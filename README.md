@@ -1,10 +1,10 @@
 ![Naas.ai - Open Source Data Platform](assets/project_logo.png)
 
-# Artificial Business Intelligence
+# Abi
 
 Building ABI, the AI System for Everyday Business
 
-![Abinet](./img/abi-net.png)
+![Abinet](./assets/abi-net.png)
 
 ## Context
 
