@@ -1,8 +1,8 @@
 ![Naas.ai - Open Source Data Platform](assets/project_logo.png)
 
-# Abi
+# ABI
 
-Building ABI, the AI System for Everyday Business
+The AI System for Everyday Business.
 
 ![Abinet](./assets/abi-net.png)
 
