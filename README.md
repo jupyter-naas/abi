@@ -1,98 +1,165 @@
 ![Naas.ai - Open Source Data Platform](assets/project_logo.png)
 
-# Naas Data Product Framework
+# Artificial Business Intelligence
+---
+Building ABI, the AI System for Everyday Business
 
-Naas is a low-code open source data platform that enables anyone working with data, including business analysts, scientists, and engineers, to easily create powerful data products combining automation, analytics, and AI from the comfort of their Jupyter notebooks. With its open source distribution model, Naas ensures visible source code and versioning, and allows you to create custom logic.
+:::tip
 
-The platform is structured around three low-code layers:
+We're in the early alpha stage, this page is constantly evolving, book a call with us to learn more.
 
-- **Templates** enable users to create automated data jobs in minutes, and are the building blocks of data products.
-- **Drivers** act as connectors, allowing you to push and/or pull data from databases, APIs, and machine learning algorithms, and more.
-- **Features** transform Jupyter notebooks into a production-ready environment, with features such as scheduling, asset sharing, and notifications.
+:::
 
-You can try Naas for free using Naas Cloud, a stable environment that runs in your browser.
+![Abinet](./img/abi-net.png)
 
-## **How Does It Work?**
+## Context
 
-This repository is a boilerplate for anyone who wishes to develop a data product using Naas. It is structured as follows:
+In the current landscape, numerous CEOs have recognized the power of chatGPT and expressed a desire to integrate it into their businesses. However, they often lack the necessary framework and guidance to do so effectively. This documentation section presents a solution that we are actively researching. Although still in the research stage, this particular solution is designed to create not an Artificial General Intelligence (AGI), but an Artificial Business Intelligence (ABI). The goal is to empower different companies to create and customize AI systems, enabling them to ride the current wave of AI advancements.
 
-- The **`/assets`** folder stores any PNG, JPG, GIF, CSV, diagrams, or slides related to the documentation of the product.
-- The **`/inputs`** folder stores the parameters and any other files needed (data, referential) to run the files in the **`/models`** folder.
-- The **`/models`** folder stores any files that transform inputs into outputs (notebook, Python, SQL files)
-    - The **`__pipeline__.ipynb`** file is used to automate the model selection process, ensuring that the most accurate model is always used for a given task.
-    
-- The **`/outputs`** folder stores all the files that would be exposed outside of the Naas server.
-- The **`/tests`** folder stores all tests to be performed before production.
-- The **`/utils`** folder stores all common functions used across files.
-- The **`requirements.txt`** file lists all the packages and dependencies.
-- The **`setup.ipynb`** file runs the product on a Naas server.
+## Concepts
 
-## What Are The Benefits?
+### ABI vs AGI
 
-Some benefits of the Naas Data Product Framework are:
+We aim at enabling businesses to create their own AI, an “Artificial Business Intelligence” (ABI) rather than pursuing Artificial General Intelligence (AGI). Here is why.
 
-- **Low-code approach**: The low-code nature of the Naas platform makes it easy for anyone, regardless of their technical background, to create powerful data products.
-- **Open source**: The open source distribution model of Naas ensures visible source code and versioning, and allows you to create custom logic.
-- **Jupyter integration**: Naas integrates seamlessly with Jupyter notebooks, allowing you to create data products from the comfort of your familiar environment.
-- **Versatility**: With its templates, drivers, and features, Naas is highly versatile and enables you to build almost anything.
-- **Cloud-based**: Naas Cloud, the stable environment provided by Naas, allows you to access the platform from anywhere with an internet connection.
+Unlike OpenAI, Naas does not aim at creating a system with human-like general intelligence that can perform any intellectual task. Naas acknowledges that AGI is a complex and challenging goal, requiring advancements in various AI domains. Instead, Naas adopts a more pragmatic approach by focusing on the practical application of AI techniques within specific business processes and domains. It leverages generative AI models and foundation engines to enhance business operations and decision-making without aiming to achieve the comprehensive intelligence of AGI.
 
-Overall, the Naas Data Product Framework is a powerful tool for anyone looking to create data products that combine automation, analytics, and AI.
+ABI refers to applying AI techniques in business settings to enhance decision-making, automate processes, and generate business outcomes. Naas aims to create data products combined with AI to drive business success, such as increasing revenue and optimizing operations. It utilizes advanced algorithms, machine learning models, and data analysis and automation to provide valuable insights and improve efficiency within specific business domains.
 
-## Why a Data Product Development Framework Like Naas is Necessary?
+While AGI aims for human-like general intelligence, Naas focuses on leveraging AI to drive business success through practical applications and domain-specific solutions
 
-Just as web development frameworks like React.js help developers create web applications more efficiently by providing a set of standardized tools and components, data product development frameworks like Naas help data scientists and engineers create data products more efficiently by providing a set of standardized tools and components specifically designed for data processing, analytics, and AI.
+### Foundation Engines
 
-Some specific benefits of using a data product development framework like Naas include:
+Foundation Engines are pre-built data products that serve as a starting point for companies to build ABI and tailor it to their specific needs. These engines offer powerful data-driven solutions across various business functions, including content, growth, sales, operations, finance, and open data. By using these engines as a foundation, organizations can customize and expand upon them to create unique data products that address their specific challenges and drive new opportunities for growth and innovation.
 
-- **Standardized structure**: A data product development framework provides a standardized structure for organizing and developing data products, which can make it easier to develop, maintain, and scale data products.
-- **Pre-built components**: A data product development framework includes a set of pre-built components, such as data connectors and data transformation tools, which can save time and effort compared to building these components from scratch.
-- **Integration with other tools**: A data product development framework typically integrates with other tools and technologies commonly used in the data world, such as Jupyter notebooks and machine learning libraries, which can make it easier to build and deploy data products.
-- **Collaboration and sharing**: A data product development framework can make it easier for multiple people to collaborate and share data products within an organization, as it provides a consistent framework for development and documentation.
+Each Foundation Engine includes a set of plugins that can be used independently or combined to create even more powerful and comprehensive data products. These modules are designed to work seamlessly together, enabling organizations to build tailored solutions that leverage the full capabilities of the Naas platform.
 
-Overall, a data product development framework like Naas can provide a number of benefits to data scientists and engineers, including improved efficiency, integration with other tools, and the ability to collaborate and share data products within an organization.
+### Plugins
 
-## How Data Products And Asociatedd Contracts Can Create More Trust From End-User?
+Plugins within a Foundation Engine encompass workflows that exist within the various features of the engine. These plugins are modular components that can be independently utilized or combined to create comprehensive and specialized data products. Each plugin represents a specific workflow, addressing a particular aspect of the business process. By integrating these plugins, organizations can build tailored solutions that align with their unique requirements. The seamless integration of these workflows within the Foundation Engine enables businesses to leverage the full capabilities of the engine, optimizing their operations and driving efficient and effective decision-making.
 
-A data product framework can help with defining data contracts and creating trust with end users in several ways:
+## Solutions
 
-- **Standardized structure**: A data product framework provides a standardized structure for organizing and developing data products, which can make it easier to define clear and consistent data contracts. For example, if a data product is built using a framework that specifies how input and output data should be structured and documented, it can be easier for end users to understand how the data product works and what they can expect from it.
-- **Transparency**: Many data product frameworks are open source, which means that the source code is visible and can be reviewed by anyone. This transparency can help build trust with end users, as they can see exactly how the data product works and how it processes their data.
-- **Auditability**: A data product framework can also provide tools and processes for auditing and reviewing data products, which can help ensure that they are reliable and accurate. This can be especially important for data products that are used in mission-critical applications, as end users need to be confident that the data products are reliable and trustworthy.
+We are continually improving and refining our six core engines, which are serving as robust data feeds for ABI:
 
-Overall, a data product framework can help create trust with end users by providing a standardized and transparent structure for developing data products, and by providing tools and processes for auditing and reviewing the products to ensure their reliability.
+**Content Engine: Increase Reach and Boost Engagement**
 
-## **About This Repository**
+1. **Content Performance Analytics:** Monitor content engagement metrics, such as views, likes, and shares, to identify high-performing content and optimize your content strategy.
+2. **AI-Driven Content Generation:** Leverage large language models to generate relevant and engaging content, reducing the time and effort required to create compelling material.
+3. **Content Optimization Recommendations:** Receive AI-driven recommendations to improve content quality, readability, and SEO, driving increased audience engagement and reach.
 
-This Data Product Framework repository is a boilerplate to create powerful Data Products in your company. To get started:
+**Growth Engine: Get Qualified Contacts**
 
-1. Create an organization on GitHub.
-2. Use this template to kickstart your Data Product.
-3. Start bringing value to your company.
+1. **Social Media Listening and Analytics:** Monitor social media platforms for mentions, trends, and conversations relevant to your industry, helping you identify potential leads and influencers.
+2. **AI-Powered Lead Scoring:** Utilize AI algorithms to score and prioritize leads, ensuring that your sales team focuses on the most promising opportunities.
+3. **Network Expansion Strategies:** Receive AI-driven recommendations for expanding your network and increasing your total addressable market through targeted outreach and engagement.
 
-## **Built With**
+**Sales Engine: Generate Deal Opportunities**
 
-- Jupyter Notebooks
-- Naas
+1. **CRM Data Visualization and Insights:** Visualize and analyze your CRM data, providing a clear overview of your sales pipeline and deal progress.
+2. **Prospect Interaction Scoring:** Track and score prospect interactions, allowing you to focus on highly engaged leads and optimize your sales efforts.
+3. **Product Analytics-Driven Signals:** Leverage product usage data to identify customer needs and pain points, enabling your sales team to tailor their approach and close deals more effectively.
+4. **Meeting assistant & sales process optimization:** Transform your notes in actionable items to follow up with your prospect. Transform memos to close you deal and generate data on what works.
 
-## **Documentation**
+**Operations Engine: Create a Single Source of Truth and Automate Tedious Tasks**
 
-### **Prerequisites**
+1. **Company Activity Dashboard:** Monitor and visualize key company activities, providing a centralized overview of your organization’s performance.
+2. **Data Integration and Automation:** Streamline and automate data workflows to eliminate manual tasks and ensure data consistency across your organization.
+3. **AI-Powered Task Prioritization and Optimization:** Receive AI-driven recommendations for optimizing operations, helping your team focus on high-impact tasks and projects.
 
-- Create an account on naas.ai
+**Finance Engine: Visualize Financial Statements in Real-Time**
 
-### **Installation**
+1. **Financial Transaction Tracking and Analysis:** Monitor and analyze financial transactions, providing real-time visibility into your organization’s financial health.
+2. **AI-Driven Financial Forecasting:** Utilize AI algorithms to predict future financial performance, enabling proactive decision-making and resource allocation.
+3. **Automated Financial Statement Generation:** Generate financial statements and reports with minimal manual intervention, streamlining financial reporting and analysis.
 
-Follow the steps in the **`settings.ipynb`** notebook.
+**Open Data Engine: Understand the World Around You**
 
-## **Roadmap**
+1. **Financial Market Analysis:** Aggregate and analyze open financial market data to identify trends, risks, and opportunities that impact your organization.
+2. **Health and Environmental Data Insights:** Monitor and visualize health and environmental data, enabling your organization to understand the implications of global trends and events.
+3. **AI-Powered Trend Identification and Forecasting:** Leverage AI algorithms to identify emerging trends and forecast their impact on your organization, allowing you to make data-driven strategic decisions.
 
-- V0: Simple boilerplate with Naas pipeline feature
-- V1: Add Naas space feature to create powerful dashboard
+## Core Model
 
-## **Support**
+Naas provides robust Foundation Engines and Plugins, which constitute the core model of our data product solutions. These models are designed to facilitate distinct business functions and can be tailored to address the unique needs and challenges of your organization.
 
-If you have problems or questions, please open an issue and we will try to help you as soon as possible.
+### Abstractions
+
+The core model is based on six key abstraction items: Content, Interaction, Sequence, Task, Transaction, and Resource.
+
+1. **Content**: At the heart of our core model is the creation and management of quality content. Our data product solutions enable organizations to generate, optimize, and disseminate content that effectively communicates their value proposition and engages their target audience.
+2. **Interaction**: Our solutions also encompass growth marketing strategies to maximize audience interaction. Through strategic content distribution and audience engagement tactics, companies can enhance their visibility, attract and retain customers, and foster growth.
+3. **Sequence**: We offer tools and methodologies to streamline the sales conversion process. Our Sequence abstraction allows organizations to guide potential customers through a structured sales funnel, from awareness to interest, decision, and finally, action.
+4. **Task**: Operational efficiency is central to our core model. Our data product solutions provide companies with tools to manage their operational tasks effectively. This includes project management, task delegation, and tracking, all aimed at enhancing productivity and efficiency.
+5. **Transaction**: Naas also provides solutions for effective financial management. With our Transaction abstraction, companies can manage their financial transactions efficiently, ensuring the financial health, profitability, and sustainability of their organization.
+6. **Resource**: The final element of our core model is the leveraging of open data intelligence. Our Resource abstraction involves utilizing market research, competitor analysis, and customer behavior analysis to inform business strategies, drive innovation, and maintain a competitive edge.
+
+Each abstraction item is the underlying data model of their respective engine: 
+
+- Content: Content engine
+- Interaction: Growth engine
+- Sequence: Sales engine
+- Task: Operation engine
+- Transaction: Finance engine
+- Resource: Open Data engine
+
+### Relationship between Core Model, Foundation Engines, and Plugins
+
+The relationship between plugins, engines, and the core model can be understood in the context of their roles in a system:
+
+- **Core Model** is the fundamental structure that serves as the base for all operations. It encapsulates the main business abstractions and logic, providing the basis for the system’s functionality. It’s like the backbone of the system.
+- **Foundation Engines** are built upon this Core Model. They provide pre-built data products that align with the abstractions of the Core Model, offering solutions for specific business functions like content, growth, sales, operations, finance, and open data. They leverage the Core Model to provide their services.
+- **Plugins** are additional components that can be added to the Foundation Engines to enhance their functionality or provide new capabilities. They can either subscribe to the Core Model, meaning they adhere to and extend the system’s existing abstractions, or they can provide additional functionality not covered by the Core Model. Plugins offer flexibility and customization, allowing organizations to tailor their data products to their specific needs.
+
+In summary, the Core Model provides the basic structure, the Foundation Engines use this structure to deliver specific business solutions, and the Plugins offer the ability to enhance these solutions or add new capabilities. 
+
+### Core Model & Plugins Alignment
+
+The notion of Plugins subscribing or not to the Core Model is a crucial aspect of Naas’s data product solutions. This feature provides a high degree of customization and flexibility to organizations, allowing them to tailor the data solutions to their specific needs.
+
+**Plugin combined to Foundation Engines**
+
+Plugins are modules or extensions added to the Foundation Engines they enhance their functionality or provide additional capabilities. Each Plugin is designed to perform a specific function and can be used independently or in combination with other Plugins and Foundation Engines.
+
+When we say a Plugin “subscribes” to the Core Model, it means that the Plugin aligns with and supports the functionalities provided by the core abstraction items (Content, Interaction, Sequence, Task, Transaction, Resource). These Plugins will seamlessly integrate with the Core Model to expand upon its functionalities, creating a comprehensive and powerful data product solution. For instance, a Plugin that subscribes to the “Interaction” abstraction might provide advanced analytics for measuring user engagement and interaction.
+
+**Standalone Plugin**
+
+On the other hand, a Plugin that does not subscribe to the Core Model is one that provides functionalities outside the scope of the core abstraction items. These Plugins offer unique features that may not directly relate to the Core Model but can still add value to the overall data product solution. For example, a Plugin providing capabilities for real-time communication or chat functionality may not directly align with any of the core abstraction items, but it can still enhance the overall user experience and efficiency of the data solution.
+
+Whether a Plugin subscribes to the Core Model or not, the key point is that it offers organizations the ability to customize their data product solutions and therefore their . By selecting and combining different Plugins, companies can create tailored solutions that best meet their specific business needs and goals.
+
+## Building ABI
+
+### Pre-requisites
+
+The first step of building ABI is to setup the foundation engines that will enable the organization to create a continuous source of “Gold” Data. 
+
+This Gold Data will constitute the dataset necessary to either feed a vector database or feed a data pipeline that will aim at continuously fine-tune a AI model like GPT3.5 or Llama.
+
+The combination of a the foundation engines and plugins live access to data and a base generative model continuously trained a curated dataset, aware of your business ontology is where ABI materialize.
+
+We are not yet there, but we are working internally at Naas to create it by gathering the data from our organization and we are heading toward creating a blueprints for any organization that wish to follow this framework.
+
+### High-Level Architecture
+
+[![architecture](https://mermaid.ink/img/pako:eNqNVU1z2jAQ_SsaH3JKJpOvC4fOGAyE1nw0pklakYNqL0aDLTGSDKGZ_PeuZIOBOJ3CRdj7nnbf213evFgm4LW8VLHVgoQPMzEzM-NTXxk-5zFnGWkXmgvQmgyEgSzjKYgYXsjFxZd2FW3PpO8PaB8EKGb4Gog_IEOkzvRLGYSvXdh4QvuTqb6cwqt5sQ8Cf-ofh4QhDUOWs2sXdDlegdCyUHhpc7w_olHwHF4OcpbCJ-EOYM_0EWIjFQnargQy6tARY5p0FsxgqqT6tGlPFiLBWqQgXZFaBcgZmWQFHnUV2HYMAe1IVEYY0lHgAEevu7Sv5MYsyJCpJRgu0qPXPRqxDLmRYw1Kn6L7FOtRjlWT7txagvJvj2LuaY8LhqbgFQIlyDGXo4CBJREkYIYdm1gGBS7o676MCai5VLlj9AXLtobH2on51LuiT1It55nckKtSwNoP-yX_yXNd81wf8tT5fKP-4CJQ2EuC7Bh3_YUilTQ3Nc1NM024T2e8Mjznf0pLHyCWOQpVOrzL6ramuz2l67rfQxpJNxVDSDgjIdfIjZ4SJpIPRd7VdHfNdCNb5ERuQEFCQmAJiWKpbI80RY_pCMwGKUn3dcWEbRYSGRQEUg76BNJzkAntPAxL5x-5Lli2E8DmO0CKdGGakd_pREm9wmlxPaNY7HDN-ZWQBwtJCkTsldg5GPEUHzXfFNEhuMEgvtYoKEOzzkg5FkgY291zaN4JSd-RTNHnHEXZEh8TXXOzxar14rdkKmkE_KD7eUhVrYlfGJl_fs3joWFTppeYIUdFzKGu_0j23rE8VRNrG2mq0MlKXDzHy6NuQj0aGZ4PpqPm6kkFMdPmo0El6ietysPka1Rk8EHeMF81vFy0vw7SLrfZZ0lWi9mn98Ay3H22nq5YcyWFvQjxlfiNDVih20daK7AdmyDa_jHVYjfV7J17OeDm4Qn-tb1Z0plnFljjzGvhMcHcZ95MvGMcQ0GirYi9llEFnHvFClcCBJxhU-Rea45NC-9_AQYXSAQ?type=png)](https://mermaid.live/edit#pako:eNqNVU1z2jAQ_SsaH3JKJpOvC4fOGAyE1nw0pklakYNqL0aDLTGSDKGZ_PeuZIOBOJ3CRdj7nnbf213evFgm4LW8VLHVgoQPMzEzM-NTXxk-5zFnGWkXmgvQmgyEgSzjKYgYXsjFxZd2FW3PpO8PaB8EKGb4Gog_IEOkzvRLGYSvXdh4QvuTqb6cwqt5sQ8Cf-ofh4QhDUOWs2sXdDlegdCyUHhpc7w_olHwHF4OcpbCJ-EOYM_0EWIjFQnargQy6tARY5p0FsxgqqT6tGlPFiLBWqQgXZFaBcgZmWQFHnUV2HYMAe1IVEYY0lHgAEevu7Sv5MYsyJCpJRgu0qPXPRqxDLmRYw1Kn6L7FOtRjlWT7txagvJvj2LuaY8LhqbgFQIlyDGXo4CBJREkYIYdm1gGBS7o676MCai5VLlj9AXLtobH2on51LuiT1It55nckKtSwNoP-yX_yXNd81wf8tT5fKP-4CJQ2EuC7Bh3_YUilTQ3Nc1NM024T2e8Mjznf0pLHyCWOQpVOrzL6ramuz2l67rfQxpJNxVDSDgjIdfIjZ4SJpIPRd7VdHfNdCNb5ERuQEFCQmAJiWKpbI80RY_pCMwGKUn3dcWEbRYSGRQEUg76BNJzkAntPAxL5x-5Lli2E8DmO0CKdGGakd_pREm9wmlxPaNY7HDN-ZWQBwtJCkTsldg5GPEUHzXfFNEhuMEgvtYoKEOzzkg5FkgY291zaN4JSd-RTNHnHEXZEh8TXXOzxar14rdkKmkE_KD7eUhVrYlfGJl_fs3joWFTppeYIUdFzKGu_0j23rE8VRNrG2mq0MlKXDzHy6NuQj0aGZ4PpqPm6kkFMdPmo0El6ietysPka1Rk8EHeMF81vFy0vw7SLrfZZ0lWi9mn98Ay3H22nq5YcyWFvQjxlfiNDVih20daK7AdmyDa_jHVYjfV7J17OeDm4Qn-tb1Z0plnFljjzGvhMcHcZ95MvGMcQ0GirYi9llEFnHvFClcCBJxhU-Rea45NC-9_AQYXSAQ)
+
+
+## In a nutshell
+
+Artificial Business Intelligence (ABI) offers a pragmatic approach to leveraging AI in business settings, focusing on practical applications rather than pursuing the complex goal of Artificial General Intelligence (AGI). Unlike AGI, which aims to create a system with human-like general intelligence, ABI empowers businesses to create their own AI systems tailored to their specific needs.
+
+Naas recognizes that AGI requires advancements in various AI domains and instead adopts a more practical approach. By leveraging generative AI models and foundation engines, NaaS enhances business operations and decision-making without aiming to achieve the comprehensive intelligence of AGI.
+
+Foundation Engines serve as the building blocks for ABI, providing pre-built data products that can be customized to address specific business functions. These engines, such as the Content Engine, Growth Engine, Sales Engine, Operations Engine, Finance Engine, and Open Data Engine, offer powerful solutions across various domains.
+
+Plugins further enhance the functionality of Foundation Engines by providing additional capabilities or extending existing functionalities. These plugins can either subscribe to the Core Model, aligning with the core abstraction items (Content, Interaction, Sequence, Task, Transaction, Resource), or offer standalone features outside the scope of the core model.
+
+By combining Foundation Engines, Plugins, and the Core Model, organizations can create tailored ABI solutions that meet their specific business needs and goals. NaaS is actively researching and developing this framework, working towards enabling organizations to build their own ABI systems by leveraging the power of generative AI models, foundation engines, and curated datasets.
+
+While the development of ABI is an ongoing process, Naas aims to provide blueprints and frameworks for organizations to follow, enabling them to gather the necessary data, set up foundation engines, and continuously train AI models to create a customized and effective AI system for their business.
+
 
 ## **Contributing**
 
