@@ -1,0 +1,21 @@
+NAME_INPUT,TICKER_INPUT,RELATIVE_INDEX_INPUT
+Apple,AAPL,^IXIC
+Microsoft,MSFT,^IXIC
+Amazon,AMZN,^IXIC
+Alphabet,GOOGL,^IXIC
+Facebook,FB,^IXIC
+Tesla,TSLA,^IXIC
+Nvidia,NVDA,^IXIC
+Paypal,PYPL,^IXIC
+Adobe,ADBE,^IXIC
+Netflix,NFLX,^IXIC
+Intel,INTC,^IXIC
+Cisco,CSCO,^IXIC
+Oracle,ORCL,^NYA
+Salesforce,CRM,^NYA
+IBM,IBM,^NYA
+Qualcomm,QCOM,^IXIC
+Texas Instruments,TXN,^IXIC
+Broadcom,AVGO,^IXIC
+Accenture,ACN,^IXIC
+ServiceNow,NOW,^IXIC

@@ -1,0 +1,25 @@
+id,date,amount,currency,description,customer,product,status,payment_method
+ch_3NaLmcLOJ4FAhbze1jo1Kzvoeza,2023-08-10 14:30:08,5000,USD,Subscription update,StabilityAI,Naas Enterprise (Monthly),succeeded,card
+py_3NbS0pLOJ4FAhbze1poaRs6rez,2023-08-04 17:42:11,50,USD,Subscription update,Google,Naas Professional (Monthly),succeeded,link
+ch_3NXT2yLOJ4FAhbze0UzWEqclez,2023-07-24 18:35:23,5000,USD,Subscription update,Amazon,Naas Enterprise (Monthly),incomplete,card
+ch_3NXQGrLOJ4FAhbze1veSw6IEzz,2023-07-24 15:36:44,50,USD,Subscription update,Netflix,Naas Professional (Monthly),succeeded,card
+ch_3NVrifLOJ4FAhbze0XQitBP0ss,2023-07-20 7:56:18,10,USD,Subscription creation,Sam Altman,Naas Individual Bronze Membership,succeeded,card
+ch_3NVZMcLOJ4FAhbze0mAzZUYcd,2023-07-19 12:20:19,50,USD,Subscription update,IBM,Naas Professional (Monthly),succeeded,card
+py_3NQC1uLOJ4FAhbze0G0xNaTHd,2023-07-04 16:24:45,5000,USD,Subscription creation,Meta,Naas Professional (Monthly),succeeded,link
+py_3NQBzYLOJ4FAhbze0EEnvRUVd,2023-07-04 16:22:19,50,USD,Subscription creation,Google,Naas Professional (Monthly),succeeded,link
+ch_3NMZI7LOJ4FAhbze1Xt6QWmMd,2023-06-30 8:04:24,50,USD,Subscription update,Microsoft,Naas Professional (Monthly),succeeded,card
+ch_3NBKQuLOJ4FAhbze0ARdb29ys,2023-06-30 8:04:02,50,USD,Subscription update,Microsoft,Naas Professional (Monthly),succeeded,card
+ch_3NMajuLOJ4FAhbze0HY9FlRYsaa,2023-06-26 21:12:09,599,USD,Subscription update,Amazon,Naas Enterprise (Monthly),succeeded,card
+ch_3NMXkmLOJ4FAhbze0QaZuTxjaa,2023-06-26 11:33:58,50,USD,Subscription update,Netflix,Naas Professional (Monthly),succeeded,card
+ch_3NKh2xLOJ4FAhbze0He2daN8aa,2023-06-19 12:19:04,50,USD,Subscription update,IBM,Naas Professional (Monthly),succeeded,card
+ch_3NBIuqLOJ4FAhbze1jcaaQQbaa,2023-05-25 8:39:13,50,USD,Subscription update,Netflix,Naas Professional (Monthly),succeeded,card
+ch_3NBM0vLOJ4FAhbze0f8nMVZKaa,2023-05-24 19:29:28,599,USD,Subscription update,Amazon,Naas Enterprise (Monthly),succeeded,card
+ch_3N9SFpLOJ4FAhbze0zic1eToaaaa,2023-05-19 12:17:54,50,USD,Subscription update,IBM,Naas Professional (Monthly),succeeded,card
+ch_3N2zsqLOJ4FAhbze0zE3GoAsaaa,2023-05-08 14:09:42,5000,USD,Subscription creation,StabilityAI,Naas Enterprise (Monthly),succeeded,card
+ch_3N2yrfLOJ4FAhbze1NOouoCvaaa,2023-05-08 14:04:07,5000,USD,Subscription creation,Microsoft,Naas Enterprise (Monthly),succeeded,card
+ch_3N0TdlLOJ4FAhbze0jirwcxZaaa,2023-05-05 20:46:23,5000,USD,Subscription creation,Amazon,Naas Enterprise (Monthly),succeeded,card
+ch_3N1W9tLOJ4FAhbze0hxoHyIpaaa,2023-05-01 13:41:52,600,USD,Subscription creation,Midjourney,Naas Professional (Yearly),succeeded,card
+ch_3N18hjLOJ4FAhbze122kehaaaa,2023-04-27 6:58:33,600,USD,Subscription creation,Midjourney,Naas Professional (Yearly),succeeded,card
+ch_3N0S8JLOJ4FAhbze0Wpa6Smsaa,2023-04-24 16:22:48,50,USD,Subscription creation,Microsoft,Naas Professional (Monthly),succeeded,card
+ch_3N0QZpLOJ4FAhbze12R1PNfRaaz,2023-04-24 15:39:01,50,USD,Subscription creation,Netflix,Naas Professional (Monthly),succeeded,card
+ch_3MyYzXLOJ4FAhbze13cLQv8zzr,2023-04-19 11:16:04,50,USD,Subscription creation,IBM,Naas Professional (Monthly),succeeded,card
