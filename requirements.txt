@@ -1,6 +1,6 @@
 naas_data_product
 pyvis==0.2.1
-openai
+openai==0.28.1
 openai[wandb]
 tqdm
 pandas
