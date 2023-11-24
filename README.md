@@ -3,8 +3,7 @@
 # ABI
 
 The AI System for Everyday Business.
-
-![Abinet](./assets/abi-net.png)
+![abi](https://github.com/jupyter-naas/abi/assets/21052349/189cecea-907f-4c01-94a7-bb52d40f8ae7)
 
 ## Context
 
@@ -33,6 +32,8 @@ Each Foundation Engine includes a set of plugins that can be used independently 
 Plugins within a Foundation Engine encompass workflows that exist within the various features of the engine. These plugins are modular components that can be independently utilized or combined to create comprehensive and specialized data products. Each plugin represents a specific workflow, addressing a particular aspect of the business process. By integrating these plugins, organizations can build tailored solutions that align with their unique requirements. The seamless integration of these workflows within the Foundation Engine enables businesses to leverage the full capabilities of the engine, optimizing their operations and driving efficient and effective decision-making.
 
 ## Solutions
+
+![Abinet](./assets/abi-net.png)
 
 We are continually improving and refining our six core engines, which are serving as robust data feeds for ABI:
 
