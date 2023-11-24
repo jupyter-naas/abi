@@ -3,7 +3,7 @@
 # ABI
 
 The AI System for Everyday Business.
-![Abinet](./assets/abi-net.png)
+![Abinet](./assets/abi-network.png)
 
 ## Context
 
