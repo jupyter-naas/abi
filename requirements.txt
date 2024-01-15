@@ -2,7 +2,7 @@ naas_data_product
 pyvis==0.2.1
 openai==0.28.1
 unidecode==1.3.7
-naas-drivers==0.120.2
+naas-drivers==0.121.0
 pandas==1.2.4
 tqdm
 pycountry==23.12.11
