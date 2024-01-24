@@ -185,4 +185,4 @@ To contribute:
 
 ## Legal
 
-This project is licensed under AGPL-3.0
+This project is licensed under BSD 3-Clause License
