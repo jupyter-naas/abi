@@ -1,0 +1,36 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: 'lts/*'
+      - name: Install dependencies
+        run: |
+          cd .github \
+            && npm ci \
+            && cd .. \
+            && (rm package.json || true) \
+            && (rm package-lock.json || true) \
+            && ln -s .github/node_modules node_modules \
+            && ln -s .github/package.json package.json \
+            && ln -s .github/package-lock.json package-lock.json \
+            && ln -s .github/.releaserc .releaserc
+      - name: Release
+        env:
+#          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
