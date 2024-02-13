@@ -154,20 +154,6 @@ By combining Foundation Engines, Plugins, and the Core Model, organizations can 
 While the development of ABI is an ongoing process, Naas aims to provide blueprints and frameworks for organizations to follow, enabling them to gather the necessary data, set up foundation engines, and continuously train AI models to create a customized and effective AI system for their business.
 
 
-## **Contributing**
-
-Contributions are welcome. If you have a suggestion that would make this better, please fork the repository and create a pull request. You can also simply open an issue with the tag "enhancement". Don't forget to give the project a star.
-
-To contribute:
-
-1. Create an account on naas.ai.
-2. Clone the repository on your machine.
-3. Create a feature branch.
-4. Commit your changes.
-5. Push to the branch.
-6. Open a pull request.
-
-
 ## Product Owners
 
 * [Florent Ravenel](https://www.linkedin.com/in/florent-ravenel/) - florent@naas.ai
