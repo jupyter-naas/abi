@@ -4,7 +4,7 @@
 
 The AI System for Everyday Business.
 
-<img href="https://public.naas.ai/YWJpLTJEZGVtby00MG5hYXMtMkVhaQ==/asset/dfafbde419e807425792122defa5ab17bfeef51d42247f515a52e24c1999" src="./assets/network.png" width="30%" height="30%">
+<img href="https://public.naas.ai/YWJpLTJEZGVtby00MG5hYXMtMkVhaQ==/asset/dfafbde419e807425792122defa5ab17bfeef51d42247f515a52e24c1999" src="./assets/network.png" width="75%" height="75%">
 
 ## Context
 
