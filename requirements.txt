@@ -6,3 +6,4 @@ naas-drivers==0.121.0
 pandas==1.2.4
 tqdm
 pycountry==23.12.11
+google
