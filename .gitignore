@@ -6,6 +6,7 @@
 .xlsx
 .json
 .parquet
+.logs
 
 # Models
 pipeline_executions
