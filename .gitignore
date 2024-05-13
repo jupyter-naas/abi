@@ -8,10 +8,14 @@
 .parquet
 .logs
 
-# Models
+# Models<
 pipeline_executions
 
 # Outputs
 outputs
 
+# App
+__pycache__
+.streamlit/secrets.toml
+.env
 .DS_Store
