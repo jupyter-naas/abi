@@ -7,3 +7,4 @@ pandas==1.2.4
 tqdm
 pycountry==23.12.11
 google
+neo4j==5.18.0
