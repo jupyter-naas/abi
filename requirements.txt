@@ -8,3 +8,5 @@ tqdm
 pycountry==23.12.11
 google
 neo4j==5.18.0
+langchain==0.1.13
+langchain-openai==0.1.1
