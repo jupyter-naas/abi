@@ -1,0 +1,90 @@
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.streamlit.rule=Host(`streamlit.abi.localhost`)"
+      - "traefik.http.routers.streamlit.entrypoints=web"
+      - "traefik.http.services.streamlit.loadbalancer.server.port=8501"
+    working_dir: /app
+    tty: true
+    ports:
+      - 8501:8501
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=neo4j
+    env_file:
+      - .env
+    command:
+      - '/bin/bash'
+      - '-c'
+      - |
+        while ! nc -z neo4j 7687; do echo -e "\n🟡  Waiting for Neo4j to be ready\n" && sleep 3; done
+        echo -e "\n🟢  Neo4j is ready!\n"
+        streamlit run --server.address 0.0.0.0 bot.py
+
+  neo4j:
+    image: neo4j:5.19
+    volumes:
+      - ./neo4j_data:/data
+    environment:
+      - NEO4J_AUTH=none
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.neo4j.rule=Host(`neo4j.abi.localhost`)"
+      - "traefik.http.routers.neo4j.entrypoints=web"
+      - "traefik.http.services.neo4j.loadbalancer.server.port=7474"
+    ports:
+      - 7474:7474
+      - 7687:7687
+
+  streamlit-ready:
+    image: alpine
+    depends_on:
+      - streamlit
+    tty: true
+    command:
+      - '/bin/sh'
+      - '-c'
+      - |
+        while ! nc -z streamlit 8501; do sleep 3; done
+        cat << EOF
+        ┌───────────────────────────────────────────────────────────────────────────────────┐
+        │                                                                                   │
+        │  █████╗ ██████╗ ██╗    ███████╗████████╗ █████╗ ██████╗ ████████╗███████╗██████╗  │
+        │ ██╔══██╗██╔══██╗██║    ██╔════╝╚══██╔══╝██╔══██╗██╔══██╗╚══██╔══╝██╔════╝██╔══██╗ │
+        │ ███████║██████╔╝██║    ███████╗   ██║   ███████║██████╔╝   ██║   █████╗  ██║  ██║ │
+        │ ██╔══██║██╔══██╗██║    ╚════██║   ██║   ██╔══██║██╔══██╗   ██║   ██╔══╝  ██║  ██║ │
+        │ ██║  ██║██████╔╝██║    ███████║   ██║   ██║  ██║██║  ██║   ██║   ███████╗██████╔╝ │
+        │ ╚═╝  ╚═╝╚═════╝ ╚═╝    ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═════╝  │
+        │                                                                                   │
+        └───────────────────────────────────────────────────────────────────────────────────┘
+
+        🟢 You can access the services at:
+
+        - Streamlit app: http://streamlit.abi.localhost
+        - Neo4j Browser: http://neo4j.abi.localhost
+        - Traefik dashboard: http://localhost:8080
+        
+        EOF
+
+  traefik:
+    image: "traefik:v3.0"
+    container_name: "traefik-abi"
+    command:
+      # - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"

@@ -2,7 +2,7 @@ import streamlit as st
 from os import environ
 
 avatar_assistant = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/content_creation.png"
-avatar_human = environ.get("AVATAR")
+avatar_human = environ.get("AVATAR", "ABI")
 
 def write_message(role, content, save=True):
     """
