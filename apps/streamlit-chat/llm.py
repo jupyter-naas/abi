@@ -4,7 +4,7 @@ from langchain_openai import OpenAIEmbeddings
 from os import environ
 
 openai_api_key = environ.get("OPENAI_API_KEY")
-model = environ.get("OPENAI_MODEL")
+model = environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
 
 llm = ChatOpenAI(
     openai_api_key=openai_api_key,
