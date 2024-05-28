@@ -123,38 +123,91 @@ On the other hand, a Plugin that does not subscribe to the Core Model is one tha
 
 Whether a Plugin subscribes to the Core Model or not, the key point is that it offers organizations the ability to customize their data product solutions and therefore their . By selecting and combining different Plugins, companies can create tailored solutions that best meet their specific business needs and goals.
 
-## Building ABI
+## Building Your ABI
+
+This section provides a step-by-step guide on how to build your Artificial Business Intelligence (ABI).
 
 ### Pre-requisites
 
-The first step of building ABI is to setup the foundation engines that will enable the organization to create a continuous source of “Gold” Data. 
+The first step in building your ABI is to ensure that you have a GitHub account. 
+If you do not yet have one, you can create it for free at GitHub's website. 
+Once you have your account, you will need to create a new organization. 
+This organization will serve as the home for your forked ABI repository. 
 
-This Gold Data will constitute the dataset necessary to either feed a vector database or feed a data pipeline that will aim at continuously fine-tune a AI model like GPT3.5 or Llama.
+#### Forking the ABI Repository
 
-The combination of a the foundation engines and plugins live access to data and a base generative model continuously trained a curated dataset, aware of your business ontology is where ABI materialize.
+To get started, you will need to fork this repository into your own GitHub organization. 
+This essentially creates a copy of the repository that you can modify and manage independently of the original source. 
 
-We are not yet there, but we are working internally at Naas to create it by gathering the data from our organization and we are heading toward creating a blueprints for any organization that wish to follow this framework.
+Here's how to fork the ABI repository:
 
-### High-Level Architecture
+1. Click on the "Fork" button. A new screen will appear asking where you want to fork the repository.
+2. Select your GitHub organization from the list. The repository will then be forked to your organization, and you'll be redirected to your new, forked repository.
 
-[![architecture](https://mermaid.ink/img/pako:eNqNVU1z2jAQ_SsaH3JKJpOvC4fOGAyE1nw0pklakYNqL0aDLTGSDKGZ_PeuZIOBOJ3CRdj7nnbf213evFgm4LW8VLHVgoQPMzEzM-NTXxk-5zFnGWkXmgvQmgyEgSzjKYgYXsjFxZd2FW3PpO8PaB8EKGb4Gog_IEOkzvRLGYSvXdh4QvuTqb6cwqt5sQ8Cf-ofh4QhDUOWs2sXdDlegdCyUHhpc7w_olHwHF4OcpbCJ-EOYM_0EWIjFQnargQy6tARY5p0FsxgqqT6tGlPFiLBWqQgXZFaBcgZmWQFHnUV2HYMAe1IVEYY0lHgAEevu7Sv5MYsyJCpJRgu0qPXPRqxDLmRYw1Kn6L7FOtRjlWT7txagvJvj2LuaY8LhqbgFQIlyDGXo4CBJREkYIYdm1gGBS7o676MCai5VLlj9AXLtobH2on51LuiT1It55nckKtSwNoP-yX_yXNd81wf8tT5fKP-4CJQ2EuC7Bh3_YUilTQ3Nc1NM024T2e8Mjznf0pLHyCWOQpVOrzL6ramuz2l67rfQxpJNxVDSDgjIdfIjZ4SJpIPRd7VdHfNdCNb5ERuQEFCQmAJiWKpbI80RY_pCMwGKUn3dcWEbRYSGRQEUg76BNJzkAntPAxL5x-5Lli2E8DmO0CKdGGakd_pREm9wmlxPaNY7HDN-ZWQBwtJCkTsldg5GPEUHzXfFNEhuMEgvtYoKEOzzkg5FkgY291zaN4JSd-RTNHnHEXZEh8TXXOzxar14rdkKmkE_KD7eUhVrYlfGJl_fs3joWFTppeYIUdFzKGu_0j23rE8VRNrG2mq0MlKXDzHy6NuQj0aGZ4PpqPm6kkFMdPmo0El6ietysPka1Rk8EHeMF81vFy0vw7SLrfZZ0lWi9mn98Ay3H22nq5YcyWFvQjxlfiNDVih20daK7AdmyDa_jHVYjfV7J17OeDm4Qn-tb1Z0plnFljjzGvhMcHcZ95MvGMcQ0GirYi9llEFnHvFClcCBJxhU-Rea45NC-9_AQYXSAQ?type=png)](https://mermaid.live/edit#pako:eNqNVU1z2jAQ_SsaH3JKJpOvC4fOGAyE1nw0pklakYNqL0aDLTGSDKGZ_PeuZIOBOJ3CRdj7nnbf213evFgm4LW8VLHVgoQPMzEzM-NTXxk-5zFnGWkXmgvQmgyEgSzjKYgYXsjFxZd2FW3PpO8PaB8EKGb4Gog_IEOkzvRLGYSvXdh4QvuTqb6cwqt5sQ8Cf-ofh4QhDUOWs2sXdDlegdCyUHhpc7w_olHwHF4OcpbCJ-EOYM_0EWIjFQnargQy6tARY5p0FsxgqqT6tGlPFiLBWqQgXZFaBcgZmWQFHnUV2HYMAe1IVEYY0lHgAEevu7Sv5MYsyJCpJRgu0qPXPRqxDLmRYw1Kn6L7FOtRjlWT7txagvJvj2LuaY8LhqbgFQIlyDGXo4CBJREkYIYdm1gGBS7o676MCai5VLlj9AXLtobH2on51LuiT1It55nckKtSwNoP-yX_yXNd81wf8tT5fKP-4CJQ2EuC7Bh3_YUilTQ3Nc1NM024T2e8Mjznf0pLHyCWOQpVOrzL6ramuz2l67rfQxpJNxVDSDgjIdfIjZ4SJpIPRd7VdHfNdCNb5ERuQEFCQmAJiWKpbI80RY_pCMwGKUn3dcWEbRYSGRQEUg76BNJzkAntPAxL5x-5Lli2E8DmO0CKdGGakd_pREm9wmlxPaNY7HDN-ZWQBwtJCkTsldg5GPEUHzXfFNEhuMEgvtYoKEOzzkg5FkgY291zaN4JSd-RTNHnHEXZEh8TXXOzxar14rdkKmkE_KD7eUhVrYlfGJl_fs3joWFTppeYIUdFzKGu_0j23rE8VRNrG2mq0MlKXDzHy6NuQj0aGZ4PpqPm6kkFMdPmo0El6ietysPka1Rk8EHeMF81vFy0vw7SLrfZZ0lWi9mn98Ay3H22nq5YcyWFvQjxlfiNDVih20daK7AdmyDa_jHVYjfV7J17OeDm4Qn-tb1Z0plnFljjzGvhMcHcZ95MvGMcQ0GirYi9llEFnHvFClcCBJxhU-Rea45NC-9_AQYXSAQ)
+Now that you have forked the ABI repository, you can proceed with building your ABI in the custom folder of each engines.
 
+### Pull / Push from main abi repository
 
-## In a nutshell
+**;TL/DR** 
+```bash
+# Add  remote
+git remote add abi https://github.com/jupyter-naas/abi.git
 
-Artificial Business Intelligence (ABI) offers a pragmatic approach to leveraging AI in business settings, focusing on practical applications rather than pursuing the complex goal of Artificial General Intelligence (AGI). Unlike AGI, which aims to create a system with human-like general intelligence, ABI empowers businesses to create their own AI systems tailored to their specific needs.
+# Push to main branch
+git push abi main
 
-Naas recognizes that AGI requires advancements in various AI domains and instead adopts a more practical approach. By leveraging generative AI models and foundation engines, NaaS enhances business operations and decision-making without aiming to achieve the comprehensive intelligence of AGI.
+# Pull from main branch
+git pull abi main
+```
 
-Foundation Engines serve as the building blocks for ABI, providing pre-built data products that can be customized to address specific business functions. These engines, such as the Content Engine, Growth Engine, Sales Engine, Operations Engine, Finance Engine, and Open Data Engine, offer powerful solutions across various domains.
+---
 
-Plugins further enhance the functionality of Foundation Engines by providing additional capabilities or extending existing functionalities. These plugins can either subscribe to the Core Model, aligning with the core abstraction items (Content, Interaction, Sequence, Task, Transaction, Resource), or offer standalone features outside the scope of the core model.
+Once you have your fork and own version of the ABI repository, you might want to be able to push/pull to/from the original abi repository to contribute back to the Open Source project.
 
-By combining Foundation Engines, Plugins, and the Core Model, organizations can create tailored ABI solutions that meet their specific business needs and goals. NaaS is actively researching and developing this framework, working towards enabling organizations to build their own ABI systems by leveraging the power of generative AI models, foundation engines, and curated datasets.
+To do that you need to add a new [git remote](https://git-scm.com/docs/git-remote). A git remote is just a reference to a "remote" location where the project is being hosted/stored.
 
-While the development of ABI is an ongoing process, Naas aims to provide blueprints and frameworks for organizations to follow, enabling them to gather the necessary data, set up foundation engines, and continuously train AI models to create a customized and effective AI system for their business.
+For example you could have a local git repository, which is hosted on multiple platforms at the same time, so on Github, Gitlab and Bitbucket for example. But on your computer you only want to have a single directory with the project, from which you want to be able to push on a single or all platforms.
 
+#### Create git remote
 
+To create the git remote you just need to execute the following command, from the repository directory (you need to be in your flavoured ABI folder):
+
+```bash
+git remote add abi https://github.com/jupyter-naas/abi.git
+```
+
+This will create a new git remote named `abi` to which you are now able to push/pull.
+
+#### Pull from abi remote
+
+Now let's say on local you are on the `main` branch, and you want to pull the latest changes from the main branch of the original abi repository (so the `abi` git remote). You need to run:
+
+```bash
+git pull abi main
+```
+
+This is telling git to pull the `main` branch from the repository hosted at `https://git-scm.com/docs/git-remote`.
+
+#### Push to abi remote
+
+If you want to push to the original ABI project (you might not have the permissions to push to the main branch), but we will imagine that you have, then you just have to run:
+
+```bash
+git pull abi main
+```
+
+This is telling git to push to the `main` branch of the repository hosted at `https://git-scm.com/docs/git-remote`.
+
+#### Git default remote
+
+When you clone a git repository from Github or any other provider, it will always create a default remote for you, named, `origin`. You might already have asked yourself what this `origin` was. It's your default git remote.
+
+This means that, assuming you are on the `main` branch, executing `git push` is the same as `git push origin main`.
+
+So by default will just use:
+- The branch you are actually on
+- The `origin` remote. Even if other exists, it will always use `origin` by default.
+- 
 ## Product Owners
 
 * [Florent Ravenel](https://www.linkedin.com/in/florent-ravenel/) - florent@naas.ai
