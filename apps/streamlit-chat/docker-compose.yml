@@ -34,6 +34,10 @@ services:
       - ./neo4j_data:/data
     environment:
       - NEO4J_AUTH=none
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+      - NEO4J_PLUGINS=["apoc"]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.neo4j.rule=Host(`neo4j.abi.localhost`)"
