@@ -18,5 +18,7 @@ def write_message(role, content, save=True):
         avatar = avatar_assistant
     else:
         avatar = avatar_human
-    with st.chat_message(role, avatar=avatar):
+    # TODO: Fix avatar
+    #with st.chat_message(role, avatar=avatar):
+    with st.chat_message(role):
         st.markdown(content)
