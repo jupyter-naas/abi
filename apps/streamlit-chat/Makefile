@@ -8,6 +8,9 @@ down:
 build:
 	docker-compose build
 
+nuke:
+	rm -rf neo4j_data
+
 # Using ANSI Shadow
 define setup_message
 \033[0;32m
