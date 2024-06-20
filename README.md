@@ -97,6 +97,8 @@ Data Tables are designed to feed one another and create a flywheel for your busi
 
 → The deals will also generate new projects for my operational teams. The projects will be tracked with tasks. At the end of the project, assets will be created for my clients (Operations) that could → become events published on content platforms (Open Data & Content), thus reinitiating the flywheel of my business.
 
+![tables_connections](assets/tables_connections.png)
+
 ### From OBTs to Knowledge
 
 Each Assistant specializes in its domain and contributes to an ever-expanding Knowledge Graph through thanks to domain-specific the OBTs (One Big Tables). 
