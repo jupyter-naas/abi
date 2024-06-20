@@ -1,155 +1,309 @@
 ![Naas.ai - Open Source Data Platform](assets/project_logo.png)
 
-# ABI
+# ABI*: The AI system for your everyday business
 
-The AI System for Everyday Business.
+*Augmented Business Intelligence
+
+---
 
 <img href="https://public.naas.ai/YWJpLTJEZGVtby00MG5hYXMtMkVhaQ==/asset/dfafbde419e807425792122defa5ab17bfeef51d42247f515a52e24c1999" src="./assets/network.png" width="75%" height="75%">
 
-## Context
+## Mixture of Assistants[](https://docs.naas.ai/usage/abi/introduction#mixture-of-assistants)
 
-In the current landscape, numerous CEOs have recognized the power of chatGPT and expressed a desire to integrate it into their businesses. However, they often lack the necessary framework and guidance to do so effectively. This documentation section presents a solution that we are actively researching. Although still in the research stage, this particular solution is designed to create not an Artificial General Intelligence (AGI), but an Artificial Business Intelligence (ABI). The goal is to empower different companies to create and customize AI systems, enabling them to ride the current wave of AI advancements.
+ABI is a mixture of AI-driven business intelligence assistants to power your business. This suite of assistants is designed by Naas core team and its design partners to cover business essentials with 6 assistants focused on open data & market intelligence, content creation, growth marketing, sales conversion, operational efficiency and finance management. 
 
-## Concepts
+Together, they form a unified system that utilizes external data for richer business insights, enhances content performance and brand awareness, improves lead generation and qualification, streamlines operations and financial transactions. 
 
-### ABI vs AGI
+ABI's capabilities are further expanded through its integration with a variety of tools, APIs, both official and unofficial, enabling comprehensive data collection and enrichment.
 
-We aim at enabling businesses to create their own AI, an “Artificial Business Intelligence” (ABI) rather than pursuing Artificial General Intelligence (AGI). Here is why.
+## Standard Operating Procedures[](https://docs.naas.ai/usage/abi/introduction#standard-operating-procedures-sops)
 
-Unlike OpenAI, Naas does not aim at creating a system with human-like general intelligence that can perform any intellectual task. Naas acknowledges that AGI is a complex and challenging goal, requiring advancements in various AI domains. Instead, Naas adopts a more pragmatic approach by focusing on the practical application of AI techniques within specific business processes and domains. It leverages generative AI models and foundation engines to enhance business operations and decision-making without aiming to achieve the comprehensive intelligence of AGI.
+ABI adheres to Standard Operating Procedures (SOPs) and connects to business tools via Python engines, following the ETL (Extract, Transform, Load) pipeline paradigm to preprocess data into domain-specific tables (content, marketing, sales, etc.). These tables are then post-processed by AI models for human conversations through a chat interface using plugins. Tools like PowerBI and Tableau can be integrated at as add-on plugins for classical data analysis and visualization.
 
-ABI refers to applying AI techniques in business settings to enhance decision-making, automate processes, and generate business outcomes. Naas aims to create data products combined with AI to drive business success, such as increasing revenue and optimizing operations. It utilizes advanced algorithms, machine learning models, and data analysis and automation to provide valuable insights and improve efficiency within specific business domains.
+ABI has 3 master SOPs that form a strategic flywheel, driving continuous improvement and optimization across business domains:
 
-While AGI aims for human-like general intelligence, Naas focuses on leveraging AI to drive business success through practical applications and domain-specific solutions
+### Open Data to Inform Strategic Decisions
 
-### Foundation Engines
+**🌍 Open Data & Market Intelligence Assistant:** Integrates real-time events and trends to provide ideas for content strategy, contact suggestions for network growth, online presence for competition analysis, operations efficiency, and financial recommendations.
 
-Foundation Engines are pre-built data products that serve as a starting point for companies to build ABI and tailor it to their specific needs. These engines offer powerful data-driven solutions across various business functions, including content, growth, sales, operations, finance, and open data. By using these engines as a foundation, organizations can customize and expand upon them to create unique data products that address their specific challenges and drive new opportunities for growth and innovation.
+### Content to Build Sales Pipeline
 
-Each Foundation Engine includes a set of plugins that can be used independently or combined to create even more powerful and comprehensive data products. These modules are designed to work seamlessly together, enabling organizations to build tailored solutions that leverage the full capabilities of the Naas platform.
+**📲 Content Assistant:** Helps users create content ideas and turn them into posts to raise awareness on social media among a target audience.
 
-### Plugins
+**🚀 Growth Assistant:** Analyze social interactions to identify and prioritize marketing qualified leads (MQLs) based on engagement levels and business fit.
 
-Plugins within a Foundation Engine encompass workflows that exist within the various features of the engine. These plugins are modular components that can be independently utilized or combined to create comprehensive and specialized data products. Each plugin represents a specific workflow, addressing a particular aspect of the business process. By integrating these plugins, organizations can build tailored solutions that align with their unique requirements. The seamless integration of these workflows within the Foundation Engine enables businesses to leverage the full capabilities of the engine, optimizing their operations and driving efficient and effective decision-making.
+**⚡️Sales Assistant:** Nurtures MQLs to sales qualified leads (SQLs) through personalized messaging, deal creation, automated sales activity logging and tasks suggestions aligned with customer profiles.
 
-## Solutions
+### Conversations to Optimize Cost and Secure Cash Flow
 
-We are continually improving and refining our six core engines, which are serving as robust data feeds for ABI:
+**⚙️ Operations Assistant:** Manages workflows from SQL to customer satisfaction and retention by capturing conversations, optimizing processes, and aggregating operational assets.
 
-**Content Engine: Increase Reach and Boost Engagement**
+**💰 Finance Assistant:** Prepares contractual documents, invoices, and payment transactions to convert successful sales into secured revenue and cash flow.
 
-1. **Content Performance Analytics:** Monitor content engagement metrics, such as views, likes, and shares, to identify high-performing content and optimize your content strategy.
-2. **AI-Driven Content Generation:** Leverage large language models to generate relevant and engaging content, reducing the time and effort required to create compelling material.
-3. **Content Optimization Recommendations:** Receive AI-driven recommendations to improve content quality, readability, and SEO, driving increased audience engagement and reach.
+These processes dictate the foundational activities of the Assistants, offering a blueprint for data collection and process management. However, the true power of ABI lies in its adaptability; users are encouraged to tailor these SOPs to fit unique requirements, ensuring each Assistant's output aligns perfectly with specific operational goals.
 
-**Growth Engine: Get Qualified Contacts**
+## Data Tables and Knowledge Graph[](https://docs.naas.ai/usage/abi/introduction#expanding-the-knowledge-base-with-obts-and-the-abi-knowledge-graph)
 
-1. **Social Media Listening and Analytics:** Monitor social media platforms for mentions, trends, and conversations relevant to your industry, helping you identify potential leads and influencers.
-2. **AI-Powered Lead Scoring:** Utilize AI algorithms to score and prioritize leads, ensuring that your sales team focuses on the most promising opportunities.
-3. **Network Expansion Strategies:** Receive AI-driven recommendations for expanding your network and increasing your total addressable market through targeted outreach and engagement.
+### OBTs
 
-**Sales Engine: Generate Deal Opportunities**
+Data tables are designed following the OBT(One Big Table) data modeling practice to store information related to specific business domains. 
 
-1. **CRM Data Visualization and Insights:** Visualize and analyze your CRM data, providing a clear overview of your sales pipeline and deal progress.
-2. **Prospect Interaction Scoring:** Track and score prospect interactions, allowing you to focus on highly engaged leads and optimize your sales efforts.
-3. **Product Analytics-Driven Signals:** Leverage product usage data to identify customer needs and pain points, enabling your sales team to tailor their approach and close deals more effectively.
-4. **Meeting assistant & sales process optimization:** Transform your notes in actionable items to follow up with your prospect. Transform memos to close you deal and generate data on what works.
+OpenData:
 
-**Operations Engine: Create a Single Source of Truth and Automate Tedious Tasks**
+- Resources: Resources to be monitored (Influencer X from LinkedIn).
+- Events: Events tracked from resources (Post published by influencer X).
 
-1. **Company Activity Dashboard:** Monitor and visualize key company activities, providing a centralized overview of your organization’s performance.
-2. **Data Integration and Automation:** Streamline and automate data workflows to eliminate manual tasks and ensure data consistency across your organization.
-3. **AI-Powered Task Prioritization and Optimization:** Receive AI-driven recommendations for optimizing operations, helping your team focus on high-impact tasks and projects.
+Content:
 
-**Finance Engine: Visualize Financial Statements in Real-Time**
+- Ideas: Ideas generated from events tracked in open data or manually input.
+- Content: Content published on social networks by your entity (post on LinkedIn, article on Medium…).
 
-1. **Financial Transaction Tracking and Analysis:** Monitor and analyze financial transactions, providing real-time visibility into your organization’s financial health.
-2. **AI-Driven Financial Forecasting:** Utilize AI algorithms to predict future financial performance, enabling proactive decision-making and resource allocation.
-3. **Automated Financial Statement Generation:** Generate financial statements and reports with minimal manual intervention, streamlining financial reporting and analysis.
+Growth:
 
-**Open Data Engine: Understand the World Around You**
+- Interactions: All interactions made by an individual or organization on a piece of content.
+- People: Individuals identified as potential targets.
+- Organizations: Organizations identified as potential targets.
 
-1. **Financial Market Analysis:** Aggregate and analyze open financial market data to identify trends, risks, and opportunities that impact your organization.
-2. **Health and Environmental Data Insights:** Monitor and visualize health and environmental data, enabling your organization to understand the implications of global trends and events.
-3. **AI-Powered Trend Identification and Forecasting:** Leverage AI algorithms to identify emerging trends and forecast their impact on your organization, allowing you to make data-driven strategic decisions.
+Sales:
 
-## Core Model
+- Deals: Opportunities based on products or services sold by your company, linking a person and organization with you.
+- Activities: Tasks to be performed to close a deal.
 
-Naas provides robust Foundation Engines and Plugins, which constitute the core model of our data product solutions. These models are designed to facilitate distinct business functions and can be tailored to address the unique needs and challenges of your organization.
+Operations:
 
-### Abstractions
+- Conversations: Conversations tagged by domain to create specific outcomes.
+- Projects: Projects with their properties.
+- Tasks: Details of projects with timesheets.
+- Assets: These are values created by Operations for customers. They could be tangible or intangible but must bring value to the customer.
 
-The core model is based on six key abstraction items: Content, Interaction, Sequence, Task, Transaction, and Resource.
+Finance:
 
-1. **Content**: At the heart of our core model is the creation and management of quality content. Our data product solutions enable organizations to generate, optimize, and disseminate content that effectively communicates their value proposition and engages their target audience.
-2. **Interaction**: Our solutions also encompass growth marketing strategies to maximize audience interaction. Through strategic content distribution and audience engagement tactics, companies can enhance their visibility, attract and retain customers, and foster growth.
-3. **Sequence**: We offer tools and methodologies to streamline the sales conversion process. Our Sequence abstraction allows organizations to guide potential customers through a structured sales funnel, from awareness to interest, decision, and finally, action.
-4. **Task**: Operational efficiency is central to our core model. Our data product solutions provide companies with tools to manage their operational tasks effectively. This includes project management, task delegation, and tracking, all aimed at enhancing productivity and efficiency.
-5. **Transaction**: Naas also provides solutions for effective financial management. With our Transaction abstraction, companies can manage their financial transactions efficiently, ensuring the financial health, profitability, and sustainability of their organization.
-6. **Resource**: The final element of our core model is the leveraging of open data intelligence. Our Resource abstraction involves utilizing market research, competitor analysis, and customer behavior analysis to inform business strategies, drive innovation, and maintain a competitive edge.
+- Contracts: Contracts owned by your organization (revenue or costs).
+- Transactions: Transactions with financial purposes.
 
-Each abstraction item is the underlying data model of their respective engine: 
+### Connections between Data Tables
 
-- Content: Content engine
-- Interaction: Growth engine
-- Sequence: Sales engine
-- Task: Operation engine
-- Transaction: Finance engine
-- Resource: Open Data engine
+Data Tables are designed to feed one another and create a flywheel for your business.
 
-### Relationship between Core Model, Foundation Engines, and Plugins
+→ For instance, I will monitor all AI-related events on Google (Open Data). 
 
-The relationship between plugins, engines, and the core model can be understood in the context of their roles in a system:
+→ This will generate ideas for creating content (Content). 
 
-- **Core Model** is the fundamental structure that serves as the base for all operations. It encapsulates the main business abstractions and logic, providing the basis for the system’s functionality. It’s like the backbone of the system.
-- **Foundation Engines** are built upon this Core Model. They provide pre-built data products that align with the abstractions of the Core Model, offering solutions for specific business functions like content, growth, sales, operations, finance, and open data. They leverage the Core Model to provide their services.
-- **Plugins** are additional components that can be added to the Foundation Engines to enhance their functionality or provide new capabilities. They can either subscribe to the Core Model, meaning they adhere to and extend the system’s existing abstractions, or they can provide additional functionality not covered by the Core Model. Plugins offer flexibility and customization, allowing organizations to tailor their data products to their specific needs.
+→ These contents will be published on social networks, creating interactions with individuals working in organizations (Growth). 
 
-In summary, the Core Model provides the basic structure, the Foundation Engines use this structure to deliver specific business solutions, and the Plugins offer the ability to enhance these solutions or add new capabilities. 
+→ These people and companies will enrich my CRM system and be contacted by my sales team, possibly becoming deals (Sales). 
 
-### Core Model & Plugins Alignment
+→ These deals will result in contracts, transactions, and invoices made by my finance team (Finance). 
 
-The notion of Plugins subscribing or not to the Core Model is a crucial aspect of Naas’s data product solutions. This feature provides a high degree of customization and flexibility to organizations, allowing them to tailor the data solutions to their specific needs.
+→ The deals will also generate new projects for my operational teams. The projects will be tracked with tasks. At the end of the project, assets will be created for my clients (Operations) that could → become events published on content platforms (Open Data & Content), thus reinitiating the flywheel of my business.
 
-**Plugin combined to Foundation Engines**
+### From OBTs to Knowledge
 
-Plugins are modules or extensions added to the Foundation Engines they enhance their functionality or provide additional capabilities. Each Plugin is designed to perform a specific function and can be used independently or in combination with other Plugins and Foundation Engines.
+Each Assistant specializes in its domain and contributes to an ever-expanding Knowledge Graph through thanks to domain-specific the OBTs (One Big Tables). 
 
-When we say a Plugin “subscribes” to the Core Model, it means that the Plugin aligns with and supports the functionalities provided by the core abstraction items (Content, Interaction, Sequence, Task, Transaction, Resource). These Plugins will seamlessly integrate with the Core Model to expand upon its functionalities, creating a comprehensive and powerful data product solution. For instance, a Plugin that subscribes to the “Interaction” abstraction might provide advanced analytics for measuring user engagement and interaction.
+These OBTs encapsulate data in a structured format, serving as the knowledge base for each Assistant. This structured data collection method ensures that every piece of information is captured and categorized via a common ontology, ready to be leveraged for insights, predictions, and strategic decision-making.
 
-**Standalone Plugin**
+When SOPs are executed, Assistants perform their designated tasks and enrich the collective intelligence embodied by ABI's Unified Knowledge Graph, making it a living, learning ecosystem, a unified knowledge framework that enables a deeper understanding and interconnected view of business operations.
 
-On the other hand, a Plugin that does not subscribe to the Core Model is one that provides functionalities outside the scope of the core abstraction items. These Plugins offer unique features that may not directly relate to the Core Model but can still add value to the overall data product solution. For example, a Plugin providing capabilities for real-time communication or chat functionality may not directly align with any of the core abstraction items, but it can still enhance the overall user experience and efficiency of the data solution.
+## Customization[](https://docs.naas.ai/usage/abi/introduction#customization)
 
-Whether a Plugin subscribes to the Core Model or not, the key point is that it offers organizations the ability to customize their data product solutions and therefore their . By selecting and combining different Plugins, companies can create tailored solutions that best meet their specific business needs and goals.
+ABI’s architecture allows for extensive customization. Users can introduce new workflows or modify existing ones within the Naas ABI Repository without impacting the core models. This flexibility ensures your ABI system remains cutting-edge, automatically incorporating the latest updates while preserving your unique customizations.
 
-## Building Your ABI
+ABI embodies the intersection of automation and intelligence, designed not just to perform tasks but to learn from them, continuously enhancing its capacity to drive business growth. Through its SOPs, OBTs, and the evolving Knowledge Graph, ABI offers a personalized, intelligent framework for tackling the complexities of modern business environments.
 
-This section provides a step-by-step guide on how to build your Artificial Business Intelligence (ABI).
+Learn more about ABI Customization with the sections below.
+
+# How it works?
+
+## Architecture
+
+ABI is a combination of open source tools and proprietary technology. ABI relies on Naas Workspace and Naas API to function, requiring a token to run. 
+
+We’re building the features of ChatGPT and its GPT Store with **Naas Workspace** and a power orchestration layer with **Naas API** using enterprise-grade, open source technologies.
+
+```mermaid
+flowchart LR
+  user[End User]
+
+  subgraph workspace[Workspace]
+    chat[Chat]
+    search[Search]
+    lab[Lab]
+    dashboard[Dashboard]
+    subgraph assistants[Assistants]
+      personalassistant["AIA (Personal Assistant)"] 
+      mixassistants["ABI (Mixture of Assistants)"]
+      customassistants[Custom Assistants]
+    end
+  end
+
+  personalassistant<-.->mixassistants<-.->customassistants<-.->personalassistant
+
+  subgraph api[API]
+    direction TB
+    aimodels[AI Models]
+    plugins[Plugins]
+    assets[Assets]
+    secrets[Secrets]
+    prompts[Prompts]
+  end
+
+  subgraph storage[Storage]
+    direction TB
+    kg[Knowledge Graph]
+    vector[Vector Search]
+    object[File/Object Storage]
+  end
+
+  subgraph sources[Data Sources]
+    direction TB
+    subgraph Tools
+      databases[Databases]
+      APIs[Third Party APIs]
+    end
+    documents[Documents]
+  end
+  
+  subgraph abirepo[ABI Repository]
+    subgraph core[Core Models]
+      opendata((Open Data)) --> content((Content))
+      content --> growth((Growth))
+      growth --> sales((Sales))
+      sales --> ops((Operations))
+      ops --> finance((Finance)) --> opendata
+    end
+    custom[Custom Models]
+  end
+  
+  direction TB
+  subgraph templates[Templates Repository]
+    automation[Automation]
+    analytics[Analytics]
+		ai[AI]
+  end
+
+  subgraph workflowAPI[Orchestration]
+    direction TB
+    pipeline[Pipeline]
+    workflows[Workflows]
+  end
+	
+	user -->|Has| sources
+	user -->|Creates| prompts
+	user -->|Works with| workspace
+  sources -->|Input| core & custom
+  pipeline -->|"Schedules (Pre-process)"| workflows
+  core -->|Configures| pipeline
+  user -->|Configures| secrets
+  aimodels -->|Used by| assistants
+  workflows -->|Publish| assets & plugins
+  workflows -->|Output| kg
+  workflows -->|Output| vector
+  workflows -->|Output| object
+  workflows -->|Updates| workspace
+  plugins -->|Updates| assistants
+  prompts -->|Used by| assistants
+  secrets -->|Used by| assistants
+  storage <-.->|Used by| api
+  workflows <-->|Access| api
+  assets -->|Used by| assistants
+  assistants <-->|Interacts with| chat
+  chat -.->|"Triggers (Post process)"| workflows
+  templates -->|Integrate| custom & core
+
+```
+
+If you don’t want to use Naas capabilities to run ABI, you can do it but it will require some code refactoring. Our aim is to give developers a openAI-like developer experience using open source tools.
+
+## Orchestration
+
+The main pipeline executes all engines in the following order: open data, content, growth, sales, operations, finance and main.
+
+Each engine is configured by a pipeline that triggers core templates and plugins, as well as custom templates. 
+
+Please refer to the 'Add custom workflows to main pipeline' section for more information on this topic.
+
+```mermaid
+---
+title: Orchestration
+---
+graph TB
+
+pipeline_main["__pipeline__.ipynb"]
+main["__main__"]
+
+subgraph engine["models"]
+	direction LR
+	opendata
+	subgraph content["content-engine"]
+		direction TB
+		pipeline_content["__pipeline__.ipynb"]
+		plugin_content["__plugin__.ipynb"]
+		subgraph core
+			template_a["template_a.ipynb"]
+			template_b["template_b.ipynb"]
+			template_c["template_c.ipynb"]
+			template_a-->template_b
+			template_b-->template_c
+		end
+		subgraph custom
+			pipeline_custom["__pipeline__.ipynb"]
+		end
+	end
+	growth["growth-engine"]
+	sales["sales-engine"]
+	ops["operations-engine"]
+	finance["finance-engine"]
+	main
+end
+
+pipeline_main-->engine
+pipeline_content-->core-->plugin_content-->pipeline_custom
+opendata-->content-->growth-->sales-->ops-->finance-->main
+```
+
+## Installation
+
+This feature is currently available exclusively on Naas Lab for Pro users. 
+
+We are working to make it possible to run it locally.
+
+- Clone repo https://github.com/jupyter-naas/abi.git
+- Execute `setup.ipynb`
+- Run `__pipeline__.ipynb`
+
+## Build Your Own ABI
 
 ### Pre-requisites
 
-The first step in building your ABI is to ensure that you have a GitHub account. 
-If you do not yet have one, you can create it for free at GitHub's website. 
-Once you have your account, you will need to create a new organization. 
-This organization will serve as the home for your forked ABI repository. 
+The first step in building your ABI is to ensure that you have a GitHub account. If you do not yet have one, you can create one for free on GitHub's website. 
 
-#### Forking the ABI Repository
+Once you have your account, you must create a new organization. This organization will serve as the home for your forked ABI repository.
 
-To get started, you will need to fork this repository into your own GitHub organization. 
-This essentially creates a copy of the repository that you can modify and manage independently of the original source. 
+### Fork ABI Repository
+
+To get started, you must fork this repository into your own GitHub organization.
+This will create a copy of the repository that you can modify and manage independently of the original source.
 
 Here's how to fork the ABI repository:
 
-1. Click on the "Fork" button. A new screen will appear asking where you want to fork the repository.
+1. Click on the "Fork" button. A new screen will appear, asking where you want to fork the repository.
 2. Select your GitHub organization from the list. The repository will then be forked to your organization, and you'll be redirected to your new, forked repository.
 
-Now that you have forked the ABI repository, you can proceed with building your ABI in the custom folder of each engines.
+Now that you have forked the ABI repository, you can build your own version of ABI in each engine's custom folder.
 
-### Pull / Push from main abi repository
+### Setup Git remote
 
-**;TL/DR** 
+Once you have forked and created your own version of the ABI repository, you need to establish a Git remote. 
+
+This will enable you to push and pull to and from the original ABI repository. Doing so will allow you to update your project with the latest changes, or contribute back to the open-source project.
+
+Execute the following commands in your terminal:
+
 ```bash
+# Access your repo
+cd "your_directory_name"
+
 # Add  remote
 git remote add abi https://github.com/jupyter-naas/abi.git
 
@@ -158,56 +312,43 @@ git push abi main
 
 # Pull from main branch
 git pull abi main
+
 ```
 
----
-
-Once you have your fork and own version of the ABI repository, you might want to be able to push/pull to/from the original abi repository to contribute back to the Open Source project.
-
-To do that you need to add a new [git remote](https://git-scm.com/docs/git-remote). A git remote is just a reference to a "remote" location where the project is being hosted/stored.
-
-For example you could have a local git repository, which is hosted on multiple platforms at the same time, so on Github, Gitlab and Bitbucket for example. But on your computer you only want to have a single directory with the project, from which you want to be able to push on a single or all platforms.
-
-#### Create git remote
-
-To create the git remote you just need to execute the following command, from the repository directory (you need to be in your flavoured ABI folder):
-
-```bash
-git remote add abi https://github.com/jupyter-naas/abi.git
-```
-
-This will create a new git remote named `abi` to which you are now able to push/pull.
-
-#### Pull from abi remote
-
-Now let's say on local you are on the `main` branch, and you want to pull the latest changes from the main branch of the original abi repository (so the `abi` git remote). You need to run:
-
-```bash
-git pull abi main
-```
-
-This is telling git to pull the `main` branch from the repository hosted at `https://git-scm.com/docs/git-remote`.
-
-#### Push to abi remote
-
-If you want to push to the original ABI project (you might not have the permissions to push to the main branch), but we will imagine that you have, then you just have to run:
-
-```bash
-git pull abi main
-```
-
-This is telling git to push to the `main` branch of the repository hosted at `https://git-scm.com/docs/git-remote`.
-
-#### Git default remote
+**About Git default remote**
 
 When you clone a git repository from Github or any other provider, it will always create a default remote for you, named, `origin`. You might already have asked yourself what this `origin` was. It's your default git remote.
 
 This means that, assuming you are on the `main` branch, executing `git push` is the same as `git push origin main`.
 
 So by default will just use:
+
 - The branch you are actually on
 - The `origin` remote. Even if other exists, it will always use `origin` by default.
-- 
+
+### Add custom workflow to main pipeline
+
+Begin creating your own workflow by developing templates in the custom folders for each engine. 
+
+![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/974ebd2d-7215-456f-b6d1-55233bc34c5b/6cca741f-de6f-45f8-bc50-03c8f226ea35/Untitled.png)
+
+Once they are ready to be integrated into the main pipeline:
+
+- Duplicates **`__**pipeline__.template.ipynb` and rename it  **`__**pipeline__.ipynb`
+- Configure your [notebook steps](https://docs.naas.ai/resources/developers/jobs/pipeline#notebookstep-pipeline)
+- Test your custom pipeline
+- Push your new notebooks to production
+
+![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/974ebd2d-7215-456f-b6d1-55233bc34c5b/a077c4f6-f8c8-4025-9371-259dcde1a69d/Untitled.png)
+
+Your custom pipeline will be executed at the end of each engine's process.
+
+![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/974ebd2d-7215-456f-b6d1-55233bc34c5b/7241d48d-ac9a-4888-8542-dd18915f663c/Untitled.png)
+
+If you're willing to share your workflows with the community, please feel free to contact us. 
+
+We'd be delighted to incorporate them into the core models and acknowledge you as contributors to this project.
+
 ## Product Owners
 
 * [Florent Ravenel](https://www.linkedin.com/in/florent-ravenel/) - florent@naas.ai
