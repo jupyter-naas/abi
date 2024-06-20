@@ -3,13 +3,13 @@ from llm import llm
 from langchain.tools import Tool
 from langchain.chains.conversation.memory import ConversationBufferWindowMemory
 from langchain.prompts import PromptTemplate
-from tools.vector import kg_qa
+# from tools.vector import kg_qa
 from tools.cypher import cypher_qa
 
-def run_retriever(query):
-    results = kg_qa.invoke({"query": query})
-    print(results)
-    return results["result"]
+# def run_retriever(query):
+#     results = kg_qa.invoke({"query": query})
+#     print(results)
+#     return results["result"]
 
 def run_cypher(query):
     results = cypher_qa.invoke({"query": query})
@@ -22,15 +22,15 @@ tools = [
         func=llm.invoke,
         return_direct=True
         ),
-    Tool.from_function(
-        name="Vector Search Index",
-        description="""Useful to provide information about content. 
-        Not useful for any sort of aggregation like counting the number of posts, ranking and filtering by date, etc.
-        Use full question as input.
-        """,
-        func = run_retriever,
-        return_direct=True
-    ),
+    # Tool.from_function(
+    #     name="Vector Search Index",
+    #     description="""Useful to provide information about content. 
+    #     Not useful for any sort of aggregation like counting the number of posts, ranking and filtering by date, etc.
+    #     Use full question as input.
+    #     """,
+    #     func = run_retriever,
+    #     return_direct=True
+    # ),
     Tool.from_function(
         name="Graph Cypher QA Chain",
         description="""Useful when you need to answer questions about content, concepts, target, objective, content types and their dependencies. 
