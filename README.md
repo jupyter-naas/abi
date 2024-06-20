@@ -357,14 +357,13 @@ We'd be delighted to incorporate them into the core models and acknowledge you a
 * [Emma Petit](https://demo.example/profiles/demo - jeremy@naas.ai
 * [Grace Lambert](https://demo.example/profiles/grace-lambert) - maxime@naas.ai
 
-
 ## Acknowledgments
 
 * [Awesome Notebooks](https://github.com/jupyter-naas/awesome-notebooks)
 * [Naas Drivers](https://github.com/jupyter-naas/drivers)
+* [Naas Python](https://github.com/jupyter-naas/naas-python)
 * [Naas](https://github.com/jupyter-naas/naas)
 * [Naas Data Product](https://github.com/jupyter-naas/naas-data-product)
-
 
 ## Legal
 
