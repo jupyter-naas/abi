@@ -113,9 +113,9 @@ ABI embodies the intersection of automation and intelligence, designed not just 
 
 Learn more about ABI Customization with the sections below.
 
-# How it works?
+## How it works?
 
-## Architecture
+### Architecture
 
 ABI is a combination of open source tools and proprietary technology. ABI relies on Naas Workspace and Naas API to function, requiring a token to run. 
 
@@ -215,7 +215,7 @@ flowchart LR
 
 If you don’t want to use Naas capabilities to run ABI, you can do it but it will require some code refactoring. Our aim is to give developers a openAI-like developer experience using open source tools.
 
-## Orchestration
+### Orchestration
 
 The main pipeline executes all engines in the following order: open data, content, growth, sales, operations, finance and main.
 
@@ -234,9 +234,9 @@ main["__main__"]
 
 subgraph engine["models"]
 	direction LR
-	opendata
+	opendata["opendata-engine"]
 	subgraph content["content-engine"]
-		direction TB
+		direction LR
 		pipeline_content["__pipeline__.ipynb"]
 		plugin_content["__plugin__.ipynb"]
 		subgraph core
@@ -262,7 +262,7 @@ pipeline_content-->core-->plugin_content-->pipeline_custom
 opendata-->content-->growth-->sales-->ops-->finance-->main
 ```
 
-## Installation
+### Installation
 
 This feature is currently available exclusively on Naas Lab for Pro users. 
 
@@ -272,15 +272,15 @@ We are working to make it possible to run it locally.
 - Execute `setup.ipynb`
 - Run `__pipeline__.ipynb`
 
-## Build Your Own ABI
+### Build Your Own ABI
 
-### Pre-requisites
+#### Pre-requisites
 
 The first step in building your ABI is to ensure that you have a GitHub account. If you do not yet have one, you can create one for free on GitHub's website. 
 
 Once you have your account, you must create a new organization. This organization will serve as the home for your forked ABI repository.
 
-### Fork ABI Repository
+#### Fork ABI Repository
 
 To get started, you must fork this repository into your own GitHub organization.
 This will create a copy of the repository that you can modify and manage independently of the original source.
@@ -292,7 +292,7 @@ Here's how to fork the ABI repository:
 
 Now that you have forked the ABI repository, you can build your own version of ABI in each engine's custom folder.
 
-### Setup Git remote
+#### Setup Git remote
 
 Once you have forked and created your own version of the ABI repository, you need to establish a Git remote. 
 
@@ -326,11 +326,11 @@ So by default will just use:
 - The branch you are actually on
 - The `origin` remote. Even if other exists, it will always use `origin` by default.
 
-### Add custom workflow to main pipeline
+#### Add custom workflow to main pipeline
 
 Begin creating your own workflow by developing templates in the custom folders for each engine. 
 
-![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/974ebd2d-7215-456f-b6d1-55233bc34c5b/6cca741f-de6f-45f8-bc50-03c8f226ea35/Untitled.png)
+![custom_folder](assets/custom_folder.png)
 
 Once they are ready to be integrated into the main pipeline:
 
@@ -339,11 +339,11 @@ Once they are ready to be integrated into the main pipeline:
 - Test your custom pipeline
 - Push your new notebooks to production
 
-![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/974ebd2d-7215-456f-b6d1-55233bc34c5b/a077c4f6-f8c8-4025-9371-259dcde1a69d/Untitled.png)
+![configure_pipeline](assets/configure_pipeline.png)
 
 Your custom pipeline will be executed at the end of each engine's process.
 
-![Untitled](https://prod-files-secure.s3.us-west-2.amazonaws.com/974ebd2d-7215-456f-b6d1-55233bc34c5b/7241d48d-ac9a-4888-8542-dd18915f663c/Untitled.png)
+![pipeline_custom](assets/pipeline_custom.png)
 
 If you're willing to share your workflows with the community, please feel free to contact us. 
 
