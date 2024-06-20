@@ -357,14 +357,13 @@ We'd be delighted to incorporate them into the core models and acknowledge you a
 * [Jeremy Ravenel](https://www.linkedin.com/in/ACoAAAJHE7sB5OxuKHuzguZ9L6lfDHqw--cdnJg/) - jeremy@naas.ai
 * [Maxime Jublou](https://www.linkedin.com/in/maximejublou/) - maxime@naas.ai
 
-
 ## Acknowledgments
 
 * [Awesome Notebooks](https://github.com/jupyter-naas/awesome-notebooks)
 * [Naas Drivers](https://github.com/jupyter-naas/drivers)
+* [Naas Python](https://github.com/jupyter-naas/naas-python)
 * [Naas](https://github.com/jupyter-naas/naas)
 * [Naas Data Product](https://github.com/jupyter-naas/naas-data-product)
-
 
 ## Legal
 
