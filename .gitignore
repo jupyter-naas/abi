@@ -19,3 +19,4 @@ __pycache__
 .streamlit/secrets.toml
 .env
 .DS_Store
+neo4j_data
