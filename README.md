@@ -124,7 +124,7 @@ ABI is a combination of open source tools and proprietary technology. ABI relies
 We’re building the features of ChatGPT and its GPT Store with **Naas Workspace** and a power orchestration layer with **Naas API** using enterprise-grade, open source technologies.
 
 ```mermaid
-%%{init: {'themeVariables': { 'background': '#ffffff' }}}%%
+%%{init: {'theme': 'neutral'}}%%
 flowchart LR
   user[End User]
 
