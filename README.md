@@ -124,7 +124,7 @@ ABI is a combination of open source tools and proprietary technology. ABI relies
 We’re building the features of ChatGPT and its GPT Store with **Naas Workspace** and a power orchestration layer with **Naas API** using enterprise-grade, open source technologies.
 
 ```mermaid
-%%{init: {'theme': 'neutral'}}%%
+%%{init: {'theme': 'neutral', 'themeVariables': { 'background': '#ffffff' }}}%%
 flowchart LR
   user[End User]
 
@@ -230,8 +230,8 @@ Please refer to the 'Add custom workflows to main pipeline' section for more inf
 ---
 title: Orchestration
 ---
+%%{init: {'theme': 'neutral', 'themeVariables': { 'background': '#ffffff' }}}%%
 graph TB
-
 pipeline_main["__pipeline__.ipynb"]
 main["__main__"]
 
