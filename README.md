@@ -267,9 +267,13 @@ This feature is currently available exclusively on Naas Lab for Pro users.
 
 We are working to make it possible to run it locally.
 
+- Duplicate our [Google Sheets spreadsheet model](https://docs.google.com/spreadsheets/d/1uHxnHhu3BIYYcUTfrmnJabWtKbGhhdaUUTpdG9WVg1M/edit?usp=sharing)
+- Share your Google Sheets spreadsheet with our service account : 🔗 naas-share@naas-gsheets.iam.gserviceaccount.com
+- Set "ENTITY" spreadsheet with your information
 - Clone repo https://github.com/jupyter-naas/abi.git
 - Execute `setup.ipynb`
 - Run `__pipeline__.ipynb`
+- Deploy to production `push_to_production.ipynb` (only on Naas Cloud)
 
 ### Build Your Own ABI
 
