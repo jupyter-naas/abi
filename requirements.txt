@@ -10,5 +10,5 @@ langchain==0.1.17
 langchain_openai==0.1.6
 naas_data_product==0.1.9
 naas-python==1.4.2
-naas-drivers==0.121.8
+naas-drivers[emailbuilder]==0.121.8
 boto3==1.34.128
