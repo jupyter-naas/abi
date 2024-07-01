@@ -1,0 +1,22 @@
+# This is a first draft of ABI configuration. We will iterate on this.
+
+config:
+  abi_spreadsheet: https://docs.google.com/spreadsheets/d/1
+
+schedulers:
+  - name: main
+    enable: true
+    cron: 0 10 * * *
+    steps:
+      - type: Notebook
+        enable: true
+        entrypoint: __pipeline__.ipynb
+        environment_variables:
+          HELLO: WORLD
+        inputs:
+          notifications: false
+          steps: ["opendata", "content", "growth", "sales", "ops", "finance"]
+      - type: Notebook
+        enable: false
+        entrypoint: ./models/Hubspot.ipynb
+
