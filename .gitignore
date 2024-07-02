@@ -1,14 +1,15 @@
 # Jupyter Notebook
 .ipynb_checkpoints
+*Untitled.ipynb
 
 # Data
-.csv
-.xlsx
-.json
-.parquet
-.logs
+*.csv
+*.xlsx
+*.json
+*.parquet
+*.logs
 
-# Models<
+# Models
 pipeline_executions
 
 # Outputs

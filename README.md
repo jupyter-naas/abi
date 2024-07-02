@@ -1,12 +1,9 @@
-![Naas.ai - Open Source Data Platform](assets/project_logo.png)
-
 # ABI*: The AI system for your everyday business
-
 *Augmented Business Intelligence
 
----
+![https://docs.naas.ai/assets/images/abi-jarvis-c60262f414cbd2899f8fcbb9fdaa4aab.png](https://docs.naas.ai/assets/images/abi-jarvis-c60262f414cbd2899f8fcbb9fdaa4aab.png)
 
-<img href="https://public.naas.ai/YWJpLTJEZGVtby00MG5hYXMtMkVhaQ==/asset/dfafbde419e807425792122defa5ab17bfeef51d42247f515a52e24c1999" src="./assets/network.png" width="75%" height="75%">
+The Naas ABI system offers an innovative approach to Enterprise Data Management, addressing the challenges of integrating Artificial Intelligence (AI) into organizational workflows. By transforming Large Language Models (LLMs) and their Mixture of Experts (MoE) model into a unified Mixture of Assistants (MoA), the system aims to eliminate business silos by facilitating interconnection across business domains, with a focus on improving brand awareness, accelerating sales, and securing cash flow.
 
 ## Mixture of Assistants[](https://docs.naas.ai/usage/abi/introduction#mixture-of-assistants)
 
@@ -281,9 +278,13 @@ This feature is currently available exclusively on Naas Lab for Pro users.
 
 We are working to make it possible to run it locally.
 
+- Duplicate our [Google Sheets spreadsheet model](https://docs.google.com/spreadsheets/d/1uHxnHhu3BIYYcUTfrmnJabWtKbGhhdaUUTpdG9WVg1M/edit?usp=sharing)
+- Share your Google Sheets spreadsheet with our service account : 🔗 naas-share@naas-gsheets.iam.gserviceaccount.com
+- Set "ENTITY" spreadsheet with your information
 - Clone repo https://github.com/jupyter-naas/abi.git
 - Execute `setup.ipynb`
 - Run `__pipeline__.ipynb`
+- Deploy to production `push_to_production.ipynb` (only on Naas Cloud)
 
 ### Build Your Own ABI
 
