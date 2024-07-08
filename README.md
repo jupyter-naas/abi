@@ -6,7 +6,7 @@
 
 ---
 
-<img href="https://public.naas.ai/YWJpLTJEZGVtby00MG5hYXMtMkVhaQ==/asset/dfafbde419e807425792122defa5ab17bfeef51d42247f515a52e24c1999" src="./assets/network.png" width="75%" height="75%">
+<img src="./assets/abi-flywheel.png" width="50%" height="50%">
 
 ## Mixture of Assistants[](https://docs.naas.ai/usage/abi/introduction#mixture-of-assistants)
 
