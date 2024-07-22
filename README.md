@@ -1,8 +1,6 @@
 # ABI*: The AI system for your everyday business
 *Augmented Business Intelligence
 
-The Naas ABI system offers an innovative approach to Enterprise Data Management, addressing the challenges of integrating Artificial Intelligence (AI) into organizational workflows. By transforming Large Language Models (LLMs) and their Mixture of Experts (MoE) model into a unified Mixture of Assistants (MoA), the system aims to eliminate business silos by facilitating interconnection across business domains, with a focus on improving brand awareness, accelerating sales, and securing cash flow.
-
 <img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
 ## Mixture of Assistants[](https://docs.naas.ai/usage/abi/introduction#mixture-of-assistants)
