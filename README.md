@@ -1,9 +1,9 @@
 # ABI*: The AI system for your everyday business
 *Augmented Business Intelligence
 
-![https://docs.naas.ai/assets/images/abi-jarvis-c60262f414cbd2899f8fcbb9fdaa4aab.png](https://docs.naas.ai/assets/images/abi-jarvis-c60262f414cbd2899f8fcbb9fdaa4aab.png)
-
 The Naas ABI system offers an innovative approach to Enterprise Data Management, addressing the challenges of integrating Artificial Intelligence (AI) into organizational workflows. By transforming Large Language Models (LLMs) and their Mixture of Experts (MoE) model into a unified Mixture of Assistants (MoA), the system aims to eliminate business silos by facilitating interconnection across business domains, with a focus on improving brand awareness, accelerating sales, and securing cash flow.
+
+<img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
 ## Mixture of Assistants[](https://docs.naas.ai/usage/abi/introduction#mixture-of-assistants)
 
@@ -121,6 +121,17 @@ ABI is a combination of open source tools and proprietary technology. ABI relies
 We’re building the features of ChatGPT and its GPT Store with **Naas Workspace** and a power orchestration layer with **Naas API** using enterprise-grade, open source technologies.
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#fcfcfc',
+    'primaryTextColor': '#000',
+    'primaryBorderColor': '#7C0000',
+    'lineColor': '#000',
+    'secondaryColor': '#f4f4f4',
+    'tertiaryColor': '#fff'
+  }
+}}%%
 flowchart LR
   user[End User]
 
@@ -226,8 +237,8 @@ Please refer to the 'Add custom workflows to main pipeline' section for more inf
 ---
 title: Orchestration
 ---
+%%{init: {'theme': 'neutral', 'themeVariables': { 'background': '#ffffff' }}}%%
 graph TB
-
 pipeline_main["__pipeline__.ipynb"]
 main["__main__"]
 
