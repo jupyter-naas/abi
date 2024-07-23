@@ -9,6 +9,7 @@ define usage_str
                               
 Usage:
 	make all: 					Create the conda environment and install the ABI kernel
+	make dependencies: 				Install the dependencies
 	make conda-install-kernel: 			Install the ABI kernel in the conda environment
 	make conda-env-add package=<package>: 		Add a package to the conda environment
 	make conda-env-update: 				Update the conda environment
@@ -68,10 +69,24 @@ usage:
 # 		make macos-install-conda; \
 # 	fi
 
+
 all: conda-install-kernel
+
+# Conda environment
+MD5=$(shell command -v md5sum &> /dev/null && echo "md5sum" || echo "md5")
+CONDA_ENV_HASH = .abi-conda/$(shell cat conda.yml | $(MD5) | sed 's/ .*//g').hash
+
+$(CONDA_ENV_HASH): .abi-conda
+	@ echo "\n📦 conda.yml drift detected. Updating conda environment ...\n\n"
+	@ make conda-env-update && \
+		(rm .abi-conda/*.hash || true) && \
+		touch $(CONDA_ENV_HASH) && \
+		echo "\n\n✅ conda environment updated.\n\n"
 
 .abi-conda:
 	conda env create -f conda.yml --prefix .abi-conda
+
+dependencies: $(CONDA_ENV_HASH)
 
 conda-env-add:
 	conda run -p .abi-conda pip install $(package)
@@ -79,7 +94,7 @@ conda-env-add:
 conda-env-update:
 	conda env update --file conda.yml --prune -p .abi-conda
 
-conda-install-kernel: .abi-conda
+conda-install-kernel: $(CONDA_ENV_HASH)
 	conda run -p .abi-conda python -m ipykernel install --user --name abi --display-name "abi"
 	conda run -p .abi-conda jupyter kernelspec install --user .abi-conda/share/jupyter/kernels/python3/
 
