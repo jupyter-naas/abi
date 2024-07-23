@@ -10,6 +10,8 @@ define usage_str
 Usage:
 	make all: 					Create the conda environment and install the ABI kernel
 	make conda-install-kernel: 			Install the ABI kernel in the conda environment
+	make conda-env-add package=<package>: 		Add a package to the conda environment
+	make conda-env-update: 				Update the conda environment
 	make conda-export: 				Export the conda environment to conda.yml
 	make windows-install-conda: 			Download and install Miniconda for Windows
 	make usage:					Show this message
@@ -70,6 +72,12 @@ all: conda-install-kernel
 
 .abi-conda:
 	conda env create -f conda.yml --prefix .abi-conda
+
+conda-env-add:
+	conda run -p .abi-conda pip install $(package)
+
+conda-env-update:
+	conda env update --file conda.yml --prune -p .abi-conda
 
 conda-install-kernel: .abi-conda
 	conda run -p .abi-conda python -m ipykernel install --user --name abi --display-name "abi"
