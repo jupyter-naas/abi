@@ -99,7 +99,8 @@ conda-install-kernel: $(CONDA_ENV_HASH)
 	conda run -p .abi-conda jupyter kernelspec install --user .abi-conda/share/jupyter/kernels/python3/
 
 conda-export: dependencies
-	conda run -p .abi-conda conda env export --no-builds | grep -v "^prefix: " > conda.yml
+	echo "name: .abi-conda" > conda.yml
+	conda run -p .abi-conda conda env export --no-builds | grep -v "^prefix: " | grep -v "^name: " >> conda.yml 
 
 windows-install-conda:
 	wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
