@@ -21,3 +21,7 @@ __pycache__
 .env
 .DS_Store
 neo4j_data
+.abi-conda
+
+# Entities + Secrets
+config.secret.yml
