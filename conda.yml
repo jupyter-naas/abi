@@ -1,4 +1,4 @@
-name: /Users/maximejublou/dev/naas/abi/.abi-conda
+name: .abi-conda
 channels:
   - conda-forge
   - defaults
@@ -83,6 +83,7 @@ dependencies:
     - greenlet==3.0.3
     - grpcio==1.64.1
     - h11==0.14.0
+    - htmlbuilder==0.1.2
     - httpcore==1.0.5
     - httpx==0.27.0
     - idna==3.7
@@ -109,7 +110,7 @@ dependencies:
     - mypy-extensions==1.0.0
     - mypy-protobuf==3.6.0
     - naas-data-product==0.1.9
-    - naas-drivers[emailbuilder]==0.121.10
+    - naas-drivers[htmlbuilder]==0.121.10
     - naas-models==1.11.6
     - naas-python==1.4.2
     - nbclient==0.10.0
