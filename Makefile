@@ -98,7 +98,7 @@ conda-install-kernel: $(CONDA_ENV_HASH)
 	conda run -p .abi-conda python -m ipykernel install --user --name abi --display-name "abi"
 	conda run -p .abi-conda jupyter kernelspec install --user .abi-conda/share/jupyter/kernels/python3/
 
-conda-export:
+conda-export: dependencies
 	conda run -p .abi-conda conda env export --no-builds | grep -v "^prefix: " > conda.yml
 
 windows-install-conda:
