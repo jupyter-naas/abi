@@ -98,9 +98,12 @@ conda-install-kernel: $(CONDA_ENV_HASH)
 	conda run -p .abi-conda python -m ipykernel install --user --name abi --display-name "abi"
 	conda run -p .abi-conda jupyter kernelspec install --user .abi-conda/share/jupyter/kernels/python3/
 
-conda-export: dependencies
-	echo "name: .abi-conda" > conda.yml
-	conda run -p .abi-conda conda env export --no-builds | grep -v "^prefix: " | grep -v "^name: " >> conda.yml 
+conda-export: $(CONDA_ENV_HASH)
+	@ rm .naas_drivers_packages > /dev/null 2>&1; cat conda.yml | grep '\- naas-drivers' | sed 's/^.*\[//g; s/\].*//g' > .naas_drivers_packages
+	@ echo "name: .abi-conda" > conda.yml
+	@ conda run -p .abi-conda conda env export --no-builds | grep -v "^prefix: " | grep -v "^name: " >> conda.yml
+	@ export packages=`cat .naas_drivers_packages` && cat conda.yml | sed "s/naas-drivers/naas-drivers\[$$packages\]/g" > conda.yml.new && mv conda.yml.new conda.yml
+	@ rm .naas_drivers_packages
 
 windows-install-conda:
 	wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
