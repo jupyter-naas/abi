@@ -1,14 +1,15 @@
 # Jupyter Notebook
 .ipynb_checkpoints
+*Untitled.ipynb
 
 # Data
-.csv
-.xlsx
-.json
-.parquet
-.logs
+*.csv
+*.xlsx
+*.json
+*.parquet
+*.logs
 
-# Models<
+# Models
 pipeline_executions
 
 # Outputs
@@ -20,3 +21,7 @@ __pycache__
 .env
 .DS_Store
 neo4j_data
+.abi-conda
+
+# Entities + Secrets
+config.secret.yml

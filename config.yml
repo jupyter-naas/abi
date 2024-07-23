@@ -1,0 +1,20 @@
+config:
+    storage_name: abi
+    workspace_id: false
+    
+schedulers:
+  - name: main
+    enable: true
+    cron: 0 10 * * *
+    steps:
+      - type: Notebook
+        enable: true
+        entrypoint: __pipeline__.ipynb
+        environment_variables:
+          HELLO: WORLD
+        inputs:
+          notifications: false
+          steps: ["opendata", "content", "growth", "sales", "ops", "finance"]
+      - type: Notebook
+        enable: false
+        entrypoint: ./models/Hubspot.ipynb
