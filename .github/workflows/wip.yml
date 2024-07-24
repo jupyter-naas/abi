@@ -64,4 +64,13 @@ jobs:
         run: docker pull ghcr.io/${{ github.repository }}/abi:latest
 
       - name: Run Papermill
-        run: docker run --rm -it --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest papermill main.ipynb output.ipynb
+        run: |
+          docker run --name abi-execution -it --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest ls
+          mkdir output
+          docker cp abi-execution:/app/__pipeline__.ipynb ./output/__pipeline__.ipynb
+
+      - name: Upload output artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: output-files
+          path: ./output
