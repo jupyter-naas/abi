@@ -80,8 +80,7 @@ CONDA_ENV_HASH = .abi-conda/$(shell cat conda.yml | $(MD5) | sed 's/ .*//g').has
 $(CONDA_ENV_HASH): .abi-conda
 	@ echo "\n📦 conda.yml drift detected. Updating conda environment ...\n\n"
 	@ make conda-env-update && \
-		(rm .abi-conda/*.hash || true) && \
-		touch $(CONDA_ENV_HASH) && \
+		make conda-update-hash && \
 		echo "\n\n✅ conda environment updated.\n\n"
 
 conda-update-hash:
@@ -119,9 +118,6 @@ windows-install-conda:
 
 # Docker
 build: build.linux.x86_64
-
-# build.linux.aarch64:
-# 	docker build . -t abi -f Dockerfile.linux.aarch64 --platform linux/aarch64
 
 build.linux.x86_64:
 	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
