@@ -43,4 +43,4 @@ jobs:
         run: docker push ghcr.io/${{ github.repository }}/abi:latest
 
       - name: Run Papermill
-        run: docker run --rm -it --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest papermill main.ipynb output.ipynb
+        run: docker run --rm --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest papermill main.ipynb output.ipynb
