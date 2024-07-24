@@ -1,0 +1,49 @@
+FROM python:3.12-slim-bookworm
+
+ENV BUILDPLATFORM=Linux
+ENV TARGETPLATFORM=x86_64
+
+RUN apt update \
+    && apt install --yes wget make \
+    && cd /tmp \
+    && wget https://repo.anaconda.com/miniconda/Miniconda3-latest-$BUILDPLATFORM-$TARGETPLATFORM.sh \
+    && bash Miniconda3-latest-$BUILDPLATFORM-$TARGETPLATFORM.sh -b -u -p /opt/conda \
+    && /opt/conda/bin/conda init bash \
+    && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Update PATH to add /root/miniconda3/bin
+ENV PATH="/opt/conda/bin:${PATH}"
+
+# Create abi user
+RUN useradd -m abi -s /bin/bash \
+    && mkdir /app && chown abi /app
+
+
+WORKDIR /app
+
+ADD --chown=abi:abi conda.yml Makefile /app/
+
+USER abi
+
+RUN conda init bash
+RUN echo "conda activate /app/.abi-conda" >> /home/abi/.bashrc
+
+USER root
+
+# This RUN can seems complex but it's here to make sure that we can reduce the cache size and therefore the overall size of the image.
+RUN su - abi -c "export PATH="/opt/conda/bin:${PATH}" && cd /app && make conda-install-kernel && conda clean --all -y" && \
+    conda clean --all -y && \
+    find /opt/conda/ -type f -name '*.a' -delete && \
+    find /opt/conda/ -type f -name '*.pyc' -delete && \
+    find /opt/conda/ -type f -name '*.pyo' -delete && \
+    find /opt/conda/ -type f -name '*.js.map' -delete && \
+    rm -rf /opt/conda/pkgs && \
+    rm -rf /opt/conda/conda-meta
+
+RUN echo "conda activate /app/.abi-conda" >> /root/.bashrc
+
+ADD --chown=abi:abi . .
+
+USER abi
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
