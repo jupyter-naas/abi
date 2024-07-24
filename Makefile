@@ -16,6 +16,7 @@ Usage:
 	make conda-export: 				Export the conda environment to conda.yml
 	make windows-install-conda: 			Download and install Miniconda for Windows
 	make usage:					Show this message
+	make build:					Build the Docker image to package ABI.
 
 
 endef
@@ -79,14 +80,19 @@ CONDA_ENV_HASH = .abi-conda/$(shell cat conda.yml | $(MD5) | sed 's/ .*//g').has
 $(CONDA_ENV_HASH): .abi-conda
 	@ echo "\n📦 conda.yml drift detected. Updating conda environment ...\n\n"
 	@ make conda-env-update && \
-		(rm .abi-conda/*.hash || true) && \
-		touch $(CONDA_ENV_HASH) && \
+		make conda-update-hash && \
 		echo "\n\n✅ conda environment updated.\n\n"
+
+conda-update-hash:
+	@ (rm .abi-conda/*.hash || true) && \
+		touch $(CONDA_ENV_HASH)
 
 .abi-conda:
 	conda env create -f conda.yml --prefix .abi-conda
+	make conda-update-hash
 
-dependencies: $(CONDA_ENV_HASH)
+dep: dependencies
+dependencies: .abi-conda $(CONDA_ENV_HASH)
 
 conda-env-add:
 	conda run -p .abi-conda pip install $(package)
@@ -94,11 +100,11 @@ conda-env-add:
 conda-env-update:
 	conda env update --file conda.yml --prune -p .abi-conda
 
-conda-install-kernel: $(CONDA_ENV_HASH)
+conda-install-kernel: dep
 	conda run -p .abi-conda python -m ipykernel install --user --name abi --display-name "abi"
 	conda run -p .abi-conda jupyter kernelspec install --user .abi-conda/share/jupyter/kernels/python3/
 
-conda-export: $(CONDA_ENV_HASH)
+conda-export: dep
 	@ rm .naas_drivers_packages > /dev/null 2>&1; cat conda.yml | grep '\- naas-drivers' | sed 's/^.*\[//g; s/\].*//g' > .naas_drivers_packages
 	@ echo "name: .abi-conda" > conda.yml
 	@ conda run -p .abi-conda conda env export --no-builds | grep -v "^prefix: " | grep -v "^name: " >> conda.yml
@@ -109,3 +115,9 @@ windows-install-conda:
 	wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 	chmod +x Miniconda3-latest-Linux-x86_64.sh
 	./Miniconda3-latest-Linux-x86_64.sh
+
+# Docker
+build: build.linux.x86_64
+
+build.linux.x86_64:
+	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
