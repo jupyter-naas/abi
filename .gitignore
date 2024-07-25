@@ -2,12 +2,13 @@
 .ipynb_checkpoints
 *Untitled.ipynb
 
-# Data
+# Files
 *.csv
 *.xlsx
 *.json
 *.parquet
 *.logs
+*.pickle
 
 # Models
 pipeline_executions
