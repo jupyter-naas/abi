@@ -68,7 +68,7 @@ export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
 mkdir -p outputs/
 
 # Copy the output files from the container to the host.
-docker cp $SCHEDULER_ID:/app/outputs ./outputs/
+#docker cp $SCHEDULER_ID:/app/outputs ./outputs/
 
 """
 
