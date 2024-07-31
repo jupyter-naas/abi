@@ -22,11 +22,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull Docker image
-        run: docker pull ghcr.io/jupyter-naas/abi/abi:latest
+        run: docker pull ghcr.io/${{ github.repository }}/abi:latest
 
       # - name: Run Papermill
       #   run: |
-      #     docker run --name abi-execution -i --platform linux/amd64 ghcr.io/jupyter-naas/abi/abi:latest ls
+      #     docker run --name abi-execution -i --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest ls
       #     mkdir output
       #     docker cp abi-execution:/app/__pipeline__.ipynb ./output/__pipeline__.ipynb
 
@@ -62,7 +62,7 @@ def generate_schedulers(config : dict, template : str):
 export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
 
 # Execute the Scheduler script
-docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/jupyter-naas/abi/abi:latest python .github/scripts/run_scheduler.py "{scheduler['name']}"
+docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest python .github/scripts/run_scheduler.py "{scheduler['name']}"
 
 # Create the output directory that will be used to store the output files and save them as artifacts.
 mkdir -p outputs/
