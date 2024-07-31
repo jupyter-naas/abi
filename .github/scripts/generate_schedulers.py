@@ -49,8 +49,8 @@ def generate_schedulers(config : dict, template : str):
 
       _.set_(cicd, "name", f"Scheduler - {scheduler['name']}")
 
-      cicd["on"] = {"schedule": [{"cron": scheduler["cron"]}]}
-      # cicd["on"] = {"workflow_dispatch": '', "schedule": [{"cron": scheduler["cron"]}]}
+      # cicd["on"] = {"schedule": [{"cron": scheduler["cron"]}]}
+      cicd["on"] = {"workflow_dispatch": None, "schedule": [{"cron": scheduler["cron"]}]}
 
 
       new_step = {}
