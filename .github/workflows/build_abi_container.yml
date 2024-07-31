@@ -1,12 +1,12 @@
-name: CI/CD Workflow
+name: Build ABI Container
 
 on:
   push:
     branches:
-      - 178-schedule-abi-using-github-action
-  pull_request:
-    branches:
-      - 178-schedule-abi-using-github-action
+      - main
+  # pull_request:
+  #   branches:
+  #     - main
 
 jobs:
   build:
@@ -53,33 +53,3 @@ jobs:
         with:
           name: output-files
           path: ./execution_outputs
-
-# jobs:
-#   pull_and_run:
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: Log in to GitHub Container Registry
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ghcr.io
-#           username: ${{ github.actor }}
-#           password: ${{ secrets.GITHUB_TOKEN }}
-
-#       - name: Pull Docker image
-#         run: docker pull ghcr.io/${{ github.repository }}/abi:latest
-
-#       - name: Run Papermill
-#         run: |
-#           docker run --name abi-execution -i --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest papermill tests/ci.ipynb outputs/ci.ipynb
-#           mkdir outputs
-#           docker cp -r abi-execution:/app/outputs ./outputs/
-
-#       - name: Upload output artifacts
-#         uses: actions/upload-artifact@v4
-#         with:
-#           name: output-files
-#           path: ./outputs
