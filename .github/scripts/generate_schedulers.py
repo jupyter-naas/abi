@@ -50,7 +50,7 @@ def generate_schedulers(config : dict, template : str):
       _.set_(cicd, "name", f"Scheduler - {scheduler['name']}")
 
       cicd["on"] = {"schedule": [{"cron": scheduler["cron"]}]}
-      # cicd["on"] = {"schedule": [{"cron": scheduler["cron"]}], "workflow_dispatch": {}}
+      # cicd["on"] = {"workflow_dispatch": '', "schedule": [{"cron": scheduler["cron"]}]}
 
 
       new_step = {}
@@ -60,6 +60,8 @@ def generate_schedulers(config : dict, template : str):
       new_step['run'] = f"""
 # Generate unique id
 export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
+SCHEDULER_ID=$SCHEDULER_ID
+echo "SCHEDULER_ID=$SCHEDULER_ID"
 
 # Execute the Scheduler script
 # docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/\${{ github.repository }}/abi:latest python .github/scripts/run_scheduler.py "{scheduler['name']}"
