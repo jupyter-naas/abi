@@ -1,5 +1,7 @@
-import yaml, os
-import pydash as _ 
+import os
+
+import pydash as _
+import yaml
 
 template_str = """
 name: CI/CD Workflow
