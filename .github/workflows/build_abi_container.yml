@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read    # This is required for actions/checkout
+  packages: write    # This is required for ghcr.io
 
 jobs:
   build:
