@@ -22,7 +22,7 @@ jobs:
 
         # Execute the Scheduler script
 
-        docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/${ github.repository
+        # docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/\${ github.repository
         }/abi:latest python .github/scripts/run_scheduler.py "main"
 
 

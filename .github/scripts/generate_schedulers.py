@@ -62,7 +62,7 @@ def generate_schedulers(config : dict, template : str):
 export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
 
 # Execute the Scheduler script
-docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest python .github/scripts/run_scheduler.py "{scheduler['name']}"
+# docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/\${{ github.repository }}/abi:latest python .github/scripts/run_scheduler.py "{scheduler['name']}"
 
 # Create the output directory that will be used to store the output files and save them as artifacts.
 mkdir -p outputs/
