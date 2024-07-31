@@ -4,6 +4,7 @@ config:
     
 schedulers:
   - name: main
+    abi_version: latest
     enabled: true
     cron: '*/5 * * * *'
     steps:
