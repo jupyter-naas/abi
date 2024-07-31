@@ -47,4 +47,3 @@ name: Scheduler - main
 'on':
   schedule:
   - cron: '*/5 * * * *'
-  workflow_dispatch: {}
