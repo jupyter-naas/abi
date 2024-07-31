@@ -65,7 +65,7 @@ docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/""" + '${{ git
 mkdir -p outputs/
 
 # Copy the output files from the container to the host.
-docker cp $SCHEDULER_ID:/app/outputs ./outputs/
+docker cp $SCHEDULER_ID:/app/outputs ./outputs
 
 """
 
