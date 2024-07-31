@@ -18,6 +18,9 @@ Usage:
 	make usage:					Show this message
 	make build:					Build the Docker image to package ABI.
 
+	make ci-generate-schedulers:			Generate the scheduler files for the CI/CD
+	make ci-run-scheduler scheduler=<scheduler>:	Run a specific scheduler
+
 
 endef
 export usage_str
@@ -121,3 +124,14 @@ build: build.linux.x86_64
 
 build.linux.x86_64:
 	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+
+# CI/CD
+ci-generate-schedulers:
+	@ conda run -p .abi-conda python .github/scripts/generate_schedulers.py
+
+ci-run-scheduler:
+	@ conda run -p .abi-conda python .github/scripts/run_scheduler.py $(scheduler)
+# Validations
+
+validate-config:
+	@ conda run -p .abi-conda python .github/scripts/validate_jsonschema_yaml.py config.schema.json config.yml

@@ -4,17 +4,24 @@ config:
     
 schedulers:
   - name: main
-    enable: true
-    cron: 0 10 * * *
+    enabled: true
+    cron: '*/5 * * * *'
     steps:
-      - type: Notebook
-        enable: true
-        entrypoint: __pipeline__.ipynb
+      - type: notebook
+        name: Run pipeline
+        enabled: true
+        entrypoint: tests/ci.ipynb
         environment_variables:
-          HELLO: WORLD
+          CUSTOM_ENV_VAR: Hello World!
         inputs:
           notifications: false
           steps: ["opendata", "content", "growth", "sales", "ops", "finance"]
-      - type: Notebook
-        enable: false
-        entrypoint: ./models/Hubspot.ipynb
+          message: "Hello scheduler!"
+      - type: notebook
+        name: Run Second step
+        enabled: true
+        entrypoint: tests/ci.ipynb
+        inputs:
+          notifications: false
+          steps: ["opendata", "content", "growth", "sales", "ops", "finance"]
+          message: "Hello scheduler!"
