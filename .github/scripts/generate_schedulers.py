@@ -21,20 +21,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull Docker image
-        run: docker pull ghcr.io/${{ github.repository }}/abi:latest
-
-      # - name: Run Papermill
-      #   run: |
-      #     docker run --name abi-execution -i --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest ls
-      #     mkdir output
-      #     docker cp abi-execution:/app/__pipeline__.ipynb ./output/__pipeline__.ipynb
-
-      # - name: Upload output artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: output-files
-      #     path: ./output
 """
 
 def generate_schedulers(config : dict, template : str):
@@ -43,9 +29,18 @@ def generate_schedulers(config : dict, template : str):
       if scheduler.get("enabled", False) is False:
           continue
 
+
       # Load template
       cicd = yaml.safe_load(template_str)
       del cicd[True]
+      
+      # Add docker pull
+      abi_version = scheduler.get("abi_version", "latest")
+      
+      cicd["jobs"]["scheduler"]["steps"].append({
+        'name': 'Pull Docker image',
+        'run': 'docker pull ghcr.io/${{ github.repository }}/abi:' + abi_version
+      })
 
       _.set_(cicd, "name", f"Scheduler - {scheduler['name']}")
 
@@ -62,7 +57,7 @@ def generate_schedulers(config : dict, template : str):
 export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
 
 # Execute the Scheduler script
-# docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/""" + '${{ github.repository }}' + f"""/abi:latest python .github/scripts/run_scheduler.py "{scheduler['name']}"
+# docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/""" + '${{ github.repository }}' + f"""/abi:{abi_version} python .github/scripts/run_scheduler.py "{scheduler['name']}"
 
 # Create the output directory that will be used to store the output files and save them as artifacts.
 mkdir -p outputs/
