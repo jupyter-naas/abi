@@ -34,7 +34,7 @@ jobs:
 
         # Copy the output files from the container to the host.
 
-        docker cp $SCHEDULER_ID:/app/outputs ./outputs/
+        docker cp $SCHEDULER_ID:/app/outputs ./outputs
 
 
         '
@@ -46,5 +46,5 @@ jobs:
 name: Scheduler - main
 'on':
   schedule:
-  - cron: '*/5 * * * *'
+  - cron: 0 9 * * *
   workflow_dispatch: null
