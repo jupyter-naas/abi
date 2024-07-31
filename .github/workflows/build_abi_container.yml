@@ -40,16 +40,16 @@ jobs:
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
 
-      - name: Push Docker image to GitHub Container Registry
-        run: |
-          docker push ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
-          docker push ghcr.io/${{ github.repository }}/abi:latest
-
       - name: Run Papermill
         run: |
           docker run --name abi-execution --platform linux/amd64 ghcr.io/${{ github.repository }}/abi:latest papermill tests/ci.ipynb outputs/ci.output.ipynb
           mkdir execution_outputs
           docker cp abi-execution:/app/outputs ./execution_outputs/
+
+      - name: Push Docker image to GitHub Container Registry
+        run: |
+          docker push ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
+          docker push ghcr.io/${{ github.repository }}/abi:latest
 
       - name: Upload output artifacts
         uses: actions/upload-artifact@v4
