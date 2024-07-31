@@ -37,7 +37,7 @@ jobs:
         run: |
           make build
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
-          docker tag abi:${{ github.event.release.tag_name }} ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
+          docker tag abi:latest ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
 
       - name: Push Docker image to GitHub Container Registry
         run: |
