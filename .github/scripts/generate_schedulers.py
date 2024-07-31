@@ -59,7 +59,7 @@ def generate_schedulers(config : dict, template : str):
 export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
 
 # Execute the Scheduler script
-docker run --name $SCHEDULER_ID -i --platform linux/amd64 ghcr.io/""" + '${{ github.repository }}' + f"""/abi:{abi_version} python .github/scripts/run_scheduler.py "{scheduler['name']}"
+docker run --name $SCHEDULER_ID -i -e NAAS_CREDENTIALS_JWT_TOKEN="$NAAS_CREDENTIALS_JWT_TOKEN" --platform linux/amd64 ghcr.io/""" + '${{ github.repository }}' + f"""/abi:{abi_version} python .github/scripts/run_scheduler.py "{scheduler['name']}"
 
 # Create the output directory that will be used to store the output files and save them as artifacts.
 mkdir -p outputs/
@@ -68,6 +68,10 @@ mkdir -p outputs/
 docker cp $SCHEDULER_ID:/app/outputs ./outputs
 
 """
+
+      new_step['env'] = {
+        'NAAS_CREDENTIALS_JWT_TOKEN': '${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}'
+      }
 
       # Append the new step to the steps list
       cicd["jobs"]["scheduler"]["steps"].append(new_step)
