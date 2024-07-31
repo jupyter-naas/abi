@@ -46,7 +46,6 @@ def generate_schedulers(config : dict, template : str):
       # Load template
       cicd = yaml.safe_load(template_str)
       del cicd[True]
-      print(cicd)
 
       _.set_(cicd, "name", f"Scheduler - {scheduler['name']}")
 
@@ -87,7 +86,9 @@ docker cp $SCHEDULER_ID:/app/outputs ./outputs/
       # Write to file.
       # Make sure scheduler name is a valid filename.
       scheduler_name = scheduler["name"].replace(" ", "_").lower()
-      yaml.dump(cicd, open(os.path.join('.github/workflows', f'scheduler__{scheduler_name}.yaml'), "w"))
+      scheduler_path = os.path.join('.github/workflows', f'scheduler__{scheduler_name}.yaml')
+      yaml.dump(cicd, open(scheduler_path, "w"))
+      print(f'✅ Scheduler file generated: {scheduler_path}')
     
 if __name__ == "__main__":
   with open("config.yml", "r") as file:
