@@ -31,6 +31,6 @@ jobs:
             && ln -s .github/.releaserc .releaserc
       - name: Release
         env:
-#          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }} # Use this if you need to trigger CI/CD based on new release being published.
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
