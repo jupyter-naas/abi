@@ -19,6 +19,10 @@ jobs:
 
         export SCHEDULER_ID=$(python -c "import uuid; print(uuid.uuid4())")
 
+        SCHEDULER_ID=$SCHEDULER_ID
+
+        echo "SCHEDULER_ID=$SCHEDULER_ID"
+
 
         # Execute the Scheduler script
 
