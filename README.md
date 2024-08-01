@@ -325,7 +325,7 @@ To set up a new scheduler, follow these steps:
    Once the `config.yaml` file is edited, execute the following command to generate the new GitHub Action configuration:
 
    ```bash
-   make ci-generate-scheduler
+   make ci-generate-schedulers
    ```
 
    This will create the new GitHub Action configuration file in `.github/workflows/scheduler__<scheduler name>.yaml`.
