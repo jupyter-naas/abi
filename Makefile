@@ -97,7 +97,7 @@ conda-update-hash:
 dep: dependencies
 dependencies: .abi-conda $(CONDA_ENV_HASH)
 
-conda-env-add:
+conda-env-add: dep
 	conda run -p .abi-conda pip install $(package)
 
 conda-env-update:
@@ -126,12 +126,12 @@ build.linux.x86_64:
 	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
 
 # CI/CD
-ci-generate-schedulers:
+ci-generate-schedulers: dep
 	@ conda run -p .abi-conda python .github/scripts/generate_schedulers.py
 
-ci-run-scheduler:
+ci-run-scheduler: dep
 	@ conda run -p .abi-conda python .github/scripts/run_scheduler.py $(scheduler)
 # Validations
 
-validate-config:
+validate-config: dep
 	@ conda run -p .abi-conda python .github/scripts/validate_jsonschema_yaml.py config.schema.json config.yml
