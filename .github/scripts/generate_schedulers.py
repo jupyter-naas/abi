@@ -36,6 +36,10 @@ def generate_schedulers(config : dict, template : str):
       cicd = yaml.safe_load(template_str)
       del cicd[True]
       
+      # Override runs-on
+      if "runs-on" in scheduler:
+        cicd["jobs"]["scheduler"]["runs-on"] = scheduler["runs-on"]
+      
       # Add docker pull
       abi_version = scheduler.get("abi_version", "latest")
       
