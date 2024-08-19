@@ -272,17 +272,75 @@ opendata-->content-->growth-->sales-->ops-->finance-->main
 
 ### Installation
 
-This feature is currently available exclusively on Naas Lab for Pro users. 
+#### Local Setup
 
-We are working to make it possible to run it locally.
+To set up the project locally, follow the steps below:
 
-- Duplicate our [Google Sheets spreadsheet model](https://docs.google.com/spreadsheets/d/1uHxnHhu3BIYYcUTfrmnJabWtKbGhhdaUUTpdG9WVg1M/edit?usp=sharing)
-- Share your Google Sheets spreadsheet with our service account : 🔗 naas-share@naas-gsheets.iam.gserviceaccount.com
-- Set "ENTITY" spreadsheet with your information
-- Clone repo https://github.com/jupyter-naas/abi.git
-- Execute `setup.ipynb`
-- Run `__pipeline__.ipynb`
-- Deploy to production `push_to_production.ipynb` (only on Naas Cloud)
+```bash
+git clone https://github.com/jupyter-naas/abi.git
+cd abi
+make all
+```
+
+#### Requirements
+
+- **Miniconda**: Ensure you have Miniconda installed. You can download it from [here](https://docs.anaconda.com/miniconda/).
+- **Docker**: Make sure Docker is installed on your system.
+
+#### Warning for Windows Users
+
+If you are using Windows, you need to use WSL (Windows Subsystem for Linux) with an Ubuntu distribution. Additionally, ensure Docker is installed and properly configured to run within the WSL environment.
+
+#### Accessing the `abi` Kernel
+
+After completing the setup, the `abi` kernel will be installed. You can use this kernel in your VSCode or any other IDE that supports Jupyter kernels.
+
+#### Setup a New Scheduler
+
+To set up a new scheduler, follow these steps:
+
+1. **Edit the `config.yaml` file:**
+   
+   In the `config.yaml` file, add a new scheduler configuration as shown below:
+
+   ```yaml
+   schedulers:
+     - name: SchedulerName   # Name of the scheduler
+       abi_version: latest   # Version of abi to use. Default is "latest"
+       enabled: true         # Enable or disable the scheduler
+       cron: '0 9 * * *'     # Cron expression
+       steps:                # Steps to run
+         - type: notebook    # Type of step. Default is "notebook"
+           name: CI tests    # Name of the step
+           enabled: true     # Enable or disable the step
+           entrypoint: tests/ci.ipynb    # Entrypoint of the step
+           environment_variables:        # Environment variables. Optional
+             CUSTOM_ENV_VAR: Hello World!
+           inputs:                         # Inputs to the step. Will be injected by papermill after the cell tagged "parameters". Optional
+             message: "Hello scheduler!"
+   ```
+
+2. **Generate the GitHub Action configuration:**
+
+   Once the `config.yaml` file is edited, execute the following command to generate the new GitHub Action configuration:
+
+   ```bash
+   make ci-generate-schedulers
+   ```
+
+   This will create the new GitHub Action configuration file in `.github/workflows/scheduler__<scheduler name>.yaml`.
+
+3. **Commit and push the changes:**
+
+   Add the new GitHub Action configuration file to the repository, commit the changes, and push to the remote repository:
+
+   ```bash
+   git add .github/workflows/scheduler__<scheduler name>.yaml
+   git commit -m 'ci: Adding new scheduler ...'
+   git push
+   ```
+
+By following these steps, you can successfully set up a new scheduler in your project.
 
 ### Build Your Own ABI
 
