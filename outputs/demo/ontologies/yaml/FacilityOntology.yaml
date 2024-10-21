@@ -1,0 +1,5161 @@
+classes:
+- id: c_bfo:BFO_0000142
+  name: fiat line
+  definition: (Elucidation) A fiat line is a one-dimensional continuant fiat boundary
+    that is continuous
+  example: The Equator; all geopolitical boundaries; all lines of latitude and longitude;
+    the median sulcus of your tongue; the line separating the outer surface of the
+    mucosa of the lower lip from the outer surface of the skin of the chin
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000140
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'fiat line (id: c_bfo:BFO_0000142)
+
+      Definition: (Elucidation) A fiat line is a one-dimensional continuant fiat boundary
+      that is continuous
+
+      Examples: The Equator; all geopolitical boundaries; all lines of latitude and
+      longitude; the median sulcus of your tongue; the line separating the outer surface
+      of the mucosa of the lower lip from the outer surface of the skin of the chin
+
+      '
+    x: -1350.0
+    y: 375.0
+    fixed: true
+- id: c_cco:Fort
+  name: Fort
+  definition: A Military Facility that is designed to support the defense of or solidification
+    of rule over some Geospatial Region and its inhabitants.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Fort (id: c_cco:Fort)
+
+      Definition: A Military Facility that is designed to support the defense of or
+      solidification of rule over some Geospatial Region and its inhabitants.
+
+      '
+- id: c_cco:MilitaryBase
+  name: Military Base
+  definition: A Military Facility that is designed to shelter military equipment and
+    personnel and to facilitate training and operations.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Military Base (id: c_cco:MilitaryBase)
+
+      Definition: A Military Facility that is designed to shelter military equipment
+      and personnel and to facilitate training and operations.
+
+      '
+- id: c_cco:MaintenanceFacility
+  name: Maintenance Facility
+  definition: A Facility that is designed to be used to perform actions to maintain
+    or improve the state of some property or equipment.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Maintenance Facility (id: c_cco:MaintenanceFacility)
+
+      Definition: A Facility that is designed to be used to perform actions to maintain
+      or improve the state of some property or equipment.
+
+      '
+- id: c_cco:AircraftManufacturingFacility
+  name: Aircraft Manufacturing Facility
+  definition: A Factory that is designed to manufacture Aircraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Aircraft Manufacturing Facility (id: c_cco:AircraftManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture Aircraft.
+
+      '
+- id: c_bfo:BFO_0000003
+  name: occurrent
+  definition: (Elucidation) An occurrent is an entity that unfolds itself in time
+    or it is the start or end of such an entity or it is a temporal or spatiotemporal
+    region
+  example: As for process, history, process boundary, spatiotemporal region, zero-dimensional
+    temporal region, one-dimensional temporal region, temporal interval, temporal
+    instant.
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000001
+  style:
+    group: 1
+    color: '#97c1fb'
+    title: "occurrent (id: c_bfo:BFO_0000003)\nDefinition: (Elucidation) An occurrent\
+      \ is an entity that unfolds itself in time or it is the start or end of such\
+      \ an entity or it is a temporal or spatiotemporal region\nExamples: As for process,\
+      \ history, process boundary, spatiotemporal region, zero-dimensional temporal\
+      \ region, one-dimensional temporal region, temporal interval, temporal instant.\n\
+      \n'occurrent part of' (c_bfo:BFO_0000132) to None (c_bfo:BFO_0000003) \n'has\
+      \ temporal part' (c_bfo:BFO_0000121) to None (c_bfo:BFO_0000003) \n'preceded\
+      \ by' (c_bfo:BFO_0000062) to None (c_bfo:BFO_0000003) \n'temporal part of' (c_bfo:BFO_0000139)\
+      \ to None (c_bfo:BFO_0000003) \n'has occurrent part' (c_bfo:BFO_0000117) to\
+      \ None (c_bfo:BFO_0000003) \n'precedes' (c_bfo:BFO_0000063) to None (c_bfo:BFO_0000003) "
+    x: 750.0
+    y: -1125.0
+    fixed: true
+- id: c_bfo:BFO_0000020
+  name: specifically dependent continuant
+  definition: b is a specifically dependent continuant =Def b is a continuant & there
+    is some independent continuant c which is not a spatial region & which is such
+    that b specifically depends on c
+  example: (with one bearer) The mass of this tomato; the pink colour of a medium
+    rare piece of grilled filet mignon at its centre; the smell of this portion of
+    mozzarella; the disposition of this fish to decay; the role of being a doctor;
+    the function of this heart to pump blood; the shape of this hole| (with multiple
+    bearers) John's love for Mary; the ownership relation between John and this statue;
+    the relation of authority between John and his subordinates
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000002
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "specifically dependent continuant (id: c_bfo:BFO_0000020)\nDefinition:\
+      \ b is a specifically dependent continuant =Def b is a continuant & there is\
+      \ some independent continuant c which is not a spatial region & which is such\
+      \ that b specifically depends on c\nExamples: (with one bearer) The mass of\
+      \ this tomato; the pink colour of a medium rare piece of grilled filet mignon\
+      \ at its centre; the smell of this portion of mozzarella; the disposition of\
+      \ this fish to decay; the role of being a doctor; the function of this heart\
+      \ to pump blood; the shape of this hole| (with multiple bearers) John's love\
+      \ for Mary; the ownership relation between John and this statue; the relation\
+      \ of authority between John and his subordinates\n\n'participates in' (c_bfo:BFO_0000056)\
+      \ to None (c_bfo:BFO_0000015) \n'concretizes' (c_bfo:BFO_0000059) to None (c_bfo:BFO_0000031)\
+      \ \n'inheres in' (c_bfo:BFO_0000197) to None (c_bfo:BFO_0000004) \nNOT 'inheres\
+      \ in' (c_bfo:BFO_0000197) to None (c_bfo:BFO_0000006) \n'specifically depended\
+      \ on by' (c_bfo:BFO_0000194) to None (c_bfo:BFO_0000020) \n'specifically depends\
+      \ on' (c_bfo:BFO_0000195) to None (c_bfo:BFO_0000020) \n'specifically depends\
+      \ on' (c_bfo:BFO_0000195) to None (c_bfo:BFO_0000004) \nNOT 'specifically depends\
+      \ on' (c_bfo:BFO_0000195) to None (c_bfo:BFO_0000006) "
+    x: -450.0
+    y: -750.0
+    fixed: true
+- id: c_bfo:BFO_0000001
+  name: entity
+  definition: (Elucidation) An entity is anything that exists or has existed or will
+    exist
+  example: Julius Caesar; the Second World War; your body mass index; Verdi's Requiem
+  relations: []
+  style:
+    group: 0
+    color: '#97c1fb'
+    title: 'entity (id: c_bfo:BFO_0000001)
+
+      Definition: (Elucidation) An entity is anything that exists or has existed or
+      will exist
+
+      Examples: Julius Caesar; the Second World War; your body mass index; Verdi''s
+      Requiem
+
+
+      ''exists at'' (c_bfo:BFO_0000108) to None (c_bfo:BFO_0000008) '
+    x: 0.0
+    y: -1500.0
+    fixed: true
+- id: c_cco:Mosque
+  name: Mosque
+  definition: A Religious Facility that is designed for Islamic worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ReligiousFacility
+  style:
+    group: 0
+    color: green
+    title: 'Mosque (id: c_cco:Mosque)
+
+      Definition: A Religious Facility that is designed for Islamic worship and prayer.
+
+      '
+- id: c_cco:PumpingStation
+  name: Pumping Station
+  definition: A Product Transport Facility that is designed to pump fluids from one
+    place to another.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ProductTransportFacility
+  style:
+    group: 0
+    color: green
+    title: 'Pumping Station (id: c_cco:PumpingStation)
+
+      Definition: A Product Transport Facility that is designed to pump fluids from
+      one place to another.
+
+      '
+- id: c_cco:PetroleumDepot
+  name: Petroleum Depot
+  definition: A Storage Facility that is designed to store petroleum, oil, or lubricants.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Petroleum Depot (id: c_cco:PetroleumDepot)
+
+      Definition: A Storage Facility that is designed to store petroleum, oil, or
+      lubricants.
+
+      '
+- id: c_cco:PetrochemicalRefinery
+  name: Petrochemical Refinery
+  definition: A Refinery that is designed for refining crude oil, intermediate petroleum
+    products, or synthetic petroleum into products of value.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Refinery
+  style:
+    group: 0
+    color: green
+    title: 'Petrochemical Refinery (id: c_cco:PetrochemicalRefinery)
+
+      Definition: A Refinery that is designed for refining crude oil, intermediate
+      petroleum products, or synthetic petroleum into products of value.
+
+      '
+- id: c_cco:ProductTransportFacility
+  name: Product Transport Facility
+  definition: A Facility that is designed to transport some product.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Product Transport Facility (id: c_cco:ProductTransportFacility)
+
+      Definition: A Facility that is designed to transport some product.
+
+      '
+- id: c_cco:MotorVehicleManufacturingFacility
+  name: Motor Vehicle Manufacturing Facility
+  definition: A Factory that is designed to manufacture automobiles.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Motor Vehicle Manufacturing Facility (id: c_cco:MotorVehicleManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture automobiles.
+
+      '
+- id: c_cco:FossilFuelPowerPlant
+  name: Fossil Fuel Power Plant
+  definition: An Electric Power Station that is designed to convert fossil fuels (e.g.
+    coal, natural gas, or petroleum) into electrical energy.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Fossil Fuel Power Plant (id: c_cco:FossilFuelPowerPlant)
+
+      Definition: An Electric Power Station that is designed to convert fossil fuels
+      (e.g. coal, natural gas, or petroleum) into electrical energy.
+
+      '
+- id: c_bfo:BFO_0000004
+  name: independent continuant
+  definition: b is an independent continuant =Def b is a continuant & there is no
+    c such that b specifically depends on c or b generically depends on c
+  example: An atom; a molecule; an organism; a heart; a chair; the bottom right portion
+    of a human torso; a leg; the interior of your mouth; a spatial region; an orchestra
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000002
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "independent continuant (id: c_bfo:BFO_0000004)\nDefinition: b is an independent\
+      \ continuant =Def b is a continuant & there is no c such that b specifically\
+      \ depends on c or b generically depends on c\nExamples: An atom; a molecule;\
+      \ an organism; a heart; a chair; the bottom right portion of a human torso;\
+      \ a leg; the interior of your mouth; a spatial region; an orchestra\n\n'location\
+      \ of' (c_bfo:BFO_0000124) to None (c_bfo:BFO_0000004) \n'location of' (c_bfo:BFO_0000124)\
+      \ to None (c_bfo:BFO_0000006) \n'participates in' (c_bfo:BFO_0000056) to None\
+      \ (c_bfo:BFO_0000015) \n'is carrier of' (c_bfo:BFO_0000101) to None (c_bfo:BFO_0000031)\
+      \ \n'located in' (c_bfo:BFO_0000171) to None (c_bfo:BFO_0000004) \n'located\
+      \ in' (c_bfo:BFO_0000171) to None (c_bfo:BFO_0000006) \n'specifically depended\
+      \ on by' (c_bfo:BFO_0000194) to None (c_bfo:BFO_0000020) \n'bearer of' (c_bfo:BFO_0000196)\
+      \ to None (c_bfo:BFO_0000020) \n'occupies spatial region' (c_bfo:BFO_0000210)\
+      \ to None (c_bfo:BFO_0000006) "
+    x: -1500.0
+    y: -750.0
+    fixed: true
+- id: c_cco:FinancialFacility
+  name: Financial Facility
+  definition: A Facility that is designed to support the management of money.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Financial Facility (id: c_cco:FinancialFacility)
+
+      Definition: A Facility that is designed to support the management of money.
+
+      '
+- id: c_bfo:BFO_0000035
+  name: process boundary
+  definition: p is a process boundary =Def p is a temporal part of a process & p has
+    no proper temporal parts
+  example: The boundary between the 2nd and 3rd year of your life
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000003
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "process boundary (id: c_bfo:BFO_0000035)\nDefinition: p is a process boundary\
+      \ =Def p is a temporal part of a process & p has no proper temporal parts\n\
+      Examples: The boundary between the 2nd and 3rd year of your life\n\n'occurs\
+      \ in' (c_bfo:BFO_0000066) to None (c_bfo:BFO_0000029) \n'occurs in' (c_bfo:BFO_0000066)\
+      \ to None (c_bfo:BFO_0000040) \n'occupies temporal region' (c_bfo:BFO_0000199)\
+      \ to None (c_bfo:BFO_0000008) \n'occupies spatiotemporal region' (c_bfo:BFO_0000200)\
+      \ to None (c_bfo:BFO_0000011) "
+    x: 600.0
+    y: -750.0
+    fixed: true
+- id: c_cco:MedicalDepot
+  name: Medical Depot
+  definition: A Storage Facility that is designed to store medical supplies.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Medical Depot (id: c_cco:MedicalDepot)
+
+      Definition: A Storage Facility that is designed to store medical supplies.
+
+      '
+- id: c_bfo:BFO_0000040
+  name: material entity
+  definition: (Elucidation) A material entity is an independent continuant has some
+    portion of matter as continuant part
+  example: A human being; the undetached arm of a human being; an aggregate of human
+    beings
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000004
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: "material entity (id: c_bfo:BFO_0000040)\nDefinition: (Elucidation) A material\
+      \ entity is an independent continuant has some portion of matter as continuant\
+      \ part\nExamples: A human being; the undetached arm of a human being; an aggregate\
+      \ of human beings\n\n'environs' (c_bfo:BFO_0000183) to None (c_bfo:BFO_0000015)\
+      \ \n'environs' (c_bfo:BFO_0000183) to None (c_bfo:BFO_0000035) \n'has history'\
+      \ (c_bfo:BFO_0000185) to None (c_bfo:BFO_0000182) \n'has member part' (c_bfo:BFO_0000115)\
+      \ to None (c_bfo:BFO_0000040) \n'member part of' (c_bfo:BFO_0000129) to None\
+      \ (c_bfo:BFO_0000040) \n'material basis of' (c_bfo:BFO_0000127) to None (c_bfo:BFO_0000016) "
+    x: -1650.0
+    y: -375.0
+    fixed: true
+- id: c_cco:Motel
+  name: Motel
+  definition: A Hotel that is designed to accommodate motor vehicles along with their
+    occupants.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Hotel
+  style:
+    group: 0
+    color: green
+    title: 'Motel (id: c_cco:Motel)
+
+      Definition: A Hotel that is designed to accommodate motor vehicles along with
+      their occupants.
+
+      '
+- id: c_bfo:BFO_0000015
+  name: process
+  definition: (Elucidation) p is a process means p is an occurrent that has some temporal
+    proper part and for some time t, p has some material entity as participant
+  example: An act of selling; the life of an organism; a process of sleeping; a process
+    of cell-division; a beating of the heart; a process of meiosis; the taxiing of
+    an aircraft; the programming of a computer
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000003
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "process (id: c_bfo:BFO_0000015)\nDefinition: (Elucidation) p is a process\
+      \ means p is an occurrent that has some temporal proper part and for some time\
+      \ t, p has some material entity as participant\nExamples: An act of selling;\
+      \ the life of an organism; a process of sleeping; a process of cell-division;\
+      \ a beating of the heart; a process of meiosis; the taxiing of an aircraft;\
+      \ the programming of a computer\n\n'concretizes' (c_bfo:BFO_0000059) to None\
+      \ (c_bfo:BFO_0000031) \n'realizes' (c_bfo:BFO_0000055) to None (c_bfo:BFO_0000017)\
+      \ \n'has participant' (c_bfo:BFO_0000057) to None (c_bfo:BFO_0000020) \n'has\
+      \ participant' (c_bfo:BFO_0000057) to None (c_bfo:BFO_0000031) \n'has participant'\
+      \ (c_bfo:BFO_0000057) to None (c_bfo:BFO_0000004) \nNOT 'has participant' (c_bfo:BFO_0000057)\
+      \ to None (c_bfo:BFO_0000006) \n'occurs in' (c_bfo:BFO_0000066) to None (c_bfo:BFO_0000029)\
+      \ \n'occurs in' (c_bfo:BFO_0000066) to None (c_bfo:BFO_0000040) \n'occupies\
+      \ temporal region' (c_bfo:BFO_0000199) to None (c_bfo:BFO_0000008) \n'occupies\
+      \ spatiotemporal region' (c_bfo:BFO_0000200) to None (c_bfo:BFO_0000011) "
+    x: 150.0
+    y: -750.0
+    fixed: true
+- id: c_cco:Factory
+  name: Factory
+  definition: A Facility that is designed for manufacturing or refining material products.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Factory (id: c_cco:Factory)
+
+      Definition: A Facility that is designed for manufacturing or refining material
+      products.
+
+      '
+- id: c_cco:Airport
+  name: Airport
+  definition: A Transportation Facility that is designed for launching, receiving,
+    and housing Aircraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Airport (id: c_cco:Airport)
+
+      Definition: A Transportation Facility that is designed for launching, receiving,
+      and housing Aircraft.
+
+      '
+- id: c_cco:Hostel
+  name: Hostel
+  definition: A Residential Facility that is designed to temporarily lodge guests
+    in a sociable environment for relatively low costs.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'Hostel (id: c_cco:Hostel)
+
+      Definition: A Residential Facility that is designed to temporarily lodge guests
+      in a sociable environment for relatively low costs.
+
+      '
+- id: c_bfo:BFO_0000006
+  name: spatial region
+  definition: (Elucidation) A spatial region is a continuant entity that is a continuant
+    part of the spatial projection of a portion of spacetime at a given time
+  example: As for zero-dimensional spatial region, one-dimensional spatial region,
+    two-dimensional spatial region, three-dimensional spatial region
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000141
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: "spatial region (id: c_bfo:BFO_0000006)\nDefinition: (Elucidation) A spatial\
+      \ region is a continuant entity that is a continuant part of the spatial projection\
+      \ of a portion of spacetime at a given time\nExamples: As for zero-dimensional\
+      \ spatial region, one-dimensional spatial region, two-dimensional spatial region,\
+      \ three-dimensional spatial region\n\nNOT 'location of' (c_bfo:BFO_0000124)\
+      \ to None (c_bfo:BFO_0000004) \nNOT 'location of' (c_bfo:BFO_0000124) to None\
+      \ (c_bfo:BFO_0000006) \nNOT 'participates in' (c_bfo:BFO_0000056) to None (c_bfo:BFO_0000015)\
+      \ \nNOT 'is carrier of' (c_bfo:BFO_0000101) to None (c_bfo:BFO_0000031) \nNOT\
+      \ 'located in' (c_bfo:BFO_0000171) to None (c_bfo:BFO_0000004) \nNOT 'located\
+      \ in' (c_bfo:BFO_0000171) to None (c_bfo:BFO_0000006) \nNOT 'specifically depended\
+      \ on by' (c_bfo:BFO_0000194) to None (c_bfo:BFO_0000020) \nNOT 'bearer of' (c_bfo:BFO_0000196)\
+      \ to None (c_bfo:BFO_0000020) \nNOT 'occupies spatial region' (c_bfo:BFO_0000210)\
+      \ to None (c_bfo:BFO_0000006) "
+    x: -1650.0
+    y: 0.0
+    fixed: true
+- id: c_bfo:BFO_0000008
+  name: temporal region
+  definition: (Elucidation) A temporal region is an occurrent over which processes
+    can unfold
+  example: As for zero-dimensional temporal region and one-dimensional temporal region
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000003
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "temporal region (id: c_bfo:BFO_0000008)\nDefinition: (Elucidation) A temporal\
+      \ region is an occurrent over which processes can unfold\nExamples: As for zero-dimensional\
+      \ temporal region and one-dimensional temporal region\n\n'has first instant'\
+      \ (c_bfo:BFO_0000222) to None (c_bfo:BFO_0000203) \n'has last instant' (c_bfo:BFO_0000224)\
+      \ to None (c_bfo:BFO_0000203) "
+    x: 1050.0
+    y: -750.0
+    fixed: true
+- id: c_cco:Synagogue
+  name: Synagogue
+  definition: A Religious Facility that is designed for Judaic worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ReligiousFacility
+  style:
+    group: 0
+    color: green
+    title: 'Synagogue (id: c_cco:Synagogue)
+
+      Definition: A Religious Facility that is designed for Judaic worship and prayer.
+
+      '
+- id: c_cco:TerroristTrainingCamp
+  name: Terrorist Training Camp
+  definition: A Training Camp designed to teach students methods of terrorism.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:TrainingCamp
+  style:
+    group: 0
+    color: green
+    title: 'Terrorist Training Camp (id: c_cco:TerroristTrainingCamp)
+
+      Definition: A Training Camp designed to teach students methods of terrorism.
+
+      '
+- id: c_cco:Warehouse
+  name: Warehouse
+  definition: A Storage Facility that is designed to store commercial goods.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Warehouse (id: c_cco:Warehouse)
+
+      Definition: A Storage Facility that is designed to store commercial goods.
+
+      '
+- id: c_cco:ForwardOperationsBase
+  name: Forward Operations Base
+  definition: A Military Base that is located relatively close to an offensive Area
+    of Operations, is supported by the Base of Operations, and is designed to support
+    local strategic objectives and tactical operations.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryBase
+  style:
+    group: 0
+    color: green
+    title: 'Forward Operations Base (id: c_cco:ForwardOperationsBase)
+
+      Definition: A Military Base that is located relatively close to an offensive
+      Area of Operations, is supported by the Base of Operations, and is designed
+      to support local strategic objectives and tactical operations.
+
+      '
+- id: c_cco:House
+  name: House
+  definition: A Residential Facility that is designed to provide a self-standing,
+    permanent residence for an individual, family, household, multiple families, or
+    similar-sized group.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'House (id: c_cco:House)
+
+      Definition: A Residential Facility that is designed to provide a self-standing,
+      permanent residence for an individual, family, household, multiple families,
+      or similar-sized group.
+
+      '
+- id: c_cco:Landfill
+  name: Landfill
+  definition: A Waste Management Facility that is designed for disposing of waste
+    by burial.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:WasteManagementFacility
+  style:
+    group: 0
+    color: green
+    title: 'Landfill (id: c_cco:Landfill)
+
+      Definition: A Waste Management Facility that is designed for disposing of waste
+      by burial.
+
+      '
+- id: c_bfo:BFO_0000038
+  name: one-dimensional temporal region
+  definition: (Elucidation) A one-dimensional temporal region is a temporal region
+    that is a whole that has a temporal interval and zero or more temporal intervals
+    and temporal instants as parts
+  example: The temporal region during which a process occurs
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000008
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'one-dimensional temporal region (id: c_bfo:BFO_0000038)
+
+      Definition: (Elucidation) A one-dimensional temporal region is a temporal region
+      that is a whole that has a temporal interval and zero or more temporal intervals
+      and temporal instants as parts
+
+      Examples: The temporal region during which a process occurs
+
+      '
+    x: 900.0
+    y: -375.0
+    fixed: true
+- id: c_bfo:BFO_0000145
+  name: relational quality
+  definition: b is a relational quality =Def b is a quality & there exists c and d
+    such that c and d are not identical & b specifically depends on c & b specifically
+    depends on d
+  example: A marriage bond; an instance of love; an obligation between one person
+    and another
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000019
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'relational quality (id: c_bfo:BFO_0000145)
+
+      Definition: b is a relational quality =Def b is a quality & there exists c and
+      d such that c and d are not identical & b specifically depends on c & b specifically
+      depends on d
+
+      Examples: A marriage bond; an instance of love; an obligation between one person
+      and another
+
+      '
+    x: -750.0
+    y: 0.0
+    fixed: true
+- id: c_cco:Port
+  name: Port
+  definition: A Transportation Facility that is designed to contain harbors for docking
+    Watercraft and for transfering people or cargo to and from land.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Port (id: c_cco:Port)
+
+      Definition: A Transportation Facility that is designed to contain harbors for
+      docking Watercraft and for transfering people or cargo to and from land.
+
+      '
+- id: c_cco:ChemicalDepot
+  name: Chemical Depot
+  definition: A Storage Facility that is designed to store chemicals.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Chemical Depot (id: c_cco:ChemicalDepot)
+
+      Definition: A Storage Facility that is designed to store chemicals.
+
+      '
+- id: c_cco:TransportationFacility
+  name: Transportation Facility
+  definition: A Facility that is designed for commencing or concluding the transportation
+    of transportation artifacts, or for housing transportation artifacts.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Transportation Facility (id: c_cco:TransportationFacility)
+
+      Definition: A Facility that is designed for commencing or concluding the transportation
+      of transportation artifacts, or for housing transportation artifacts.
+
+      '
+- id: c_bfo:BFO_0000023
+  name: role
+  definition: (Elucidation) A role b is a realizable entity such that b exists because
+    there is some single bearer that is in some special physical, social, or institutional
+    set of circumstances in which this bearer does not have to be & b is not such
+    that, if it ceases to exist, then the physical make-up of the bearer is thereby
+    changed
+  example: The priest role; the student role; the role of subject in a clinical trial;
+    the role of a stone in marking a property boundary; the role of a boundary to
+    demarcate two neighbouring administrative territories; the role of a building
+    in serving as a military target
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000017
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'role (id: c_bfo:BFO_0000023)
+
+      Definition: (Elucidation) A role b is a realizable entity such that b exists
+      because there is some single bearer that is in some special physical, social,
+      or institutional set of circumstances in which this bearer does not have to
+      be & b is not such that, if it ceases to exist, then the physical make-up of
+      the bearer is thereby changed
+
+      Examples: The priest role; the student role; the role of subject in a clinical
+      trial; the role of a stone in marking a property boundary; the role of a boundary
+      to demarcate two neighbouring administrative territories; the role of a building
+      in serving as a military target
+
+      '
+    x: -450.0
+    y: 0.0
+    fixed: true
+- id: c_bfo:BFO_0000030
+  name: object
+  definition: (Elucidation) An object is a material entity which manifests causal
+    unity & is of a type instances of which are maximal relative to the sort of causal
+    unity manifested
+  example: An organism; a fish tank; a planet; a laptop; a valve; a block of marble;
+    an ice cube
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000040
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'object (id: c_bfo:BFO_0000030)
+
+      Definition: (Elucidation) An object is a material entity which manifests causal
+      unity & is of a type instances of which are maximal relative to the sort of
+      causal unity manifested
+
+      Examples: An organism; a fish tank; a planet; a laptop; a valve; a block of
+      marble; an ice cube
+
+      '
+    x: -1950.0
+    y: 0.0
+    fixed: true
+- id: c_bfo:BFO_0000027
+  name: object aggregate
+  definition: (Elucidation) An object aggregate is a material entity consisting exactly
+    of a plurality (≥1) of objects as member parts which together form a unit
+  example: The aggregate of the musicians in a symphony orchestra and their instruments;
+    the aggregate of bearings in a constant velocity axle joint; the nitrogen atoms
+    in the atmosphere; a collection of cells in a blood biobank
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000040
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'object aggregate (id: c_bfo:BFO_0000027)
+
+      Definition: (Elucidation) An object aggregate is a material entity consisting
+      exactly of a plurality (≥1) of objects as member parts which together form a
+      unit
+
+      Examples: The aggregate of the musicians in a symphony orchestra and their instruments;
+      the aggregate of bearings in a constant velocity axle joint; the nitrogen atoms
+      in the atmosphere; a collection of cells in a blood biobank
+
+      '
+    x: -2550.0
+    y: 0.0
+    fixed: true
+- id: c_cco:BaseOfOperations
+  name: Base of Operations
+  definition: A Military Base with permanently stationed operating forces, robust
+    Infrastructure, and strengthened force protection measures such that it is designed
+    to launch and support large-scale operations, support smaller or less-permanent
+    bases, and organize supply facilities.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryBase
+  style:
+    group: 0
+    color: green
+    title: 'Base of Operations (id: c_cco:BaseOfOperations)
+
+      Definition: A Military Base with permanently stationed operating forces, robust
+      Infrastructure, and strengthened force protection measures such that it is designed
+      to launch and support large-scale operations, support smaller or less-permanent
+      bases, and organize supply facilities.
+
+      '
+- id: c_cco:OfficeBuilding
+  name: Office Building
+  definition: A Commercial Facility that is designed as an environment for conducting
+    commercial, professional, or bureaucratic work.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:RetailFacility
+  style:
+    group: 0
+    color: green
+    title: 'Office Building (id: c_cco:OfficeBuilding)
+
+      Definition: A Commercial Facility that is designed as an environment for conducting
+      commercial, professional, or bureaucratic work.
+
+      '
+- id: c_cco:AgriculturalFacility
+  name: Agricultural Facility
+  definition: A Facility that is designed as a building or campus for agricultural
+    processes with the aim of cultivating animals, plants, or fungi for food, fiber,
+    biofuel, medicinal plants, or other products to sustain and enhance human life.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Agricultural Facility (id: c_cco:AgriculturalFacility)
+
+      Definition: A Facility that is designed as a building or campus for agricultural
+      processes with the aim of cultivating animals, plants, or fungi for food, fiber,
+      biofuel, medicinal plants, or other products to sustain and enhance human life.
+
+      '
+- id: c_bfo:BFO_0000011
+  name: spatiotemporal region
+  definition: (Elucidation) A spatiotemporal region is an occurrent that is an occurrent
+    part of spacetime
+  example: The spatiotemporal region occupied by the development of a cancer tumour;
+    the spatiotemporal region occupied by an orbiting satellite
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000003
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "spatiotemporal region (id: c_bfo:BFO_0000011)\nDefinition: (Elucidation)\
+      \ A spatiotemporal region is an occurrent that is an occurrent part of spacetime\n\
+      Examples: The spatiotemporal region occupied by the development of a cancer\
+      \ tumour; the spatiotemporal region occupied by an orbiting satellite\n\n'temporally\
+      \ projects onto' (c_bfo:BFO_0000153) to None (c_bfo:BFO_0000008) \n'spatially\
+      \ projects onto' (c_bfo:BFO_0000216) to None (c_bfo:BFO_0000006) "
+    x: 1500.0
+    y: -750.0
+    fixed: true
+- id: c_cco:HealthcareFacility
+  name: Healthcare Facility
+  definition: A Facility that is designed for the diagnosis, treatment, and prevention
+    of disease.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Healthcare Facility (id: c_cco:HealthcareFacility)
+
+      Definition: A Facility that is designed for the diagnosis, treatment, and prevention
+      of disease.
+
+      '
+- id: c_bfo:BFO_0000026
+  name: one-dimensional spatial region
+  definition: (Elucidation) A one-dimensional spatial region is a whole consisting
+    of a line together with zero or more lines which may have points as parts
+  example: An edge of a cube-shaped portion of space; a line connecting two points;
+    two parallel lines extended in space
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'one-dimensional spatial region (id: c_bfo:BFO_0000026)
+
+      Definition: (Elucidation) A one-dimensional spatial region is a whole consisting
+      of a line together with zero or more lines which may have points as parts
+
+      Examples: An edge of a cube-shaped portion of space; a line connecting two points;
+      two parallel lines extended in space
+
+      '
+    x: -1800.0
+    y: 375.0
+    fixed: true
+- id: c_bfo:BFO_0000203
+  name: temporal instant
+  definition: (Elucidation) A temporal instant is a zero-dimensional temporal region
+    that has no proper temporal part
+  example: The millennium
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000148
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: "temporal instant (id: c_bfo:BFO_0000203)\nDefinition: (Elucidation) A\
+      \ temporal instant is a zero-dimensional temporal region that has no proper\
+      \ temporal part\nExamples: The millennium\n\n'first instant of' (c_bfo:BFO_0000221)\
+      \ to None (c_bfo:BFO_0000008) \n'last instant of' (c_bfo:BFO_0000223) to None\
+      \ (c_bfo:BFO_0000008) "
+    x: 1350.0
+    y: 0.0
+    fixed: true
+- id: c_bfo:BFO_0000147
+  name: fiat point
+  definition: (Elucidation) A fiat point is a zero-dimensional continuant fiat boundary
+    that consists of a single point
+  example: The geographic North Pole; the quadripoint where the boundaries of Colorado,
+    Utah, New Mexico and Arizona meet; the point of origin of some spatial coordinate
+    system
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000140
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'fiat point (id: c_bfo:BFO_0000147)
+
+      Definition: (Elucidation) A fiat point is a zero-dimensional continuant fiat
+      boundary that consists of a single point
+
+      Examples: The geographic North Pole; the quadripoint where the boundaries of
+      Colorado, Utah, New Mexico and Arizona meet; the point of origin of some spatial
+      coordinate system
+
+      '
+    x: -1050.0
+    y: 375.0
+    fixed: true
+- id: c_cco:MilitaryFacility
+  name: Military Facility
+  definition: A Facility that is designed to support a Military Force.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Military Facility (id: c_cco:MilitaryFacility)
+
+      Definition: A Facility that is designed to support a Military Force.
+
+      '
+- id: c_cco:HydroelectricPowerPlant
+  name: Hydroelectric Power Plant
+  definition: An Electric Power Station that is designed to convert hydropower into
+    electrical power.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Hydroelectric Power Plant (id: c_cco:HydroelectricPowerPlant)
+
+      Definition: An Electric Power Station that is designed to convert hydropower
+      into electrical power.
+
+      '
+- id: c_cco:SewageTreatmentFacility
+  name: Sewage Treatment Facility
+  definition: A Waste Management Facility that is designed for removing contaminants
+    from wastewater, especially sewage.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:WasteManagementFacility
+  style:
+    group: 0
+    color: green
+    title: 'Sewage Treatment Facility (id: c_cco:SewageTreatmentFacility)
+
+      Definition: A Waste Management Facility that is designed for removing contaminants
+      from wastewater, especially sewage.
+
+      '
+- id: c_bfo:BFO_0000029
+  name: site
+  definition: (Elucidation) A site is a three-dimensional immaterial entity whose
+    boundaries either (partially or wholly) coincide with the boundaries of one or
+    more material entities or have locations determined in relation to some material
+    entity
+  example: A hole in a portion of cheese; a rabbit hole; the Grand Canyon; the Piazza
+    San Marco; the kangaroo-joey-containing hole of a kangaroo pouch; your left nostril
+    (a fiat part - the opening - of your left nasal cavity); the lumen of your gut;
+    the hold of a ship; the interior of the trunk of your car; hole in an engineered
+    floor joist
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000141
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: "site (id: c_bfo:BFO_0000029)\nDefinition: (Elucidation) A site is a three-dimensional\
+      \ immaterial entity whose boundaries either (partially or wholly) coincide with\
+      \ the boundaries of one or more material entities or have locations determined\
+      \ in relation to some material entity\nExamples: A hole in a portion of cheese;\
+      \ a rabbit hole; the Grand Canyon; the Piazza San Marco; the kangaroo-joey-containing\
+      \ hole of a kangaroo pouch; your left nostril (a fiat part - the opening - of\
+      \ your left nasal cavity); the lumen of your gut; the hold of a ship; the interior\
+      \ of the trunk of your car; hole in an engineered floor joist\n\n'environs'\
+      \ (c_bfo:BFO_0000183) to None (c_bfo:BFO_0000015) \n'environs' (c_bfo:BFO_0000183)\
+      \ to None (c_bfo:BFO_0000035) "
+    x: -1050.0
+    y: 0.0
+    fixed: true
+- id: c_bfo:BFO_0000017
+  name: realizable entity
+  definition: (Elucidation) A realizable entity is a specifically dependent continuant
+    that inheres in some independent continuant which is not a spatial region & which
+    is of a type some instances of which are realized in processes of a correlated
+    type
+  example: The role of being a doctor; the role of this boundary to delineate where
+    Utah and Colorado meet; the function of your reproductive organs; the disposition
+    of your blood to coagulate; the disposition of this piece of metal to conduct
+    electricity
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000020
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'realizable entity (id: c_bfo:BFO_0000017)
+
+      Definition: (Elucidation) A realizable entity is a specifically dependent continuant
+      that inheres in some independent continuant which is not a spatial region &
+      which is of a type some instances of which are realized in processes of a correlated
+      type
+
+      Examples: The role of being a doctor; the role of this boundary to delineate
+      where Utah and Colorado meet; the function of your reproductive organs; the
+      disposition of your blood to coagulate; the disposition of this piece of metal
+      to conduct electricity
+
+
+      ''has realization'' (c_bfo:BFO_0000054) to None (c_bfo:BFO_0000015) '
+    x: -300.0
+    y: -375.0
+    fixed: true
+- id: c_cco:CommunicationsFacility
+  name: Communications Facility
+  definition: A Facility that is designed to support processes of receiving or transmitting
+    information.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Communications Facility (id: c_cco:CommunicationsFacility)
+
+      Definition: A Facility that is designed to support processes of receiving or
+      transmitting information.
+
+      '
+- id: c_cco:CommandPostFacility
+  name: Command Post Facility
+  definition: A Military Facility that is designed to support the command and control
+    of Military Operations or Forces.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Command Post Facility (id: c_cco:CommandPostFacility)
+
+      Definition: A Military Facility that is designed to support the command and
+      control of Military Operations or Forces.
+
+      '
+- id: c_bfo:BFO_0000019
+  name: quality
+  definition: (Elucidation) A quality is a specifically dependent continuant that,
+    in contrast to roles and dispositions, does not require any further process in
+    order to be realized
+  example: The colour of a tomato; the ambient temperature of this portion of air;
+    the length of the circumference of your waist; the shape of your nose; the shape
+    of your nostril; the mass of this piece of gold
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000020
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'quality (id: c_bfo:BFO_0000019)
+
+      Definition: (Elucidation) A quality is a specifically dependent continuant that,
+      in contrast to roles and dispositions, does not require any further process
+      in order to be realized
+
+      Examples: The colour of a tomato; the ambient temperature of this portion of
+      air; the length of the circumference of your waist; the shape of your nose;
+      the shape of your nostril; the mass of this piece of gold
+
+      '
+    x: -600.0
+    y: -375.0
+    fixed: true
+- id: c_bfo:BFO_0000140
+  name: continuant fiat boundary
+  definition: (Elucidation) A continuant fiat boundary b is an immaterial entity that
+    is of zero, one or two dimensions & such that there is no time t when b has a
+    spatial region as continuant part & whose location is determined in relation to
+    some material entity
+  example: As for fiat point, fiat line, fiat surface
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000141
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'continuant fiat boundary (id: c_bfo:BFO_0000140)
+
+      Definition: (Elucidation) A continuant fiat boundary b is an immaterial entity
+      that is of zero, one or two dimensions & such that there is no time t when b
+      has a spatial region as continuant part & whose location is determined in relation
+      to some material entity
+
+      Examples: As for fiat point, fiat line, fiat surface
+
+      '
+    x: -1350.0
+    y: 0.0
+    fixed: true
+- id: c_bfo:BFO_0000031
+  name: generically dependent continuant
+  definition: (Elucidation) A generically dependent continuant is an entity that exists
+    in virtue of the fact that there is at least one of what may be multiple copies
+    which is the content or the pattern that multiple copies would share
+  example: The pdf file on your laptop; the pdf file that is a copy thereof on my
+    laptop; the sequence of this protein molecule; the sequence that is a copy thereof
+    in that protein molecule; the content that is shared by a string of dots and dashes
+    written on a page and the transmitted Morse code signal; the content of a sentence;
+    an engineering blueprint
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000002
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "generically dependent continuant (id: c_bfo:BFO_0000031)\nDefinition:\
+      \ (Elucidation) A generically dependent continuant is an entity that exists\
+      \ in virtue of the fact that there is at least one of what may be multiple copies\
+      \ which is the content or the pattern that multiple copies would share\nExamples:\
+      \ The pdf file on your laptop; the pdf file that is a copy thereof on my laptop;\
+      \ the sequence of this protein molecule; the sequence that is a copy thereof\
+      \ in that protein molecule; the content that is shared by a string of dots and\
+      \ dashes written on a page and the transmitted Morse code signal; the content\
+      \ of a sentence; an engineering blueprint\n\n'is concretized by' (c_bfo:BFO_0000058)\
+      \ to None (c_bfo:BFO_0000015) \n'is concretized by' (c_bfo:BFO_0000058) to None\
+      \ (c_bfo:BFO_0000020) \n'participates in' (c_bfo:BFO_0000056) to None (c_bfo:BFO_0000015)\
+      \ \n'generically depends on' (c_bfo:BFO_0000084) to None (c_bfo:BFO_0000004)\
+      \ \nNOT 'generically depends on' (c_bfo:BFO_0000084) to None (c_bfo:BFO_0000006) "
+    x: -900.0
+    y: -750.0
+    fixed: true
+- id: c_cco:MissileLaunchSite
+  name: Missile Launch Site
+  definition: A Military Facility that is designed for storing and launching missiles.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Missile Launch Site (id: c_cco:MissileLaunchSite)
+
+      Definition: A Military Facility that is designed for storing and launching missiles.
+
+      '
+- id: c_bfo:BFO_0000141
+  name: immaterial entity
+  definition: b is an immaterial entity =Def b is an independent continuant which
+    is such that there is no time t when it has a material entity as continuant part
+  example: As for fiat point, fiat line, fiat surface, site
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000004
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'immaterial entity (id: c_bfo:BFO_0000141)
+
+      Definition: b is an immaterial entity =Def b is an independent continuant which
+      is such that there is no time t when it has a material entity as continuant
+      part
+
+      Examples: As for fiat point, fiat line, fiat surface, site
+
+      '
+    x: -1200.0
+    y: -375.0
+    fixed: true
+- id: c_cco:MailingFacility
+  name: Mailing Facility
+  definition: A Facility that is designed for the systematic physical transportation
+    of documents and packages.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Mailing Facility (id: c_cco:MailingFacility)
+
+      Definition: A Facility that is designed for the systematic physical transportation
+      of documents and packages.
+
+      '
+- id: c_bfo:BFO_0000016
+  name: disposition
+  definition: (Elucidation) A disposition b is a realizable entity such that if b
+    ceases to exist then its bearer is physically changed & b's realization occurs
+    when and because this bearer is in some special physical circumstances & this
+    realization occurs in virtue of the bearer's physical make-up
+  example: An atom of element X has the disposition to decay to an atom of element
+    Y; the cell wall is disposed to transport cellular material through endocytosis
+    and exocytosis; certain people have a predisposition to colon cancer; children
+    are innately disposed to categorize objects in certain ways
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000017
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'disposition (id: c_bfo:BFO_0000016)
+
+      Definition: (Elucidation) A disposition b is a realizable entity such that if
+      b ceases to exist then its bearer is physically changed & b''s realization occurs
+      when and because this bearer is in some special physical circumstances & this
+      realization occurs in virtue of the bearer''s physical make-up
+
+      Examples: An atom of element X has the disposition to decay to an atom of element
+      Y; the cell wall is disposed to transport cellular material through endocytosis
+      and exocytosis; certain people have a predisposition to colon cancer; children
+      are innately disposed to categorize objects in certain ways
+
+
+      ''has material basis'' (c_bfo:BFO_0000218) to None (c_bfo:BFO_0000040) '
+    x: -150.0
+    y: 0.0
+    fixed: true
+- id: c_cco:OpenPitMine
+  name: Open Pit Mine
+  definition: A Mine that is designed to support the extraction of materials from
+    the ground directly without using tunnels.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Mine
+  style:
+    group: 0
+    color: green
+    title: 'Open Pit Mine (id: c_cco:OpenPitMine)
+
+      Definition: A Mine that is designed to support the extraction of materials from
+      the ground directly without using tunnels.
+
+      '
+- id: c_cco:SeatOfLocalGovernment
+  name: Seat of Local Government
+  definition: A Government Building that is designed for the administration of a local
+    community.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:GovernmentBuilding
+  style:
+    group: 0
+    color: green
+    title: 'Seat of Local Government (id: c_cco:SeatOfLocalGovernment)
+
+      Definition: A Government Building that is designed for the administration of
+      a local community.
+
+      '
+- id: c_cco:Pipeline
+  name: Pipeline
+  definition: A Product Transport Facility that is designed to transport goods or
+    materials through a pipe.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ProductTransportFacility
+  style:
+    group: 0
+    color: green
+    title: 'Pipeline (id: c_cco:Pipeline)
+
+      Definition: A Product Transport Facility that is designed to transport goods
+      or materials through a pipe.
+
+      '
+- id: c_bfo:BFO_0000028
+  name: three-dimensional spatial region
+  definition: (Elucidation) A three-dimensional spatial region is a whole consisting
+    of a spatial volume together with zero or more spatial volumes which may have
+    spatial regions of lower dimension as parts
+  example: A cube-shaped region of space; a sphere-shaped region of space; the region
+    of space occupied by all and only the planets in the solar system at some point
+    in time
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'three-dimensional spatial region (id: c_bfo:BFO_0000028)
+
+      Definition: (Elucidation) A three-dimensional spatial region is a whole consisting
+      of a spatial volume together with zero or more spatial volumes which may have
+      spatial regions of lower dimension as parts
+
+      Examples: A cube-shaped region of space; a sphere-shaped region of space; the
+      region of space occupied by all and only the planets in the solar system at
+      some point in time
+
+      '
+    x: -1500.0
+    y: 375.0
+    fixed: true
+- id: c_cco:WaterTower
+  name: Water Tower
+  definition: A Facility that is the bearer of functions realized in processes of
+    storing water in an elevated container.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Water Tower (id: c_cco:WaterTower)
+
+      Definition: A Facility that is the bearer of functions realized in processes
+      of storing water in an elevated container.
+
+      '
+- id: c_cco:School
+  name: School
+  definition: An Education Facility that is designed to provide learning space and
+    environments for teaching of students under the direction of teachers.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:EducationalFacility
+  style:
+    group: 0
+    color: green
+    title: 'School (id: c_cco:School)
+
+      Definition: An Education Facility that is designed to provide learning space
+      and environments for teaching of students under the direction of teachers.
+
+      '
+- id: c_bfo:BFO_0000182
+  name: history
+  definition: (Elucidation) A history is a process that is the sum of the totality
+    of processes taking place in the spatiotemporal region occupied by the material
+    part of a material entity
+  example: The life of an organism from the beginning to the end of its existence
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000015
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'history (id: c_bfo:BFO_0000182)
+
+      Definition: (Elucidation) A history is a process that is the sum of the totality
+      of processes taking place in the spatiotemporal region occupied by the material
+      part of a material entity
+
+      Examples: The life of an organism from the beginning to the end of its existence
+
+
+      ''history of'' (c_bfo:BFO_0000184) to None (c_bfo:BFO_0000040) '
+    x: 450.0
+    y: -375.0
+    fixed: true
+- id: c_cco:Reservoir
+  name: Reservoir
+  definition: A Storage Facility that is designed to store water in a man-made open
+    enclosure or area.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Reservoir (id: c_cco:Reservoir)
+
+      Definition: A Storage Facility that is designed to store water in a man-made
+      open enclosure or area.
+
+      '
+- id: c_cco:GovernmentBuilding
+  name: Government Building
+  definition: A Facility that is designed for the administration of a community.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Government Building (id: c_cco:GovernmentBuilding)
+
+      Definition: A Facility that is designed for the administration of a community.
+
+      '
+- id: c_cco:RailFacility
+  name: Rail Facility
+  definition: A Transportation Facility that is designed for transferring people or
+    cargo to and from Trains.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Rail Facility (id: c_cco:RailFacility)
+
+      Definition: A Transportation Facility that is designed for transferring people
+      or cargo to and from Trains.
+
+      '
+- id: c_cco:Heliport
+  name: Heliport
+  definition: An Airport that is designed for launching, receiving, and housing Rotorcraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Airport
+  style:
+    group: 0
+    color: green
+    title: 'Heliport (id: c_cco:Heliport)
+
+      Definition: An Airport that is designed for launching, receiving, and housing
+      Rotorcraft.
+
+      '
+- id: c_cco:RetailFacility
+  name: Commercial Facility
+  definition: A Facility that is designed for buying and selling goods and services,
+    especially on a large scale.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Commercial Facility (id: c_cco:RetailFacility)
+
+      Definition: A Facility that is designed for buying and selling goods and services,
+      especially on a large scale.
+
+      '
+- id: c_bfo:BFO_0000146
+  name: fiat surface
+  definition: (Elucidation) A fiat surface is a two-dimensional continuant fiat boundary
+    that is self-connected
+  example: The surface of the Earth; the plane separating the smoking from the non-smoking
+    zone in a restaurant
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000140
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'fiat surface (id: c_bfo:BFO_0000146)
+
+      Definition: (Elucidation) A fiat surface is a two-dimensional continuant fiat
+      boundary that is self-connected
+
+      Examples: The surface of the Earth; the plane separating the smoking from the
+      non-smoking zone in a restaurant
+
+      '
+    x: -1200.0
+    y: 375.0
+    fixed: true
+- id: c_cco:ResidentialFacility
+  name: Residential Facility
+  definition: A Facility that is designed to house one or more Persons.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Residential Facility (id: c_cco:ResidentialFacility)
+
+      Definition: A Facility that is designed to house one or more Persons.
+
+      '
+- id: c_cco:AmmunitionDepot
+  name: Ammunition Depot
+  definition: A Storage Facility that is designed to store Portions of Ammunition.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Ammunition Depot (id: c_cco:AmmunitionDepot)
+
+      Definition: A Storage Facility that is designed to store Portions of Ammunition.
+
+      '
+- id: c_cco:Church
+  name: Church
+  definition: A Religious Facility that is designed for Christian worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ReligiousFacility
+  style:
+    group: 0
+    color: green
+    title: 'Church (id: c_cco:Church)
+
+      Definition: A Religious Facility that is designed for Christian worship and
+      prayer.
+
+      '
+- id: c_cco:Farm
+  name: Farm
+  definition: An Agricultural Facility that is designed to produce food and other
+    crops.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:AgriculturalFacility
+  style:
+    group: 0
+    color: green
+    title: 'Farm (id: c_cco:Farm)
+
+      Definition: An Agricultural Facility that is designed to produce food and other
+      crops.
+
+      '
+- id: c_bfo:BFO_0000024
+  name: fiat object part
+  definition: (Elucidation) A fiat object part b is a material entity & such that
+    if b exists then it is continuant part of some object c & demarcated from the
+    remainder of c by one or more fiat surfaces
+  example: The upper and lower lobes of the left lung; the dorsal and ventral surfaces
+    of the body; the Western hemisphere of the Earth; the FMA:regional parts of an
+    intact human body
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000040
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'fiat object part (id: c_bfo:BFO_0000024)
+
+      Definition: (Elucidation) A fiat object part b is a material entity & such that
+      if b exists then it is continuant part of some object c & demarcated from the
+      remainder of c by one or more fiat surfaces
+
+      Examples: The upper and lower lobes of the left lung; the dorsal and ventral
+      surfaces of the body; the Western hemisphere of the Earth; the FMA:regional
+      parts of an intact human body
+
+      '
+    x: -2250.0
+    y: 0.0
+    fixed: true
+- id: c_cco:WeaponManufacturingFacility
+  name: Weapon Manufacturing Facility
+  definition: A Factory that is designed to produce or assemble weapons.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Weapon Manufacturing Facility (id: c_cco:WeaponManufacturingFacility)
+
+      Definition: A Factory that is designed to produce or assemble weapons.
+
+      '
+- id: c_cco:SeatOfNationalGovernment
+  name: Seat of National Government
+  definition: A Government Building that is designed for the administration of a sovereign
+    nation.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:GovernmentBuilding
+  style:
+    group: 0
+    color: green
+    title: 'Seat of National Government (id: c_cco:SeatOfNationalGovernment)
+
+      Definition: A Government Building that is designed for the administration of
+      a sovereign nation.
+
+      '
+- id: c_cco:Hospital
+  name: Hospital
+  definition: A Healthcare Facility that is designed to provide patient treatment
+    with specialized staff and equipment.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:HealthcareFacility
+  style:
+    group: 0
+    color: green
+    title: 'Hospital (id: c_cco:Hospital)
+
+      Definition: A Healthcare Facility that is designed to provide patient treatment
+      with specialized staff and equipment.
+
+      '
+- id: c_cco:GasProcessingFacility
+  name: Gas Processing Facility
+  definition: A Refinery that is designed for refining natural gas into products of
+    value.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Refinery
+  style:
+    group: 0
+    color: green
+    title: 'Gas Processing Facility (id: c_cco:GasProcessingFacility)
+
+      Definition: A Refinery that is designed for refining natural gas into products
+      of value.
+
+      '
+- id: c_bfo:BFO_0000034
+  name: function
+  definition: (Elucidation) A function is a disposition that exists in virtue of its
+    bearer's physical make-up & this physical make-up is something the bearer possesses
+    because it came into being either through evolution (in the case of natural biological
+    entities) or through intentional design (in the case of artefacts) in order to
+    realize processes of a certain sort
+  example: The function of a hammer to drive in nails; the function of a heart pacemaker
+    to regulate the beating of a heart through electricity
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000016
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'function (id: c_bfo:BFO_0000034)
+
+      Definition: (Elucidation) A function is a disposition that exists in virtue
+      of its bearer''s physical make-up & this physical make-up is something the bearer
+      possesses because it came into being either through evolution (in the case of
+      natural biological entities) or through intentional design (in the case of artefacts)
+      in order to realize processes of a certain sort
+
+      Examples: The function of a hammer to drive in nails; the function of a heart
+      pacemaker to regulate the beating of a heart through electricity
+
+      '
+    x: -150.0
+    y: 375.0
+    fixed: true
+- id: c_cco:UnderwaterMine
+  name: Underwater Mine
+  definition: A Mine that is designed to support the extraction of materials from
+    the ocean floor.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Mine
+  style:
+    group: 0
+    color: green
+    title: 'Underwater Mine (id: c_cco:UnderwaterMine)
+
+      Definition: A Mine that is designed to support the extraction of materials from
+      the ocean floor.
+
+      '
+- id: c_cco:ThermalPowerPlant
+  name: Thermal Power Plant
+  definition: An Electric Power Station that is designed to convert heat energy into
+    electrical energy.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Thermal Power Plant (id: c_cco:ThermalPowerPlant)
+
+      Definition: An Electric Power Station that is designed to convert heat energy
+      into electrical energy.
+
+      '
+- id: c_cco:EducationalFacility
+  name: Educational Facility
+  definition: A Facility that is designed for facilitating learning, or the acquisition
+    of knowledge, skills, values, beliefs, and habits.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Educational Facility (id: c_cco:EducationalFacility)
+
+      Definition: A Facility that is designed for facilitating learning, or the acquisition
+      of knowledge, skills, values, beliefs, and habits.
+
+      '
+- id: c_cco:Hotel
+  name: Hotel
+  definition: A Residential Facility that is designed to provide lodging that is paid
+    for on a short-term basis.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'Hotel (id: c_cco:Hotel)
+
+      Definition: A Residential Facility that is designed to provide lodging that
+      is paid for on a short-term basis.
+
+      '
+- id: c_cco:ReligiousFacility
+  name: Religious Facility
+  definition: A Facility that is designed for worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Religious Facility (id: c_cco:ReligiousFacility)
+
+      Definition: A Facility that is designed for worship and prayer.
+
+      '
+- id: c_cco:DistributionPort
+  name: Distribution Port
+  definition: A Port that is designed with the cargo handling equipment necessary
+    for the loading and unloading of Watercraft
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Port
+  style:
+    group: 0
+    color: green
+    title: 'Distribution Port (id: c_cco:DistributionPort)
+
+      Definition: A Port that is designed with the cargo handling equipment necessary
+      for the loading and unloading of Watercraft
+
+      '
+- id: c_cco:PostOffice
+  name: Post Office
+  definition: A Mailing Facility that is designed for serving customers of the national
+    postal system.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MailingFacility
+  style:
+    group: 0
+    color: green
+    title: 'Post Office (id: c_cco:PostOffice)
+
+      Definition: A Mailing Facility that is designed for serving customers of the
+      national postal system.
+
+      '
+- id: c_cco:Biological_Depot
+  name: Biological Depot
+  definition: A Storage Facility that is designed to store biological agents.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Biological Depot (id: c_cco:Biological_Depot)
+
+      Definition: A Storage Facility that is designed to store biological agents.
+
+      '
+- id: c_cco:RadioRelayStation
+  name: Radio Relay Station
+  definition: A Communications Facility that is designed to support the receiving
+    and re-transmitting of radio signals.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:CommunicationsFacility
+  style:
+    group: 0
+    color: green
+    title: 'Radio Relay Station (id: c_cco:RadioRelayStation)
+
+      Definition: A Communications Facility that is designed to support the receiving
+      and re-transmitting of radio signals.
+
+      '
+- id: c_cco:NuclearPowerPlant
+  name: Nuclear Power Plant
+  definition: A Thermal Power Plant that is designed to produce heat by means of a
+    nuclear reactor, which is then converted to electrical energy.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ThermalPowerPlant
+  style:
+    group: 0
+    color: green
+    title: 'Nuclear Power Plant (id: c_cco:NuclearPowerPlant)
+
+      Definition: A Thermal Power Plant that is designed to produce heat by means
+      of a nuclear reactor, which is then converted to electrical energy.
+
+      '
+- id: c_cco:ChemicalManufacturingFacility
+  name: Chemical Manufacturing Facility
+  definition: A Factory that is designed to manufacture or process chemicals.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Chemical Manufacturing Facility (id: c_cco:ChemicalManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture or process chemicals.
+
+      '
+- id: c_cco:GroceryStore
+  name: Grocery Store
+  definition: A Commercial Facility that is designed to sell food.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:RetailFacility
+  style:
+    group: 0
+    color: green
+    title: 'Grocery Store (id: c_cco:GroceryStore)
+
+      Definition: A Commercial Facility that is designed to sell food.
+
+      '
+- id: c_bfo:BFO_0000202
+  name: temporal interval
+  definition: (Elucidation) A temporal interval is a one-dimensional temporal region
+    that is continuous, thus without gaps or breaks
+  example: The year 2018.
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000038
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'temporal interval (id: c_bfo:BFO_0000202)
+
+      Definition: (Elucidation) A temporal interval is a one-dimensional temporal
+      region that is continuous, thus without gaps or breaks
+
+      Examples: The year 2018.
+
+      '
+    x: 900.0
+    y: 0.0
+    fixed: true
+- id: c_cco:ApartmentBuilding
+  name: Apartment Building
+  definition: A Residential Facility that is designed to contain multiple permanent
+    residences comprised of a suite of rooms.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'Apartment Building (id: c_cco:ApartmentBuilding)
+
+      Definition: A Residential Facility that is designed to contain multiple permanent
+      residences comprised of a suite of rooms.
+
+      '
+- id: c_bfo:BFO_0000018
+  name: zero-dimensional spatial region
+  definition: (Elucidation) A zero-dimensional spatial region is one or a collection
+    of more than one spatially disjoint points in space
+  example: The spatial region occupied at some time instant by the North Pole
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'zero-dimensional spatial region (id: c_bfo:BFO_0000018)
+
+      Definition: (Elucidation) A zero-dimensional spatial region is one or a collection
+      of more than one spatially disjoint points in space
+
+      Examples: The spatial region occupied at some time instant by the North Pole
+
+      '
+    x: -1950.0
+    y: 375.0
+    fixed: true
+- id: c_cco:ElectricPowerStation
+  name: Electric Power Station
+  definition: A Facility that is designed to generate electrical power.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Electric Power Station (id: c_cco:ElectricPowerStation)
+
+      Definition: A Facility that is designed to generate electrical power.
+
+      '
+- id: c_cco:PowerTransmissionLine
+  name: Power Transmission Line
+  definition: A Product Transport Facility that is designed to transmit electricity
+    over distance via a system of above ground wires including their supports.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ProductTransportFacility
+  style:
+    group: 0
+    color: green
+    title: 'Power Transmission Line (id: c_cco:PowerTransmissionLine)
+
+      Definition: A Product Transport Facility that is designed to transmit electricity
+      over distance via a system of above ground wires including their supports.
+
+      '
+- id: c_bfo:BFO_0000009
+  name: two-dimensional spatial region
+  definition: (Elucidation) A two-dimensional spatial region is a spatial region that
+    is a whole consisting of a surface together with zero or more surfaces which may
+    have spatial regions of lower dimension as parts
+  example: The surface of a sphere-shaped part of space; an infinitely thin plane
+    in space
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'two-dimensional spatial region (id: c_bfo:BFO_0000009)
+
+      Definition: (Elucidation) A two-dimensional spatial region is a spatial region
+      that is a whole consisting of a surface together with zero or more surfaces
+      which may have spatial regions of lower dimension as parts
+
+      Examples: The surface of a sphere-shaped part of space; an infinitely thin plane
+      in space
+
+      '
+    x: -1650.0
+    y: 375.0
+    fixed: true
+- id: c_cco:WindFarm
+  name: Wind Farm
+  definition: An Electric Power Station that is designed to convert the wind's kinetic
+    energy into electrical power by means of wind turbines.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Wind Farm (id: c_cco:WindFarm)
+
+      Definition: An Electric Power Station that is designed to convert the wind''s
+      kinetic energy into electrical power by means of wind turbines.
+
+      '
+- id: c_cco:Mine
+  name: Mine
+  definition: A Facility that is designed to support the extraction of minerals or
+    other geological materials from an orebody, lode, vein, seam, reef, or placer
+    deposit within the earth.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Mine (id: c_cco:Mine)
+
+      Definition: A Facility that is designed to support the extraction of minerals
+      or other geological materials from an orebody, lode, vein, seam, reef, or placer
+      deposit within the earth.
+
+      '
+- id: c_bfo:BFO_0000002
+  name: continuant
+  definition: (Elucidation) A continuant is an entity that persists, endures, or continues
+    to exist through time while maintaining its identity
+  example: A human being; a tennis ball; a cave; a region of space; someone's temperature
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000001
+  style:
+    group: 1
+    color: '#97c1fb'
+    title: "continuant (id: c_bfo:BFO_0000002)\nDefinition: (Elucidation) A continuant\
+      \ is an entity that persists, endures, or continues to exist through time while\
+      \ maintaining its identity\nExamples: A human being; a tennis ball; a cave;\
+      \ a region of space; someone's temperature\n\n'continuant part of' (c_bfo:BFO_0000176)\
+      \ to None (c_bfo:BFO_0000002) \n'has continuant part' (c_bfo:BFO_0000178) to\
+      \ None (c_bfo:BFO_0000002) "
+    x: -750.0
+    y: -1125.0
+    fixed: true
+- id: c_cco:WashingFacility
+  name: Washing Facility
+  definition: A Facility that is designed to wash personnel or equipment.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Washing Facility (id: c_cco:WashingFacility)
+
+      Definition: A Facility that is designed to wash personnel or equipment.
+
+      '
+- id: c_cco:StorageFacility
+  name: Storage Facility
+  definition: A Facility that is designed to store materials or goods.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Storage Facility (id: c_cco:StorageFacility)
+
+      Definition: A Facility that is designed to store materials or goods.
+
+      '
+- id: c_cco:DecontaminationFacility
+  name: Decontamination Facility
+  definition: A Washing Facility that is designed to wash personnel or equipment after
+    (potential) contamination by radioactive, biological, or chemical material.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:WashingFacility
+  style:
+    group: 0
+    color: green
+    title: 'Decontamination Facility (id: c_cco:DecontaminationFacility)
+
+      Definition: A Washing Facility that is designed to wash personnel or equipment
+      after (potential) contamination by radioactive, biological, or chemical material.
+
+      '
+- id: c_cco:PublicSafetyFacility
+  name: Public Safety Facility
+  definition: A Facility that is designed for the prevention of and protection from
+    events that could endanger, injure, or damage the general public.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Public Safety Facility (id: c_cco:PublicSafetyFacility)
+
+      Definition: A Facility that is designed for the prevention of and protection
+      from events that could endanger, injure, or damage the general public.
+
+      '
+- id: c_bfo:BFO_0000148
+  name: zero-dimensional temporal region
+  definition: (Elucidation) A zero-dimensional temporal region is a temporal region
+    that is a whole consisting of one or more separated temporal instants as parts
+  example: A temporal region that is occupied by a process boundary; the moment at
+    which a finger is detached in an industrial accident
+  relations:
+  - label: is_a
+    to: c_bfo:BFO_0000008
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'zero-dimensional temporal region (id: c_bfo:BFO_0000148)
+
+      Definition: (Elucidation) A zero-dimensional temporal region is a temporal region
+      that is a whole consisting of one or more separated temporal instants as parts
+
+      Examples: A temporal region that is occupied by a process boundary; the moment
+      at which a finger is detached in an industrial accident
+
+      '
+    x: 1350.0
+    y: -375.0
+    fixed: true
+- id: c_cco:EntertainmentFacility
+  name: Entertainment Facility
+  definition: A Facility that is designed to host activities that are intended to
+    hold the interest of, or give pleasure or delight to, an audience.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Entertainment Facility (id: c_cco:EntertainmentFacility)
+
+      Definition: A Facility that is designed to host activities that are intended
+      to hold the interest of, or give pleasure or delight to, an audience.
+
+      '
+- id: c_cco:NuclearStorageDepot
+  name: Nuclear Storage Depot
+  definition: A Storage Facility that is designed to store nuclear material.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Nuclear Storage Depot (id: c_cco:NuclearStorageDepot)
+
+      Definition: A Storage Facility that is designed to store nuclear material.
+
+      '
+- id: c_cco:Shop
+  name: Shop
+  definition: A Commercial Facility designed to sell small lots of goods to consumers.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:RetailFacility
+  style:
+    group: 0
+    color: green
+    title: 'Shop (id: c_cco:Shop)
+
+      Definition: A Commercial Facility designed to sell small lots of goods to consumers.
+
+      '
+- id: c_cco:WaterTreatmentFacility
+  name: Water Treatment Facility
+  definition: A Facility that is designed for making water more acceptable for a specific
+    end-use.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Water Treatment Facility (id: c_cco:WaterTreatmentFacility)
+
+      Definition: A Facility that is designed for making water more acceptable for
+      a specific end-use.
+
+      '
+- id: c_cco:Stage
+  name: Stage
+  definition: An Entertainment Facility that is designed to provide a space upon which
+    entertaining performances or productions can occur.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:EntertainmentFacility
+  style:
+    group: 0
+    color: green
+    title: 'Stage (id: c_cco:Stage)
+
+      Definition: An Entertainment Facility that is designed to provide a space upon
+      which entertaining performances or productions can occur.
+
+      '
+- id: c_cco:PoliceStation
+  name: Police Station
+  definition: A Public Safety Facility that is designed for the professional and clerical
+    processes of a local police force.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:PublicSafetyFacility
+  style:
+    group: 0
+    color: green
+    title: 'Police Station (id: c_cco:PoliceStation)
+
+      Definition: A Public Safety Facility that is designed for the professional and
+      clerical processes of a local police force.
+
+      '
+- id: c_cco:PetroleumManufacturingFacility
+  name: Petroleum Manufacturing Facility
+  definition: A Factory that is designed to manufacture petroleum-based products.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Petroleum Manufacturing Facility (id: c_cco:PetroleumManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture petroleum-based products.
+
+      '
+- id: c_cco:WasteManagementFacility
+  name: Waste Management Facility
+  definition: A Facility that is designed for managing waste for some portion of the
+    waste's existence.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Waste Management Facility (id: c_cco:WasteManagementFacility)
+
+      Definition: A Facility that is designed for managing waste for some portion
+      of the waste''s existence.
+
+      '
+- id: c_cco:FireStation
+  name: Fire Station
+  definition: A Public Safety Facility that is designed for the storage of firefighting
+    apparatus.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:PublicSafetyFacility
+  style:
+    group: 0
+    color: green
+    title: 'Fire Station (id: c_cco:FireStation)
+
+      Definition: A Public Safety Facility that is designed for the storage of firefighting
+      apparatus.
+
+      '
+- id: c_cco:TrainingCamp
+  name: Training Camp
+  definition: A Facility that is designed for rigorous and focused training in order
+    to learn or improve skills, usually involving physical actions.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Training Camp (id: c_cco:TrainingCamp)
+
+      Definition: A Facility that is designed for rigorous and focused training in
+      order to learn or improve skills, usually involving physical actions.
+
+      '
+- id: c_cco:Pier
+  name: Pier
+  definition: A Transportation Facility that is designed to partially enclose a harbor
+    and form a landing place for Watercraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Pier (id: c_cco:Pier)
+
+      Definition: A Transportation Facility that is designed to partially enclose
+      a harbor and form a landing place for Watercraft.
+
+      '
+- id: c_cco:Refinery
+  name: Refinery
+  definition: A Factory that is designed for refining raw materials into products
+    of value.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Refinery (id: c_cco:Refinery)
+
+      Definition: A Factory that is designed for refining raw materials into products
+      of value.
+
+      '
+- id: c_cco:CombatOutpost
+  name: Combat Outpost
+  definition: A Military Facility that is designed to support the conduction of combat
+    operations of limited scope or size.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Combat Outpost (id: c_cco:CombatOutpost)
+
+      Definition: A Military Facility that is designed to support the conduction of
+      combat operations of limited scope or size.
+
+      '
+- id: c_cco:MilitaryHeadquartersFacility
+  name: Military Headquarters Facility
+  definition: A Military Facility that is designed for military administration and
+    coordination.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Military Headquarters Facility (id: c_cco:MilitaryHeadquartersFacility)
+
+      Definition: A Military Facility that is designed for military administration
+      and coordination.
+
+      '
+- id: c_cco:UndergroundMine
+  name: Underground Mine
+  definition: A Mine that is designed to support the extraction of materials from
+    the ground using underground tunnels and shafts.
+  example: ''
+  relations:
+  - label: is_a
+    to: c_cco:Mine
+  style:
+    group: 0
+    color: green
+    title: 'Underground Mine (id: c_cco:UndergroundMine)
+
+      Definition: A Mine that is designed to support the extraction of materials from
+      the ground using underground tunnels and shafts.
+
+      '
+entities:
+- id: bfo:BFO_0000142
+  name: fiat line
+  definition: (Elucidation) A fiat line is a one-dimensional continuant fiat boundary
+    that is continuous
+  example: The Equator; all geopolitical boundaries; all lines of latitude and longitude;
+    the median sulcus of your tongue; the line separating the outer surface of the
+    mucosa of the lower lip from the outer surface of the skin of the chin
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000140
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'fiat line (id: bfo:BFO_0000142)
+
+      Definition: (Elucidation) A fiat line is a one-dimensional continuant fiat boundary
+      that is continuous
+
+      Examples: The Equator; all geopolitical boundaries; all lines of latitude and
+      longitude; the median sulcus of your tongue; the line separating the outer surface
+      of the mucosa of the lower lip from the outer surface of the skin of the chin
+
+      '
+- id: cco:Fort
+  name: Fort
+  definition: A Military Facility that is designed to support the defense of or solidification
+    of rule over some Geospatial Region and its inhabitants.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Fort (id: cco:Fort)
+
+      Definition: A Military Facility that is designed to support the defense of or
+      solidification of rule over some Geospatial Region and its inhabitants.
+
+      '
+- id: cco:MilitaryBase
+  name: Military Base
+  definition: A Military Facility that is designed to shelter military equipment and
+    personnel and to facilitate training and operations.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Military Base (id: cco:MilitaryBase)
+
+      Definition: A Military Facility that is designed to shelter military equipment
+      and personnel and to facilitate training and operations.
+
+      '
+- id: cco:MaintenanceFacility
+  name: Maintenance Facility
+  definition: A Facility that is designed to be used to perform actions to maintain
+    or improve the state of some property or equipment.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Maintenance Facility (id: cco:MaintenanceFacility)
+
+      Definition: A Facility that is designed to be used to perform actions to maintain
+      or improve the state of some property or equipment.
+
+      '
+- id: cco:AircraftManufacturingFacility
+  name: Aircraft Manufacturing Facility
+  definition: A Factory that is designed to manufacture Aircraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Aircraft Manufacturing Facility (id: cco:AircraftManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture Aircraft.
+
+      '
+- id: bfo:BFO_0000003
+  name: occurrent
+  definition: (Elucidation) An occurrent is an entity that unfolds itself in time
+    or it is the start or end of such an entity or it is a temporal or spatiotemporal
+    region
+  example: As for process, history, process boundary, spatiotemporal region, zero-dimensional
+    temporal region, one-dimensional temporal region, temporal interval, temporal
+    instant.
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000001
+  - label: occurrent part of
+    to: bfo:BFO_0000003
+    description: 'bfo:BFO_0000132: occurrent part of
+
+      Definition: (Elucidation) occurrent part of is a relation between occurrents
+      b and c when b is part of c'
+  - label: has temporal part
+    to: bfo:BFO_0000003
+    description: 'bfo:BFO_0000121: has temporal part
+
+      Definition: b has temporal part c =Def c temporal part of b'
+  - label: preceded by
+    to: bfo:BFO_0000003
+    description: 'bfo:BFO_0000062: preceded by
+
+      Definition: b preceded by c =Def b precedes c'
+  - label: temporal part of
+    to: bfo:BFO_0000003
+    description: 'bfo:BFO_0000139: temporal part of
+
+      Definition: b temporal part of c =Def b occurrent part of c & (b and c are temporal
+      regions) or (b and c are spatiotemporal regions & b temporally projects onto
+      an occurrent part of the temporal region that c temporally projects onto) or
+      (b and c are processes or process boundaries & b occupies a temporal region
+      that is an occurrent part of the temporal region that c occupies)'
+  - label: has occurrent part
+    to: bfo:BFO_0000003
+    description: 'bfo:BFO_0000117: has occurrent part
+
+      Definition: b has occurrent part c =Def c occurrent part of b'
+  - label: precedes
+    to: bfo:BFO_0000003
+    description: 'bfo:BFO_0000063: precedes
+
+      Definition: (Elucidation) precedes is a relation between occurrents o, o'' such
+      that if t is the temporal extent of o & t'' is the temporal extent of o'' then
+      either the last instant of o is before the first instant of o'' or the last
+      instant of o is the first instant of o'' & neither o nor o'' are temporal instants'
+  style:
+    group: 1
+    color: '#97c1fb'
+    title: "occurrent (id: bfo:BFO_0000003)\nDefinition: (Elucidation) An occurrent\
+      \ is an entity that unfolds itself in time or it is the start or end of such\
+      \ an entity or it is a temporal or spatiotemporal region\nExamples: As for process,\
+      \ history, process boundary, spatiotemporal region, zero-dimensional temporal\
+      \ region, one-dimensional temporal region, temporal interval, temporal instant.\n\
+      \n'occurrent part of' (bfo:BFO_0000132) to None (bfo:BFO_0000003) \n'has temporal\
+      \ part' (bfo:BFO_0000121) to None (bfo:BFO_0000003) \n'preceded by' (bfo:BFO_0000062)\
+      \ to None (bfo:BFO_0000003) \n'temporal part of' (bfo:BFO_0000139) to None (bfo:BFO_0000003)\
+      \ \n'has occurrent part' (bfo:BFO_0000117) to None (bfo:BFO_0000003) \n'precedes'\
+      \ (bfo:BFO_0000063) to None (bfo:BFO_0000003) "
+- id: bfo:BFO_0000020
+  name: specifically dependent continuant
+  definition: b is a specifically dependent continuant =Def b is a continuant & there
+    is some independent continuant c which is not a spatial region & which is such
+    that b specifically depends on c
+  example: (with one bearer) The mass of this tomato; the pink colour of a medium
+    rare piece of grilled filet mignon at its centre; the smell of this portion of
+    mozzarella; the disposition of this fish to decay; the role of being a doctor;
+    the function of this heart to pump blood; the shape of this hole| (with multiple
+    bearers) John's love for Mary; the ownership relation between John and this statue;
+    the relation of authority between John and his subordinates
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000002
+  - label: participates in
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000056: participates in
+
+      Definition: (Elucidation) participates in holds between some b that is either
+      a specifically dependent continuant or generically dependent continuant or independent
+      continuant that is not a spatial region & some process p such that b participates
+      in p some way'
+  - label: concretizes
+    to: bfo:BFO_0000031
+    description: 'bfo:BFO_0000059: concretizes
+
+      Definition: b concretizes c =Def b is a process or a specifically dependent
+      continuant & c is a generically dependent continuant & there is some time t
+      such that c is the pattern or content which b shares at t with actual or potential
+      copies'
+  - label: inheres in
+    to: bfo:BFO_0000004
+    description: 'bfo:BFO_0000197: inheres in
+
+      Definition: b inheres in c =Def b is a specifically dependent continuant & c
+      is an independent continuant that is not a spatial region & b specifically depends
+      on c'
+  - label: specifically depended on by
+    to: bfo:BFO_0000020
+    description: 'bfo:BFO_0000194: specifically depended on by
+
+      Definition: b specifically depended on by c =Def c specifically depends on b'
+  - label: specifically depends on
+    to: bfo:BFO_0000020
+    description: 'bfo:BFO_0000195: specifically depends on
+
+      Definition: (Elucidation) specifically depends on is a relation between a specifically
+      dependent continuant b and specifically dependent continuant or independent
+      continuant that is not a spatial region c such that b and c share no parts in
+      common & b is of a nature such that at all times t it cannot exist unless c
+      exists & b is not a boundary of c'
+  - label: specifically depends on
+    to: bfo:BFO_0000004
+    description: 'bfo:BFO_0000195: specifically depends on
+
+      Definition: (Elucidation) specifically depends on is a relation between a specifically
+      dependent continuant b and specifically dependent continuant or independent
+      continuant that is not a spatial region c such that b and c share no parts in
+      common & b is of a nature such that at all times t it cannot exist unless c
+      exists & b is not a boundary of c'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "specifically dependent continuant (id: bfo:BFO_0000020)\nDefinition: b\
+      \ is a specifically dependent continuant =Def b is a continuant & there is some\
+      \ independent continuant c which is not a spatial region & which is such that\
+      \ b specifically depends on c\nExamples: (with one bearer) The mass of this\
+      \ tomato; the pink colour of a medium rare piece of grilled filet mignon at\
+      \ its centre; the smell of this portion of mozzarella; the disposition of this\
+      \ fish to decay; the role of being a doctor; the function of this heart to pump\
+      \ blood; the shape of this hole| (with multiple bearers) John's love for Mary;\
+      \ the ownership relation between John and this statue; the relation of authority\
+      \ between John and his subordinates\n\n'participates in' (bfo:BFO_0000056) to\
+      \ None (bfo:BFO_0000015) \n'concretizes' (bfo:BFO_0000059) to None (bfo:BFO_0000031)\
+      \ \n'inheres in' (bfo:BFO_0000197) to None (bfo:BFO_0000004) \nNOT 'inheres\
+      \ in' (bfo:BFO_0000197) to None (bfo:BFO_0000006) \n'specifically depended on\
+      \ by' (bfo:BFO_0000194) to None (bfo:BFO_0000020) \n'specifically depends on'\
+      \ (bfo:BFO_0000195) to None (bfo:BFO_0000020) \n'specifically depends on' (bfo:BFO_0000195)\
+      \ to None (bfo:BFO_0000004) \nNOT 'specifically depends on' (bfo:BFO_0000195)\
+      \ to None (bfo:BFO_0000006) "
+- id: bfo:BFO_0000001
+  name: entity
+  definition: (Elucidation) An entity is anything that exists or has existed or will
+    exist
+  example: Julius Caesar; the Second World War; your body mass index; Verdi's Requiem
+  relations:
+  - label: exists at
+    to: bfo:BFO_0000008
+    description: 'bfo:BFO_0000108: exists at
+
+      Definition: (Elucidation) exists at is a relation between a particular and some
+      temporal region at which the particular exists'
+  style:
+    group: 0
+    color: '#97c1fb'
+    title: 'entity (id: bfo:BFO_0000001)
+
+      Definition: (Elucidation) An entity is anything that exists or has existed or
+      will exist
+
+      Examples: Julius Caesar; the Second World War; your body mass index; Verdi''s
+      Requiem
+
+
+      ''exists at'' (bfo:BFO_0000108) to None (bfo:BFO_0000008) '
+- id: cco:Mosque
+  name: Mosque
+  definition: A Religious Facility that is designed for Islamic worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ReligiousFacility
+  style:
+    group: 0
+    color: green
+    title: 'Mosque (id: cco:Mosque)
+
+      Definition: A Religious Facility that is designed for Islamic worship and prayer.
+
+      '
+- id: cco:PumpingStation
+  name: Pumping Station
+  definition: A Product Transport Facility that is designed to pump fluids from one
+    place to another.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ProductTransportFacility
+  style:
+    group: 0
+    color: green
+    title: 'Pumping Station (id: cco:PumpingStation)
+
+      Definition: A Product Transport Facility that is designed to pump fluids from
+      one place to another.
+
+      '
+- id: cco:PetroleumDepot
+  name: Petroleum Depot
+  definition: A Storage Facility that is designed to store petroleum, oil, or lubricants.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Petroleum Depot (id: cco:PetroleumDepot)
+
+      Definition: A Storage Facility that is designed to store petroleum, oil, or
+      lubricants.
+
+      '
+- id: cco:PetrochemicalRefinery
+  name: Petrochemical Refinery
+  definition: A Refinery that is designed for refining crude oil, intermediate petroleum
+    products, or synthetic petroleum into products of value.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Refinery
+  style:
+    group: 0
+    color: green
+    title: 'Petrochemical Refinery (id: cco:PetrochemicalRefinery)
+
+      Definition: A Refinery that is designed for refining crude oil, intermediate
+      petroleum products, or synthetic petroleum into products of value.
+
+      '
+- id: cco:ProductTransportFacility
+  name: Product Transport Facility
+  definition: A Facility that is designed to transport some product.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Product Transport Facility (id: cco:ProductTransportFacility)
+
+      Definition: A Facility that is designed to transport some product.
+
+      '
+- id: cco:MotorVehicleManufacturingFacility
+  name: Motor Vehicle Manufacturing Facility
+  definition: A Factory that is designed to manufacture automobiles.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Motor Vehicle Manufacturing Facility (id: cco:MotorVehicleManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture automobiles.
+
+      '
+- id: cco:FossilFuelPowerPlant
+  name: Fossil Fuel Power Plant
+  definition: An Electric Power Station that is designed to convert fossil fuels (e.g.
+    coal, natural gas, or petroleum) into electrical energy.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Fossil Fuel Power Plant (id: cco:FossilFuelPowerPlant)
+
+      Definition: An Electric Power Station that is designed to convert fossil fuels
+      (e.g. coal, natural gas, or petroleum) into electrical energy.
+
+      '
+- id: bfo:BFO_0000004
+  name: independent continuant
+  definition: b is an independent continuant =Def b is a continuant & there is no
+    c such that b specifically depends on c or b generically depends on c
+  example: An atom; a molecule; an organism; a heart; a chair; the bottom right portion
+    of a human torso; a leg; the interior of your mouth; a spatial region; an orchestra
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000002
+  - label: location of
+    to: bfo:BFO_0000004
+    description: 'bfo:BFO_0000124: location of
+
+      Definition: b location of c =Def c located in b'
+  - label: location of
+    to: bfo:BFO_0000006
+    description: 'bfo:BFO_0000124: location of
+
+      Definition: b location of c =Def c located in b'
+  - label: participates in
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000056: participates in
+
+      Definition: (Elucidation) participates in holds between some b that is either
+      a specifically dependent continuant or generically dependent continuant or independent
+      continuant that is not a spatial region & some process p such that b participates
+      in p some way'
+  - label: is carrier of
+    to: bfo:BFO_0000031
+    description: 'bfo:BFO_0000101: is carrier of
+
+      Definition: b is carrier of c =Def there is some time t such that c generically
+      depends on b at t'
+  - label: located in
+    to: bfo:BFO_0000004
+    description: 'bfo:BFO_0000171: located in
+
+      Definition: b located in c =Def b is an independent continuant & c is an independent
+      & neither is a spatial region & there is some time t such that the spatial region
+      which b occupies at t is continuant part of the spatial region which c occupies
+      at t'
+  - label: located in
+    to: bfo:BFO_0000006
+    description: 'bfo:BFO_0000171: located in
+
+      Definition: b located in c =Def b is an independent continuant & c is an independent
+      & neither is a spatial region & there is some time t such that the spatial region
+      which b occupies at t is continuant part of the spatial region which c occupies
+      at t'
+  - label: specifically depended on by
+    to: bfo:BFO_0000020
+    description: 'bfo:BFO_0000194: specifically depended on by
+
+      Definition: b specifically depended on by c =Def c specifically depends on b'
+  - label: bearer of
+    to: bfo:BFO_0000020
+    description: 'bfo:BFO_0000196: bearer of
+
+      Definition: b bearer of c =Def c inheres in b'
+  - label: occupies spatial region
+    to: bfo:BFO_0000006
+    description: 'bfo:BFO_0000210: occupies spatial region
+
+      Definition: b occupies spatial region r =Def b is an independent continuant
+      that is not a spatial region & r is a spatial region & there is some time t
+      such that every continuant part of b occupies some continuant part of r at t
+      and no continuant part of b occupies any spatial region that is not a continuant
+      part of r at t'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "independent continuant (id: bfo:BFO_0000004)\nDefinition: b is an independent\
+      \ continuant =Def b is a continuant & there is no c such that b specifically\
+      \ depends on c or b generically depends on c\nExamples: An atom; a molecule;\
+      \ an organism; a heart; a chair; the bottom right portion of a human torso;\
+      \ a leg; the interior of your mouth; a spatial region; an orchestra\n\n'location\
+      \ of' (bfo:BFO_0000124) to None (bfo:BFO_0000004) \n'location of' (bfo:BFO_0000124)\
+      \ to None (bfo:BFO_0000006) \n'participates in' (bfo:BFO_0000056) to None (bfo:BFO_0000015)\
+      \ \n'is carrier of' (bfo:BFO_0000101) to None (bfo:BFO_0000031) \n'located in'\
+      \ (bfo:BFO_0000171) to None (bfo:BFO_0000004) \n'located in' (bfo:BFO_0000171)\
+      \ to None (bfo:BFO_0000006) \n'specifically depended on by' (bfo:BFO_0000194)\
+      \ to None (bfo:BFO_0000020) \n'bearer of' (bfo:BFO_0000196) to None (bfo:BFO_0000020)\
+      \ \n'occupies spatial region' (bfo:BFO_0000210) to None (bfo:BFO_0000006) "
+- id: cco:FinancialFacility
+  name: Financial Facility
+  definition: A Facility that is designed to support the management of money.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Financial Facility (id: cco:FinancialFacility)
+
+      Definition: A Facility that is designed to support the management of money.
+
+      '
+- id: bfo:BFO_0000035
+  name: process boundary
+  definition: p is a process boundary =Def p is a temporal part of a process & p has
+    no proper temporal parts
+  example: The boundary between the 2nd and 3rd year of your life
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000003
+  - label: occurs in
+    to: bfo:BFO_0000029
+    description: 'bfo:BFO_0000066: occurs in
+
+      Definition: b occurs in c =Def b is a process or a process boundary & c is a
+      material entity or site & there exists a spatiotemporal region r & b occupies
+      spatiotemporal region r & for all time t, if b exists at t then c exists at
+      t & there exist spatial regions s and s'' where b spatially projects onto s
+      at t & c occupies spatial region s'' at t & s is a continuant part of s'' at
+      t'
+  - label: occurs in
+    to: bfo:BFO_0000040
+    description: 'bfo:BFO_0000066: occurs in
+
+      Definition: b occurs in c =Def b is a process or a process boundary & c is a
+      material entity or site & there exists a spatiotemporal region r & b occupies
+      spatiotemporal region r & for all time t, if b exists at t then c exists at
+      t & there exist spatial regions s and s'' where b spatially projects onto s
+      at t & c occupies spatial region s'' at t & s is a continuant part of s'' at
+      t'
+  - label: occupies temporal region
+    to: bfo:BFO_0000008
+    description: 'bfo:BFO_0000199: occupies temporal region
+
+      Definition: p occupies temporal region t =Def p is a process or process boundary
+      & the spatiotemporal region occupied by p temporally projects onto t'
+  - label: occupies spatiotemporal region
+    to: bfo:BFO_0000011
+    description: 'bfo:BFO_0000200: occupies spatiotemporal region
+
+      Definition: (Elucidation) occupies spatiotemporal region is a relation between
+      a process or process boundary p and the spatiotemporal region s which is its
+      spatiotemporal extent'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "process boundary (id: bfo:BFO_0000035)\nDefinition: p is a process boundary\
+      \ =Def p is a temporal part of a process & p has no proper temporal parts\n\
+      Examples: The boundary between the 2nd and 3rd year of your life\n\n'occurs\
+      \ in' (bfo:BFO_0000066) to None (bfo:BFO_0000029) \n'occurs in' (bfo:BFO_0000066)\
+      \ to None (bfo:BFO_0000040) \n'occupies temporal region' (bfo:BFO_0000199) to\
+      \ None (bfo:BFO_0000008) \n'occupies spatiotemporal region' (bfo:BFO_0000200)\
+      \ to None (bfo:BFO_0000011) "
+- id: cco:MedicalDepot
+  name: Medical Depot
+  definition: A Storage Facility that is designed to store medical supplies.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Medical Depot (id: cco:MedicalDepot)
+
+      Definition: A Storage Facility that is designed to store medical supplies.
+
+      '
+- id: bfo:BFO_0000040
+  name: material entity
+  definition: (Elucidation) A material entity is an independent continuant has some
+    portion of matter as continuant part
+  example: A human being; the undetached arm of a human being; an aggregate of human
+    beings
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000004
+  - label: environs
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000183: environs
+
+      Definition: b environs c =Def c occurs in b'
+  - label: environs
+    to: bfo:BFO_0000035
+    description: 'bfo:BFO_0000183: environs
+
+      Definition: b environs c =Def c occurs in b'
+  - label: has history
+    to: bfo:BFO_0000182
+    description: 'bfo:BFO_0000185: has history
+
+      Definition: b has history c =Def c history of b'
+  - label: has member part
+    to: bfo:BFO_0000040
+    description: 'bfo:BFO_0000115: has member part
+
+      Definition: b has member part c =Def c member part of b'
+  - label: member part of
+    to: bfo:BFO_0000040
+    description: 'bfo:BFO_0000129: member part of
+
+      Definition: b member part of c =Def b is an object & c is a material entity
+      & there is some time t such that b continuant part of c at t & there is a mutually
+      exhaustive and pairwise disjoint partition of c into objects x1, ..., xn (for
+      some n ≠ 1) with b = xi (for some 1 <= i <= n)'
+  - label: material basis of
+    to: bfo:BFO_0000016
+    description: 'bfo:BFO_0000127: material basis of
+
+      Definition: b material basis of c =Def c has material basis b'
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: "material entity (id: bfo:BFO_0000040)\nDefinition: (Elucidation) A material\
+      \ entity is an independent continuant has some portion of matter as continuant\
+      \ part\nExamples: A human being; the undetached arm of a human being; an aggregate\
+      \ of human beings\n\n'environs' (bfo:BFO_0000183) to None (bfo:BFO_0000015)\
+      \ \n'environs' (bfo:BFO_0000183) to None (bfo:BFO_0000035) \n'has history' (bfo:BFO_0000185)\
+      \ to None (bfo:BFO_0000182) \n'has member part' (bfo:BFO_0000115) to None (bfo:BFO_0000040)\
+      \ \n'member part of' (bfo:BFO_0000129) to None (bfo:BFO_0000040) \n'material\
+      \ basis of' (bfo:BFO_0000127) to None (bfo:BFO_0000016) "
+- id: cco:Motel
+  name: Motel
+  definition: A Hotel that is designed to accommodate motor vehicles along with their
+    occupants.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Hotel
+  style:
+    group: 0
+    color: green
+    title: 'Motel (id: cco:Motel)
+
+      Definition: A Hotel that is designed to accommodate motor vehicles along with
+      their occupants.
+
+      '
+- id: bfo:BFO_0000015
+  name: process
+  definition: (Elucidation) p is a process means p is an occurrent that has some temporal
+    proper part and for some time t, p has some material entity as participant
+  example: An act of selling; the life of an organism; a process of sleeping; a process
+    of cell-division; a beating of the heart; a process of meiosis; the taxiing of
+    an aircraft; the programming of a computer
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000003
+  - label: concretizes
+    to: bfo:BFO_0000031
+    description: 'bfo:BFO_0000059: concretizes
+
+      Definition: b concretizes c =Def b is a process or a specifically dependent
+      continuant & c is a generically dependent continuant & there is some time t
+      such that c is the pattern or content which b shares at t with actual or potential
+      copies'
+  - label: realizes
+    to: bfo:BFO_0000017
+    description: 'bfo:BFO_0000055: realizes
+
+      Definition: (Elucidation) realizes is a relation between a process b and realizable
+      entity c such that c inheres in some d & for all t, if b has participant d then
+      c exists & the type instantiated by b is correlated with the type instantiated
+      by c'
+  - label: has participant
+    to: bfo:BFO_0000020
+    description: 'bfo:BFO_0000057: has participant
+
+      Definition: p has participant c =Def c participates in p'
+  - label: has participant
+    to: bfo:BFO_0000031
+    description: 'bfo:BFO_0000057: has participant
+
+      Definition: p has participant c =Def c participates in p'
+  - label: has participant
+    to: bfo:BFO_0000004
+    description: 'bfo:BFO_0000057: has participant
+
+      Definition: p has participant c =Def c participates in p'
+  - label: occurs in
+    to: bfo:BFO_0000029
+    description: 'bfo:BFO_0000066: occurs in
+
+      Definition: b occurs in c =Def b is a process or a process boundary & c is a
+      material entity or site & there exists a spatiotemporal region r & b occupies
+      spatiotemporal region r & for all time t, if b exists at t then c exists at
+      t & there exist spatial regions s and s'' where b spatially projects onto s
+      at t & c occupies spatial region s'' at t & s is a continuant part of s'' at
+      t'
+  - label: occurs in
+    to: bfo:BFO_0000040
+    description: 'bfo:BFO_0000066: occurs in
+
+      Definition: b occurs in c =Def b is a process or a process boundary & c is a
+      material entity or site & there exists a spatiotemporal region r & b occupies
+      spatiotemporal region r & for all time t, if b exists at t then c exists at
+      t & there exist spatial regions s and s'' where b spatially projects onto s
+      at t & c occupies spatial region s'' at t & s is a continuant part of s'' at
+      t'
+  - label: occupies temporal region
+    to: bfo:BFO_0000008
+    description: 'bfo:BFO_0000199: occupies temporal region
+
+      Definition: p occupies temporal region t =Def p is a process or process boundary
+      & the spatiotemporal region occupied by p temporally projects onto t'
+  - label: occupies spatiotemporal region
+    to: bfo:BFO_0000011
+    description: 'bfo:BFO_0000200: occupies spatiotemporal region
+
+      Definition: (Elucidation) occupies spatiotemporal region is a relation between
+      a process or process boundary p and the spatiotemporal region s which is its
+      spatiotemporal extent'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "process (id: bfo:BFO_0000015)\nDefinition: (Elucidation) p is a process\
+      \ means p is an occurrent that has some temporal proper part and for some time\
+      \ t, p has some material entity as participant\nExamples: An act of selling;\
+      \ the life of an organism; a process of sleeping; a process of cell-division;\
+      \ a beating of the heart; a process of meiosis; the taxiing of an aircraft;\
+      \ the programming of a computer\n\n'concretizes' (bfo:BFO_0000059) to None (bfo:BFO_0000031)\
+      \ \n'realizes' (bfo:BFO_0000055) to None (bfo:BFO_0000017) \n'has participant'\
+      \ (bfo:BFO_0000057) to None (bfo:BFO_0000020) \n'has participant' (bfo:BFO_0000057)\
+      \ to None (bfo:BFO_0000031) \n'has participant' (bfo:BFO_0000057) to None (bfo:BFO_0000004)\
+      \ \nNOT 'has participant' (bfo:BFO_0000057) to None (bfo:BFO_0000006) \n'occurs\
+      \ in' (bfo:BFO_0000066) to None (bfo:BFO_0000029) \n'occurs in' (bfo:BFO_0000066)\
+      \ to None (bfo:BFO_0000040) \n'occupies temporal region' (bfo:BFO_0000199) to\
+      \ None (bfo:BFO_0000008) \n'occupies spatiotemporal region' (bfo:BFO_0000200)\
+      \ to None (bfo:BFO_0000011) "
+- id: cco:Factory
+  name: Factory
+  definition: A Facility that is designed for manufacturing or refining material products.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Factory (id: cco:Factory)
+
+      Definition: A Facility that is designed for manufacturing or refining material
+      products.
+
+      '
+- id: cco:Airport
+  name: Airport
+  definition: A Transportation Facility that is designed for launching, receiving,
+    and housing Aircraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Airport (id: cco:Airport)
+
+      Definition: A Transportation Facility that is designed for launching, receiving,
+      and housing Aircraft.
+
+      '
+- id: cco:Hostel
+  name: Hostel
+  definition: A Residential Facility that is designed to temporarily lodge guests
+    in a sociable environment for relatively low costs.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'Hostel (id: cco:Hostel)
+
+      Definition: A Residential Facility that is designed to temporarily lodge guests
+      in a sociable environment for relatively low costs.
+
+      '
+- id: bfo:BFO_0000006
+  name: spatial region
+  definition: (Elucidation) A spatial region is a continuant entity that is a continuant
+    part of the spatial projection of a portion of spacetime at a given time
+  example: As for zero-dimensional spatial region, one-dimensional spatial region,
+    two-dimensional spatial region, three-dimensional spatial region
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000141
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: "spatial region (id: bfo:BFO_0000006)\nDefinition: (Elucidation) A spatial\
+      \ region is a continuant entity that is a continuant part of the spatial projection\
+      \ of a portion of spacetime at a given time\nExamples: As for zero-dimensional\
+      \ spatial region, one-dimensional spatial region, two-dimensional spatial region,\
+      \ three-dimensional spatial region\n\nNOT 'location of' (bfo:BFO_0000124) to\
+      \ None (bfo:BFO_0000004) \nNOT 'location of' (bfo:BFO_0000124) to None (bfo:BFO_0000006)\
+      \ \nNOT 'participates in' (bfo:BFO_0000056) to None (bfo:BFO_0000015) \nNOT\
+      \ 'is carrier of' (bfo:BFO_0000101) to None (bfo:BFO_0000031) \nNOT 'located\
+      \ in' (bfo:BFO_0000171) to None (bfo:BFO_0000004) \nNOT 'located in' (bfo:BFO_0000171)\
+      \ to None (bfo:BFO_0000006) \nNOT 'specifically depended on by' (bfo:BFO_0000194)\
+      \ to None (bfo:BFO_0000020) \nNOT 'bearer of' (bfo:BFO_0000196) to None (bfo:BFO_0000020)\
+      \ \nNOT 'occupies spatial region' (bfo:BFO_0000210) to None (bfo:BFO_0000006) "
+- id: bfo:BFO_0000008
+  name: temporal region
+  definition: (Elucidation) A temporal region is an occurrent over which processes
+    can unfold
+  example: As for zero-dimensional temporal region and one-dimensional temporal region
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000003
+  - label: has first instant
+    to: bfo:BFO_0000203
+    description: 'bfo:BFO_0000222: has first instant
+
+      Definition: t has first instant t'' =Def t'' first instant of t'
+  - label: has last instant
+    to: bfo:BFO_0000203
+    description: 'bfo:BFO_0000224: has last instant
+
+      Definition: t has last instant t'' =Def t'' last instant of t'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "temporal region (id: bfo:BFO_0000008)\nDefinition: (Elucidation) A temporal\
+      \ region is an occurrent over which processes can unfold\nExamples: As for zero-dimensional\
+      \ temporal region and one-dimensional temporal region\n\n'has first instant'\
+      \ (bfo:BFO_0000222) to None (bfo:BFO_0000203) \n'has last instant' (bfo:BFO_0000224)\
+      \ to None (bfo:BFO_0000203) "
+- id: cco:Synagogue
+  name: Synagogue
+  definition: A Religious Facility that is designed for Judaic worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ReligiousFacility
+  style:
+    group: 0
+    color: green
+    title: 'Synagogue (id: cco:Synagogue)
+
+      Definition: A Religious Facility that is designed for Judaic worship and prayer.
+
+      '
+- id: cco:TerroristTrainingCamp
+  name: Terrorist Training Camp
+  definition: A Training Camp designed to teach students methods of terrorism.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:TrainingCamp
+  style:
+    group: 0
+    color: green
+    title: 'Terrorist Training Camp (id: cco:TerroristTrainingCamp)
+
+      Definition: A Training Camp designed to teach students methods of terrorism.
+
+      '
+- id: cco:Warehouse
+  name: Warehouse
+  definition: A Storage Facility that is designed to store commercial goods.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Warehouse (id: cco:Warehouse)
+
+      Definition: A Storage Facility that is designed to store commercial goods.
+
+      '
+- id: cco:ForwardOperationsBase
+  name: Forward Operations Base
+  definition: A Military Base that is located relatively close to an offensive Area
+    of Operations, is supported by the Base of Operations, and is designed to support
+    local strategic objectives and tactical operations.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryBase
+  style:
+    group: 0
+    color: green
+    title: 'Forward Operations Base (id: cco:ForwardOperationsBase)
+
+      Definition: A Military Base that is located relatively close to an offensive
+      Area of Operations, is supported by the Base of Operations, and is designed
+      to support local strategic objectives and tactical operations.
+
+      '
+- id: cco:House
+  name: House
+  definition: A Residential Facility that is designed to provide a self-standing,
+    permanent residence for an individual, family, household, multiple families, or
+    similar-sized group.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'House (id: cco:House)
+
+      Definition: A Residential Facility that is designed to provide a self-standing,
+      permanent residence for an individual, family, household, multiple families,
+      or similar-sized group.
+
+      '
+- id: cco:Landfill
+  name: Landfill
+  definition: A Waste Management Facility that is designed for disposing of waste
+    by burial.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:WasteManagementFacility
+  style:
+    group: 0
+    color: green
+    title: 'Landfill (id: cco:Landfill)
+
+      Definition: A Waste Management Facility that is designed for disposing of waste
+      by burial.
+
+      '
+- id: bfo:BFO_0000038
+  name: one-dimensional temporal region
+  definition: (Elucidation) A one-dimensional temporal region is a temporal region
+    that is a whole that has a temporal interval and zero or more temporal intervals
+    and temporal instants as parts
+  example: The temporal region during which a process occurs
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000008
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'one-dimensional temporal region (id: bfo:BFO_0000038)
+
+      Definition: (Elucidation) A one-dimensional temporal region is a temporal region
+      that is a whole that has a temporal interval and zero or more temporal intervals
+      and temporal instants as parts
+
+      Examples: The temporal region during which a process occurs
+
+      '
+- id: bfo:BFO_0000145
+  name: relational quality
+  definition: b is a relational quality =Def b is a quality & there exists c and d
+    such that c and d are not identical & b specifically depends on c & b specifically
+    depends on d
+  example: A marriage bond; an instance of love; an obligation between one person
+    and another
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000019
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'relational quality (id: bfo:BFO_0000145)
+
+      Definition: b is a relational quality =Def b is a quality & there exists c and
+      d such that c and d are not identical & b specifically depends on c & b specifically
+      depends on d
+
+      Examples: A marriage bond; an instance of love; an obligation between one person
+      and another
+
+      '
+- id: cco:Port
+  name: Port
+  definition: A Transportation Facility that is designed to contain harbors for docking
+    Watercraft and for transfering people or cargo to and from land.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Port (id: cco:Port)
+
+      Definition: A Transportation Facility that is designed to contain harbors for
+      docking Watercraft and for transfering people or cargo to and from land.
+
+      '
+- id: cco:ChemicalDepot
+  name: Chemical Depot
+  definition: A Storage Facility that is designed to store chemicals.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Chemical Depot (id: cco:ChemicalDepot)
+
+      Definition: A Storage Facility that is designed to store chemicals.
+
+      '
+- id: cco:TransportationFacility
+  name: Transportation Facility
+  definition: A Facility that is designed for commencing or concluding the transportation
+    of transportation artifacts, or for housing transportation artifacts.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Transportation Facility (id: cco:TransportationFacility)
+
+      Definition: A Facility that is designed for commencing or concluding the transportation
+      of transportation artifacts, or for housing transportation artifacts.
+
+      '
+- id: bfo:BFO_0000023
+  name: role
+  definition: (Elucidation) A role b is a realizable entity such that b exists because
+    there is some single bearer that is in some special physical, social, or institutional
+    set of circumstances in which this bearer does not have to be & b is not such
+    that, if it ceases to exist, then the physical make-up of the bearer is thereby
+    changed
+  example: The priest role; the student role; the role of subject in a clinical trial;
+    the role of a stone in marking a property boundary; the role of a boundary to
+    demarcate two neighbouring administrative territories; the role of a building
+    in serving as a military target
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000017
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'role (id: bfo:BFO_0000023)
+
+      Definition: (Elucidation) A role b is a realizable entity such that b exists
+      because there is some single bearer that is in some special physical, social,
+      or institutional set of circumstances in which this bearer does not have to
+      be & b is not such that, if it ceases to exist, then the physical make-up of
+      the bearer is thereby changed
+
+      Examples: The priest role; the student role; the role of subject in a clinical
+      trial; the role of a stone in marking a property boundary; the role of a boundary
+      to demarcate two neighbouring administrative territories; the role of a building
+      in serving as a military target
+
+      '
+- id: bfo:BFO_0000030
+  name: object
+  definition: (Elucidation) An object is a material entity which manifests causal
+    unity & is of a type instances of which are maximal relative to the sort of causal
+    unity manifested
+  example: An organism; a fish tank; a planet; a laptop; a valve; a block of marble;
+    an ice cube
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000040
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'object (id: bfo:BFO_0000030)
+
+      Definition: (Elucidation) An object is a material entity which manifests causal
+      unity & is of a type instances of which are maximal relative to the sort of
+      causal unity manifested
+
+      Examples: An organism; a fish tank; a planet; a laptop; a valve; a block of
+      marble; an ice cube
+
+      '
+- id: bfo:BFO_0000027
+  name: object aggregate
+  definition: (Elucidation) An object aggregate is a material entity consisting exactly
+    of a plurality (≥1) of objects as member parts which together form a unit
+  example: The aggregate of the musicians in a symphony orchestra and their instruments;
+    the aggregate of bearings in a constant velocity axle joint; the nitrogen atoms
+    in the atmosphere; a collection of cells in a blood biobank
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000040
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'object aggregate (id: bfo:BFO_0000027)
+
+      Definition: (Elucidation) An object aggregate is a material entity consisting
+      exactly of a plurality (≥1) of objects as member parts which together form a
+      unit
+
+      Examples: The aggregate of the musicians in a symphony orchestra and their instruments;
+      the aggregate of bearings in a constant velocity axle joint; the nitrogen atoms
+      in the atmosphere; a collection of cells in a blood biobank
+
+      '
+- id: cco:BaseOfOperations
+  name: Base of Operations
+  definition: A Military Base with permanently stationed operating forces, robust
+    Infrastructure, and strengthened force protection measures such that it is designed
+    to launch and support large-scale operations, support smaller or less-permanent
+    bases, and organize supply facilities.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryBase
+  style:
+    group: 0
+    color: green
+    title: 'Base of Operations (id: cco:BaseOfOperations)
+
+      Definition: A Military Base with permanently stationed operating forces, robust
+      Infrastructure, and strengthened force protection measures such that it is designed
+      to launch and support large-scale operations, support smaller or less-permanent
+      bases, and organize supply facilities.
+
+      '
+- id: cco:OfficeBuilding
+  name: Office Building
+  definition: A Commercial Facility that is designed as an environment for conducting
+    commercial, professional, or bureaucratic work.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:RetailFacility
+  style:
+    group: 0
+    color: green
+    title: 'Office Building (id: cco:OfficeBuilding)
+
+      Definition: A Commercial Facility that is designed as an environment for conducting
+      commercial, professional, or bureaucratic work.
+
+      '
+- id: cco:AgriculturalFacility
+  name: Agricultural Facility
+  definition: A Facility that is designed as a building or campus for agricultural
+    processes with the aim of cultivating animals, plants, or fungi for food, fiber,
+    biofuel, medicinal plants, or other products to sustain and enhance human life.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Agricultural Facility (id: cco:AgriculturalFacility)
+
+      Definition: A Facility that is designed as a building or campus for agricultural
+      processes with the aim of cultivating animals, plants, or fungi for food, fiber,
+      biofuel, medicinal plants, or other products to sustain and enhance human life.
+
+      '
+- id: bfo:BFO_0000011
+  name: spatiotemporal region
+  definition: (Elucidation) A spatiotemporal region is an occurrent that is an occurrent
+    part of spacetime
+  example: The spatiotemporal region occupied by the development of a cancer tumour;
+    the spatiotemporal region occupied by an orbiting satellite
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000003
+  - label: temporally projects onto
+    to: bfo:BFO_0000008
+    description: 'bfo:BFO_0000153: temporally projects onto
+
+      Definition: (Elucidation) temporally projects onto is a relation between a spatiotemporal
+      region s and some temporal region which is the temporal extent of s'
+  - label: spatially projects onto
+    to: bfo:BFO_0000006
+    description: 'bfo:BFO_0000216: spatially projects onto
+
+      Definition: (Elucidation) spatially projects onto is a relation between some
+      spatiotemporal region b and spatial region c such that at some time t, c is
+      the spatial extent of b at t'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "spatiotemporal region (id: bfo:BFO_0000011)\nDefinition: (Elucidation)\
+      \ A spatiotemporal region is an occurrent that is an occurrent part of spacetime\n\
+      Examples: The spatiotemporal region occupied by the development of a cancer\
+      \ tumour; the spatiotemporal region occupied by an orbiting satellite\n\n'temporally\
+      \ projects onto' (bfo:BFO_0000153) to None (bfo:BFO_0000008) \n'spatially projects\
+      \ onto' (bfo:BFO_0000216) to None (bfo:BFO_0000006) "
+- id: cco:HealthcareFacility
+  name: Healthcare Facility
+  definition: A Facility that is designed for the diagnosis, treatment, and prevention
+    of disease.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Healthcare Facility (id: cco:HealthcareFacility)
+
+      Definition: A Facility that is designed for the diagnosis, treatment, and prevention
+      of disease.
+
+      '
+- id: bfo:BFO_0000026
+  name: one-dimensional spatial region
+  definition: (Elucidation) A one-dimensional spatial region is a whole consisting
+    of a line together with zero or more lines which may have points as parts
+  example: An edge of a cube-shaped portion of space; a line connecting two points;
+    two parallel lines extended in space
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'one-dimensional spatial region (id: bfo:BFO_0000026)
+
+      Definition: (Elucidation) A one-dimensional spatial region is a whole consisting
+      of a line together with zero or more lines which may have points as parts
+
+      Examples: An edge of a cube-shaped portion of space; a line connecting two points;
+      two parallel lines extended in space
+
+      '
+- id: bfo:BFO_0000203
+  name: temporal instant
+  definition: (Elucidation) A temporal instant is a zero-dimensional temporal region
+    that has no proper temporal part
+  example: The millennium
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000148
+  - label: first instant of
+    to: bfo:BFO_0000008
+    description: 'bfo:BFO_0000221: first instant of
+
+      Definition: t first instant of t'' =Def t is a temporal instant & t'' is a temporal
+      region t'' & t precedes all temporal parts of t'' other than t'
+  - label: last instant of
+    to: bfo:BFO_0000008
+    description: 'bfo:BFO_0000223: last instant of
+
+      Definition: t last instant of t'' =Def t is a temporal instant & t'' is a temporal
+      region & all temporal parts of t'' other than t precede t'
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: "temporal instant (id: bfo:BFO_0000203)\nDefinition: (Elucidation) A temporal\
+      \ instant is a zero-dimensional temporal region that has no proper temporal\
+      \ part\nExamples: The millennium\n\n'first instant of' (bfo:BFO_0000221) to\
+      \ None (bfo:BFO_0000008) \n'last instant of' (bfo:BFO_0000223) to None (bfo:BFO_0000008) "
+- id: bfo:BFO_0000147
+  name: fiat point
+  definition: (Elucidation) A fiat point is a zero-dimensional continuant fiat boundary
+    that consists of a single point
+  example: The geographic North Pole; the quadripoint where the boundaries of Colorado,
+    Utah, New Mexico and Arizona meet; the point of origin of some spatial coordinate
+    system
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000140
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'fiat point (id: bfo:BFO_0000147)
+
+      Definition: (Elucidation) A fiat point is a zero-dimensional continuant fiat
+      boundary that consists of a single point
+
+      Examples: The geographic North Pole; the quadripoint where the boundaries of
+      Colorado, Utah, New Mexico and Arizona meet; the point of origin of some spatial
+      coordinate system
+
+      '
+- id: cco:MilitaryFacility
+  name: Military Facility
+  definition: A Facility that is designed to support a Military Force.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Military Facility (id: cco:MilitaryFacility)
+
+      Definition: A Facility that is designed to support a Military Force.
+
+      '
+- id: cco:HydroelectricPowerPlant
+  name: Hydroelectric Power Plant
+  definition: An Electric Power Station that is designed to convert hydropower into
+    electrical power.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Hydroelectric Power Plant (id: cco:HydroelectricPowerPlant)
+
+      Definition: An Electric Power Station that is designed to convert hydropower
+      into electrical power.
+
+      '
+- id: cco:SewageTreatmentFacility
+  name: Sewage Treatment Facility
+  definition: A Waste Management Facility that is designed for removing contaminants
+    from wastewater, especially sewage.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:WasteManagementFacility
+  style:
+    group: 0
+    color: green
+    title: 'Sewage Treatment Facility (id: cco:SewageTreatmentFacility)
+
+      Definition: A Waste Management Facility that is designed for removing contaminants
+      from wastewater, especially sewage.
+
+      '
+- id: bfo:BFO_0000029
+  name: site
+  definition: (Elucidation) A site is a three-dimensional immaterial entity whose
+    boundaries either (partially or wholly) coincide with the boundaries of one or
+    more material entities or have locations determined in relation to some material
+    entity
+  example: A hole in a portion of cheese; a rabbit hole; the Grand Canyon; the Piazza
+    San Marco; the kangaroo-joey-containing hole of a kangaroo pouch; your left nostril
+    (a fiat part - the opening - of your left nasal cavity); the lumen of your gut;
+    the hold of a ship; the interior of the trunk of your car; hole in an engineered
+    floor joist
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000141
+  - label: environs
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000183: environs
+
+      Definition: b environs c =Def c occurs in b'
+  - label: environs
+    to: bfo:BFO_0000035
+    description: 'bfo:BFO_0000183: environs
+
+      Definition: b environs c =Def c occurs in b'
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: "site (id: bfo:BFO_0000029)\nDefinition: (Elucidation) A site is a three-dimensional\
+      \ immaterial entity whose boundaries either (partially or wholly) coincide with\
+      \ the boundaries of one or more material entities or have locations determined\
+      \ in relation to some material entity\nExamples: A hole in a portion of cheese;\
+      \ a rabbit hole; the Grand Canyon; the Piazza San Marco; the kangaroo-joey-containing\
+      \ hole of a kangaroo pouch; your left nostril (a fiat part - the opening - of\
+      \ your left nasal cavity); the lumen of your gut; the hold of a ship; the interior\
+      \ of the trunk of your car; hole in an engineered floor joist\n\n'environs'\
+      \ (bfo:BFO_0000183) to None (bfo:BFO_0000015) \n'environs' (bfo:BFO_0000183)\
+      \ to None (bfo:BFO_0000035) "
+- id: bfo:BFO_0000017
+  name: realizable entity
+  definition: (Elucidation) A realizable entity is a specifically dependent continuant
+    that inheres in some independent continuant which is not a spatial region & which
+    is of a type some instances of which are realized in processes of a correlated
+    type
+  example: The role of being a doctor; the role of this boundary to delineate where
+    Utah and Colorado meet; the function of your reproductive organs; the disposition
+    of your blood to coagulate; the disposition of this piece of metal to conduct
+    electricity
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000020
+  - label: has realization
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000054: has realization
+
+      Definition: b has realization c =Def c realizes b'
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'realizable entity (id: bfo:BFO_0000017)
+
+      Definition: (Elucidation) A realizable entity is a specifically dependent continuant
+      that inheres in some independent continuant which is not a spatial region &
+      which is of a type some instances of which are realized in processes of a correlated
+      type
+
+      Examples: The role of being a doctor; the role of this boundary to delineate
+      where Utah and Colorado meet; the function of your reproductive organs; the
+      disposition of your blood to coagulate; the disposition of this piece of metal
+      to conduct electricity
+
+
+      ''has realization'' (bfo:BFO_0000054) to None (bfo:BFO_0000015) '
+- id: cco:CommunicationsFacility
+  name: Communications Facility
+  definition: A Facility that is designed to support processes of receiving or transmitting
+    information.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Communications Facility (id: cco:CommunicationsFacility)
+
+      Definition: A Facility that is designed to support processes of receiving or
+      transmitting information.
+
+      '
+- id: cco:CommandPostFacility
+  name: Command Post Facility
+  definition: A Military Facility that is designed to support the command and control
+    of Military Operations or Forces.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Command Post Facility (id: cco:CommandPostFacility)
+
+      Definition: A Military Facility that is designed to support the command and
+      control of Military Operations or Forces.
+
+      '
+- id: bfo:BFO_0000019
+  name: quality
+  definition: (Elucidation) A quality is a specifically dependent continuant that,
+    in contrast to roles and dispositions, does not require any further process in
+    order to be realized
+  example: The colour of a tomato; the ambient temperature of this portion of air;
+    the length of the circumference of your waist; the shape of your nose; the shape
+    of your nostril; the mass of this piece of gold
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000020
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'quality (id: bfo:BFO_0000019)
+
+      Definition: (Elucidation) A quality is a specifically dependent continuant that,
+      in contrast to roles and dispositions, does not require any further process
+      in order to be realized
+
+      Examples: The colour of a tomato; the ambient temperature of this portion of
+      air; the length of the circumference of your waist; the shape of your nose;
+      the shape of your nostril; the mass of this piece of gold
+
+      '
+- id: bfo:BFO_0000140
+  name: continuant fiat boundary
+  definition: (Elucidation) A continuant fiat boundary b is an immaterial entity that
+    is of zero, one or two dimensions & such that there is no time t when b has a
+    spatial region as continuant part & whose location is determined in relation to
+    some material entity
+  example: As for fiat point, fiat line, fiat surface
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000141
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'continuant fiat boundary (id: bfo:BFO_0000140)
+
+      Definition: (Elucidation) A continuant fiat boundary b is an immaterial entity
+      that is of zero, one or two dimensions & such that there is no time t when b
+      has a spatial region as continuant part & whose location is determined in relation
+      to some material entity
+
+      Examples: As for fiat point, fiat line, fiat surface
+
+      '
+- id: bfo:BFO_0000031
+  name: generically dependent continuant
+  definition: (Elucidation) A generically dependent continuant is an entity that exists
+    in virtue of the fact that there is at least one of what may be multiple copies
+    which is the content or the pattern that multiple copies would share
+  example: The pdf file on your laptop; the pdf file that is a copy thereof on my
+    laptop; the sequence of this protein molecule; the sequence that is a copy thereof
+    in that protein molecule; the content that is shared by a string of dots and dashes
+    written on a page and the transmitted Morse code signal; the content of a sentence;
+    an engineering blueprint
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000002
+  - label: is concretized by
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000058: is concretized by
+
+      Definition: c is concretized by b =Def b concretizes c'
+  - label: is concretized by
+    to: bfo:BFO_0000020
+    description: 'bfo:BFO_0000058: is concretized by
+
+      Definition: c is concretized by b =Def b concretizes c'
+  - label: participates in
+    to: bfo:BFO_0000015
+    description: 'bfo:BFO_0000056: participates in
+
+      Definition: (Elucidation) participates in holds between some b that is either
+      a specifically dependent continuant or generically dependent continuant or independent
+      continuant that is not a spatial region & some process p such that b participates
+      in p some way'
+  - label: generically depends on
+    to: bfo:BFO_0000004
+    description: 'bfo:BFO_0000084: generically depends on
+
+      Definition: b generically depends on c =Def b is a generically dependent continuant
+      & c is an independent continuant that is not a spatial region & at some time
+      t there inheres in c a specifically dependent continuant which concretizes b
+      at t'
+  style:
+    group: 2
+    color: '#97c1fb'
+    title: "generically dependent continuant (id: bfo:BFO_0000031)\nDefinition: (Elucidation)\
+      \ A generically dependent continuant is an entity that exists in virtue of the\
+      \ fact that there is at least one of what may be multiple copies which is the\
+      \ content or the pattern that multiple copies would share\nExamples: The pdf\
+      \ file on your laptop; the pdf file that is a copy thereof on my laptop; the\
+      \ sequence of this protein molecule; the sequence that is a copy thereof in\
+      \ that protein molecule; the content that is shared by a string of dots and\
+      \ dashes written on a page and the transmitted Morse code signal; the content\
+      \ of a sentence; an engineering blueprint\n\n'is concretized by' (bfo:BFO_0000058)\
+      \ to None (bfo:BFO_0000015) \n'is concretized by' (bfo:BFO_0000058) to None\
+      \ (bfo:BFO_0000020) \n'participates in' (bfo:BFO_0000056) to None (bfo:BFO_0000015)\
+      \ \n'generically depends on' (bfo:BFO_0000084) to None (bfo:BFO_0000004) \n\
+      NOT 'generically depends on' (bfo:BFO_0000084) to None (bfo:BFO_0000006) "
+- id: cco:MissileLaunchSite
+  name: Missile Launch Site
+  definition: A Military Facility that is designed for storing and launching missiles.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Missile Launch Site (id: cco:MissileLaunchSite)
+
+      Definition: A Military Facility that is designed for storing and launching missiles.
+
+      '
+- id: bfo:BFO_0000141
+  name: immaterial entity
+  definition: b is an immaterial entity =Def b is an independent continuant which
+    is such that there is no time t when it has a material entity as continuant part
+  example: As for fiat point, fiat line, fiat surface, site
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000004
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'immaterial entity (id: bfo:BFO_0000141)
+
+      Definition: b is an immaterial entity =Def b is an independent continuant which
+      is such that there is no time t when it has a material entity as continuant
+      part
+
+      Examples: As for fiat point, fiat line, fiat surface, site
+
+      '
+- id: cco:MailingFacility
+  name: Mailing Facility
+  definition: A Facility that is designed for the systematic physical transportation
+    of documents and packages.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Mailing Facility (id: cco:MailingFacility)
+
+      Definition: A Facility that is designed for the systematic physical transportation
+      of documents and packages.
+
+      '
+- id: bfo:BFO_0000016
+  name: disposition
+  definition: (Elucidation) A disposition b is a realizable entity such that if b
+    ceases to exist then its bearer is physically changed & b's realization occurs
+    when and because this bearer is in some special physical circumstances & this
+    realization occurs in virtue of the bearer's physical make-up
+  example: An atom of element X has the disposition to decay to an atom of element
+    Y; the cell wall is disposed to transport cellular material through endocytosis
+    and exocytosis; certain people have a predisposition to colon cancer; children
+    are innately disposed to categorize objects in certain ways
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000017
+  - label: has material basis
+    to: bfo:BFO_0000040
+    description: 'bfo:BFO_0000218: has material basis
+
+      Definition: b has material basis c =Def b is a disposition & c is a material
+      entity & there is some d bearer of b & there is some time t such that c is a
+      continuant part of d at t & d has disposition b because c is a continuant part
+      of d at t'
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'disposition (id: bfo:BFO_0000016)
+
+      Definition: (Elucidation) A disposition b is a realizable entity such that if
+      b ceases to exist then its bearer is physically changed & b''s realization occurs
+      when and because this bearer is in some special physical circumstances & this
+      realization occurs in virtue of the bearer''s physical make-up
+
+      Examples: An atom of element X has the disposition to decay to an atom of element
+      Y; the cell wall is disposed to transport cellular material through endocytosis
+      and exocytosis; certain people have a predisposition to colon cancer; children
+      are innately disposed to categorize objects in certain ways
+
+
+      ''has material basis'' (bfo:BFO_0000218) to None (bfo:BFO_0000040) '
+- id: cco:OpenPitMine
+  name: Open Pit Mine
+  definition: A Mine that is designed to support the extraction of materials from
+    the ground directly without using tunnels.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Mine
+  style:
+    group: 0
+    color: green
+    title: 'Open Pit Mine (id: cco:OpenPitMine)
+
+      Definition: A Mine that is designed to support the extraction of materials from
+      the ground directly without using tunnels.
+
+      '
+- id: cco:SeatOfLocalGovernment
+  name: Seat of Local Government
+  definition: A Government Building that is designed for the administration of a local
+    community.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:GovernmentBuilding
+  style:
+    group: 0
+    color: green
+    title: 'Seat of Local Government (id: cco:SeatOfLocalGovernment)
+
+      Definition: A Government Building that is designed for the administration of
+      a local community.
+
+      '
+- id: cco:Pipeline
+  name: Pipeline
+  definition: A Product Transport Facility that is designed to transport goods or
+    materials through a pipe.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ProductTransportFacility
+  style:
+    group: 0
+    color: green
+    title: 'Pipeline (id: cco:Pipeline)
+
+      Definition: A Product Transport Facility that is designed to transport goods
+      or materials through a pipe.
+
+      '
+- id: bfo:BFO_0000028
+  name: three-dimensional spatial region
+  definition: (Elucidation) A three-dimensional spatial region is a whole consisting
+    of a spatial volume together with zero or more spatial volumes which may have
+    spatial regions of lower dimension as parts
+  example: A cube-shaped region of space; a sphere-shaped region of space; the region
+    of space occupied by all and only the planets in the solar system at some point
+    in time
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'three-dimensional spatial region (id: bfo:BFO_0000028)
+
+      Definition: (Elucidation) A three-dimensional spatial region is a whole consisting
+      of a spatial volume together with zero or more spatial volumes which may have
+      spatial regions of lower dimension as parts
+
+      Examples: A cube-shaped region of space; a sphere-shaped region of space; the
+      region of space occupied by all and only the planets in the solar system at
+      some point in time
+
+      '
+- id: cco:WaterTower
+  name: Water Tower
+  definition: A Facility that is the bearer of functions realized in processes of
+    storing water in an elevated container.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Water Tower (id: cco:WaterTower)
+
+      Definition: A Facility that is the bearer of functions realized in processes
+      of storing water in an elevated container.
+
+      '
+- id: cco:School
+  name: School
+  definition: An Education Facility that is designed to provide learning space and
+    environments for teaching of students under the direction of teachers.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:EducationalFacility
+  style:
+    group: 0
+    color: green
+    title: 'School (id: cco:School)
+
+      Definition: An Education Facility that is designed to provide learning space
+      and environments for teaching of students under the direction of teachers.
+
+      '
+- id: bfo:BFO_0000182
+  name: history
+  definition: (Elucidation) A history is a process that is the sum of the totality
+    of processes taking place in the spatiotemporal region occupied by the material
+    part of a material entity
+  example: The life of an organism from the beginning to the end of its existence
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000015
+  - label: history of
+    to: bfo:BFO_0000040
+    description: 'bfo:BFO_0000184: history of
+
+      Definition: (Elucidation) history of is a relation between history b and material
+      entity c such that b is the unique history of c'
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'history (id: bfo:BFO_0000182)
+
+      Definition: (Elucidation) A history is a process that is the sum of the totality
+      of processes taking place in the spatiotemporal region occupied by the material
+      part of a material entity
+
+      Examples: The life of an organism from the beginning to the end of its existence
+
+
+      ''history of'' (bfo:BFO_0000184) to None (bfo:BFO_0000040) '
+- id: cco:Reservoir
+  name: Reservoir
+  definition: A Storage Facility that is designed to store water in a man-made open
+    enclosure or area.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Reservoir (id: cco:Reservoir)
+
+      Definition: A Storage Facility that is designed to store water in a man-made
+      open enclosure or area.
+
+      '
+- id: cco:GovernmentBuilding
+  name: Government Building
+  definition: A Facility that is designed for the administration of a community.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Government Building (id: cco:GovernmentBuilding)
+
+      Definition: A Facility that is designed for the administration of a community.
+
+      '
+- id: cco:RailFacility
+  name: Rail Facility
+  definition: A Transportation Facility that is designed for transferring people or
+    cargo to and from Trains.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Rail Facility (id: cco:RailFacility)
+
+      Definition: A Transportation Facility that is designed for transferring people
+      or cargo to and from Trains.
+
+      '
+- id: cco:Heliport
+  name: Heliport
+  definition: An Airport that is designed for launching, receiving, and housing Rotorcraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Airport
+  style:
+    group: 0
+    color: green
+    title: 'Heliport (id: cco:Heliport)
+
+      Definition: An Airport that is designed for launching, receiving, and housing
+      Rotorcraft.
+
+      '
+- id: cco:RetailFacility
+  name: Commercial Facility
+  definition: A Facility that is designed for buying and selling goods and services,
+    especially on a large scale.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Commercial Facility (id: cco:RetailFacility)
+
+      Definition: A Facility that is designed for buying and selling goods and services,
+      especially on a large scale.
+
+      '
+- id: bfo:BFO_0000146
+  name: fiat surface
+  definition: (Elucidation) A fiat surface is a two-dimensional continuant fiat boundary
+    that is self-connected
+  example: The surface of the Earth; the plane separating the smoking from the non-smoking
+    zone in a restaurant
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000140
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'fiat surface (id: bfo:BFO_0000146)
+
+      Definition: (Elucidation) A fiat surface is a two-dimensional continuant fiat
+      boundary that is self-connected
+
+      Examples: The surface of the Earth; the plane separating the smoking from the
+      non-smoking zone in a restaurant
+
+      '
+- id: cco:ResidentialFacility
+  name: Residential Facility
+  definition: A Facility that is designed to house one or more Persons.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Residential Facility (id: cco:ResidentialFacility)
+
+      Definition: A Facility that is designed to house one or more Persons.
+
+      '
+- id: cco:AmmunitionDepot
+  name: Ammunition Depot
+  definition: A Storage Facility that is designed to store Portions of Ammunition.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Ammunition Depot (id: cco:AmmunitionDepot)
+
+      Definition: A Storage Facility that is designed to store Portions of Ammunition.
+
+      '
+- id: cco:Church
+  name: Church
+  definition: A Religious Facility that is designed for Christian worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ReligiousFacility
+  style:
+    group: 0
+    color: green
+    title: 'Church (id: cco:Church)
+
+      Definition: A Religious Facility that is designed for Christian worship and
+      prayer.
+
+      '
+- id: cco:Farm
+  name: Farm
+  definition: An Agricultural Facility that is designed to produce food and other
+    crops.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:AgriculturalFacility
+  style:
+    group: 0
+    color: green
+    title: 'Farm (id: cco:Farm)
+
+      Definition: An Agricultural Facility that is designed to produce food and other
+      crops.
+
+      '
+- id: bfo:BFO_0000024
+  name: fiat object part
+  definition: (Elucidation) A fiat object part b is a material entity & such that
+    if b exists then it is continuant part of some object c & demarcated from the
+    remainder of c by one or more fiat surfaces
+  example: The upper and lower lobes of the left lung; the dorsal and ventral surfaces
+    of the body; the Western hemisphere of the Earth; the FMA:regional parts of an
+    intact human body
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000040
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'fiat object part (id: bfo:BFO_0000024)
+
+      Definition: (Elucidation) A fiat object part b is a material entity & such that
+      if b exists then it is continuant part of some object c & demarcated from the
+      remainder of c by one or more fiat surfaces
+
+      Examples: The upper and lower lobes of the left lung; the dorsal and ventral
+      surfaces of the body; the Western hemisphere of the Earth; the FMA:regional
+      parts of an intact human body
+
+      '
+- id: cco:WeaponManufacturingFacility
+  name: Weapon Manufacturing Facility
+  definition: A Factory that is designed to produce or assemble weapons.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Weapon Manufacturing Facility (id: cco:WeaponManufacturingFacility)
+
+      Definition: A Factory that is designed to produce or assemble weapons.
+
+      '
+- id: cco:SeatOfNationalGovernment
+  name: Seat of National Government
+  definition: A Government Building that is designed for the administration of a sovereign
+    nation.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:GovernmentBuilding
+  style:
+    group: 0
+    color: green
+    title: 'Seat of National Government (id: cco:SeatOfNationalGovernment)
+
+      Definition: A Government Building that is designed for the administration of
+      a sovereign nation.
+
+      '
+- id: cco:Hospital
+  name: Hospital
+  definition: A Healthcare Facility that is designed to provide patient treatment
+    with specialized staff and equipment.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:HealthcareFacility
+  style:
+    group: 0
+    color: green
+    title: 'Hospital (id: cco:Hospital)
+
+      Definition: A Healthcare Facility that is designed to provide patient treatment
+      with specialized staff and equipment.
+
+      '
+- id: cco:GasProcessingFacility
+  name: Gas Processing Facility
+  definition: A Refinery that is designed for refining natural gas into products of
+    value.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Refinery
+  style:
+    group: 0
+    color: green
+    title: 'Gas Processing Facility (id: cco:GasProcessingFacility)
+
+      Definition: A Refinery that is designed for refining natural gas into products
+      of value.
+
+      '
+- id: bfo:BFO_0000034
+  name: function
+  definition: (Elucidation) A function is a disposition that exists in virtue of its
+    bearer's physical make-up & this physical make-up is something the bearer possesses
+    because it came into being either through evolution (in the case of natural biological
+    entities) or through intentional design (in the case of artefacts) in order to
+    realize processes of a certain sort
+  example: The function of a hammer to drive in nails; the function of a heart pacemaker
+    to regulate the beating of a heart through electricity
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000016
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'function (id: bfo:BFO_0000034)
+
+      Definition: (Elucidation) A function is a disposition that exists in virtue
+      of its bearer''s physical make-up & this physical make-up is something the bearer
+      possesses because it came into being either through evolution (in the case of
+      natural biological entities) or through intentional design (in the case of artefacts)
+      in order to realize processes of a certain sort
+
+      Examples: The function of a hammer to drive in nails; the function of a heart
+      pacemaker to regulate the beating of a heart through electricity
+
+      '
+- id: cco:UnderwaterMine
+  name: Underwater Mine
+  definition: A Mine that is designed to support the extraction of materials from
+    the ocean floor.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Mine
+  style:
+    group: 0
+    color: green
+    title: 'Underwater Mine (id: cco:UnderwaterMine)
+
+      Definition: A Mine that is designed to support the extraction of materials from
+      the ocean floor.
+
+      '
+- id: cco:ThermalPowerPlant
+  name: Thermal Power Plant
+  definition: An Electric Power Station that is designed to convert heat energy into
+    electrical energy.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Thermal Power Plant (id: cco:ThermalPowerPlant)
+
+      Definition: An Electric Power Station that is designed to convert heat energy
+      into electrical energy.
+
+      '
+- id: cco:EducationalFacility
+  name: Educational Facility
+  definition: A Facility that is designed for facilitating learning, or the acquisition
+    of knowledge, skills, values, beliefs, and habits.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Educational Facility (id: cco:EducationalFacility)
+
+      Definition: A Facility that is designed for facilitating learning, or the acquisition
+      of knowledge, skills, values, beliefs, and habits.
+
+      '
+- id: cco:Hotel
+  name: Hotel
+  definition: A Residential Facility that is designed to provide lodging that is paid
+    for on a short-term basis.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'Hotel (id: cco:Hotel)
+
+      Definition: A Residential Facility that is designed to provide lodging that
+      is paid for on a short-term basis.
+
+      '
+- id: cco:ReligiousFacility
+  name: Religious Facility
+  definition: A Facility that is designed for worship and prayer.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Religious Facility (id: cco:ReligiousFacility)
+
+      Definition: A Facility that is designed for worship and prayer.
+
+      '
+- id: cco:DistributionPort
+  name: Distribution Port
+  definition: A Port that is designed with the cargo handling equipment necessary
+    for the loading and unloading of Watercraft
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Port
+  style:
+    group: 0
+    color: green
+    title: 'Distribution Port (id: cco:DistributionPort)
+
+      Definition: A Port that is designed with the cargo handling equipment necessary
+      for the loading and unloading of Watercraft
+
+      '
+- id: cco:PostOffice
+  name: Post Office
+  definition: A Mailing Facility that is designed for serving customers of the national
+    postal system.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MailingFacility
+  style:
+    group: 0
+    color: green
+    title: 'Post Office (id: cco:PostOffice)
+
+      Definition: A Mailing Facility that is designed for serving customers of the
+      national postal system.
+
+      '
+- id: cco:Biological_Depot
+  name: Biological Depot
+  definition: A Storage Facility that is designed to store biological agents.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Biological Depot (id: cco:Biological_Depot)
+
+      Definition: A Storage Facility that is designed to store biological agents.
+
+      '
+- id: cco:RadioRelayStation
+  name: Radio Relay Station
+  definition: A Communications Facility that is designed to support the receiving
+    and re-transmitting of radio signals.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:CommunicationsFacility
+  style:
+    group: 0
+    color: green
+    title: 'Radio Relay Station (id: cco:RadioRelayStation)
+
+      Definition: A Communications Facility that is designed to support the receiving
+      and re-transmitting of radio signals.
+
+      '
+- id: cco:NuclearPowerPlant
+  name: Nuclear Power Plant
+  definition: A Thermal Power Plant that is designed to produce heat by means of a
+    nuclear reactor, which is then converted to electrical energy.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ThermalPowerPlant
+  style:
+    group: 0
+    color: green
+    title: 'Nuclear Power Plant (id: cco:NuclearPowerPlant)
+
+      Definition: A Thermal Power Plant that is designed to produce heat by means
+      of a nuclear reactor, which is then converted to electrical energy.
+
+      '
+- id: cco:ChemicalManufacturingFacility
+  name: Chemical Manufacturing Facility
+  definition: A Factory that is designed to manufacture or process chemicals.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Chemical Manufacturing Facility (id: cco:ChemicalManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture or process chemicals.
+
+      '
+- id: cco:GroceryStore
+  name: Grocery Store
+  definition: A Commercial Facility that is designed to sell food.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:RetailFacility
+  style:
+    group: 0
+    color: green
+    title: 'Grocery Store (id: cco:GroceryStore)
+
+      Definition: A Commercial Facility that is designed to sell food.
+
+      '
+- id: bfo:BFO_0000202
+  name: temporal interval
+  definition: (Elucidation) A temporal interval is a one-dimensional temporal region
+    that is continuous, thus without gaps or breaks
+  example: The year 2018.
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000038
+  style:
+    group: 4
+    color: '#97c1fb'
+    title: 'temporal interval (id: bfo:BFO_0000202)
+
+      Definition: (Elucidation) A temporal interval is a one-dimensional temporal
+      region that is continuous, thus without gaps or breaks
+
+      Examples: The year 2018.
+
+      '
+- id: cco:ApartmentBuilding
+  name: Apartment Building
+  definition: A Residential Facility that is designed to contain multiple permanent
+    residences comprised of a suite of rooms.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ResidentialFacility
+  style:
+    group: 0
+    color: green
+    title: 'Apartment Building (id: cco:ApartmentBuilding)
+
+      Definition: A Residential Facility that is designed to contain multiple permanent
+      residences comprised of a suite of rooms.
+
+      '
+- id: bfo:BFO_0000018
+  name: zero-dimensional spatial region
+  definition: (Elucidation) A zero-dimensional spatial region is one or a collection
+    of more than one spatially disjoint points in space
+  example: The spatial region occupied at some time instant by the North Pole
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'zero-dimensional spatial region (id: bfo:BFO_0000018)
+
+      Definition: (Elucidation) A zero-dimensional spatial region is one or a collection
+      of more than one spatially disjoint points in space
+
+      Examples: The spatial region occupied at some time instant by the North Pole
+
+      '
+- id: cco:ElectricPowerStation
+  name: Electric Power Station
+  definition: A Facility that is designed to generate electrical power.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Electric Power Station (id: cco:ElectricPowerStation)
+
+      Definition: A Facility that is designed to generate electrical power.
+
+      '
+- id: cco:PowerTransmissionLine
+  name: Power Transmission Line
+  definition: A Product Transport Facility that is designed to transmit electricity
+    over distance via a system of above ground wires including their supports.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ProductTransportFacility
+  style:
+    group: 0
+    color: green
+    title: 'Power Transmission Line (id: cco:PowerTransmissionLine)
+
+      Definition: A Product Transport Facility that is designed to transmit electricity
+      over distance via a system of above ground wires including their supports.
+
+      '
+- id: bfo:BFO_0000009
+  name: two-dimensional spatial region
+  definition: (Elucidation) A two-dimensional spatial region is a spatial region that
+    is a whole consisting of a surface together with zero or more surfaces which may
+    have spatial regions of lower dimension as parts
+  example: The surface of a sphere-shaped part of space; an infinitely thin plane
+    in space
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000006
+  style:
+    group: 5
+    color: '#97c1fb'
+    title: 'two-dimensional spatial region (id: bfo:BFO_0000009)
+
+      Definition: (Elucidation) A two-dimensional spatial region is a spatial region
+      that is a whole consisting of a surface together with zero or more surfaces
+      which may have spatial regions of lower dimension as parts
+
+      Examples: The surface of a sphere-shaped part of space; an infinitely thin plane
+      in space
+
+      '
+- id: cco:WindFarm
+  name: Wind Farm
+  definition: An Electric Power Station that is designed to convert the wind's kinetic
+    energy into electrical power by means of wind turbines.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:ElectricPowerStation
+  style:
+    group: 0
+    color: green
+    title: 'Wind Farm (id: cco:WindFarm)
+
+      Definition: An Electric Power Station that is designed to convert the wind''s
+      kinetic energy into electrical power by means of wind turbines.
+
+      '
+- id: cco:Mine
+  name: Mine
+  definition: A Facility that is designed to support the extraction of minerals or
+    other geological materials from an orebody, lode, vein, seam, reef, or placer
+    deposit within the earth.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Mine (id: cco:Mine)
+
+      Definition: A Facility that is designed to support the extraction of minerals
+      or other geological materials from an orebody, lode, vein, seam, reef, or placer
+      deposit within the earth.
+
+      '
+- id: bfo:BFO_0000002
+  name: continuant
+  definition: (Elucidation) A continuant is an entity that persists, endures, or continues
+    to exist through time while maintaining its identity
+  example: A human being; a tennis ball; a cave; a region of space; someone's temperature
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000001
+  - label: continuant part of
+    to: bfo:BFO_0000002
+    description: 'bfo:BFO_0000176: continuant part of
+
+      Definition: b continuant part of c =Def b and c are continuants & there is some
+      time t such that b and c exist at t & b continuant part of c at t'
+  - label: has continuant part
+    to: bfo:BFO_0000002
+    description: 'bfo:BFO_0000178: has continuant part
+
+      Definition: b has continuant part c =Def c continuant part of b'
+  style:
+    group: 1
+    color: '#97c1fb'
+    title: "continuant (id: bfo:BFO_0000002)\nDefinition: (Elucidation) A continuant\
+      \ is an entity that persists, endures, or continues to exist through time while\
+      \ maintaining its identity\nExamples: A human being; a tennis ball; a cave;\
+      \ a region of space; someone's temperature\n\n'continuant part of' (bfo:BFO_0000176)\
+      \ to None (bfo:BFO_0000002) \n'has continuant part' (bfo:BFO_0000178) to None\
+      \ (bfo:BFO_0000002) "
+- id: cco:WashingFacility
+  name: Washing Facility
+  definition: A Facility that is designed to wash personnel or equipment.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Washing Facility (id: cco:WashingFacility)
+
+      Definition: A Facility that is designed to wash personnel or equipment.
+
+      '
+- id: cco:StorageFacility
+  name: Storage Facility
+  definition: A Facility that is designed to store materials or goods.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Storage Facility (id: cco:StorageFacility)
+
+      Definition: A Facility that is designed to store materials or goods.
+
+      '
+- id: cco:DecontaminationFacility
+  name: Decontamination Facility
+  definition: A Washing Facility that is designed to wash personnel or equipment after
+    (potential) contamination by radioactive, biological, or chemical material.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:WashingFacility
+  style:
+    group: 0
+    color: green
+    title: 'Decontamination Facility (id: cco:DecontaminationFacility)
+
+      Definition: A Washing Facility that is designed to wash personnel or equipment
+      after (potential) contamination by radioactive, biological, or chemical material.
+
+      '
+- id: cco:PublicSafetyFacility
+  name: Public Safety Facility
+  definition: A Facility that is designed for the prevention of and protection from
+    events that could endanger, injure, or damage the general public.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Public Safety Facility (id: cco:PublicSafetyFacility)
+
+      Definition: A Facility that is designed for the prevention of and protection
+      from events that could endanger, injure, or damage the general public.
+
+      '
+- id: bfo:BFO_0000148
+  name: zero-dimensional temporal region
+  definition: (Elucidation) A zero-dimensional temporal region is a temporal region
+    that is a whole consisting of one or more separated temporal instants as parts
+  example: A temporal region that is occupied by a process boundary; the moment at
+    which a finger is detached in an industrial accident
+  relations:
+  - label: is_a
+    to: bfo:BFO_0000008
+  style:
+    group: 3
+    color: '#97c1fb'
+    title: 'zero-dimensional temporal region (id: bfo:BFO_0000148)
+
+      Definition: (Elucidation) A zero-dimensional temporal region is a temporal region
+      that is a whole consisting of one or more separated temporal instants as parts
+
+      Examples: A temporal region that is occupied by a process boundary; the moment
+      at which a finger is detached in an industrial accident
+
+      '
+- id: cco:EntertainmentFacility
+  name: Entertainment Facility
+  definition: A Facility that is designed to host activities that are intended to
+    hold the interest of, or give pleasure or delight to, an audience.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Entertainment Facility (id: cco:EntertainmentFacility)
+
+      Definition: A Facility that is designed to host activities that are intended
+      to hold the interest of, or give pleasure or delight to, an audience.
+
+      '
+- id: cco:NuclearStorageDepot
+  name: Nuclear Storage Depot
+  definition: A Storage Facility that is designed to store nuclear material.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:StorageFacility
+  style:
+    group: 0
+    color: green
+    title: 'Nuclear Storage Depot (id: cco:NuclearStorageDepot)
+
+      Definition: A Storage Facility that is designed to store nuclear material.
+
+      '
+- id: cco:Shop
+  name: Shop
+  definition: A Commercial Facility designed to sell small lots of goods to consumers.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:RetailFacility
+  style:
+    group: 0
+    color: green
+    title: 'Shop (id: cco:Shop)
+
+      Definition: A Commercial Facility designed to sell small lots of goods to consumers.
+
+      '
+- id: cco:WaterTreatmentFacility
+  name: Water Treatment Facility
+  definition: A Facility that is designed for making water more acceptable for a specific
+    end-use.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Water Treatment Facility (id: cco:WaterTreatmentFacility)
+
+      Definition: A Facility that is designed for making water more acceptable for
+      a specific end-use.
+
+      '
+- id: cco:Stage
+  name: Stage
+  definition: An Entertainment Facility that is designed to provide a space upon which
+    entertaining performances or productions can occur.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:EntertainmentFacility
+  style:
+    group: 0
+    color: green
+    title: 'Stage (id: cco:Stage)
+
+      Definition: An Entertainment Facility that is designed to provide a space upon
+      which entertaining performances or productions can occur.
+
+      '
+- id: cco:PoliceStation
+  name: Police Station
+  definition: A Public Safety Facility that is designed for the professional and clerical
+    processes of a local police force.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:PublicSafetyFacility
+  style:
+    group: 0
+    color: green
+    title: 'Police Station (id: cco:PoliceStation)
+
+      Definition: A Public Safety Facility that is designed for the professional and
+      clerical processes of a local police force.
+
+      '
+- id: cco:PetroleumManufacturingFacility
+  name: Petroleum Manufacturing Facility
+  definition: A Factory that is designed to manufacture petroleum-based products.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Petroleum Manufacturing Facility (id: cco:PetroleumManufacturingFacility)
+
+      Definition: A Factory that is designed to manufacture petroleum-based products.
+
+      '
+- id: cco:WasteManagementFacility
+  name: Waste Management Facility
+  definition: A Facility that is designed for managing waste for some portion of the
+    waste's existence.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Waste Management Facility (id: cco:WasteManagementFacility)
+
+      Definition: A Facility that is designed for managing waste for some portion
+      of the waste''s existence.
+
+      '
+- id: cco:FireStation
+  name: Fire Station
+  definition: A Public Safety Facility that is designed for the storage of firefighting
+    apparatus.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:PublicSafetyFacility
+  style:
+    group: 0
+    color: green
+    title: 'Fire Station (id: cco:FireStation)
+
+      Definition: A Public Safety Facility that is designed for the storage of firefighting
+      apparatus.
+
+      '
+- id: cco:TrainingCamp
+  name: Training Camp
+  definition: A Facility that is designed for rigorous and focused training in order
+    to learn or improve skills, usually involving physical actions.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Facility
+  style:
+    group: 0
+    color: green
+    title: 'Training Camp (id: cco:TrainingCamp)
+
+      Definition: A Facility that is designed for rigorous and focused training in
+      order to learn or improve skills, usually involving physical actions.
+
+      '
+- id: cco:Pier
+  name: Pier
+  definition: A Transportation Facility that is designed to partially enclose a harbor
+    and form a landing place for Watercraft.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:TransportationFacility
+  style:
+    group: 0
+    color: green
+    title: 'Pier (id: cco:Pier)
+
+      Definition: A Transportation Facility that is designed to partially enclose
+      a harbor and form a landing place for Watercraft.
+
+      '
+- id: cco:Refinery
+  name: Refinery
+  definition: A Factory that is designed for refining raw materials into products
+    of value.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Factory
+  style:
+    group: 0
+    color: green
+    title: 'Refinery (id: cco:Refinery)
+
+      Definition: A Factory that is designed for refining raw materials into products
+      of value.
+
+      '
+- id: cco:CombatOutpost
+  name: Combat Outpost
+  definition: A Military Facility that is designed to support the conduction of combat
+    operations of limited scope or size.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Combat Outpost (id: cco:CombatOutpost)
+
+      Definition: A Military Facility that is designed to support the conduction of
+      combat operations of limited scope or size.
+
+      '
+- id: cco:MilitaryHeadquartersFacility
+  name: Military Headquarters Facility
+  definition: A Military Facility that is designed for military administration and
+    coordination.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:MilitaryFacility
+  style:
+    group: 0
+    color: green
+    title: 'Military Headquarters Facility (id: cco:MilitaryHeadquartersFacility)
+
+      Definition: A Military Facility that is designed for military administration
+      and coordination.
+
+      '
+- id: cco:UndergroundMine
+  name: Underground Mine
+  definition: A Mine that is designed to support the extraction of materials from
+    the ground using underground tunnels and shafts.
+  example: ''
+  relations:
+  - label: is_a
+    to: cco:Mine
+  style:
+    group: 0
+    color: green
+    title: 'Underground Mine (id: cco:UndergroundMine)
+
+      Definition: A Mine that is designed to support the extraction of materials from
+      the ground using underground tunnels and shafts.
+
+      '
