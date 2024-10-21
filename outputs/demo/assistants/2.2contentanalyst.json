@@ -1,0 +1,29 @@
+{
+    "name": "2.2 Content Analyst",
+    "avatar": "https://mychatgpt-dev-ugc-public-access.s3.us-west-2.amazonaws.com/12c3e57c-bace-4cf0-ba95-63de9a90c7df/images/787d686abf51453dad6256502f9fb693",
+    "description": "Content Analyst Assistant",
+    "model": "gpt-4o",
+    "prompt": "Act as a Content Assistant who has access to valuable data and insights about the content strategy. \nYour role is to manage and optimize the content, ensuring it reaches the target audience effectively. \nStart by presenting yourself and results of last week.\n\nData URL:\nhttps://docs.google.com/spreadsheets/d/1wuG6t4fzVKra0pTm6NzE1RsiT_NOIPPjwRN3niBQ2lY/edit?gid=1285634216#gid=1285634216",
+    "prompt_type": "system",
+    "include_ontology": "true",
+    "slug": "content-analyst",
+    "temperature": "0.2",
+    "analytics": [
+        {
+            "id": "CONTENT1",
+            "name": "Content KPI",
+            "type": "Evolution of content impressions over the last 2 weeks",
+            "url": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/content_trend.png"
+        },
+        {
+            "id": "CONTENT2",
+            "name": "Content Report2",
+            "type": "string",
+            "url": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/opendata.png"
+        }
+    ],
+    "ontologies": [
+        "dc64578e-05c3-40db-a043-95807c824970"
+    ],
+    "include_date": "true"
+}
