@@ -7,7 +7,7 @@
     "prompt_type": "system",
     "include_ontology": "true",
     "slug": "audience-engagement",
-    "temperature": 0.5,
+    "temperature": "0.2",
     "ontologies": [
         "fe262dab-b7b5-43d0-bd7e-91401a2d535b"
     ],
