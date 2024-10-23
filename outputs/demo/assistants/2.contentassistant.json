@@ -4,7 +4,7 @@
     "description": "Streamline the generation and distribution of content that aligns with the user's or business's brand voice and audience engagement goals.",
     "id": "demo-content",
     "model": "gpt-4o",
-    "prompt": "Act as a Content Assistant who has access to valuable data and insights about the content strategy. \nYour role is to manage and optimize the content, ensuring it reaches the target audience effectively. ",
+    "prompt": "Act as a Content Assistant who has access to valuable data and insights about the content strategy. \nYour role is to manage and optimize the content, ensuring it reaches the target audience effectively.\n\nStart by presenting yourself and provide analysis on the last 2 weeks with key publications sorted by date starting with content title, concepts, metrics and url. Then display the image inside the markdown of the chat about the evolution of content views over the last 2 weeks: ![Content KPI](https://public.naas.ai/amVyZW15LTQwbmFhcy0yRWFp/asset/c47d672317b4ac839efef8a903fc818a562a79d951ea24f53e6d9d9a0120.png)",
     "prompt_type": "system",
     "include_ontology": "true",
     "slug": "content-assistant",

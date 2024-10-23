@@ -1,6 +1,6 @@
 {
     "name": "ABI",
-    "avatar": "https://workspace-dev-ugc-public-access.s3.us-west-2.amazonaws.com/5d4797db-0ac2-418b-9b81-5b1c6e6cfc3a/images/f803b3b68a68423ba5f4ed8a954b8781",
+    "avatar": "https://workspace-dev-ugc-public-access.s3.us-west-2.amazonaws.com/2b9ac8af-4026-4173-8796-1c2de5d34966/images/bb0f42aa96474c96a1977d604b70695c",
     "description": "Consolidates, audits, and orchestrates all other assistants within the ABI ecosystem.",
     "id": "aia",
     "include_date": "true",
@@ -11,6 +11,7 @@
     "slug": "abi",
     "temperature": 0,
     "ontologies": [
-        "186c171c-803d-454c-8921-5efa7bf16e87"
+        "7ca92096-180d-4dcf-87dd-fe0526465601",
+        "416e55f8-c915-48dd-a50f-a3433d43a387"
     ]
 }
