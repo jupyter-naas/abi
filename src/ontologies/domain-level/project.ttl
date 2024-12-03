@@ -1,0 +1,99 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Project Class Definition
+abi:Project a owl:Class ;
+    rdfs:label "Project"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    skos:definition "A planned business initiative with defined scope, timeline and deliverables" .
+
+# Properties
+abi:hasProjectName a owl:DatatypeProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range xsd:string .
+
+abi:hasStartDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range xsd:date .
+
+abi:hasEndDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range xsd:date .
+
+abi:hasStatus a owl:ObjectProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range abi:ProjectStatus .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range xsd:string .
+
+abi:hasBudget a owl:DatatypeProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range xsd:decimal .
+
+abi:hasOwner a owl:ObjectProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range abi:Person .
+
+abi:hasTeamMembers a owl:ObjectProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range abi:Person .
+
+abi:hasRelatedIdeas a owl:ObjectProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range abi:Idea .
+
+abi:hasRelatedPosts a owl:ObjectProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range abi:Post .
+
+# Project Status Class
+abi:ProjectStatus a owl:Class ;
+    rdfs:label "Project Status"@en ;
+    skos:definition "The current state of a project's lifecycle"@en .
+
+# Status Instances
+abi:Active a abi:ProjectStatus ;
+    rdfs:label "Active"@en ;
+    skos:definition "Project is currently in progress"@en .
+abi:Completed a abi:ProjectStatus .
+abi:OnHold a abi:ProjectStatus .
+abi:Cancelled a abi:ProjectStatus .
+
+# Example Project Instances
+<http://ontology.naas.ai/abi/Project#CiscoIntegration> a abi:Project ;
+    abi:hasProjectName "Cisco Platform Integration" ;
+    abi:hasStartDate "2024-01-15"^^xsd:date ;
+    abi:hasEndDate "2024-06-30"^^xsd:date ;
+    abi:hasStatus abi:Active ;
+    abi:hasDescription """Integration of NAS platform with Cisco's enterprise chat interface, including:
+    - API integration
+    - Policy enforcement layer
+    - Custom agent connectors
+    - Enterprise deployment support""" ;
+    abi:hasBudget "250000.00"^^xsd:decimal ;
+    abi:hasOwner <http://ontology.naas.ai/abi/Person#Jeremy> ;
+    abi:hasTeamMembers <http://ontology.naas.ai/abi/Person#Max>, <http://ontology.naas.ai/abi/Person#Raven> ;
+    abi:hasRelatedIdeas <http://ontology.naas.ai/abi/Idea#AICodeProduction> .
+
+<http://ontology.naas.ai/abi/Project#BMWCustomization> a abi:Project ;
+    abi:hasProjectName "BMW AI Assistant Customization" ;
+    abi:hasStartDate "2024-02-01"^^xsd:date ;
+    abi:hasEndDate "2024-09-30"^^xsd:date ;
+    abi:hasStatus abi:Active ;
+    abi:hasDescription """Customization of ABI system for BMW's internal use:
+    - Custom agent development
+    - Integration with internal systems
+    - Enterprise deployment
+    - Training and documentation""" ;
+    abi:hasBudget "180000.00"^^xsd:decimal ;
+    abi:hasOwner <http://ontology.naas.ai/abi/Person#Max> ;
+    abi:hasTeamMembers <http://ontology.naas.ai/abi/Person#Jeremy> ;
+    abi:hasRelatedPosts <http://ontology.naas.ai/abi/Post#7156278144277073922> . 

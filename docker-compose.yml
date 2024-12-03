@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  abi:
+    build: .
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app
+    command: ["poetry", "run", "chat-single-assistant"]

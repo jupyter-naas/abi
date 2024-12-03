@@ -1,0 +1,213 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix off: <http://example.com/offering-ontology#> .
+
+# Ontology Declaration
+off: rdf:type owl:Ontology ;
+    rdfs:label "Offering Ontology"@en ;
+    rdfs:comment "An ontology for describing offerings (products and services) aligned with BFO and CCO"@en .
+
+# 1. Offering Classes
+off:Offering rdfs:subClassOf cco:InformationContentEntity ;
+    rdfs:label "Offering"@en .
+
+off:Product rdfs:subClassOf cco:Artifact ;
+    rdfs:label "Product"@en .
+
+off:Service rdfs:subClassOf cco:Process ;
+    rdfs:label "Service"@en .
+
+off:HybridOffering rdfs:subClassOf off:Offering ;
+    rdfs:label "Hybrid Offering"@en .
+
+# 2. Offering Attributes
+off:name rdfs:subPropertyOf cco:Appellation ;
+    rdfs:label "name"@en .
+
+off:description rdfs:subPropertyOf cco:TextValue ;
+    rdfs:label "description"@en .
+
+off:price rdfs:subPropertyOf cco:MonetaryValue ;
+    rdfs:label "price"@en .
+
+off:Category rdfs:subClassOf cco:Classification ;
+    rdfs:label "Category"@en .
+
+off:Brand rdfs:subClassOf cco:Organization ;
+    rdfs:label "Brand"@en .
+
+off:Feature rdfs:subClassOf cco:Quality ;
+    rdfs:label "Feature"@en .
+
+# 3. Target Market
+off:TargetMarket rdfs:subClassOf cco:Group ;
+    rdfs:label "Target Market"@en .
+
+off:CustomerSegment rdfs:subClassOf cco:HumanGroup ;
+    rdfs:label "Customer Segment"@en .
+
+off:GeographicRegion rdfs:subClassOf cco:GeopoliticalRegion ;
+    rdfs:label "Geographic Region"@en .
+
+off:Industry rdfs:subClassOf cco:OrganizationType ;
+    rdfs:label "Industry"@en .
+
+# 4. Value Proposition
+off:ValueProposition rdfs:subClassOf cco:Proposition ;
+    rdfs:label "Value Proposition"@en .
+
+off:KeyBenefit rdfs:subClassOf cco:Quality ;
+    rdfs:label "Key Benefit"@en .
+
+off:UniqueSelllingPoint rdfs:subClassOf cco:Quality ;
+    rdfs:label "Unique Selling Point"@en .
+
+off:ProblemSolved rdfs:subClassOf cco:Process ;
+    rdfs:label "Problem Solved"@en .
+
+# 5. Delivery Method
+off:DeliveryMethod rdfs:subClassOf cco:Process ;
+    rdfs:label "Delivery Method"@en .
+
+off:PhysicalDelivery rdfs:subClassOf cco:MaterialEntity ;
+    rdfs:label "Physical Delivery"@en .
+
+off:DigitalDelivery rdfs:subClassOf cco:InformationContentEntity ;
+    rdfs:label "Digital Delivery"@en .
+
+off:InPersonDelivery rdfs:subClassOf cco:Process ;
+    rdfs:label "In-Person Delivery"@en .
+
+off:RemoteDelivery rdfs:subClassOf cco:Process ;
+    rdfs:label "Remote Delivery"@en .
+
+# 6. Lifecycle
+off:Lifecycle rdfs:subClassOf bfo:Process ;
+    rdfs:label "Lifecycle"@en .
+
+off:ProcessStage rdfs:subClassOf cco:ProcessStage ;
+    rdfs:label "Process Stage"@en .
+
+# 7. Related Entities
+off:RelatedEntity rdfs:subClassOf cco:Organization ;
+    rdfs:label "Related Entity"@en .
+
+off:Manufacturer rdfs:subClassOf cco:Organization ;
+    rdfs:label "Manufacturer"@en .
+
+off:Supplier rdfs:subClassOf cco:Organization ;
+    rdfs:label "Supplier"@en .
+
+off:Distributor rdfs:subClassOf cco:Organization ;
+    rdfs:label "Distributor"@en .
+
+off:Competitor rdfs:subClassOf cco:Organization ;
+    rdfs:label "Competitor"@en .
+
+# 8. Performance Metrics
+off:PerformanceMetric rdfs:subClassOf cco:MeasurementInformationContentEntity ;
+    rdfs:label "Performance Metric"@en .
+
+off:SalesVolume rdfs:subClassOf cco:MeasurementValue ;
+    rdfs:label "Sales Volume"@en .
+
+off:Revenue rdfs:subClassOf cco:MonetaryValue ;
+    rdfs:label "Revenue"@en .
+
+off:CustomerSatisfactionScore rdfs:subClassOf cco:MeasurementValue ;
+    rdfs:label "Customer Satisfaction Score"@en .
+
+off:MarketShare rdfs:subClassOf cco:Ratio ;
+    rdfs:label "Market Share"@en .
+
+# 9. Legal and Compliance
+off:LegalDocument rdfs:subClassOf cco:DocumentAct ;
+    rdfs:label "Legal Document"@en .
+
+off:Certification rdfs:subClassOf cco:DocumentAct ;
+    rdfs:label "Certification"@en .
+
+off:Patent rdfs:subClassOf cco:DocumentAct ;
+    rdfs:label "Patent"@en .
+
+off:RegulatoryApproval rdfs:subClassOf cco:DocumentAct ;
+    rdfs:label "Regulatory Approval"@en .
+
+# 10. Sustainability Aspects
+off:SustainabilityAspect rdfs:subClassOf cco:Quality ;
+    rdfs:label "Sustainability Aspect"@en .
+
+off:EnvironmentalImpact rdfs:subClassOf cco:Quality ;
+    rdfs:label "Environmental Impact"@en .
+
+off:EthicalSourcing rdfs:subClassOf cco:Process ;
+    rdfs:label "Ethical Sourcing"@en .
+
+off:Recyclability rdfs:subClassOf cco:Quality ;
+    rdfs:label "Recyclability"@en .
+
+# Object Properties
+off:hasTargetMarket rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:TargetMarket .
+
+off:hasDeliveryMethod rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:DeliveryMethod .
+
+off:hasValueProposition rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:ValueProposition .
+
+off:hasManufacturer rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:Manufacturer .
+
+off:hasSupplier rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:Supplier .
+
+off:hasDistributor rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:Distributor .
+
+off:hasCompetitor rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:Competitor .
+
+off:hasPerformanceMetric rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:PerformanceMetric .
+
+off:hasLegalDocument rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:LegalDocument .
+
+off:hasSustainabilityAspect rdf:type owl:ObjectProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range off:SustainabilityAspect .
+
+# Data Properties
+off:launchDate rdf:type owl:DatatypeProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range xsd:dateTime .
+
+off:endOfLifeDate rdf:type owl:DatatypeProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range xsd:dateTime .
+
+off:priceValue rdf:type owl:DatatypeProperty ;
+    rdfs:domain off:Offering ;
+    rdfs:range xsd:decimal .
+
+off:marketShareValue rdf:type owl:DatatypeProperty ;
+    rdfs:domain off:MarketShare ;
+    rdfs:range xsd:decimal .
+
+off:satisfactionScore rdf:type owl:DatatypeProperty ;
+    rdfs:domain off:CustomerSatisfactionScore ;
+    rdfs:range xsd:decimal . 

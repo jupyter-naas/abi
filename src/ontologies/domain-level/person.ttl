@@ -1,0 +1,116 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Person Class Definition
+abi:Person a owl:Class ;
+    rdfs:label "Person"@en ;
+    rdfs:subClassOf bfo:BFO_0000040 ;  # Material entity
+    skos:definition "An individual person with associated professional and interaction data"@en .
+
+# Seniority Level Class
+abi:SeniorityLevel a owl:Class ;
+    rdfs:label "Seniority Level"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 .
+
+abi:TopExecutive a abi:SeniorityLevel ;
+    rdfs:label "Top Executive"@en .
+
+abi:Executive a abi:SeniorityLevel ;
+    rdfs:label "Executive"@en .
+
+abi:ProfessionalStaff a abi:SeniorityLevel ;
+    rdfs:label "Professional/Staff"@en .
+
+# Department Class
+abi:Department a owl:Class ;
+    rdfs:label "Department"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 .
+
+# Department Instances
+abi:IT a abi:Department ;
+    rdfs:label "Information Technology (IT)"@en .
+
+abi:StrategyAndBusinessDevelopment a abi:Department ;
+    rdfs:label "Strategy and Business Development"@en .
+
+abi:ResearchAndDevelopment a abi:Department ;
+    rdfs:label "Research and Development (R&D)"@en .
+
+# Properties
+abi:hasFirstName a owl:DatatypeProperty ;
+    rdfs:label "has first name"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:hasLastName a owl:DatatypeProperty ;
+    rdfs:label "has last name"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:hasOccupation a owl:DatatypeProperty ;
+    rdfs:label "has occupation"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:hasSeniorityLevel a owl:ObjectProperty ;
+    rdfs:label "has seniority level"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:SeniorityLevel .
+
+abi:hasDepartment a owl:ObjectProperty ;
+    rdfs:label "has department"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range abi:Department .
+
+abi:hasOrganization a owl:DatatypeProperty ;
+    rdfs:label "has organization"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:hasInteractionScore a owl:DatatypeProperty ;
+    rdfs:label "has interaction score"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:integer .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:label "has created date"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:dateTime .
+
+abi:hasMQLDate a owl:DatatypeProperty ;
+    rdfs:label "has MQL date"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:dateTime .
+
+abi:hasSQLDate a owl:DatatypeProperty ;
+    rdfs:label "has SQL date"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:dateTime .
+
+abi:hasLastInteractionDate a owl:DatatypeProperty ;
+    rdfs:label "has last interaction date"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:dateTime .
+
+abi:hasProfileURL a owl:DatatypeProperty ;
+    rdfs:label "has profile URL"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:anyURI .
+
+abi:hasPublicID a owl:DatatypeProperty ;
+    rdfs:label "has public ID"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+abi:hasCRMContactID a owl:DatatypeProperty ;
+    rdfs:label "has CRM contact ID"@en ;
+    rdfs:domain abi:Person ;
+    rdfs:range xsd:string .
+
+# Person Instances

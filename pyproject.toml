@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "src"
+version = "0.1.0"
+description = "AI system"
+authors = ["AI Team <aiteam@company.com>"]
+readme = "README.md"
+
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyyaml = "^6.0.1"
+abi = {path = "./lib", develop = true, extras = ["all"]} 
+requests = "^2.32.3"
+fastapi = "^0.115.5"
+uvicorn = {extras = ["standard"], version = "^0.32.1"}
+replicate = "^1.0.4"
+pydash = "^8.0.4"
+
+
+[tool.poetry.group.terminal-agent.dependencies]
+langchain-anthropic = "^0.3.0"
+langchain-openai = "^0.2.9"
+rich = "^13.9.4"
+
+
+[tool.poetry.scripts]
+ingest-github-user = "src.workflows.ingest_github_user:main"
+ingest-github-user-api = "src.workflows.ingest_github_user:api"
+chat-single-assistant = "src.apps.terminal_agent.main:run_single"
+chat-multiple-assistant = "src.apps.terminal_agent.main:run_multiple"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

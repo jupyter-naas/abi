@@ -1,0 +1,6 @@
+ontologies:
+  # Platform Ontologies
+  - name: "Naas.ai Platform"
+    description: "Represents Naas.ai Platform Ontology."
+    type: "platform"
+    access: "public"

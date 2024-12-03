@@ -1,0 +1,89 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Contact Class Definition
+abi:Contact a owl:Class ;
+    rdfs:label "Contact"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;  # Role
+    skos:definition "A business contact with associated lead status and interaction history"@en .
+
+# Lead Status Class
+abi:LeadStatus a owl:Class ;
+    rdfs:label "Lead Status"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 .
+
+abi:MarketingQualifiedLead a abi:LeadStatus ;
+    rdfs:label "Marketing Qualified Lead"@en .
+
+abi:SalesQualifiedLead a abi:LeadStatus ;
+    rdfs:label "Sales Qualified Lead"@en .
+
+# Properties
+abi:hasLeadStatus a owl:ObjectProperty ;
+    rdfs:label "has lead status"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:LeadStatus .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:label "has created date"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range xsd:dateTime .
+
+abi:hasMQLDate a owl:DatatypeProperty ;
+    rdfs:label "has MQL date"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range xsd:dateTime .
+
+abi:hasSQLDate a owl:DatatypeProperty ;
+    rdfs:label "has SQL date"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range xsd:dateTime .
+
+abi:hasLastInteractionDate a owl:DatatypeProperty ;
+    rdfs:label "has last interaction date"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range xsd:dateTime .
+
+abi:hasMessagingOptions a owl:DatatypeProperty ;
+    rdfs:label "has messaging options"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range rdf:List .
+
+abi:relatedToPerson a owl:ObjectProperty ;
+    rdfs:label "related to person"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:Person .
+
+abi:relatedToOrganization a owl:ObjectProperty ;
+    rdfs:label "related to organization"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:Organization .
+
+
+# Contract Status Class
+abi:ContractStatus a owl:Class ;
+    rdfs:label "Contract Status"@en .
+
+abi:Live a abi:ContractStatus .
+abi:Paused a abi:ContractStatus .
+abi:Completed a abi:ContractStatus .
+abi:Cancelled a abi:ContractStatus .
+
+# Contract Unit Class
+abi:ContractUnit a owl:Class ;
+    rdfs:label "Contract Unit"@en .
+
+abi:HourlyRate a abi:ContractUnit .
+abi:Annual a abi:ContractUnit .
+abi:Monthly a abi:ContractUnit .
+abi:Fixed a abi:ContractUnit .
+
+# Additional Contract Types
+abi:ContractType a owl:Class ;
+    rdfs:label "Contract Type"@en . 

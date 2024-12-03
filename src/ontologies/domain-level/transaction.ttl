@@ -1,0 +1,344 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Transaction Class Definition
+abi:Transaction a owl:Class ;
+    rdfs:label "Transaction"@en ;
+    rdfs:subClassOf cco:ont00000836 ; # Financial Instrument Use
+    skos:definition "A financial exchange or transfer between parties" .
+
+# Transaction Types
+abi:TransactionType a owl:Class ;
+    rdfs:label "Transaction Type"@en .
+
+abi:CashTransaction a abi:TransactionType ;
+    rdfs:label "Cash Transaction"@en .
+
+abi:WireTransfer a abi:TransactionType ;
+    rdfs:label "Wire Transfer"@en .
+
+abi:CreditCardPayment a abi:TransactionType ;
+    rdfs:label "Credit Card Payment"@en .
+
+abi:CryptoTransaction a abi:TransactionType ;
+    rdfs:label "Cryptocurrency Transaction"@en .
+
+# Transaction Status
+abi:TransactionStatus a owl:Class ;
+    rdfs:label "Transaction Status"@en .
+
+abi:Pending a abi:TransactionStatus .
+abi:Completed a abi:TransactionStatus .
+abi:Failed a abi:TransactionStatus .
+abi:Refunded a abi:TransactionStatus .
+
+# Properties
+abi:hasTransactionType a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:TransactionType .
+
+abi:hasTransactionStatus a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:TransactionStatus .
+
+abi:hasTransactionDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:dateTime .
+
+abi:hasAmount a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:decimal .
+
+abi:hasCurrency a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:hasReference a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:relatedToContract a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Contract .
+
+abi:relatedToBusiness a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Business .
+
+# Bank Account Class
+abi:BankAccount a owl:Class ;
+    rdfs:label "Bank Account"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A financial account maintained by a banking institution" .
+
+# Bank Institution Class
+abi:BankInstitution a owl:Class ;
+    rdfs:label "Bank Institution"@en ;
+    rdfs:subClassOf abi:Organization ;
+    skos:definition "A financial institution that provides banking services" .
+
+# Currency Exchange Information
+abi:CurrencyExchange a owl:Class ;
+    rdfs:label "Currency Exchange"@en ;
+    skos:definition "Information about currency conversion in a transaction" .
+
+# Additional Properties
+abi:hasBeneficiaryAccount a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:BankAccount .
+
+abi:hasRemitterAccount a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:BankAccount .
+
+abi:hasBeneficiaryBank a owl:ObjectProperty ;
+    rdfs:domain abi:BankAccount ;
+    rdfs:range abi:BankInstitution .
+
+abi:hasRemitterBank a owl:ObjectProperty ;
+    rdfs:domain abi:BankAccount ;
+    rdfs:range abi:BankInstitution .
+
+abi:hasIBAN a owl:DatatypeProperty ;
+    rdfs:domain abi:BankAccount ;
+    rdfs:range xsd:string .
+
+abi:hasSWIFT a owl:DatatypeProperty ;
+    rdfs:domain abi:BankInstitution ;
+    rdfs:range xsd:string .
+
+abi:hasAccountHolder a owl:ObjectProperty ;
+    rdfs:domain abi:BankAccount ;
+    rdfs:range abi:Organization .
+
+abi:hasRemitterCurrency a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:hasBeneficiaryCurrency a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:hasExchangeRate a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:decimal .
+
+abi:hasTransactionFees a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:decimal .
+
+# Transaction Method Classification
+abi:TransactionMethod a owl:Class ;
+    rdfs:label "Transaction Method"@en ;
+    skos:definition "Classification of transaction as cash or non-cash" .
+
+abi:CashMethod a abi:TransactionMethod ;
+    rdfs:label "Cash Method"@en ;
+    skos:definition "Physical currency transaction" .
+
+abi:NonCashMethod a abi:TransactionMethod ;
+    rdfs:label "Non-Cash Method"@en ;
+    skos:definition "Electronic or digital transaction" .
+
+# Cash Transaction Types
+abi:CashDeposit a abi:TransactionType ;
+    rdfs:label "Cash Deposit"@en ;
+    rdfs:subClassOf abi:CashMethod .
+
+abi:CashWithdrawal a abi:TransactionType ;
+    rdfs:label "Cash Withdrawal"@en ;
+    rdfs:subClassOf abi:CashMethod .
+
+abi:PhysicalCashPayment a abi:TransactionType ;
+    rdfs:label "Physical Cash Payment"@en ;
+    rdfs:subClassOf abi:CashMethod .
+
+# Non-Cash Transaction Types
+abi:WireTransfer a abi:TransactionType ;
+    rdfs:label "Wire Transfer"@en ;
+    rdfs:subClassOf abi:NonCashMethod .
+
+abi:CreditCardPayment a abi:TransactionType ;
+    rdfs:label "Credit Card Payment"@en ;
+    rdfs:subClassOf abi:NonCashMethod .
+
+abi:DirectDebit a abi:TransactionType ;
+    rdfs:label "Direct Debit"@en ;
+    rdfs:subClassOf abi:NonCashMethod .
+
+# Additional Property
+abi:hasTransactionMethod a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:TransactionMethod .
+
+# Example Transaction Instances
+<http://ontology.naas.ai/abi/Transaction#SurfeSubscription2024> a abi:Transaction ;
+    abi:hasTransactionType abi:CreditCardPayment ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-01-01T10:30:00Z"^^xsd:dateTime ;
+    abi:hasAmount "300.00"^^xsd:decimal ;
+    abi:hasCurrency "USD" ;
+    abi:hasReference "SURFE-2024-001" ;
+    abi:relatedToContract <http://ontology.naas.ai/abi/Contract#SurfeSubscription> ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> .
+
+<http://ontology.naas.ai/abi/Transaction#CiscoFirstMilestone> a abi:Transaction ;
+    abi:hasTransactionType abi:WireTransfer ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-02-15T14:45:00Z"^^xsd:dateTime ;
+    abi:hasAmount "75000.00"^^xsd:decimal ;
+    abi:hasCurrency "USD" ;
+    abi:hasReference "CISCO-INT-M1" ;
+    abi:relatedToContract <http://ontology.naas.ai/abi/Contract#CiscoIntegration> ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> .
+
+<http://ontology.naas.ai/abi/Transaction#UpworkPayment> a abi:Transaction ;
+    abi:hasTransactionType abi:CashTransaction ;
+    abi:hasTransactionStatus abi:Pending ;
+    abi:hasTransactionDate "2024-01-30T16:00:00Z"^^xsd:dateTime ;
+    abi:hasAmount "400.00"^^xsd:decimal ;
+    abi:hasCurrency "USD" ;
+    abi:hasReference "UW-2024-123" ;
+    abi:relatedToContract <http://ontology.naas.ai/abi/Contract#UpworkEngineer> ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> .
+
+# Example Cash Transaction
+<http://ontology.naas.ai/abi/Transaction#OfficeSupplies> a abi:Transaction ;
+    abi:hasTransactionMethod abi:CashMethod ;
+    abi:hasTransactionType abi:PhysicalCashPayment ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-01-15T11:30:00Z"^^xsd:dateTime ;
+    abi:hasAmount "150.00"^^xsd:decimal ;
+    abi:hasCurrency "EUR" ;
+    abi:hasReference "PETTY-CASH-2024-001" ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> .
+
+# Example Non-Cash Transaction
+<http://ontology.naas.ai/abi/Transaction#CiscoFirstMilestone> a abi:Transaction ;
+    abi:hasTransactionMethod abi:NonCashMethod ;
+    abi:hasTransactionType abi:WireTransfer ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-02-15T14:45:00Z"^^xsd:dateTime ;
+    abi:hasAmount "75000.00"^^xsd:decimal ;
+    abi:hasCurrency "USD" ;
+    abi:hasReference "CISCO-INT-M1" ;
+    abi:relatedToContract <http://ontology.naas.ai/abi/Contract#CiscoIntegration> ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> ;
+    abi:hasRemitterAccount <http://ontology.naas.ai/abi/BankAccount#CiscoUS> ;
+    abi:hasBeneficiaryAccount <http://ontology.naas.ai/abi/BankAccount#CashStoryFR> ;
+    abi:hasRemitterCurrency "USD" ;
+    abi:hasBeneficiaryCurrency "EUR" ;
+    abi:hasExchangeRate "0.92"^^xsd:decimal ;
+    abi:hasTransactionFees "25.00"^^xsd:decimal .
+
+# Example Cash Deposit
+<http://ontology.naas.ai/abi/Transaction#PettyCashDeposit> a abi:Transaction ;
+    abi:hasTransactionMethod abi:CashMethod ;
+    abi:hasTransactionType abi:CashDeposit ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-01-10T09:15:00Z"^^xsd:dateTime ;
+    abi:hasAmount "1000.00"^^xsd:decimal ;
+    abi:hasCurrency "EUR" ;
+    abi:hasReference "CASH-DEP-2024-001" ;
+    abi:hasBeneficiaryAccount <http://ontology.naas.ai/abi/BankAccount#CashStoryFR> ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> .
+
+# Account Number Properties
+abi:hasAccountNumber a owl:DatatypeProperty ;
+    rdfs:domain abi:BankAccount ;
+    rdfs:range xsd:string .
+
+abi:hasRoutingNumber a owl:DatatypeProperty ;
+    rdfs:domain abi:BankAccount ;
+    rdfs:range xsd:string .
+
+# Cash Handling Procedures
+abi:CashHandlingProcedure a owl:Class ;
+    rdfs:label "Cash Handling Procedure"@en ;
+    skos:definition "Procedures for handling physical cash" .
+
+abi:CashReconciliation a owl:Class ;
+    rdfs:label "Cash Reconciliation"@en ;
+    skos:definition "Record of cash balance verification" .
+
+abi:CashRegister a owl:Class ;
+    rdfs:label "Cash Register"@en ;
+    skos:definition "Physical location for storing cash" .
+
+# Enhanced Bank Account Examples
+<http://ontology.naas.ai/abi/BankAccount#CashStoryFR> a abi:BankAccount ;
+    rdfs:label "CashStory French Account" ;
+    abi:hasIBAN "FR7630004000000123456789012" ;
+    abi:hasAccountNumber "12345678901" ;
+    abi:hasRoutingNumber "30004" ;
+    abi:hasBeneficiaryBank <http://ontology.naas.ai/abi/BankInstitution#BNPPARIBAS> ;
+    abi:hasAccountHolder <http://ontology.naas.ai/abi/Business#CashStory> .
+
+# Cash Register Instance
+<http://ontology.naas.ai/abi/CashRegister#MainOffice> a abi:CashRegister ;
+    rdfs:label "Main Office Cash Register" ;
+    abi:hasLocation "Paris Office" ;
+    abi:hasMaximumBalance "2000.00"^^xsd:decimal ;
+    abi:hasCurrentBalance "1250.00"^^xsd:decimal ;
+    abi:hasCurrency "EUR" .
+
+# Cash Handling Procedure Examples
+<http://ontology.naas.ai/abi/CashHandlingProcedure#DailyCount> a abi:CashHandlingProcedure ;
+    rdfs:label "Daily Cash Count" ;
+    abi:hasFrequency "Daily" ;
+    abi:hasResponsible <http://ontology.naas.ai/abi/Person#OfficeManager> ;
+    abi:hasVerifier <http://ontology.naas.ai/abi/Person#FinanceManager> ;
+    abi:hasMaximumAllowed "2000.00"^^xsd:decimal ;
+    abi:requiresDualControl true ;
+    abi:requiresDocumentation true .
+
+# Cash Transaction with Detailed Handling
+<http://ontology.naas.ai/abi/Transaction#ClientCashPayment> a abi:Transaction ;
+    abi:hasTransactionMethod abi:CashMethod ;
+    abi:hasTransactionType abi:PhysicalCashPayment ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-02-20T14:30:00Z"^^xsd:dateTime ;
+    abi:hasAmount "500.00"^^xsd:decimal ;
+    abi:hasCurrency "EUR" ;
+    abi:hasReference "CASH-PAY-2024-005" ;
+    abi:relatedToBusiness <http://ontology.naas.ai/abi/Business#CashStory> ;
+    abi:hasCashRegister <http://ontology.naas.ai/abi/CashRegister#MainOffice> ;
+    abi:hasHandlingProcedure <http://ontology.naas.ai/abi/CashHandlingProcedure#DailyCount> ;
+    abi:hasReceivedBy <http://ontology.naas.ai/abi/Person#OfficeManager> ;
+    abi:hasReceiptNumber "REC-2024-123" .
+
+# Cash Reconciliation Record
+<http://ontology.naas.ai/abi/CashReconciliation#20240220> a abi:CashReconciliation ;
+    rdfs:label "Daily Reconciliation 2024-02-20" ;
+    abi:hasDate "2024-02-20T17:00:00Z"^^xsd:dateTime ;
+    abi:hasCashRegister <http://ontology.naas.ai/abi/CashRegister#MainOffice> ;
+    abi:hasOpeningBalance "750.00"^^xsd:decimal ;
+    abi:hasClosingBalance "1250.00"^^xsd:decimal ;
+    abi:hasTotalReceipts "500.00"^^xsd:decimal ;
+    abi:hasTotalDisbursements "0.00"^^xsd:decimal ;
+    abi:hasVariance "0.00"^^xsd:decimal ;
+    abi:hasPerformedBy <http://ontology.naas.ai/abi/Person#OfficeManager> ;
+    abi:hasVerifiedBy <http://ontology.naas.ai/abi/Person#FinanceManager> ;
+    abi:hasStatus "Balanced" ;
+    abi:hasNotes "All transactions reconciled successfully" .
+
+# Petty Cash Transaction
+<http://ontology.naas.ai/abi/Transaction#OfficeSuppliesPettyCash> a abi:Transaction ;
+    abi:hasTransactionMethod abi:CashMethod ;
+    abi:hasTransactionType abi:PhysicalCashPayment ;
+    abi:hasTransactionStatus abi:Completed ;
+    abi:hasTransactionDate "2024-02-20T11:15:00Z"^^xsd:dateTime ;
+    abi:hasAmount "75.50"^^xsd:decimal ;
+    abi:hasCurrency "EUR" ;
+    abi:hasReference "PETTY-2024-015" ;
+    abi:hasCashRegister <http://ontology.naas.ai/abi/CashRegister#MainOffice> ;
+    abi:hasReceiptNumber "PET-2024-015" ;
+    abi:hasCategory "Office Supplies" ;
+    abi:hasApprovedBy <http://ontology.naas.ai/abi/Person#OfficeManager> ;
+    abi:hasReceiptImage <http://ontology.naas.ai/abi/Asset#Receipt20240220> . 
