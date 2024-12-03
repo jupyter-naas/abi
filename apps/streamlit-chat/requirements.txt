@@ -1,6 +1,0 @@
-langchain==0.1.17
-openai==1.26.0
-langchain_openai==0.1.6
-neo4j-driver==5.2.1
-streamlit==1.34.0
-naas-python

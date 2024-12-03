@@ -1,6 +1,0 @@
-{
-    "python.defaultInterpreterPath": ".abi-config/bin/python",
-    "conventionalCommits.scopes": [
-        "CI/CD"
-    ]
-}
