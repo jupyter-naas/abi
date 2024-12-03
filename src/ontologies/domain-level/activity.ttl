@@ -1,0 +1,67 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Activity Class Definition
+abi:Activity a owl:Class ;
+    rdfs:label "Activity"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    skos:definition "A planned business activity with associated timeline and context" .
+
+# Properties
+abi:hasScenario a owl:DatatypeProperty ;
+    rdfs:label "has scenario"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range xsd:string .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:label "has created date"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range xsd:dateTime .
+
+abi:hasDueDate a owl:DatatypeProperty ;
+    rdfs:label "has due date"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range xsd:dateTime .
+
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:label "has title"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range xsd:string .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:label "has description"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range xsd:string .
+
+# Object Properties
+abi:relatedToDeal a owl:ObjectProperty ;
+    rdfs:label "related to deal"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Deal .
+
+abi:relatedToContact a owl:ObjectProperty ;
+    rdfs:label "related to contact"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Contact .
+
+abi:relatedToOrganization a owl:ObjectProperty ;
+    rdfs:label "related to organization"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Organization .
+
+# Activity Instance Example
+<http://ontology.naas.ai/abi/Activity#KristenPhillipsFirstMessage> a abi:Activity ;
+    abi:hasScenario "W04-2024" ;
+    abi:hasCreatedDate "2024-01-26"^^xsd:date ;
+    abi:hasDueDate "2024-01-29"^^xsd:date ;
+    abi:hasTitle "Send first message on LinkedIn to connect" ;
+    abi:hasDescription "Hi Kristen, I noticed that you've been engaging..." ;
+    abi:relatedToDeal <http://ontology.naas.ai/abi/Deal#75> ;
+    abi:relatedToContact <http://ontology.naas.ai/abi/Contact#91> ;
+    abi:relatedToOrganization <http://ontology.naas.ai/abi/Organization#Redkite> . 

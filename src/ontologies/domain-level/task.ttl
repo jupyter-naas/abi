@@ -1,0 +1,110 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+# Task Class Definition
+abi:Task a owl:Class ;
+    rdfs:label "Task"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    skos:definition "A defined unit of work with timeline, ownership and metrics" .
+
+# Properties
+abi:hasScenario a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:string .
+
+abi:hasSource a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:string .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:date .
+
+abi:hasDueDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:date .
+
+abi:hasTaskID a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:integer .
+
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:string .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:string .
+
+abi:relatedToConversation a owl:ObjectProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range abi:Conversation .
+
+abi:relatedToProject a owl:ObjectProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range abi:Project .
+
+abi:relatedToClient a owl:ObjectProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range abi:Organization .
+
+abi:hasAssignee a owl:ObjectProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range abi:Person .
+
+abi:hasEstimate a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:decimal .
+
+abi:hasActual a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:decimal .
+
+abi:hasUnit a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:string .
+
+abi:hasVariance a owl:DatatypeProperty ;
+    rdfs:domain abi:Task ;
+    rdfs:range xsd:decimal .
+
+# Example Task Instance
+<http://ontology.naas.ai/abi/Task#17> a abi:Task ;
+    abi:hasScenario "W04-2024" ;
+    abi:hasSource "Google Meet" ;
+    abi:hasCreatedDate "2024-01-25"^^xsd:date ;
+    abi:hasDueDate "2024-01-27"^^xsd:date ;
+    abi:hasTaskID 17 ;
+    abi:hasTitle "Review project progress" ;
+    abi:hasDescription "Review project progress" ;
+    abi:relatedToConversation <http://ontology.naas.ai/abi/Conversation#11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny> ;
+    abi:relatedToProject <http://ontology.naas.ai/abi/Project#Operations> ;
+    abi:relatedToClient <http://ontology.naas.ai/abi/Organization#Naas> ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/Person#Abi> ;
+    abi:hasEstimate "3.00"^^xsd:decimal ;
+    abi:hasActual "3.95"^^xsd:decimal ;
+    abi:hasUnit "hours" ;
+    abi:hasVariance "-0.95"^^xsd:decimal .
+
+# Additional Task Instance
+<http://ontology.naas.ai/abi/Task#14> a abi:Task ;
+    abi:hasScenario "W04-2024" ;
+    abi:hasSource "Google Meet" ;
+    abi:hasCreatedDate "2024-01-25"^^xsd:date ;
+    abi:hasDueDate "2024-01-30"^^xsd:date ;
+    abi:hasTaskID 14 ;
+    abi:hasTitle "Brainstorm new ideas" ;
+    abi:hasDescription "Brainstorm new ideas" ;
+    abi:relatedToConversation <http://ontology.naas.ai/abi/Conversation#11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny> ;
+    abi:relatedToProject <http://ontology.naas.ai/abi/Project#Content> ;
+    abi:relatedToClient <http://ontology.naas.ai/abi/Organization#Naas> ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/Person#Abi> ;
+    abi:hasEstimate "3.00"^^xsd:decimal ;
+    abi:hasActual "3.95"^^xsd:decimal ;
+    abi:hasUnit "hours" ;
+    abi:hasVariance "-0.95"^^xsd:decimal . 

@@ -1,0 +1,60 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Idea Class Definition
+abi:Idea a owl:Class ;
+    rdfs:label "Idea"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;  # Generically dependent continuant
+    skos:definition "A concept or thought generated from content that could be developed into content"@en .
+
+# Idea Properties
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:label "has title"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:label "has description"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
+
+abi:generatedFrom a owl:ObjectProperty ;
+    rdfs:label "generated from"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range abi:Post .
+
+abi:hasTopic a owl:DatatypeProperty ;
+    rdfs:label "has topic"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
+
+# Idea Instances
+<http://ontology.naas.ai/abi/Idea#BuildingBridges> a abi:Idea ;
+    rdfs:label "Building Bridges: A French Startups Journey" ;
+    abi:hasDescription """This article will delve into the unique challenges and triumphs of building a startup in France, with a focus on the experiences of Jeremy Ravenel and his team. The content will be informative and engaging, aiming to inspire other entrepreneurs and startup enthusiasts.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7156331037667565568> ;
+    abi:hasTopic "Startups" , "French Language" , "Product Development" .
+
+<http://ontology.naas.ai/abi/Idea#AICodeProduction> a abi:Idea ;
+    rdfs:label "The Pros and Cons of Generative AI in Code Production: A Deep Dive" ;
+    abi:hasDescription """This article could explore the benefits of using generative AI in code production, such as increased efficiency and reduced human error, while also discussing the potential pitfalls, such as the risk of blindly copying and pasting code without fully understanding it.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7156278144277073922> ;
+    abi:hasTopic "Generative AI" , "Code Production" , "Accountability in Coding" .
+
+<http://ontology.naas.ai/abi/Idea#NotebookTransition> a abi:Idea ;
+    rdfs:label "The Transition from Exploratory to Operational Notebooks" ;
+    abi:hasDescription """This content will delve into the process of transitioning from exploratory to operational notebooks, highlighting the benefits of this shift and providing a step-by-step guide on how to make this transition effectively using the Naas template.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7155915766783967235> ;
+    abi:hasTopic "Data Science" , "Artificial Intelligence" , "Open Source Software" .
+
+<http://ontology.naas.ai/abi/Idea#DataBusinessTech> a abi:Idea ;
+    rdfs:label "The Intersection of Data, Business, and Tech: A Personal Perspective" ;
+    abi:hasDescription """An article that delves into Jeremy Ravenels experiences and insights on the convergence of data, business, and technology. It could include anecdotes, lessons learned, and advice for others navigating this intersection.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7155889078645702658> ;
+    abi:hasTopic "Data Management" , "Business Strategy" , "Technology Integration" .

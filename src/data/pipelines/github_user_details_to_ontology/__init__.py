@@ -1,0 +1,1 @@
+from src.data.pipelines.github_user_details_to_ontology.github_user_details_pipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration

@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "abi"
+version = "0.1.0"
+description = "Abi framework allowing you to build your AI system."
+authors = ["Maxime Jublou <maxime@naas.ai>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+rdflib = "^7.1.1"
+langgraph = "^0.2.53"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
