@@ -79,7 +79,7 @@ class GithubIntegration(Integration):
         """Get an issue from a repository."""
         return self._make_request("GET", f"/repos/{repo_name}/issues/{issue_id}")
 
-    def get_issues(self, repo_name: str, state: str = "open") -> List[Dict]:
+    def get_issues(self, repo_name: str, state: str = "all") -> List[Dict]:
         """Get issues from a repository."""
         return self._make_request("GET", f"/repos/{repo_name}/issues?state={state}")
 
