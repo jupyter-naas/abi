@@ -101,20 +101,6 @@ class NaasIntegration(Integration):
         """Delete a plugin."""
         return self._make_request("DELETE", f"/workspace/{workspace_id}/plugin/{plugin_id}")
 
-    def duplicate_plugin(self, workspace_id: str, plugin_id: str) -> Dict:
-        """Duplicate an existing plugin."""
-        plugin = self.get_plugin(workspace_id, plugin_id)
-        payload = json.loads(plugin['workspace_plugin']['payload'])
-        
-        date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        date = f'{date}-utc'
-        
-        payload['id'] = f"{payload['id']} ({date})"
-        payload['name'] = f"{payload['name']} ({date})"
-        payload['slug'] = f"{payload['slug']}-{date}"
-        
-        return self.create_plugin(workspace_id, payload)
-
     # Ontology methods
     def create_ontology(self, workspace_id: str, label: str, ontology: str, level: str) -> Dict:
         """Create a new ontology."""
@@ -201,10 +187,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         workspace_id: str = Field(..., description="Workspace ID to delete a plugin from")
         plugin_id: str = Field(..., description="ID of the plugin to delete")
 
-    class DuplicatePluginSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to duplicate a plugin in")
-        plugin_id: str = Field(..., description="ID of the plugin to duplicate")
-
     class CreateOntologySchema(BaseModel): 
         workspace_id: str = Field(..., description="Workspace ID to create an ontology in")
         label: str = Field(..., description="Label for the ontology")
@@ -265,18 +247,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             args_schema=UpdatePluginSchema
         ),
         StructuredTool(
-            name="delete_plugin",
-            description="Delete a plugin or assistant from workspace",
-            func=lambda workspace_id, plugin_id: integration.delete_plugin(workspace_id, plugin_id),
-            args_schema=DeletePluginSchema
-        ),
-        StructuredTool(
-            name="duplicate_plugin",
-            description="Duplicate an existing plugin or assistant from workspace",
-            func=lambda workspace_id, plugin_id: integration.duplicate_plugin(workspace_id, plugin_id),
-            args_schema=DuplicatePluginSchema
-        ),
-        StructuredTool(
             name="create_ontology",
             description="Create a new ontology from workspace",
             func=lambda workspace_id, label, ontology, level: integration.create_ontology(workspace_id, label, ontology, level),
@@ -299,11 +269,5 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             description="Update an existing ontology from workspace",
             func=lambda workspace_id, ontology_id, ontology_source, level: integration.update_ontology(workspace_id, ontology_id, ontology_source, level),
             args_schema=UpdateOntologySchema
-        ),
-        StructuredTool(
-            name="delete_ontology",
-            description="Delete an ontology from workspace",
-            func=lambda workspace_id, ontology_id: integration.delete_ontology(workspace_id, ontology_id),
-            args_schema=DeleteOntologySchema
         )
     ]
