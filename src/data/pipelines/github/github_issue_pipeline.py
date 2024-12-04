@@ -30,7 +30,7 @@ class GithubIssuePipeline(Pipeline):
         
         issue_id = issue_data.get("number")
         issue_label = issue_data.get("title")
-        hasDescription = issue_data.get("body").strip()
+        hasDescription = issue_data.get("body")
         hasURL = issue_data.get("html_url")
         hasLabels = ", ".join([x.get("name") for x in issue_data.get("labels")])
 
@@ -40,10 +40,9 @@ class GithubIssuePipeline(Pipeline):
             uid=issue_id,
             label=issue_label,
             is_a=ABI.TaskCompletion,
-            hasDescription=hasDescription,
-            hasURL=hasURL,
-            hasLabels=hasLabels,
-            updateAt=datetime.now()
+            # hasDescription=hasDescription,
+            # hasURL=hasURL,
+            # hasLabels=hasLabels,
         )
 
         # Add GDC: GitHubIssue
@@ -52,9 +51,9 @@ class GithubIssuePipeline(Pipeline):
             uid=issue_id,
             label=issue_label,
             is_a=ABI.GitHubIssue,
-            hasDescription=hasDescription,
-            hasURL=hasURL,
-            hasLabels=hasLabels
+            # hasDescription=hasDescription,
+            # hasURL=hasURL,
+            # hasLabels=hasLabels
         )
         graph.add((task_completion, BFO.BFO_0000058, issue))
         graph.add((issue, BFO.BFO_0000059, task_completion))
