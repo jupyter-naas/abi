@@ -154,9 +154,9 @@ def as_tools(configuration: GithubIntegrationConfiguration):
         body: str = Field(..., description="Content/description of the issue (mandatory)")
         labels: Optional[List[str]] = Field(None, description="List of labels to apply to the issue (optional)")
 
-    class GetIssuesSchema(BaseModel):
-        repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
-        state: str = Field("open", description="State of issues to fetch: 'open', 'closed', or 'all'")
+    # class GetIssuesSchema(BaseModel):
+    #     repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
+    #     state: str = Field("open", description="State of issues to fetch: 'open', 'closed', or 'all'")
 
     class CreatePullRequestSchema(BaseModel):
         repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
@@ -195,12 +195,12 @@ def as_tools(configuration: GithubIntegrationConfiguration):
             func=lambda repo_name, title, body, labels=None: integration.create_issue(repo_name, title, body, labels),
             args_schema=CreateIssueSchema
         ),
-        StructuredTool(
-            name="get_github_issues",
-            description="Get list of issues from a GitHub repository",
-            func=lambda repo_name, state="open": integration.get_issues(repo_name, state),
-            args_schema=GetIssuesSchema
-        ),
+        # StructuredTool(
+        #     name="get_github_issues",
+        #     description="Get list of issues from a GitHub repository",
+        #     func=lambda repo_name, state="open": integration.get_issues(repo_name, state),
+        #     args_schema=GetIssuesSchema
+        # ),
         StructuredTool(
             name="create_github_pull_request",
             description="Create a new pull request in a GitHub repository",
