@@ -42,6 +42,36 @@ workspace_id\r
     abi:hasURL "https://github.com/jupyter-naas/abi/issues/177"@en ;
     bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#177> .
 
+<http://ontology.naas.ai/abi/GitHubIssue#192> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: HubSpot, Contacts, Deals, Companies, Notes Endpoint"@en ;
+    abi:hasDescription """Implement integration with HubSpot to manage contacts, deals, companies, and notes. This will enhance our CRM capabilities and streamline workflows. Please ensure that the following functionalities are included:
+
+1. Fetch and update contacts
+2. Create and manage deals
+3. Retrieve and update company information
+4. Manage notes associated with contacts and deals
+
+Consider using the HubSpot API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:hasLabels "enhancement"@en ;
+    abi:hasURL "https://github.com/jupyter-naas/abi/issues/192"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#192> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#193> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: Stripe Customer Endpoint"@en ;
+    abi:hasDescription """Implement integration with Stripe to manage customer data. This will enhance our payment processing capabilities and streamline customer management. Please ensure that the following functionalities are included:
+
+1. Create and update customer profiles
+2. Retrieve customer information
+3. Manage customer payment methods
+4. Handle customer subscriptions and invoices
+
+Consider using the Stripe API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:hasLabels "enhancement"@en ;
+    abi:hasURL "https://github.com/jupyter-naas/abi/issues/193"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#193> .
+
 <http://ontology.naas.ai/abi/TaskCompletion#177> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Content Engine - Rework Storage & Remove Google Sheets from Core Domain"@en ;
@@ -82,4 +112,36 @@ workspace_id\r
         "2024-12-04T11:40:50.383710"^^xsd:dateTime,
         "2024-12-04T11:40:56.496308"^^xsd:dateTime ;
     bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#177> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#192> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: HubSpot, Contacts, Deals, Companies, Notes Endpoint"@en ;
+    abi:hasDescription """Implement integration with HubSpot to manage contacts, deals, companies, and notes. This will enhance our CRM capabilities and streamline workflows. Please ensure that the following functionalities are included:
+
+1. Fetch and update contacts
+2. Create and manage deals
+3. Retrieve and update company information
+4. Manage notes associated with contacts and deals
+
+Consider using the HubSpot API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:hasLabels "enhancement"@en ;
+    abi:hasURL "https://github.com/jupyter-naas/abi/issues/192"@en ;
+    abi:updateAt "2024-12-04T14:22:13.134871"^^xsd:dateTime ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#192> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#193> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: Stripe Customer Endpoint"@en ;
+    abi:hasDescription """Implement integration with Stripe to manage customer data. This will enhance our payment processing capabilities and streamline customer management. Please ensure that the following functionalities are included:
+
+1. Create and update customer profiles
+2. Retrieve customer information
+3. Manage customer payment methods
+4. Handle customer subscriptions and invoices
+
+Consider using the Stripe API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:hasLabels "enhancement"@en ;
+    abi:hasURL "https://github.com/jupyter-naas/abi/issues/193"@en ;
+    abi:updateAt "2024-12-04T14:22:12.617860"^^xsd:dateTime ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#193> .
 
