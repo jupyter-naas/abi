@@ -47,6 +47,7 @@ class ABIGraph(rdfgraph):
                 self.add((uri, ABI[x], Literal(value, datatype=XSD.integer)))
             else:
                 self.add((uri, ABI[x], Literal(value, datatype=XSD.dateTime)))
+
         logger.debug(f"✅ '{label}' successfully added to ontology ({str(uri)})")
         return uri
     
