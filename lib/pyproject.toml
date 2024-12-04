@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.9"
 rdflib = "^7.1.1"
 langgraph = "^0.2.53"
+loguru = "^0.7.2"
 
 [build-system]
 requires = ["poetry-core"]
