@@ -1,0 +1,525 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+rdfs:subClassOf a rdf:Property ;
+	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
+	rdfs:label "subClassOf" ;
+	rdfs:comment "The subject is a subclass of a class." ;
+	rdfs:range rdfs:Class ;
+	rdfs:domain rdfs:Class .
+
+rdfs:subPropertyOf a rdf:Property ;
+	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
+	rdfs:label "subPropertyOf" ;
+	rdfs:comment "The subject is a subproperty of a property." ;
+	rdfs:range rdf:Property ;
+	rdfs:domain rdf:Property .
+
+rdfs:comment a rdf:Property ;
+	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
+	rdfs:label "comment" ;
+	rdfs:comment "A description of the subject resource." ;
+	rdfs:domain rdfs:Resource ;
+	rdfs:range rdfs:Literal .
+
+rdfs:label a rdf:Property ;
+	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
+	rdfs:label "label" ;
+	rdfs:comment "A human-readable name for the subject." ;
+	rdfs:domain rdfs:Resource ;
+	rdfs:range rdfs:Literal .
+
+rdfs:domain a rdf:Property ;
+	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
+	rdfs:label "domain" ;
+	rdfs:comment "A domain of the subject property." ;
+	rdfs:range rdfs:Class ;
+	rdfs:domain rdf:Property .
+
+rdfs:range a rdf:Property ;
+	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
+	rdfs:label "range" ;
+	rdfs:comment "A range of the subject property." ;
+	rdfs:range rdfs:Class ;
+	rdfs:domain rdf:Property .
+
+###  http://www.w3.org/2004/02/skos/core#definition
+skos:definition rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#example
+skos:example rdf:type owl:AnnotationProperty .
+
+###  https://www.commoncoreontologies.org/ont00001760
+cco:ont00001760 rdf:type owl:AnnotationProperty .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:description a owl:DatatypeProperty ;
+    rdfs:label "description" ;
+    rdfs:range xsd:string .
+
+abi:occupation a owl:DatatypeProperty ;
+    rdfs:label "occupation" ;
+    rdfs:range xsd:string .
+
+abi:summary a owl:DatatypeProperty ;
+    rdfs:label "summary" ;
+    rdfs:range xsd:string .
+
+abi:employeecountrange a owl:DatatypeProperty ;
+    rdfs:label "employee count range" ;
+    rdfs:range xsd:string .
+
+abi:issuer a owl:DatatypeProperty ;
+    rdfs:label "issuer" ;
+    rdfs:range xsd:string .
+
+abi:url a owl:DatatypeProperty ;
+    rdfs:label "url" ;
+    rdfs:range xsd:string .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  http://purl.obolibrary.org/obo/BFO_0000054
+bfo:BFO_0000054 rdf:type owl:ObjectProperty ;
+                owl:inverseOf bfo:BFO_0000055 ;
+                rdfs:domain bfo:BFO_0000017 ;
+                rdfs:range bfo:BFO_0000015 ;
+                dc11:identifier "206-BFO" ;
+                rdfs:label "has realization"@en ;
+                skos:altLabel "realized in"@en ;
+                skos:definition "b has realization c =Def c realizes b"@en ;
+                skos:example "As for realizes"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000055
+bfo:BFO_0000055 rdf:type owl:ObjectProperty ;
+                rdfs:domain bfo:BFO_0000015 ;
+                rdfs:range bfo:BFO_0000017 ;
+                dc11:identifier "059-BFO" ;
+                rdfs:label "realizes"@en ;
+                skos:definition "(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"@en ;
+                skos:example "A balding process realizes a disposition to go bald; a studying process realizes a student role; a process of pumping blood realizes the pumping function of a heart"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000056
+bfo:BFO_0000056 rdf:type owl:ObjectProperty ;
+                owl:inverseOf bfo:BFO_0000057 ;
+                rdfs:domain [ rdf:type owl:Class ;
+                            owl:unionOf ( bfo:BFO_0000020
+                                        bfo:BFO_0000031
+                                        [ owl:intersectionOf ( bfo:BFO_0000004
+                                                            [ rdf:type owl:Class ;
+                                                              owl:complementOf bfo:BFO_0000006
+                                                            ]
+                                                          ) ;
+                                          rdf:type owl:Class
+                                        ]
+                                      )
+                          ] ;
+                rdfs:range bfo:BFO_0000015 ;
+                dc11:identifier "250-BFO" ;
+                rdfs:label "participates in"@en ;
+                skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en ;
+                skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000057
+bfo:BFO_0000057 rdf:type owl:ObjectProperty ;
+                rdfs:domain bfo:BFO_0000015 ;
+                rdfs:range [ rdf:type owl:Class ;
+                           owl:unionOf ( bfo:BFO_0000020
+                                       bfo:BFO_0000031
+                                       [ owl:intersectionOf ( bfo:BFO_0000004
+                                                           [ rdf:type owl:Class ;
+                                                             owl:complementOf bfo:BFO_0000006
+                                                           ]
+                                                         ) ;
+                                         rdf:type owl:Class
+                                       ]
+                                     )
+                         ] ;
+                dc11:identifier "248-BFO" ;
+                rdfs:label "has participant"@en ;
+                skos:definition "p has participant c =Def c participates in p"@en ;
+                skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+
+bfo:BFO_0000058 rdf:type owl:ObjectProperty ;
+    owl:inverseOf bfo:BFO_0000059 ;
+    rdfs:domain bfo:BFO_0000031 ;
+    rdfs:range [ rdf:type owl:Class ;
+                owl:unionOf ( bfo:BFO_0000015
+                            bfo:BFO_0000020
+                            )
+            ] ;
+    dc11:identifier "258-BFO" ;
+    rdfs:label "is concretized by"@en ;
+    skos:definition "c is concretized by b =Def b concretizes c"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000059
+bfo:BFO_0000059 rdf:type owl:ObjectProperty ;
+    rdfs:domain [ rdf:type owl:Class ;
+                owl:unionOf ( bfo:BFO_0000015
+                            bfo:BFO_0000020
+                            )
+            ] ;
+    rdfs:range bfo:BFO_0000031 ;
+    dc11:identifier "256-BFO" ;
+    rdfs:label "concretizes"@en ;
+    skos:definition "b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+
+###  http://purl.obolibrary.org/obo/BFO_0000066
+bfo:BFO_0000066 rdf:type owl:ObjectProperty ;
+    owl:inverseOf bfo:BFO_0000183 ;
+    rdfs:domain [ rdf:type owl:Class ;
+                owl:unionOf ( bfo:BFO_0000015
+                            bfo:BFO_0000035
+                            )
+            ] ;
+    rdfs:range [ rdf:type owl:Class ;
+                owl:unionOf ( bfo:BFO_0000029
+                            bfo:BFO_0000040
+                            )
+            ] ;
+    dc11:identifier "143-BFO" ;
+    rdfs:label "occurs in"@en ;
+    skos:definition "b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"@en ;
+    skos:example "A process of digestion occurs in the interior of an organism; a process of loading artillery rounds into a tank cannon occurs in the interior of the tank"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000222
+bfo:BFO_0000222 rdf:type owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:domain bfo:BFO_0000008 ;
+    rdfs:range  bfo:BFO_0000203 ;
+    dc11:identifier "261-BFO" ;
+    rdfs:label "has first instant"@en ;
+    skos:definition "t has first instant t' =Def t' first instant of t"@en ;
+    skos:example "The first hour of a year has first instant midnight on December 31"@en .
+
+###  http://purl.obolibrary.org/obo/BFO_0000224
+bfo:BFO_0000224 rdf:type owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:domain bfo:BFO_0000008 ;
+    rdfs:range  bfo:BFO_0000203 ;
+    dc11:identifier "215-BFO" ;
+    rdfs:label "has last instant"@en ;
+    skos:definition "t has last instant t' =Def t' last instant of t"@en ;
+    skos:example "The last hour of a year has last instant midnight December 31"@en .
+
+abi:hasConcept a owl:ObjectProperty ;
+    rdfs:label "has concept"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Concept ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to a concept it expresses or discusses."@en ;
+    skos:example "A post about artificial intelligence has machine learning as one of its concepts."@en .
+
+abi:hasFillingDate a owl:ObjectProperty ;
+    rdfs:label "has filling date"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstantWithOffset ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    skos:definition "A relation between a process and the date it was filled or completed."@en ;
+    skos:example "The tax return has a filling date of 2024-04-15."@en .
+
+abi:hasIssueDate a owl:ObjectProperty ;
+    rdfs:label "has issue date"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstantWithOffset ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    skos:definition "A relation between a process and the date it was issued."@en ;
+    skos:example "The passport has an issue date of 2023-01-15."@en .
+
+abi:hasLanguage a owl:ObjectProperty ;
+    rdfs:label "has language"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range abi:Language ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a person and a language they can speak or understand."@en ;
+    skos:example "Jane has the language English."@en .
+
+abi:hasLinkedinPage a owl:ObjectProperty ;
+    rdfs:label "has linkedin page"@en ;
+    rdfs:domain bfo:BFO_0000030 ;
+    rdfs:range abi:LinkedInPage ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    skos:definition "A relation between an entity and its associated LinkedIn page."@en ;
+    skos:example "John has a LinkedIn page at linkedin.com/in/john-doe."@en .
+
+abi:hasMetric a owl:ObjectProperty ;
+    rdfs:label "has metric"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:PostMetric ;
+    rdfs:subPropertyOf bfo:BFO_0000051 .
+
+abi:hasObjective a owl:ObjectProperty ;
+    rdfs:label "has objective"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Objective ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to its intended goal or purpose."@en ;
+    skos:example "A post announcing a product launch has increasing brand awareness as its objective."@en .
+
+abi:hasPublicationDate a owl:ObjectProperty ;
+    rdfs:label "has publication date"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstantWithOffset ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    skos:definition "A relation between a process and the date it was published."@en ;
+    skos:example "The research paper has a publication date of 2024-03-01."@en .
+
+abi:hasSentiment a owl:ObjectProperty ;
+    rdfs:label "has sentiment"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Sentiment ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to its sentiment"@en .
+
+abi:hasSkill a owl:ObjectProperty ;
+    rdfs:label "has skill"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range abi:ProfessionalSkills ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a person and a professional skill they possess."@en ;
+    skos:example "John has the skill to play the piano."@en .
+
+abi:hasTarget a owl:ObjectProperty ;
+    rdfs:label "has target"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Target ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to its intended audience or subject."@en ;
+    skos:example "A LinkedIn post about new job opportunities has software developers as its target."@en .
+
+abi:isLanguageOf a owl:ObjectProperty ;
+    rdfs:label "is language of"@en ;
+    rdfs:domain abi:Language ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a language and the person who can speak or understand it."@en ;
+    skos:example "English is a language of Jane."@en .
+
+abi:isSkillOf a owl:ObjectProperty ;
+    rdfs:label "is skill of"@en ;
+    rdfs:domain abi:ProfessionalSkills ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a professional skill and the person who possesses it."@en ;
+    skos:example "Playing the piano is a skill of John."@en .
+
+#################################################################
+#    Classes
+#################################################################
+
+###  https://www.commoncoreontologies.org/ont00000181
+cco:ont00000181 rdf:type owl:Class ;
+                 rdfs:subClassOf cco:ont00000089 ;
+                 rdfs:label "Language Skill"@en ;
+                 skos:definition "A Skill that is realized by an Act which is prescribed by a Language."@en ;
+                 cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+###  https://www.commoncoreontologies.org/ont00000408
+cco:ont00000408 rdf:type owl:Class ;
+                 rdfs:subClassOf cco:ont00001180 ,
+                                 [ rdf:type owl:Restriction ;
+                                   owl:onProperty obo:BFO_0000176 ;
+                                   owl:someValuesFrom cco:ont00001335
+                                 ] ;
+                 rdfs:label "Government Organization"@en ;
+                 skos:definition "An Organization that is part of a Government and is responsible for the oversight or administration of specific governmental functions."@en ;
+                 cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+
+###  https://www.commoncoreontologies.org/ont00000443
+cco:ont00000443 rdf:type owl:Class ;
+                 owl:equivalentClass [ owl:intersectionOf ( cco:ont00001180
+                                                            [ rdf:type owl:Restriction ;
+                                                              owl:onProperty obo:BFO_0000196 ;
+                                                              owl:someValuesFrom cco:ont00000485
+                                                            ]
+                                                          ) ;
+                                       rdf:type owl:Class
+                                     ] ;
+                 rdfs:subClassOf cco:ont00001180 ;
+                 rdfs:label "Commercial Organization"@en ;
+                 skos:definition "An Organization that is the bearer of a Commercial Role and whose primary objective is to make a profit from the provision of goods or services."@en ;
+                 cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+###  https://www.commoncoreontologies.org/ont00000564
+cco:ont00000564 rdf:type owl:Class ;
+                 rdfs:subClassOf cco:ont00001180 ;
+                 rdfs:label "Educational Organization"@en ;
+                 skos:definition "An Organization whose primary purpose is to provide training or otherwise facilitate learning or the acquisition of knowledge, Skills, values, beliefs, or habits."@en ;
+                 cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Education&oldid=1064011752"^^xsd:anyURI ;
+                 cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+###  https://www.commoncoreontologies.org/ont00001302
+cco:ont00001302 rdf:type owl:Class ;
+                 owl:equivalentClass [ owl:intersectionOf ( cco:ont00001180
+                                                            [ rdf:type owl:Restriction ;
+                                                              owl:onProperty obo:BFO_0000196 ;
+                                                              owl:someValuesFrom cco:ont00000173
+                                                            ]
+                                                          ) ;
+                                       rdf:type owl:Class
+                                     ] ;
+                 rdfs:subClassOf cco:ont00001180 ;
+                 rdfs:label "Civil Organization"@en ;
+                 skos:definition "An Organization that is not commercial or military and is the bearer of a Civilian Role."@en ;
+                 cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+###  https://www.commoncoreontologies.org/ont00001226
+cco:ont00001226 rdf:type owl:Class ;
+                 rdfs:subClassOf cco:ont00000433 ;
+                 rdfs:label "Act of Employment"@en ;
+                 skos:definition "An Act of Association wherein an Organization assigns a set of activities to some Person to be performed in exchange for financial compensation."@en ;
+                 cco:ont00001760 "https://www.commoncoreontologies.org/EventOntology"^^xsd:anyURI .
+
+abi:ActOfBeingCertified a owl:Class ;
+    rdfs:label "Act Of Being Certified"@en ;
+    rdfs:subClassOf cco:ont00001374 ;
+    skos:definition "The act of obtaining a license or certification."@en ;
+    skos:example "A doctor completing their medical board certification exam."@en .
+
+abi:ActOfBeingHonored a owl:Class ;
+    rdfs:label "Act Of Being Honored"@en ;
+    rdfs:subClassOf cco:ont00000123 ;
+    skos:definition "A process that involves an individual or group receiving recognition, accolades, or awards for their achievements or excellence."@en ;
+    skos:example "The ceremony where John was awarded the Nobel Prize; the event where Jane received the Employee of the Month award."@en .
+
+abi:ActOfCreatingPatent a owl:Class ;
+    rdfs:label "Act Of Creating Patent"@en ;
+    rdfs:subClassOf cco:ont00001374 ;
+    skos:definition "A process involving the activities required to invent, document, file, and obtain a patent for a novel invention or discovery."@en ;
+    skos:example "An engineer developing a new technology, documenting the invention, and filing a patent application."@en .
+
+abi:ActOfParticipatinginProject a owl:Class ;
+    rdfs:label "Act Of Participating in Project"@en ;
+    rdfs:subClassOf cco:ont00000433 ;
+    skos:definition "A process where an individual or entity actively engages in a project, contributing to its objectives and outcomes."@en ;
+    skos:example "Researcher contributing to a scientific study by collecting data and analyzing results."@en .
+
+abi:ActOfPostingonLinkedIn a owl:Class ;
+    rdfs:label "Act Of Posting on LinkedIn"@en ;
+    rdfs:subClassOf cco:ont00000517 ;
+    skos:definition "A process of creating and publishing content on the LinkedIn platform."@en ;
+    skos:example "When a user composes a post about their recent job promotion and shares it with their professional network on the LinkedIn platform."@en .
+
+abi:ActOfPublishing a owl:Class ;
+    rdfs:label "Act Of Publishing"@en ;
+    rdfs:subClassOf cco:ont00000356 ;
+    skos:definition "The act of publishing articles, books, or other works."@en ;
+    skos:example "An author releasing a new book through a publishing house"@en .
+
+abi:ActOfStudying a owl:Class ;
+    rdfs:label "Act Of Studying"@en ;
+    rdfs:subClassOf cco:ont00000687 ;
+    skos:definition "The act of studying at an educational institution."@en ;
+    skos:example "Jane studying biology at Harvard University"@en .
+
+abi:Cause a owl:Class ;
+    rdfs:label "Cause"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A type of role that focuses on a specific area of interest or activity for social, cultural, or environmental improvement."@en ;
+    skos:example "Environmental conservation cause."@en .
+
+abi:ContentCreationRole a owl:Class ;
+    rdfs:label "Content Creation Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that exists because an individual or organization is involved in the creation of content."@en ;
+    skos:example "A blogger writing articles for a website."@en .
+
+abi:Country a owl:Class ;
+    rdfs:label "Country"@en ;
+    rdfs:subClassOf cco:ont00000472 ;
+    skos:definition "A Geospatial Region that is defined by political and administrative boundaries, serving as the primary subdivision of the world into distinct geographic and governmental units."@en ;
+    skos:example "France"@en .
+
+abi:Course a owl:Class ;
+    rdfs:label "Course"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A generically dependent continuant representing the content of a course of study."@en ;
+    skos:example "Introduction to Computer Science"@en .
+
+abi:EmployeeRange a owl:Class ;
+    rdfs:label "Employee Range"@en ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    skos:definition "A specific range or number of employees within an organization or company."@en ;
+    skos:example "50-100 employees in a medium-sized business."@en .
+
+abi:Honor a owl:Class ;
+    rdfs:label "Honor"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A generically dependent continuant representing recognition or accolades."@en ;
+    skos:example "Nobel Prize in Literature"@en .
+
+abi:Industry a owl:Class ;
+    rdfs:label "Industry"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A type of role that focuses on a specific sector of economic activity."@en ;
+    skos:example "The technology industry."@en .
+
+abi:LanguageProficiencyLevel a owl:Class ;
+    rdfs:label "Language Proficiency Level"@en ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    skos:definition "A quality that indicates the degree of competence or skill in a particular language."@en ;
+    skos:example "Fluent in Spanish (C2 level)."@en .
+
+abi:Location a owl:Class ;
+    rdfs:label "Location"@en ;
+    rdfs:subClassOf cco:ont00000224 ;
+    skos:definition "A Populated Place characterized by a dense population, significant infrastructure, and serving as a central hub for economic, cultural, and political activities within a region."@en ;
+    skos:example "New York City"@en .
+
+abi:Patent a owl:Class ;
+    rdfs:label "Patent"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A legal document granting exclusive rights to an inventor or assignee."@en ;
+    skos:example "A patent for a new smartphone design"@en .
+
+abi:ProfessionalRole a owl:Class ;
+    rdfs:label "Professional Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that an individual occupies in a professional context."@en ;
+    skos:example "The role of a doctor in a hospital."@en .
+
+abi:Publisher a owl:Class ;
+    rdfs:label "Publisher"@en ;
+    rdfs:subClassOf cco:ont00001017 ;
+    skos:definition "A material entity responsible for producing and distributing publications."@en ;
+    skos:example "Penguin Random House publishing company."@en .
+
+abi:TimeInterval a owl:Class ;
+    rdfs:label "Time Interval"@en ;
+    rdfs:subClassOf bfo:BFO_0000202 ;
+    skos:definition "A subclass of temporal interval with specific date representation."@en ;
+    skos:example "2023-08_Current"@en .
+
+abi:UniversityRole a owl:Class ;
+    rdfs:label "University Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that an individual occupies within the context of a university or academic institution."@en ;
+    skos:example "The role of a professor at a university."@en .
+
+abi:VolunteeringRole a owl:Class ;
+    rdfs:label "Volunteering Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that exists because an individual is volunteering for various activities or services."@en ;
+    skos:example "A volunteer coach for a youth sports team."@en .
