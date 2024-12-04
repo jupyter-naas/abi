@@ -17,7 +17,7 @@ def load_tools() -> List[BaseTool]:
     
     # Get all python files in current directory
     for filename in os.listdir(current_dir):
-        if filename.endswith('.py') and filename != '__init__.py':
+        if filename.endswith('.py') and filename != '__init__.py' and filename != '__workflow_template__.py':
             # Convert filename to module name
             module_name = filename[:-3]
             

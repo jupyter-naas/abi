@@ -15,6 +15,7 @@ fastapi = "^0.115.5"
 uvicorn = {extras = ["standard"], version = "^0.32.1"}
 replicate = "^1.0.4"
 pydash = "^8.0.4"
+pandas = "^2.2.3"
 
 
 [tool.poetry.group.terminal-agent.dependencies]
