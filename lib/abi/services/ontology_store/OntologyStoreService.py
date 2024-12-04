@@ -1,12 +1,13 @@
-from abi.services.ontology_store.OntologyPorts import IOntologyStore, IOntologyStorePort
+from lib.abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, IOntologyStorePort, OntologyNotFoundError
 from rdflib import Graph, BNode
 from typing import List
 
-class OntologyStoreService(IOntologyStore):
+class OntologyStoreService(IOntologyStoreService):
     def __init__(self, ontology_adaptor: IOntologyStorePort):
         self.__ontology_adaptor = ontology_adaptor
 
     def __filter_ontology(self, ontology: Graph) -> Graph:
+        return ontology
         # Create a new graph containing only named individuals and their properties
         filtered_graph = Graph()
         
@@ -25,13 +26,16 @@ class OntologyStoreService(IOntologyStore):
         self.__ontology_adaptor.store(name, filtered_ontology)
         
     def insert(self, name: str, ontology: Graph, individual_filter: bool = True):
-        existing_ontology = self.get(name)
+        try:
+            existing_ontology = self.get(name)
+        except OntologyNotFoundError:
+            existing_ontology = Graph()
         
         filtered_inserted_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
         
         merged_ontology = existing_ontology + filtered_inserted_ontology
         
-        self.store(name, merged_ontology)
+        self.store(name, merged_ontology, individual_filter=False)
 
     def list_ontologies(self) -> List[str]:
         return self.__ontology_adaptor.list_ontologies()
