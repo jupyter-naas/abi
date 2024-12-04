@@ -25,7 +25,6 @@ ABI Framework is open-source and available for non-production use under the [AGP
 ### Getting Started
 
 1. **Prerequisites**
-   - Install [Poetry](https://python-poetry.org/docs/#installation) for Python dependency management
    - Docker Desktop 
 
 2. **Clone the Repository**
@@ -42,7 +41,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
 4. **Create Docker Container & Start Chatting**
    ```bash
-   make
+   make chat
    ```
 
 ### Managing Dependencies
@@ -50,7 +49,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
 To add a new Python dependency to the project:
 
 ```bash
-poetry add <library-name>
+make add dep=<library-name>
 ```
 
 This will automatically:
