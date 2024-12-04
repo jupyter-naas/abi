@@ -1,0 +1,85 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#177> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Content Engine - Rework Storage & Remove Google Sheets from Core Domain"@en ;
+    abi:hasDescription """```\r
+workspace_id\r
+- storage_name\r
+\r
+-- datalake\r
+--- entities\r
+---- jeremy_ravenel\r
+--- posts\r
+---- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c\r
+----- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
+----- 20240705114800_100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
+--- concept\r
+---- concept1\r
+--- post_concept\r
+---- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c_concept1\r
+--- reactions\r
+---- 871a614923b98110a78cd556ab15e96d26b632c5e685e302d316fb6588029919\r
+--- comments\r
+--- shares\r
+--- people\r
+--- organizations\r
+\r
+-- views\r
+--- jeremy_ravenel\r
+---- content\r
+----- jeremy_ravenel_content.json\r
+----- 20240705114800_content.json\r
+---- interactions\r
+---- people\r
+---- organizations\r
+```"""@en ;
+    abi:hasLabels "enhancement"@en ;
+    abi:hasURL "https://github.com/jupyter-naas/abi/issues/177"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#177> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#177> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Content Engine - Rework Storage & Remove Google Sheets from Core Domain"@en ;
+    abi:hasDescription """```\r
+workspace_id\r
+- storage_name\r
+\r
+-- datalake\r
+--- entities\r
+---- jeremy_ravenel\r
+--- posts\r
+---- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c\r
+----- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
+----- 20240705114800_100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
+--- concept\r
+---- concept1\r
+--- post_concept\r
+---- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c_concept1\r
+--- reactions\r
+---- 871a614923b98110a78cd556ab15e96d26b632c5e685e302d316fb6588029919\r
+--- comments\r
+--- shares\r
+--- people\r
+--- organizations\r
+\r
+-- views\r
+--- jeremy_ravenel\r
+---- content\r
+----- jeremy_ravenel_content.json\r
+----- 20240705114800_content.json\r
+---- interactions\r
+---- people\r
+---- organizations\r
+```"""@en ;
+    abi:hasLabels "enhancement"@en ;
+    abi:hasURL "https://github.com/jupyter-naas/abi/issues/177"@en ;
+    abi:updateAt "2024-12-04T11:40:43.268780"^^xsd:dateTime,
+        "2024-12-04T11:40:50.383710"^^xsd:dateTime,
+        "2024-12-04T11:40:56.496308"^^xsd:dateTime ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#177> .
+

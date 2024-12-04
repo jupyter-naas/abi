@@ -1,4 +1,4 @@
-from abi.services.ontology_store.OntologyPorts import IOntologyStorePort, OntologyNotFoundError
+from lib.abi.services.ontology_store.OntologyStorePorts import IOntologyStorePort, OntologyNotFoundError
 
 from rdflib import Graph
 from typing import List
@@ -31,6 +31,17 @@ class OntologyStoreService__SecondaryAdaptor__Filesystem(IOntologyStorePort):
         # Create directory if it doesn't exist
         os.makedirs(self.__store_path, exist_ok=True)
         
+        # Get existing prefixes if file exists
+        existing_prefixes = {}
+        if os.path.exists(file_path):
+            existing_graph = Graph()
+            existing_graph.parse(file_path, format='turtle')
+            existing_prefixes = dict(existing_graph.namespaces())
+            
+        # Update graph with existing prefixes
+        for prefix, namespace in existing_prefixes.items():
+            ontology.bind(prefix, namespace)
+            
         # Serialize and save the graph
         ontology.serialize(destination=file_path, format='turtle')
     
