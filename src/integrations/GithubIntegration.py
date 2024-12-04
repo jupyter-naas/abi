@@ -75,6 +75,10 @@ class GithubIntegration(Integration):
         }
         return self._make_request("POST", f"/repos/{repo_name}/issues", data)
 
+    def get_issue(self, repo_name: str, issue_id: str) -> Dict:
+        """Get an issue from a repository."""
+        return self._make_request("GET", f"/repos/{repo_name}/issues/{issue_id}")
+
     def get_issues(self, repo_name: str, state: str = "open") -> List[Dict]:
         """Get issues from a repository."""
         return self._make_request("GET", f"/repos/{repo_name}/issues?state={state}")
