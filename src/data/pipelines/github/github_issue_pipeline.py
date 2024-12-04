@@ -10,13 +10,13 @@ from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
 from src import secret
 
 @dataclass
-class GithubIssuesPipelineConfiguration(PipelineConfiguration):
+class GithubIssuePipelineConfiguration(PipelineConfiguration):
     github_repository: str
     github_issue_id: str
     ontology_store_name: str = "github"
 
-class GithubIssuesPipeline(Pipeline):
-    def __init__(self, integration: GithubIntegration, ontology_store: IOntologyStoreService, configuration: GithubIssuesPipelineConfiguration):
+class GithubIssuePipeline(Pipeline):
+    def __init__(self, integration: GithubIntegration, ontology_store: IOntologyStoreService, configuration: GithubIssuePipelineConfiguration):
         super().__init__([integration], configuration)
         
         self.__integration = integration
@@ -68,10 +68,10 @@ if __name__ == "__main__":
     from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
     from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
     
-    graph = GithubIssuesPipeline(
+    graph = GithubIssuePipeline(
         integration=GithubIntegration(GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))),
         ontology_store=OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path="src/data/ontology-store")),
-        configuration=GithubIssuesPipelineConfiguration(
+        configuration=GithubIssuePipelineConfiguration(
             github_repository="jupyter-naas/abi",
             github_issue_id="177"
         )
