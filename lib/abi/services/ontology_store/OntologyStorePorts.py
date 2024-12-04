@@ -39,7 +39,7 @@ class IOntologyStorePort(ABC):
     def list_ontologies(self) -> List[str]:
         pass
 
-class IOntologyStore(ABC):
+class IOntologyStoreService(ABC):
     
     __ontology_adaptor: IOntologyStorePort
     
