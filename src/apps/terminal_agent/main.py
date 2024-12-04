@@ -18,7 +18,7 @@ from src.apps.terminal_agent.prompts import SUPER_ASSISTANT_INSTRUCTIONS
 def create_agent():
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     
-    from src.integrations import GithubIntegration, PerplexityIntegration, LinkedinIntegration, ReplicateIntegration, NaasIntegration, AiaIntegration
+    from src.integrations import GithubIntegration, PerplexityIntegration, LinkedinIntegration, ReplicateIntegration, NaasIntegration, AiaIntegration, HubSpotIntegration, StripeIntegration
     from src.workflows import tools as workflow_tools
     
     tools = [] + workflow_tools
@@ -48,6 +48,14 @@ def create_agent():
         tools += AiaIntegration.as_tools(AiaIntegration.AiaIntegrationConfiguration(
             api_key=naas_key
         ))
+
+    # Add HubSpot integration if access token is present
+    if hubspot_token := secret.get('HUBSPOT_ACCESS_TOKEN'):
+        tools += HubSpotIntegration.as_tools(HubSpotIntegration.HubSpotIntegrationConfiguration(access_token=hubspot_token))
+
+    # Add Stripe integration if API key is present
+    if stripe_key := secret.get('STRIPE_API_KEY'):
+        tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
             
     return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS))
 
