@@ -25,7 +25,7 @@ class GithubIssuesPipeline(Pipeline):
         
     def run(self) -> Graph:
         # Get all issues from the repository
-        issues_data = self.__integration.get_issues(self.__configuration.github_repository)
+        issues_data = self.__integration.get_issues(self.__configuration.github_repository, state="all")
         
         # Create a combined graph
         combined_graph = ABIGraph()
