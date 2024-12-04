@@ -1,4 +1,4 @@
-from src.data.pipelines.github_user_details_to_ontology import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
+from src.data.pipelines.github.github_user_details_pipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from abi.workflow import Workflow, WorkflowConfiguration
 from dataclasses import dataclass
