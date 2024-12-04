@@ -50,12 +50,23 @@ class GithubIssuesPipeline(Pipeline):
 
 # Add this to the if __name__ == "__main__" section for testing
 if __name__ == "__main__":
-    graph = GithubIssuesPipeline(
-        integration=GithubIntegration(GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))),
-        ontology_store=OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path="src/data/ontology-store")),
-        configuration=GithubIssuesPipelineConfiguration(
-            github_repository="jupyter-naas/abi"
-        )
-    ).run()
-    
-    print(graph.serialize(format="turtle"))
+    import click
+
+    @click.command()
+    @click.option('--github_access_token', default=None, help='GitHub access token. If not provided, will use GITHUB_ACCESS_TOKEN from secrets.')
+    @click.option('--github_repository', '--ghr', required=True, help='GitHub repository in format owner/repo')
+    def main(github_access_token, github_repository):
+        # Use provided token or fall back to secret
+        token = github_access_token or secret.get("GITHUB_ACCESS_TOKEN")
+        
+        graph = GithubIssuesPipeline(
+            integration=GithubIntegration(GithubIntegrationConfiguration(access_token=token)),
+            ontology_store=OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path="src/data/ontology-store")),
+            configuration=GithubIssuesPipelineConfiguration(
+                github_repository=github_repository
+            )
+        ).run()
+        
+        print(graph.serialize(format="turtle"))
+
+    main()
