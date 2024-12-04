@@ -260,7 +260,7 @@ class Agent:
         conversation thread. Any subsequent invocations will be processed as part of a
         new conversation context.
         """
-        self.__thread_id += 1
+        self.__state.set_thread_id(self.__state.thread_id + 1)
     
     def __tool_function(self, prompt: str) -> str:
         response = self.invoke(prompt)

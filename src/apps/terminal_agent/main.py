@@ -148,8 +148,14 @@ def run_agent(agent: Agent):
 def run_single():
     agent = create_agent()
     
+    def on_tool_response(message: str):
+        try:
+            print_tool_response(f'\n{message}')
+        except Exception as e:
+            print(e)
+    
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
-    agent.on_tool_response(lambda message: print_tool_response(f'\n{message.content}'))
+    agent.on_tool_response(on_tool_response)
 
     run_agent(agent)
 
