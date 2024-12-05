@@ -64,35 +64,41 @@ skos:example rdf:type owl:AnnotationProperty .
 #    Data properties
 #################################################################
 
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:label "has description" ;
-    rdfs:comment "The description of a continuant." ;
+abi:node_id a owl:DatatypeProperty ;
+    rdfs:label "description" ;
     rdfs:range xsd:string .
 
-abi:hasURL a owl:DatatypeProperty ;
-    rdfs:label "has URL" ;
-    rdfs:comment "The URL associated with a continuant." ;
+abi:description a owl:DatatypeProperty ;
+    rdfs:label "description" ;
     rdfs:range xsd:string .
 
-abi:hasStatus a owl:DatatypeProperty ;
-    rdfs:label "has status" ;
-    rdfs:comment "The current status of a continuant." ;
+abi:description a owl:DatatypeProperty ;
+    rdfs:label "description" ;
     rdfs:range xsd:string .
 
-abi:hasPriority a owl:DatatypeProperty ;
-    rdfs:label "has priority" ;
-    rdfs:comment "The priority level of a continuant." ;
+abi:url a owl:DatatypeProperty ;
+    rdfs:label "HTML URL to access the entity" ;
     rdfs:range xsd:string .
 
-abi:hasLabels a owl:DatatypeProperty ;
-    rdfs:label "has labels" ;
-    rdfs:comment "The labels associated with a continuant." ;
+abi:status a owl:DatatypeProperty ;
+    rdfs:label "status" ;
     rdfs:range xsd:string .
 
-abi:hasDueDate a owl:DatatypeProperty ;
-    rdfs:label "has due date" ;
-    rdfs:comment "The due date of a continuant." ;
-    rdfs:range xsd:date .
+abi:priority a owl:DatatypeProperty ;
+    rdfs:label "priority" ;
+    rdfs:range xsd:string .
+
+abi:labels a owl:DatatypeProperty ;
+    rdfs:label "labels" ;
+    rdfs:range xsd:string .
+
+abi:due_date a owl:DatatypeProperty ;
+    rdfs:label "due date" ;
+    rdfs:range xsd:dateTime .
+
+abi:updated_date a owl:DatatypeProperty ;
+    rdfs:label "updated date" ;
+    rdfs:range xsd:dateTime .
 
 #################################################################
 #    Object Properties
