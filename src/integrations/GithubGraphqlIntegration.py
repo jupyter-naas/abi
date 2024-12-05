@@ -69,12 +69,12 @@ class GithubGraphqlIntegration(Integration):
             if "errors" in result:
                 raise IntegrationConnectionError(f"GraphQL query failed: {result['errors']}")
             
-            return result["data"]
+            return result
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"Github GraphQL API request failed: {str(e)}")
 
-    def find_org_project_node_id(self, organization: str, number: int) -> str:
-        """Find the node ID of an organization project.
+    def get_org_project_node_id(self, organization: str, number: int) -> str:
+        """Get the node ID of an organization project.
         
         Args:
             organization (str): The organization login name
@@ -94,7 +94,7 @@ class GithubGraphqlIntegration(Integration):
         """
         variables = {
             "org": organization,
-            "number": number
+            "number": int(number)
         }
         return self.execute_query(query, variables)
     
@@ -231,8 +231,8 @@ class GithubGraphqlIntegration(Integration):
         }
         return self.execute_query(query, variables)
     
-    def find_project_fields(self, project_id: str):
-        """Find information about project fields in a GitHub Project.
+    def get_project_fields(self, project_id: str):
+        """Get information about project fields in a GitHub Project.
 
         Args:
             project_id (str): The node ID of the GitHub Project
@@ -364,10 +364,11 @@ class GithubGraphqlIntegration(Integration):
 def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
+    from typing import Optional
     
     integration = GithubGraphqlIntegration(configuration)
     
-    class FindOrgProjectNodeIdSchema(BaseModel):
+    class GetOrgProjectNodeIdSchema(BaseModel):
         organization: str = Field(..., description="The organization login name")
         number: int = Field(..., description="The project number")
         
@@ -387,10 +388,10 @@ def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
         
     return [
         StructuredTool(
-            name="find_github_org_project_node_id",
+            name="get_github_org_project_node_id",
             description="Find the node ID of an organization project in GitHub",
-            func=lambda organization, number: integration.find_org_project_node_id(organization, number),
-            args_schema=FindOrgProjectNodeIdSchema
+            func=lambda organization, number: integration.get_org_project_node_id(organization, number),
+            args_schema=GetOrgProjectNodeIdSchema
         ),
         StructuredTool(
             name="get_github_project_item_from_node",
