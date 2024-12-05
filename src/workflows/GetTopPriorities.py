@@ -104,7 +104,7 @@ def main():
 def as_tool():
     from langchain_core.tools import StructuredTool
     
-    def get_top_priorities(max_issues: int = 10):
+    def get_top_priorities():
         configuration = GetTopPrioritiesConfiguration()
         workflow = GetTopPrioritiesWorkflow(configuration)
         return workflow.run()
