@@ -72,10 +72,6 @@ abi:description a owl:DatatypeProperty ;
     rdfs:label "description" ;
     rdfs:range xsd:string .
 
-abi:description a owl:DatatypeProperty ;
-    rdfs:label "description" ;
-    rdfs:range xsd:string .
-
 abi:url a owl:DatatypeProperty ;
     rdfs:label "HTML URL to access the entity" ;
     rdfs:range xsd:string .
@@ -92,9 +88,17 @@ abi:labels a owl:DatatypeProperty ;
     rdfs:label "labels" ;
     rdfs:range xsd:string .
 
+abi:estimate a owl:DatatypeProperty ;
+    rdfs:label "estimate" ;
+    rdfs:range xsd:integer .
+
+abi:state a owl:DatatypeProperty ;
+    rdfs:label "state" ;
+    rdfs:range xsd:string .
+
 abi:due_date a owl:DatatypeProperty ;
     rdfs:label "due date" ;
-    rdfs:range xsd:dateTime .
+    rdfs:range xsd:date .
 
 abi:updated_date a owl:DatatypeProperty ;
     rdfs:label "updated date" ;
