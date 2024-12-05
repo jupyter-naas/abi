@@ -78,8 +78,9 @@ class GetTopPrioritiesWorkflow(Workflow):
                 "assignee": str(task["assignee_label"]) if task["assignee_label"] else None
             }
             # Remove None values for cleaner output
-            task_dict = {k: v for k, v in task_dict.items() if v is not None}
-            formatted_tasks.append(task_dict)
+            if task["due_date"] is not None:
+                task_dict = {k: v for k, v in task_dict.items() if v is not None}
+                formatted_tasks.append(task_dict)
             
         return formatted_tasks
         
