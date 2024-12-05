@@ -361,55 +361,55 @@ class GithubGraphqlIntegration(Integration):
         
         return self.execute_query(update_mutation, variables)
     
-    def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
-        from langchain_core.tools import StructuredTool
-        from pydantic import BaseModel, Field
+def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field
+    
+    integration = GithubGraphqlIntegration(configuration)
+    
+    class FindOrgProjectNodeIdSchema(BaseModel):
+        organization: str = Field(..., description="The organization login name")
+        number: int = Field(..., description="The project number")
         
-        integration = GithubGraphqlIntegration(configuration)
+    class GetProjectItemFromNodeSchema(BaseModel):
+        node_id: str = Field(..., description="The Node ID to look up")
+
+    class GetProjectItemByIdSchema(BaseModel):
+        item_id: str = Field(..., description="The Node ID of the project item")
+
+    class AddIssueToProjectSchema(BaseModel):
+        project_id: str = Field(..., description="The Node ID of the project (ProjectV2)")
+        issue_id: str = Field(..., description="The Node ID of the issue")
+        status_field_id: Optional[str] = Field(None, description="The field ID for status")
+        priority_field_id: Optional[str] = Field(None, description="The field ID for priority")
+        status_option_id: Optional[str] = Field(None, description="The option ID for status")
+        priority_option_id: Optional[str] = Field(None, description="The option ID for priority")
         
-        class FindOrgProjectNodeIdSchema(BaseModel):
-            organization: str = Field(..., description="The organization login name")
-            number: int = Field(..., description="The project number")
-            
-        class GetProjectItemFromNodeSchema(BaseModel):
-            node_id: str = Field(..., description="The Node ID to look up")
-
-        class GetProjectItemByIdSchema(BaseModel):
-            item_id: str = Field(..., description="The Node ID of the project item")
-
-        class AddIssueToProjectSchema(BaseModel):
-            project_id: str = Field(..., description="The Node ID of the project (ProjectV2)")
-            issue_id: str = Field(..., description="The Node ID of the issue")
-            status_field_id: Optional[str] = Field(None, description="The field ID for status")
-            priority_field_id: Optional[str] = Field(None, description="The field ID for priority")
-            status_option_id: Optional[str] = Field(None, description="The option ID for status")
-            priority_option_id: Optional[str] = Field(None, description="The option ID for priority")
-            
-        return [
-            StructuredTool(
-                name="find_github_org_project_node_id",
-                description="Find the node ID of an organization project in GitHub",
-                func=lambda organization, number: integration.find_org_project_node_id(organization, number),
-                args_schema=FindOrgProjectNodeIdSchema
-            ),
-            StructuredTool(
-                name="get_github_project_item_from_node",
-                description="Retrieves a project item ID from a node ID using the GitHub GraphQL API",
-                func=lambda node_id: integration.get_project_item_from_node(node_id),
-                args_schema=GetProjectItemFromNodeSchema
-            ),
-            StructuredTool(
-                name="get_github_project_item_by_id",
-                description="Retrieves a project item using its ID from the GitHub GraphQL API",
-                func=lambda item_id: integration.get_project_item_by_id(item_id),
-                args_schema=GetProjectItemByIdSchema
-            ),
-            StructuredTool(
-                name="add_github_issue_to_project",
-                description="Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields",
-                func=lambda project_id, issue_id, status_field_id, priority_field_id, status_option_id, priority_option_id: integration.add_issue_to_project(project_id, issue_id, status_field_id, priority_field_id, status_option_id, priority_option_id),
-                args_schema=AddIssueToProjectSchema
-            )
-        ]
+    return [
+        StructuredTool(
+            name="find_github_org_project_node_id",
+            description="Find the node ID of an organization project in GitHub",
+            func=lambda organization, number: integration.find_org_project_node_id(organization, number),
+            args_schema=FindOrgProjectNodeIdSchema
+        ),
+        StructuredTool(
+            name="get_github_project_item_from_node",
+            description="Retrieves a project item ID from a node ID using the GitHub GraphQL API",
+            func=lambda node_id: integration.get_project_item_from_node(node_id),
+            args_schema=GetProjectItemFromNodeSchema
+        ),
+        StructuredTool(
+            name="get_github_project_item_by_id",
+            description="Retrieves a project item using its ID from the GitHub GraphQL API",
+            func=lambda item_id: integration.get_project_item_by_id(item_id),
+            args_schema=GetProjectItemByIdSchema
+        ),
+        StructuredTool(
+            name="add_github_issue_to_project",
+            description="Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields",
+            func=lambda project_id, issue_id, status_field_id, priority_field_id, status_option_id, priority_option_id: integration.add_issue_to_project(project_id, issue_id, status_field_id, priority_field_id, status_option_id, priority_option_id),
+            args_schema=AddIssueToProjectSchema
+        )
+    ]
     
     
