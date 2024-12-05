@@ -7,6 +7,9 @@ abi-add: .venv
 add:
 	docker compose run abi poetry add $(dep)
 
+lock:
+	docker compose run abi poetry lock --no-update
+
 sh: .venv
 	docker compose run -it abi bash
 chat: .venv
