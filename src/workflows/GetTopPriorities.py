@@ -42,11 +42,7 @@ class GetTopPrioritiesWorkflow(Workflow):
                 OPTIONAL { ?issue abi:status ?status }
                 OPTIONAL { ?issue abi:priority ?priority }
                 OPTIONAL { ?issue abi:labels ?labels }
-                OPTIONAL { 
-                    ?issue abi:due_date ?due_date .
-                    # Only show issues with due dates between now and end of week
-                    FILTER (?due_date >= NOW() && ?due_date <= (NOW() + "P7D"^^xsd:duration))
-                }
+                OPTIONAL { ?issue abi:due_date ?due_date }
                 OPTIONAL { ?issue abi:updated_date ?updated_date }
                 
                 # Get associated task completion if it exists
@@ -93,7 +89,7 @@ def api():
     
     @app.get("/top-priorities")
     def get_top_priorities():
-        configuration = GetTopPrioritiesConfiguration(jira_token=secret.JIRA_TOKEN)
+        configuration = GetTopPrioritiesConfiguration()
         workflow = GetTopPrioritiesWorkflow(configuration)
         return workflow.run()
     
