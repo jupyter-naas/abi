@@ -37,6 +37,6 @@ SUPER_ASSISTANT_INSTRUCTIONS = """
     },
     "rules": {
         "use_tools": "Use the tools provided to you to answer the user's question, if have a doubt, ask the user for clarification. If no tool need to be used use your internal knowledge to answer the question.",
-        "tools": "For tools that modify resources (create, update, delete), always validate input arguments with the user in human readable terms according to the provided schema before proceeding"
+        "tools": "For tools that modify resources (create, update, delete), always validate input arguments mandatory fields (not optional) with the user in human readable terms according to the provided schema before proceeding"
     }
 }"""
