@@ -283,13 +283,13 @@ class GithubGraphqlIntegration(Integration):
         }
         return self.execute_query(query, variables)
     
-    def add_issue_to_project(self, project_id: str, issue_id: str, status_field_id: str, priority_field_id: str, status_option_id: str, priority_option_id: str) -> dict:
+    def add_issue_to_project(self, project_node_id: str, issue_node_id: str, status_field_id: Optional[str] = None, priority_field_id: Optional[str] = None, status_option_id: Optional[str] = None, priority_option_id: Optional[str] = None) -> dict:
         """
         Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields.
         
         Args:
-            project_id (str): The Node ID of the project (ProjectV2)
-            issue_id (str): The Node ID of the issue
+            project_node_id (str): The Node ID of the project (ProjectV2)
+            issue_node_id (str): The Node ID of the issue
             status_field_id (str): The field ID for status (e.g., "PVTSSF_lADOBESWNM4AKRt3zgGZRV8")
             priority_field_id (str): The field ID for priority (e.g., "PVTSSF_lADOBESWNM4AKRt3zgGac0g")
             status_option_id (str): The option ID for status (e.g., "97363483" for "📥Inbox")
@@ -314,52 +314,53 @@ class GithubGraphqlIntegration(Integration):
 
         # Add issue to project
         variables = {
-            "projectId": project_id,
-            "issueId": issue_id
+            "projectId": project_node_id,
+            "issueId": issue_node_id
         }
         
         data = self.execute_query(add_mutation, variables)
         
         # Get the item ID from the response
         item_id = data["addProjectV2ItemById"]["item"]["id"]
+        return item_id
 
-        # Update fields mutation
-        update_mutation = """
-        mutation UpdateFields($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $priorityFieldId: ID!, $statusOptionId: String!, $priorityOptionId: String!) {
-            updateStatus: updateProjectV2ItemFieldValue(input: {
-                projectId: $projectId
-                itemId: $itemId
-                fieldId: $statusFieldId
-                value: { singleSelectOptionId: $statusOptionId }
-            }) {
-                projectV2Item {
-                    id
-                }
-            }
-            updatePriority: updateProjectV2ItemFieldValue(input: {
-                projectId: $projectId
-                itemId: $itemId
-                fieldId: $priorityFieldId
-                value: { singleSelectOptionId: $priorityOptionId }
-            }) {
-                projectV2Item {
-                    id
-                }
-            }
-        }
-        """
+        # # Update fields mutation
+        # update_mutation = """
+        # mutation UpdateFields($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $priorityFieldId: ID!, $statusOptionId: String!, $priorityOptionId: String!) {
+        #     updateStatus: updateProjectV2ItemFieldValue(input: {
+        #         projectId: $projectId
+        #         itemId: $itemId
+        #         fieldId: $statusFieldId
+        #         value: { singleSelectOptionId: $statusOptionId }
+        #     }) {
+        #         projectV2Item {
+        #             id
+        #         }
+        #     }
+        #     updatePriority: updateProjectV2ItemFieldValue(input: {
+        #         projectId: $projectId
+        #         itemId: $itemId
+        #         fieldId: $priorityFieldId
+        #         value: { singleSelectOptionId: $priorityOptionId }
+        #     }) {
+        #         projectV2Item {
+        #             id
+        #         }
+        #     }
+        # }
+        # """
 
-        # Update the fields
-        variables = {
-            "projectId": project_id,
-            "itemId": item_id,
-            "statusFieldId": status_field_id,
-            "priorityFieldId": priority_field_id,
-            "statusOptionId": status_option_id,
-            "priorityOptionId": priority_option_id
-        }
+        # # Update the fields
+        # variables = {
+        #     "projectId": project_node_id,
+        #     "itemId": item_id,
+        #     # "statusFieldId": status_field_id,
+        #     # "priorityFieldId": priority_field_id,
+        #     # "statusOptionId": status_option_id,
+        #     # "priorityOptionId": priority_option_id
+        # }
         
-        return self.execute_query(update_mutation, variables)
+        # return self.execute_query(update_mutation, variables)
     
 def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
@@ -379,8 +380,8 @@ def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
         item_id: str = Field(..., description="The Node ID of the project item")
 
     class AddIssueToProjectSchema(BaseModel):
-        project_id: str = Field(..., description="The Node ID of the project (ProjectV2)")
-        issue_id: str = Field(..., description="The Node ID of the issue")
+        project_node_id: int = Field(..., description="The Node ID of the project (ProjectV2)")
+        issue_node_id: str = Field(..., description="The Node ID of the issue")
         status_field_id: Optional[str] = Field(None, description="The field ID for status")
         priority_field_id: Optional[str] = Field(None, description="The field ID for priority")
         status_option_id: Optional[str] = Field(None, description="The option ID for status")
@@ -404,13 +405,5 @@ def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
             description="Retrieves a project item using its ID from the GitHub GraphQL API",
             func=lambda item_id: integration.get_project_item_by_id(item_id),
             args_schema=GetProjectItemByIdSchema
-        ),
-        StructuredTool(
-            name="add_github_issue_to_project",
-            description="Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields",
-            func=lambda project_id, issue_id, status_field_id, priority_field_id, status_option_id, priority_option_id: integration.add_issue_to_project(project_id, issue_id, status_field_id, priority_field_id, status_option_id, priority_option_id),
-            args_schema=AddIssueToProjectSchema
         )
     ]
-    
-    

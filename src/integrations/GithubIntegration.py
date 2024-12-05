@@ -189,12 +189,12 @@ def as_tools(configuration: GithubIntegrationConfiguration):
             func=lambda repo_name: integration.get_repository(repo_name),
             args_schema=GetRepositorySchema
         ),
-        StructuredTool(
-            name="create_github_issue",
-            description="Create a new issue in a GitHub repository.",
-            func=lambda repo_name, title, body, labels=None: integration.create_issue(repo_name, title, body, labels),
-            args_schema=CreateIssueSchema
-        ),
+        # StructuredTool(
+        #     name="create_github_issue",
+        #     description="Create a new issue in a GitHub repository.",
+        #     func=lambda repo_name, title, body, labels=None: integration.create_issue(repo_name, title, body, labels),
+        #     args_schema=CreateIssueSchema
+        # ),
         # StructuredTool(
         #     name="get_github_issues",
         #     description="Get list of issues from a GitHub repository",
