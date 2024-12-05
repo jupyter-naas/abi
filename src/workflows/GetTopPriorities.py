@@ -30,29 +30,36 @@ class GetTopPrioritiesWorkflow(Workflow):
             PREFIX bfo: <http://purl.obolibrary.org/obo/> 
             PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
-            SELECT DISTINCT ?issue ?title ?description ?url ?status ?priority ?labels ?due_date
+            SELECT DISTINCT ?issue ?title ?description ?url ?status ?priority ?labels ?due_date ?updated_date ?assignee_label
             WHERE {
-                # Match issues of type GitHubIssue
+                # Match tasks of type Task
                 ?issue a abi:GitHubIssue ;
                     rdfs:label ?title .
                 
                 # Get required properties
-                OPTIONAL { ?issue abi:hasDescription ?description }
-                OPTIONAL { ?issue abi:hasURL ?url }
-                OPTIONAL { ?issue abi:hasStatus ?status }
-                OPTIONAL { ?issue abi:hasPriority ?priority }
-                OPTIONAL { ?issue abi:hasLabels ?labels }
-                OPTIONAL { ?issue abi:hasDueDate ?due_date }
+                OPTIONAL { ?issue abi:description ?description }
+                OPTIONAL { ?issue abi:url ?url }
+                OPTIONAL { ?issue abi:status ?status }
+                OPTIONAL { ?issue abi:priority ?priority }
+                OPTIONAL { ?issue abi:labels ?labels }
+                OPTIONAL { ?issue abi:due_date ?due_date }
+                OPTIONAL { ?issue abi:updated_date ?updated_date }
                 
                 # Get associated task completion if it exists
                 OPTIONAL {
                     ?task_completion bfo:BFO_0000058 ?issue ;
                                     a abi:TaskCompletion .
+                    
+                    # Get assignee if it exists
+                    OPTIONAL {
+                        ?task_completion abi:hasAssignee ?assignee .
+                        ?assignee a abi:GitHubUser ;  # Ensure it's a GitHub user
+                                rdfs:label ?assignee_label .
+                    }
                 }
             }
-            ORDER BY ?title
+            ORDER BY ?due_date ?priority ?title  # Order by due date first, then priority, then title
             """)
-        
         # Convert tasks to a list of dictionaries for better LLM consumption
         formatted_tasks = []
         for task in tasks:
@@ -63,39 +70,25 @@ class GetTopPrioritiesWorkflow(Workflow):
                 "status": str(task["status"]) if task["status"] else None,
                 "priority": str(task["priority"]) if task["priority"] else None,
                 "labels": str(task["labels"]) if task["labels"] else None,
-                "due_date": str(task["due_date"]) if task["due_date"] else None
+                "due_date": str(task["due_date"]) if task["due_date"] else None,
+                "assignee": str(task["assignee_label"]) if task["assignee_label"] else None
             }
             # Remove None values for cleaner output
-            task_dict = {k: v for k, v in task_dict.items() if v is not None}
-            formatted_tasks.append(task_dict)
+            if task["due_date"] is not None:
+                task_dict = {k: v for k, v in task_dict.items() if v is not None}
+                formatted_tasks.append(task_dict)
             
         return formatted_tasks
-        
-
-def api():
-    import fastapi
-    import uvicorn
-    
-    app = fastapi.FastAPI()
-    
-    @app.get("/top-priorities")
-    def get_top_priorities():
-        configuration = GetTopPrioritiesConfiguration(jira_token=secret.JIRA_TOKEN)
-        workflow = GetTopPrioritiesWorkflow(configuration)
-        return workflow.run()
-    
-    uvicorn.run(app, host="0.0.0.0", port=9877)
 
 def main():
     configuration = GetTopPrioritiesConfiguration()
     workflow = GetTopPrioritiesWorkflow(configuration)
     result = workflow.run()
-    print(result)
 
 def as_tool():
     from langchain_core.tools import StructuredTool
     
-    def get_top_priorities(max_issues: int = 10):
+    def get_top_priorities():
         configuration = GetTopPrioritiesConfiguration()
         workflow = GetTopPrioritiesWorkflow(configuration)
         return workflow.run()
