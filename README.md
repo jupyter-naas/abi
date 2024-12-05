@@ -77,8 +77,6 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
 #### Add a new Python dependency to `src` project
 
-To add a new Python dependency to the project:
-
 ```bash
 make add dep=<library-name>
 ```
@@ -89,8 +87,6 @@ This will automatically:
 - Install the package in your virtual environment
 
 #### Add a new Python dependency to `lib/abi` project
-
-To add a new Python dependency to the `lib/abi` project:
 
 ```bash
 make abi-add dep=<library-name>
@@ -398,12 +394,6 @@ To create a new workflow in ABI, follow these steps:
 
 For examples, see existing workflows in the `src/workflows/` directory.
 
-## Cursor users
-
-For Cursor users there is the [.cursorrules](.cursorrules) file already configured to help you create new Integrations, Pipelines and Workflows.
-
-More will be added as we add more components to the framework.
-
 ### Learn more
 
 - lib/abi: [lib/abi/README.md](lib/README.md)
@@ -437,6 +427,12 @@ These changes will make it easier to:
 - Test and validate component behavior
 
 The standardization will be rolled out gradually to maintain backward compatibility while improving the developer experience.
+
+## Cursor users
+
+For Cursor users there is the [.cursorrules](.cursorrules) file already configured to help you create new Integrations, Pipelines and Workflows.
+
+More will be added as we add more components to the framework.
 
 
 ## Contributing
