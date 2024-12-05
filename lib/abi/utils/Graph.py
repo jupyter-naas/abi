@@ -3,7 +3,8 @@ from rdflib.namespace import RDF, RDFS, OWL, DC, XSD, SKOS
 from urllib.parse import quote
 from typing import Union
 from typing import overload
-
+from datetime import datetime
+import pytz
 from abi import logger
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
@@ -41,12 +42,15 @@ class ABIGraph(rdfgraph):
         self.add((uri, RDFS.label, Literal(str(label), lang=lang)))
         for x in data_properties:
             value = data_properties.get(x)
-            if type(value) is str:
-                self.add((uri, ABI[x], Literal(value, lang=lang)))
-            elif type(value) in [int, float]:
-                self.add((uri, ABI[x], Literal(value, datatype=XSD.integer)))
-            else:
-                self.add((uri, ABI[x], Literal(value, datatype=XSD.dateTime)))
+            if value is not None:
+                if type(value) is str:
+                    self.add((uri, ABI[x], Literal(value.strip(), lang=lang)))
+                elif type(value) in [int, float]:
+                    self.add((uri, ABI[x], Literal(value, datatype=XSD.integer)))
+                elif isinstance(value, datetime):
+                    if value.tzinfo is None:
+                        value = value.replace(tzinfo=pytz.utc)  # Apply UTC timezone if none
+                    self.add((uri, ABI[x], Literal(value.strftime("%Y-%m-%dT%H:%M:%S%z"), datatype=XSD.dateTime)))
 
         logger.debug(f"✅ '{label}' successfully added to ontology ({str(uri)})")
         return uri
