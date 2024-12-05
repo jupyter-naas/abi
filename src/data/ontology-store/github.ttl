@@ -4,144 +4,318 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-<http://ontology.naas.ai/abi/GitHubIssue#177> a abi:GitHubIssue,
+<http://ontology.naas.ai/abi/BFO_0000203#1733324792> a bfo:BFO_0000203,
         owl:NamedIndividual ;
-    rdfs:label "Content Engine - Rework Storage & Remove Google Sheets from Core Domain"@en ;
-    abi:hasDescription """```\r
-workspace_id\r
-- storage_name\r
-\r
--- datalake\r
---- entities\r
----- jeremy_ravenel\r
---- posts\r
----- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c\r
------ 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
------ 20240705114800_100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
---- concept\r
----- concept1\r
---- post_concept\r
----- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c_concept1\r
---- reactions\r
----- 871a614923b98110a78cd556ab15e96d26b632c5e685e302d316fb6588029919\r
---- comments\r
---- shares\r
---- people\r
---- organizations\r
-\r
--- views\r
---- jeremy_ravenel\r
----- content\r
------ jeremy_ravenel_content.json\r
------ 20240705114800_content.json\r
----- interactions\r
----- people\r
----- organizations\r
-```"""@en ;
-    abi:hasLabels "enhancement"@en ;
-    abi:hasURL "https://github.com/jupyter-naas/abi/issues/177"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#177> .
+    rdfs:label "2024-12-04T15:06:32"@en .
 
-<http://ontology.naas.ai/abi/GitHubIssue#192> a abi:GitHubIssue,
+<http://ontology.naas.ai/abi/BFO_0000203#1733325030> a bfo:BFO_0000203,
         owl:NamedIndividual ;
-    rdfs:label "Integration: HubSpot, Contacts, Deals, Companies, Notes Endpoint"@en ;
-    abi:hasDescription """Implement integration with HubSpot to manage contacts, deals, companies, and notes. This will enhance our CRM capabilities and streamline workflows. Please ensure that the following functionalities are included:
+    rdfs:label "2024-12-04T15:10:30"@en .
 
-1. Fetch and update contacts
-2. Create and manage deals
-3. Retrieve and update company information
-4. Manage notes associated with contacts and deals
-
-Consider using the HubSpot API for this integration and ensure proper authentication and error handling."""@en ;
-    abi:hasLabels "enhancement"@en ;
-    abi:hasURL "https://github.com/jupyter-naas/abi/issues/192"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#192> .
-
-<http://ontology.naas.ai/abi/GitHubIssue#193> a abi:GitHubIssue,
+<http://ontology.naas.ai/abi/BFO_0000203#1733325067> a bfo:BFO_0000203,
         owl:NamedIndividual ;
-    rdfs:label "Integration: Stripe Customer Endpoint"@en ;
-    abi:hasDescription """Implement integration with Stripe to manage customer data. This will enhance our payment processing capabilities and streamline customer management. Please ensure that the following functionalities are included:
+    rdfs:label "2024-12-04T15:11:07"@en .
 
-1. Create and update customer profiles
-2. Retrieve customer information
-3. Manage customer payment methods
-4. Handle customer subscriptions and invoices
-
-Consider using the Stripe API for this integration and ensure proper authentication and error handling."""@en ;
-    abi:hasLabels "enhancement"@en ;
-    abi:hasURL "https://github.com/jupyter-naas/abi/issues/193"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#193> .
-
-<http://ontology.naas.ai/abi/TaskCompletion#177> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/BFO_0000203#1733325242> a bfo:BFO_0000203,
         owl:NamedIndividual ;
-    rdfs:label "Content Engine - Rework Storage & Remove Google Sheets from Core Domain"@en ;
-    abi:hasDescription """```\r
-workspace_id\r
-- storage_name\r
-\r
--- datalake\r
---- entities\r
----- jeremy_ravenel\r
---- posts\r
----- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c\r
------ 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
------ 20240705114800_100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c.json\r
---- concept\r
----- concept1\r
---- post_concept\r
----- 100eb7aa1d44c490f036f918d83f8e7008ca7440d169b2bea2419b098599003c_concept1\r
---- reactions\r
----- 871a614923b98110a78cd556ab15e96d26b632c5e685e302d316fb6588029919\r
---- comments\r
---- shares\r
---- people\r
---- organizations\r
-\r
--- views\r
---- jeremy_ravenel\r
----- content\r
------ jeremy_ravenel_content.json\r
------ 20240705114800_content.json\r
----- interactions\r
----- people\r
----- organizations\r
-```"""@en ;
-    abi:hasLabels "enhancement"@en ;
-    abi:hasURL "https://github.com/jupyter-naas/abi/issues/177"@en ;
-    abi:updateAt "2024-12-04T11:40:43.268780"^^xsd:dateTime,
-        "2024-12-04T11:40:50.383710"^^xsd:dateTime,
-        "2024-12-04T11:40:56.496308"^^xsd:dateTime ;
-    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#177> .
+    rdfs:label "2024-12-04T15:14:02"@en .
 
-<http://ontology.naas.ai/abi/TaskCompletion#192> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/BFO_0000203#1733332147> a bfo:BFO_0000203,
         owl:NamedIndividual ;
-    rdfs:label "Integration: HubSpot, Contacts, Deals, Companies, Notes Endpoint"@en ;
-    abi:hasDescription """Implement integration with HubSpot to manage contacts, deals, companies, and notes. This will enhance our CRM capabilities and streamline workflows. Please ensure that the following functionalities are included:
+    rdfs:label "2024-12-04T17:09:07"@en .
 
-1. Fetch and update contacts
-2. Create and manage deals
-3. Retrieve and update company information
-4. Manage notes associated with contacts and deals
-
-Consider using the HubSpot API for this integration and ensure proper authentication and error handling."""@en ;
-    abi:hasLabels "enhancement"@en ;
-    abi:hasURL "https://github.com/jupyter-naas/abi/issues/192"@en ;
-    abi:updateAt "2024-12-04T14:22:13.134871"^^xsd:dateTime ;
-    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#192> .
-
-<http://ontology.naas.ai/abi/TaskCompletion#193> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/BFO_0000203#1733332566> a bfo:BFO_0000203,
         owl:NamedIndividual ;
-    rdfs:label "Integration: Stripe Customer Endpoint"@en ;
-    abi:hasDescription """Implement integration with Stripe to manage customer data. This will enhance our payment processing capabilities and streamline customer management. Please ensure that the following functionalities are included:
+    rdfs:label "2024-12-04T17:16:06"@en .
 
-1. Create and update customer profiles
-2. Retrieve customer information
-3. Manage customer payment methods
-4. Handle customer subscriptions and invoices
+<http://ontology.naas.ai/abi/BFO_0000203#1733332621> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T17:17:01"@en .
 
-Consider using the Stripe API for this integration and ensure proper authentication and error handling."""@en ;
-    abi:hasLabels "enhancement"@en ;
-    abi:hasURL "https://github.com/jupyter-naas/abi/issues/193"@en ;
-    abi:updateAt "2024-12-04T14:22:12.617860"^^xsd:dateTime ;
-    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#193> .
+<http://ontology.naas.ai/abi/BFO_0000203#1733332695> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T17:18:15"@en .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718037402> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Add documentation to create new integrations, workflows, and pipelines"@en ;
+    abi:description "We need to enhance the README file by adding comprehensive documentation on how to create new integrations, workflows, and pipelines. This will help users understand the process better and improve the overall usability of the project."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 1.0 ;
+    abi:issue_node_id "I_kwDOKfslW86iAfWa"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:status "🏗 In progress"@en ;
+    abi:updated_date "2024-12-04T15:06:58+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/195"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733324818> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718051921> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Domain Ontology: Deal, Develop deal with HubSpot integration example"@en ;
+    abi:description "We need to create a domain ontology for 'Deal' and provide a detailed example of how to develop a deal with HubSpot integration. This will help users understand the practical application of the ontology in real-world scenarios."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 3.0 ;
+    abi:issue_node_id "I_kwDOKfslW86iAi5R"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T15:12:03+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/196"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718051921-1733325123> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718054117> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Application Ontology: Create HubSpot ontology with deals, contacts, companies, notes integration"@en ;
+    abi:description "We need to develop an application ontology for HubSpot that includes integrations for deals, contacts, companies, and notes. This ontology will serve as a framework for understanding and implementing HubSpot functionalities within our system."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 3.0 ;
+    abi:issue_node_id "I_kwDOKfslW86iAjbl"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T15:12:54+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/197"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718054117-1733325174> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718064203> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Create Agent Support to Enable Feedback Loop"@en ;
+    abi:description "Develop a mechanism for the agent to enable a feedback loop. If a user's intent or tool is not mapped, the system should automatically create an issue in the repository. This will help in continuously improving the agent's capabilities and ensuring that user needs are met."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 8.0 ;
+    abi:issue_node_id "I_kwDOKfslW86iAl5L"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T17:13:54+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/198"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733332434> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718342893> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: assign GitHub project once an issue is created if provided in env"@en ;
+    abi:description "This issue is to implement functionality that assigns a GitHub project to an issue once it is created, based on the environment variables provided. This will streamline project management and ensure that issues are automatically linked to the relevant projects."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iBp7t"@en ;
+    abi:labels "enhancement"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T17:18:56+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/199"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718342893-1733332736> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718357547> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: GitHub GraphQL"@en ;
+    abi:description "This issue is to discuss and implement the integration of GitHub's GraphQL API into the ABI system. The goal is to leverage the capabilities of GraphQL for more efficient data retrieval and manipulation."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iBtgr"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:status "👀 In review"@en ;
+    abi:updated_date "2024-12-04T17:19:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/200"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733332748> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718359308> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Pipeline: Complete Mapping GitHub Issue to Ontology"@en ;
+    abi:description "This issue is to ensure the complete mapping of GitHub issues to the ontology used in the ABI system. The goal is to create a structured representation of issues that aligns with the existing ontology framework."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iBt8M"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:status "🏗 In progress"@en ;
+    abi:updated_date "2024-12-04T17:19:35+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/201"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733332775> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718361894> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Workflow: Improve SPARQL to Get Top Priorities from All Subclasses of abi:Task"@en ;
+    abi:description "This issue is to enhance the SPARQL query used to retrieve top priorities from all subclasses of `abi:Task`. The goal is to ensure that the query efficiently fetches relevant data and improves overall performance."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iBukm"@en ;
+    abi:labels "enhancement"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T17:20:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/202"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733332808> .
+
+<http://ontology.naas.ai/abi/GitHubUser#22365519> a abi:GitHubUser,
+        owl:NamedIndividual ;
+    rdfs:label "Dr0p42"@en ;
+    abi:url "https://github.com/Dr0p42"@en .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733324818> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Add documentation to create new integrations, workflows, and pipelines"@en ;
+    abi:description "We need to enhance the README file by adding comprehensive documentation on how to create new integrations, workflows, and pipelines. This will help users understand the process better and improve the overall usability of the project."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 1.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iAfWa"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:state "open"@en ;
+    abi:status "🏗 In progress"@en ;
+    abi:updated_date "2024-12-04T15:06:58+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/195"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718037402>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733324792> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718051921-1733325123> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Domain Ontology: Deal, Develop deal with HubSpot integration example"@en ;
+    abi:description "We need to create a domain ontology for 'Deal' and provide a detailed example of how to develop a deal with HubSpot integration. This will help users understand the practical application of the ontology in real-world scenarios."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 3.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iAi5R"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "open"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T15:12:03+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/196"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718051921>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733325030> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718054117-1733325174> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Application Ontology: Create HubSpot ontology with deals, contacts, companies, notes integration"@en ;
+    abi:description "We need to develop an application ontology for HubSpot that includes integrations for deals, contacts, companies, and notes. This ontology will serve as a framework for understanding and implementing HubSpot functionalities within our system."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 3.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iAjbl"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "open"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T15:12:54+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/197"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718054117>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733325067> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733332434> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Create Agent Support to Enable Feedback Loop"@en ;
+    abi:description "Develop a mechanism for the agent to enable a feedback loop. If a user's intent or tool is not mapped, the system should automatically create an issue in the repository. This will help in continuously improving the agent's capabilities and ensuring that user needs are met."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 8.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iAl5L"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:state "open"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T17:13:54+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/198"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718064203>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733325242> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718342893-1733332736> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: assign GitHub project once an issue is created if provided in env"@en ;
+    abi:description "This issue is to implement functionality that assigns a GitHub project to an issue once it is created, based on the environment variables provided. This will streamline project management and ensure that issues are automatically linked to the relevant projects."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iBp7t"@en ;
+    abi:labels "enhancement"@en ;
+    abi:state "open"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T17:18:56+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/199"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718342893>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332147> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733332748> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: GitHub GraphQL"@en ;
+    abi:description "This issue is to discuss and implement the integration of GitHub's GraphQL API into the ABI system. The goal is to leverage the capabilities of GraphQL for more efficient data retrieval and manipulation."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iBtgr"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "open"@en ;
+    abi:status "👀 In review"@en ;
+    abi:updated_date "2024-12-04T17:19:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/200"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718357547>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332566> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733332775> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Pipeline: Complete Mapping GitHub Issue to Ontology"@en ;
+    abi:description "This issue is to ensure the complete mapping of GitHub issues to the ontology used in the ABI system. The goal is to create a structured representation of issues that aligns with the existing ontology framework."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iBt8M"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:state "open"@en ;
+    abi:status "🏗 In progress"@en ;
+    abi:updated_date "2024-12-04T17:19:35+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/201"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718359308>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332621> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733332808> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Workflow: Improve SPARQL to Get Top Priorities from All Subclasses of abi:Task"@en ;
+    abi:description "This issue is to enhance the SPARQL query used to retrieve top priorities from all subclasses of `abi:Task`. The goal is to ensure that the query efficiently fetches relevant data and improves overall performance."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iBukm"@en ;
+    abi:labels "enhancement"@en ;
+    abi:state "open"@en ;
+    abi:status "🔖 Ready"@en ;
+    abi:updated_date "2024-12-04T17:20:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/202"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718361894>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332695> .
+
+<http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> a abi:GitHubRepository,
+        owl:NamedIndividual ;
+    rdfs:label "/jupyter-naas/abi"@en ;
+    abi:url "https://api.github.com/repos/jupyter-naas/abi"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733324818>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718051921-1733325123>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718054117-1733325174>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733332434>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718342893-1733332736>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733332748>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733332775>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733332808> .
+
+<http://ontology.naas.ai/abi/GitHubUser#48032461> a abi:GitHubUser,
+        owl:NamedIndividual ;
+    rdfs:label "FlorentLvr"@en ;
+    abi:url "https://github.com/FlorentLvr"@en .
 
