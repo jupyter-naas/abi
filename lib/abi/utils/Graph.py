@@ -3,7 +3,7 @@ from rdflib.namespace import RDF, RDFS, OWL, DC, XSD, SKOS
 from urllib.parse import quote
 from typing import Union
 from typing import overload
-from datetime import datetime
+from datetime import datetime, date
 import pytz
 from abi import logger
 
@@ -51,6 +51,8 @@ class ABIGraph(rdfgraph):
                     if value.tzinfo is None:
                         value = value.replace(tzinfo=pytz.utc)  # Apply UTC timezone if none
                     self.add((uri, ABI[x], Literal(value.strftime("%Y-%m-%dT%H:%M:%S%z"), datatype=XSD.dateTime)))
+                elif isinstance(value, date):
+                    self.add((uri, ABI[x], Literal(value.strftime("%Y-%m-%d"), datatype=XSD.date)))
 
         logger.debug(f"✅ '{label}' successfully added to ontology ({str(uri)})")
         return uri
