@@ -79,27 +79,11 @@ class GetTopPrioritiesWorkflow(Workflow):
                 formatted_tasks.append(task_dict)
             
         return formatted_tasks
-        
-
-def api():
-    import fastapi
-    import uvicorn
-    
-    app = fastapi.FastAPI()
-    
-    @app.get("/top-priorities")
-    def get_top_priorities():
-        configuration = GetTopPrioritiesConfiguration()
-        workflow = GetTopPrioritiesWorkflow(configuration)
-        return workflow.run()
-    
-    uvicorn.run(app, host="0.0.0.0", port=9877)
 
 def main():
     configuration = GetTopPrioritiesConfiguration()
     workflow = GetTopPrioritiesWorkflow(configuration)
     result = workflow.run()
-    print(result)
 
 def as_tool():
     from langchain_core.tools import StructuredTool
