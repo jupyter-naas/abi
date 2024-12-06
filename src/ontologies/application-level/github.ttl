@@ -8,57 +8,17 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix dc11: <http://purl.org/dc/elements/1.1/> .
 
+<http://purl.obolibrary.org/obo/bfo.owl> rdf:type owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/github.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for GitHub."@en ;
+                                    dc:license ""> ;
+                                    dc:title "GitHub Application Ontology" ;
+
 #################################################################
 #    Annotation properties
 #################################################################
-
-rdfs:subClassOf a rdf:Property ;
-	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
-	rdfs:label "subClassOf" ;
-	rdfs:comment "The subject is a subclass of a class." ;
-	rdfs:range rdfs:Class ;
-	rdfs:domain rdfs:Class .
-
-rdfs:subPropertyOf a rdf:Property ;
-	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
-	rdfs:label "subPropertyOf" ;
-	rdfs:comment "The subject is a subproperty of a property." ;
-	rdfs:range rdf:Property ;
-	rdfs:domain rdf:Property .
-
-rdfs:comment a rdf:Property ;
-	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
-	rdfs:label "comment" ;
-	rdfs:comment "A description of the subject resource." ;
-	rdfs:domain rdfs:Resource ;
-	rdfs:range rdfs:Literal .
-
-rdfs:label a rdf:Property ;
-	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
-	rdfs:label "label" ;
-	rdfs:comment "A human-readable name for the subject." ;
-	rdfs:domain rdfs:Resource ;
-	rdfs:range rdfs:Literal .
-
-rdfs:domain a rdf:Property ;
-	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
-	rdfs:label "domain" ;
-	rdfs:comment "A domain of the subject property." ;
-	rdfs:range rdfs:Class ;
-	rdfs:domain rdf:Property .
-
-rdfs:range a rdf:Property ;
-	rdfs:isDefinedBy <http://www.w3.org/2000/01/rdf-schema#> ;
-	rdfs:label "range" ;
-	rdfs:comment "A range of the subject property." ;
-	rdfs:range rdfs:Class ;
-	rdfs:domain rdf:Property .
-
-###  http://www.w3.org/2004/02/skos/core#definition
-skos:definition rdf:type owl:AnnotationProperty .
-
-###  http://www.w3.org/2004/02/skos/core#example
-skos:example rdf:type owl:AnnotationProperty .
 
 #################################################################
 #    Data properties
@@ -68,149 +28,13 @@ abi:node_id a owl:DatatypeProperty ;
     rdfs:label "description" ;
     rdfs:range xsd:string .
 
-abi:description a owl:DatatypeProperty ;
-    rdfs:label "description" ;
-    rdfs:range xsd:string .
-
-abi:url a owl:DatatypeProperty ;
-    rdfs:label "HTML URL to access the entity" ;
-    rdfs:range xsd:string .
-
-abi:status a owl:DatatypeProperty ;
-    rdfs:label "status" ;
-    rdfs:range xsd:string .
-
-abi:priority a owl:DatatypeProperty ;
-    rdfs:label "priority" ;
-    rdfs:range xsd:string .
-
-abi:labels a owl:DatatypeProperty ;
-    rdfs:label "labels" ;
-    rdfs:range xsd:string .
-
-abi:estimate a owl:DatatypeProperty ;
-    rdfs:label "estimate" ;
-    rdfs:range xsd:integer .
-
-abi:state a owl:DatatypeProperty ;
-    rdfs:label "state" ;
-    rdfs:range xsd:string .
-
-abi:due_date a owl:DatatypeProperty ;
-    rdfs:label "due date" ;
-    rdfs:range xsd:date .
-
-abi:updated_date a owl:DatatypeProperty ;
-    rdfs:label "updated date" ;
-    rdfs:range xsd:dateTime .
-
 #################################################################
 #    Object Properties
 #################################################################
 
-abi:hasAssignee a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000057 ;
-    rdfs:domain bfo:TaskCompletion ;
-    rdfs:range cco:ont00001017 ;
-    rdfs:label "has assignee" ;
-    rdfs:comment "This property relates a task to an individual who is assigned to perform the task." ;
-    owl:inverseOf abi:assignedIn .
-
-abi:assignedIn a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000056 ;
-    rdfs:domain cco:ont00001017 ;
-    rdfs:range bfo:TaskCompletion ;
-    rdfs:label "assigned in" ;
-    rdfs:comment "This property relates an individual to a task they are assigned to perform." .
-
-abi:hasCreator a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000057 ;
-    rdfs:domain bfo:TaskCompletion ;
-    rdfs:range cco:ont00001017 ;
-    rdfs:label "has creator" ;
-    rdfs:comment "This property relates a task to the individual who created it." ;
-    owl:inverseOf abi:created .
-
-abi:created a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000056 ;
-    rdfs:domain cco:ont00001017 ;
-    rdfs:range bfo:TaskCompletion ;
-    rdfs:label "created" ;
-    rdfs:comment "This property relates an individual to tasks they have created." .
-
-bfo:BFO_0000058 rdf:type owl:ObjectProperty ;
-    owl:inverseOf bfo:BFO_0000059 ;
-    rdfs:domain bfo:BFO_0000031 ;
-    rdfs:range [ rdf:type owl:Class ;
-                owl:unionOf ( bfo:BFO_0000015
-                            bfo:BFO_0000020
-                            )
-            ] ;
-    dc11:identifier "258-BFO" ;
-    rdfs:label "is concretized by"@en ;
-    skos:definition "c is concretized by b =Def b concretizes c"@en ;
-    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
-
-
-###  http://purl.obolibrary.org/obo/BFO_0000059
-bfo:BFO_0000059 rdf:type owl:ObjectProperty ;
-    rdfs:domain [ rdf:type owl:Class ;
-                owl:unionOf ( bfo:BFO_0000015
-                            bfo:BFO_0000020
-                            )
-            ] ;
-    rdfs:range bfo:BFO_0000031 ;
-    dc11:identifier "256-BFO" ;
-    rdfs:label "concretizes"@en ;
-    skos:definition "b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"@en ;
-    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
-
-
-###  http://purl.obolibrary.org/obo/BFO_0000066
-bfo:BFO_0000066 rdf:type owl:ObjectProperty ;
-    owl:inverseOf bfo:BFO_0000183 ;
-    rdfs:domain [ rdf:type owl:Class ;
-                owl:unionOf ( bfo:BFO_0000015
-                            bfo:BFO_0000035
-                            )
-            ] ;
-    rdfs:range [ rdf:type owl:Class ;
-                owl:unionOf ( bfo:BFO_0000029
-                            bfo:BFO_0000040
-                            )
-            ] ;
-    dc11:identifier "143-BFO" ;
-    rdfs:label "occurs in"@en ;
-    skos:definition "b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"@en ;
-    skos:example "A process of digestion occurs in the interior of an organism; a process of loading artillery rounds into a tank cannon occurs in the interior of the tank"@en .
-
-###  http://purl.obolibrary.org/obo/BFO_0000222
-bfo:BFO_0000222 rdf:type owl:ObjectProperty , owl:FunctionalProperty ;
-    rdfs:domain bfo:BFO_0000008 ;
-    rdfs:range  bfo:BFO_0000203 ;
-    dc11:identifier "261-BFO" ;
-    rdfs:label "has first instant"@en ;
-    skos:definition "t has first instant t' =Def t' first instant of t"@en ;
-    skos:example "The first hour of a year has first instant midnight on December 31"@en .
-
-###  http://purl.obolibrary.org/obo/BFO_0000224
-bfo:BFO_0000224 rdf:type owl:ObjectProperty , owl:FunctionalProperty ;
-    rdfs:domain bfo:BFO_0000008 ;
-    rdfs:range  bfo:BFO_0000203 ;
-    dc11:identifier "215-BFO" ;
-    rdfs:label "has last instant"@en ;
-    skos:definition "t has last instant t' =Def t' last instant of t"@en ;
-    skos:example "The last hour of a year has last instant midnight December 31"@en .
-
 #################################################################
 #    Classes
 #################################################################
-
-abi:TaskCompletion a owl:Class ;
-    rdfs:label "Task Completion"@en ;
-    rdfs:subClassOf cco:ont00000228 ; # Planned Act
-    skos:definition "A defined unit of work with timeline, ownership and metrics" ;
-    skos:example "Completing a report, cleaning a room, or conducting a meeting." .
 
 abi:GitHubIssue rdf:type owl:Class ;
     rdfs:subClassOf abi:Task ;
@@ -219,42 +43,28 @@ abi:GitHubIssue rdf:type owl:Class ;
     skos:definition "A GitHub Issue is a task, enhancement, or bug report on the GitHub platform."@en ;
     skos:example "An issue created to track a bug in a software project."@en .
 
+abi:GitHubPullRequest rdf:type owl:Class ;
+    rdfs:subClassOf abi:Task ;
+    rdfs:label "GitHub Pull Request"@en ;
+    rdfs:comment "A Directive Information Content Entity on the GitHub platform that proposes changes to a repository's codebase and facilitates code review."@en ;
+    skos:definition "A GitHub Pull Request is a task that proposes changes to a repository and enables collaborative code review."@en ;
+    skos:example "A pull request that adds a new feature to a software project."@en .
+
 abi:GitHubRepository rdf:type owl:Class ;
-    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:subClassOf abi:SitePlatform ;
     rdfs:label "GitHub Repository"@en ;
     skos:definition "A GitHub Repository is a site on the GitHub platform where code, documentation, issues, and collaborative work are managed."@en ;
     skos:example "The 'jupyter-naas/awesome-notebooks' repository on GitHub."@en .
 
 abi:GitHubUser a owl:Class ;
-    rdfs:subClassOf cco:ont00001017 ; # Agent: has creator / has assignee
+    rdfs:subClassOf abi:User ; # Agent: has creator / has assignee
     rdfs:label "GitHub User"@en ;
     skos:definition "An individual who interacts with GitHub repositories, such as creating, modifying, or managing them."@en ;
     skos:example "A developer with access to a GitHub repository."@en .
 
-bfo:BFO_0000203 rdf:type owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000148 ; # TemporaL region: occupies temporal region
-    dc11:identifier "209-BFO" ;
-    rdfs:label "temporal instant"@en ;
-    skos:definition "(Elucidation) A temporal instant is a zero-dimensional temporal region that has no proper temporal part"@en ;
-    skos:example "The millennium"@en .
-
-cco:ont00000509 rdf:type owl:Class ;
-                rdfs:subClassOf cco:ont00001180 ;  # Organization: occurs in 
-                rdfs:label "Service Provider"@en ;
-                skos:definition "An Organization whose purpose is to provide a service to other Agents."@en ;
-                cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Service_provider&oldid=1059415018"^^xsd:anyURI ;
-                cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-cco:ont00000443 rdf:type owl:Class ; 
-                owl:equivalentClass [ owl:intersectionOf ( cco:ont00001180
-                                                        [ rdf:type owl:Restriction ;
-                                                          owl:onProperty bfo:BFO_0000196 ;
-                                                          owl:someValuesFrom cco:ont00000485
-                                                        ]
-                                                      ) ;
-                                   rdf:type owl:Class
-                                 ] ;
-                rdfs:subClassOf cco:ont00001180 ;
-                rdfs:label "Commercial Organization"@en ;
-                skos:definition "An Organization that is the bearer of a Commercial Role and whose primary objective is to make a profit from the provision of goods or services."@en ;
-                cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+abi:GitHubProject rdf:type owl:Class ;
+    rdfs:subClassOf abi:Project ;
+    rdfs:label "GitHub Project"@en ;
+    rdfs:comment "A project management tool on the GitHub platform used to organize and track work."@en ;
+    skos:definition "A GitHub Project is a customizable spreadsheet integrated with GitHub issues and pull requests that helps track and organize work."@en ;
+    skos:example "A GitHub Project board used to track development tasks across multiple repositories."@en .
