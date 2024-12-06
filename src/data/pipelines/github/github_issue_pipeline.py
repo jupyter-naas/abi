@@ -5,8 +5,7 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime, timedelta
-from abi.services.ontology_processor.OntologyService import OntologyService
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 import pydash as _
 from src import secret
 from abi import logger
@@ -20,7 +19,7 @@ class GithubIssuePipelineConfiguration(PipelineConfiguration):
     ontology_store_name: str = "github"
 
 class GithubIssuePipeline(Pipeline):
-    def __init__(self, integration: GithubIntegration, integration_graphql: GithubGraphqlIntegration, ontology_store: IOntologyStoreService, configuration: GithubIssuePipelineConfiguration):
+    def __init__(self, integration: GithubIntegration, integration_graphql: GithubGraphqlIntegration, ontology_store: OntologyStoreService, configuration: GithubIssuePipelineConfiguration):
         super().__init__([integration], configuration)
         
         self.__integration = integration
@@ -77,41 +76,42 @@ class GithubIssuePipeline(Pipeline):
                     break
             logger.debug(f"Item ID: {item_id}")
 
-            # Get item data from GithubGraphqlIntegration
-            item_data : dict = self.__integration_graphql.get_project_item_by_id(item_id) # type: ignore
-            issue_iteration = {}
-            issue_eta = ""
+            if item_id:
+                # Get item data from GithubGraphqlIntegration
+                item_data : dict = self.__integration_graphql.get_project_item_by_id(item_id) # type: ignore
+                issue_iteration = {}
+                issue_eta = ""
 
-            # Iterate through the field values
-            for field_value in item_data.get("data", {}).get("node", {}).get("fieldValues", {}).get("nodes", []):
-                if field_value:
-                    field_name = field_value.get("field", {}).get("name")
-                    if field_name == "Status":
-                        issue_status = field_value.get("name")
-                        logger.debug(f"Issue status: {issue_status}")
-                    elif field_name == "Priority":
-                        issue_priority = field_value.get("name")
-                        logger.debug(f"Issue priority: {issue_priority}")
-                    elif field_name == "Iteration":
-                        issue_iteration = {
-                            "title": field_value.get("title"),
-                            "startDate": field_value.get("startDate"),
-                            "duration": field_value.get("duration")
-                        }
-                    elif field_name == "Estimate":
-                        issue_estimate = field_value.get("number")
-                        logger.debug(f"Issue estimate: {issue_estimate}")
-                    elif field_name == "ETA":
-                        issue_eta = field_value.get("date")
-                        logger.debug(f"Issue ETA: {issue_eta}")
+                # Iterate through the field values
+                for field_value in item_data.get("data", {}).get("node", {}).get("fieldValues", {}).get("nodes", []):
+                    if field_value:
+                        field_name = field_value.get("field", {}).get("name")
+                        if field_name == "Status":
+                            issue_status = field_value.get("name")
+                            logger.debug(f"Issue status: {issue_status}")
+                        elif field_name == "Priority":
+                            issue_priority = field_value.get("name")
+                            logger.debug(f"Issue priority: {issue_priority}")
+                        elif field_name == "Iteration":
+                            issue_iteration = {
+                                "title": field_value.get("title"),
+                                "startDate": field_value.get("startDate"),
+                                "duration": field_value.get("duration")
+                            }
+                        elif field_name == "Estimate":
+                            issue_estimate = field_value.get("number")
+                            logger.debug(f"Issue estimate: {issue_estimate}")
+                        elif field_name == "ETA":
+                            issue_eta = field_value.get("date")
+                            logger.debug(f"Issue ETA: {issue_eta}")
 
-            # Calculate due date if eta is empty
-            issue_due_date = issue_eta
-            if not issue_eta and issue_iteration:
-                start_date = datetime.strptime(issue_iteration["startDate"], "%Y-%m-%d")
-                issue_due_date = start_date + timedelta(days=issue_iteration["duration"])
-                issue_due_date = issue_due_date.strftime("%Y-%m-%d")
-            logger.debug(f"Issue due date: {issue_due_date}")
+                # Calculate due date if eta is empty
+                issue_due_date = issue_eta
+                if not issue_eta and issue_iteration:
+                    start_date = datetime.strptime(issue_iteration["startDate"], "%Y-%m-%d")
+                    issue_due_date = start_date + timedelta(days=issue_iteration["duration"])
+                    issue_due_date = issue_due_date.strftime("%Y-%m-%d")
+                logger.debug(f"Issue due date: {issue_due_date}")
 
         # Add Process: Task Completion
         task_completion = graph.add_individual_to_prefix(
@@ -142,6 +142,7 @@ class GithubIssuePipeline(Pipeline):
             url=issue_url,
             labels=issue_labels,
             status=issue_status,
+            state=issue_state,
             priority=issue_priority,
             estimate=issue_estimate,
             due_date=issue_due_date,
