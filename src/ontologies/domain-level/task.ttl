@@ -15,7 +15,7 @@
                                     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
                                     dc:description "Domain ontology for tasks."@en ;
                                     dc:license ""> ;
-                                    dc:title "Task Domain Ontology" ;
+                                    dc:title "Task Domain Ontology" .
 
 #################################################################
 #    Annotation properties
