@@ -4,6 +4,90 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
+<http://ontology.naas.ai/abi/BFO_0000203#1722420113> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-07-31T10:01:53"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1722423825> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-07-31T11:03:45"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1722499197> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-08-01T07:59:57"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1722868003> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-08-05T14:26:43"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1723111193> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-08-08T09:59:53"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1723111201> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-08-08T10:00:01"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1723468473> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-08-12T13:14:33"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1724051268> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-08-19T07:07:48"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1726498725> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-09-16T14:58:45"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1728582092> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-10-10T17:41:32"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1729508666> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-10-21T11:04:26"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1729514547> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-10-21T12:42:27"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1729520324> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-10-21T14:18:44"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1729521231> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-10-21T14:33:51"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1732810586> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-11-28T16:16:26"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1732810627> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-11-28T16:17:07"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733321358> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T14:09:18"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733321432> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T14:10:32"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733324439> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T15:00:39"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733324639> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T15:03:59"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733324646> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T15:04:06"@en .
+
 <http://ontology.naas.ai/abi/BFO_0000203#1733324792> a bfo:BFO_0000203,
         owl:NamedIndividual ;
     rdfs:label "2024-12-04T15:06:32"@en .
@@ -24,6 +108,10 @@
         owl:NamedIndividual ;
     rdfs:label "2024-12-04T17:09:07"@en .
 
+<http://ontology.naas.ai/abi/BFO_0000203#1733332209> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-04T17:10:09"@en .
+
 <http://ontology.naas.ai/abi/BFO_0000203#1733332566> a bfo:BFO_0000203,
         owl:NamedIndividual ;
     rdfs:label "2024-12-04T17:16:06"@en .
@@ -36,6 +124,268 @@
         owl:NamedIndividual ;
     rdfs:label "2024-12-04T17:18:15"@en .
 
+<http://ontology.naas.ai/abi/BFO_0000203#1733403630> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:00:30"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733403668> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:01:08"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405769> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:36:09"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405795> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:36:35"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405804> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:36:44"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405810> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:36:50"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405816> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:36:56"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405822> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:37:02"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733405829> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:37:09"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406066> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:41:06"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406073> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:41:13"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406151> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:42:31"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406171> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:42:51"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406183> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:03"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406192> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:12"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406199> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:19"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406208> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:28"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406217> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:37"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406224> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:44"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733406232> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T13:43:52"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733407626> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T14:07:06"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733416186> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T16:29:46"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733416187> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T16:29:47"@en .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733477829> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-06T09:37:09"@en .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2439646652> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "WIP: 178 schedule abi using GitHub action"@en ;
+    abi:description "This pull request resolves #178"@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "PR_kwDOKfslW852-TAn"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:16:40+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/183"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2439646652-1733307400> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2441760865> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "docs: Readme add Local Setup and Setup a New scheduler sections"@en ;
+    abi:description "This pull request is updating the README.md to add local setup section and how to add a new scheduler."@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "PR_kwDOKfslW853FU9f"@en ;
+    abi:labels "documentation, released"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:15:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/184"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2441760865-1733307308> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2448699625> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Create Naas Completion When Plugin is Updated"@en ;
+    abi:due_date "2024-09-16"@en ;
+    abi:estimate 5.0 ;
+    abi:issue_node_id "I_kwDOKfslW86R9DDp"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-09-16T14:58:45+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/185"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2448699625-1726498725> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2455386193> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "ci: Make it possible to override runs-on"@en ;
+    abi:description """This pull request makes it possible to override runs-on in the CI/CD configuration. \r
+\r
+Pretty useful if you want to run the schedulers on a self-hosted runner in your own infrastructure."""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "PR_kwDOKfslW8530K_s"@en ;
+    abi:labels "released"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:16:39+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/186"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2455386193-1733307399> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2460977067> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Create Class to Manage Datalake and Rework Storage"@en ;
+    abi:due_date "2024-09-23"@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86Sr4er"@en ;
+    abi:labels "enhancement"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-10-10T17:41:33+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/187"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2460977067-1728582093> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2602182254> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Create JSON Ontologies & Assistants"@en ;
+    abi:description """- outputs/demo/ontologies\r
+ABI: description, logo\r
+AIA: description, logo\r
+- outputs/demo/assistants\r
+..."""@en ;
+    abi:due_date "2024-10-28"@en ;
+    abi:estimate 3.0 ;
+    abi:issue_node_id "I_kwDOKfslW86bGiZu"@en ;
+    abi:labels ""@en ;
+    abi:priority "High"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-10-21T14:33:52+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/189"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2602182254-1729521232> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2602435503> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "feat: add abi ontologies"@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "PR_kwDOKfslW85_UKuJ"@en ;
+    abi:labels "released"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:15:51+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/190"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2602435503-1733307351> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2702653067> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "New Feature Request"@en ;
+    abi:description "Request to add a new feature that enhances user experience. Please provide details on the feature and its expected impact."@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86hFzaL"@en ;
+    abi:labels "enhancement, feature"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-11-28T16:17:07+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/191"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2702653067-1732810627> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2717878076> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: HubSpot, Contacts, Deals, Companies, Notes Endpoint"@en ;
+    abi:description """Implement integration with HubSpot to manage contacts, deals, companies, and notes. This will enhance our CRM capabilities and streamline workflows. Please ensure that the following functionalities are included:
+
+1. Fetch and update contacts
+2. Create and manage deals
+3. Retrieve and update company information
+4. Manage notes associated with contacts and deals
+
+Consider using the HubSpot API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 1.0 ;
+    abi:issue_node_id "I_kwDOKfslW86h_4c8"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-04T15:04:06+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/192"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2717878076-1733324646> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2717882363> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: Stripe Customer Endpoint"@en ;
+    abi:description """Implement integration with Stripe to manage customer data. This will enhance our payment processing capabilities and streamline customer management. Please ensure that the following functionalities are included:
+
+1. Create and update customer profiles
+2. Retrieve customer information
+3. Manage customer payment methods
+4. Handle customer subscriptions and invoices
+
+Consider using the Stripe API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 1.0 ;
+    abi:issue_node_id "I_kwDOKfslW86h_5f7"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-04T15:03:59+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/193"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2717882363-1733324639> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2718018938> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Workflows: What are the key priorities for today?"@en ;
+    abi:description "Create a SPARQL query to identify the key priorities for today."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 2.0 ;
+    abi:issue_node_id "I_kwDOKfslW86iAa16"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-04T17:10:09+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/194"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718018938-1733332209> .
+
 <http://ontology.naas.ai/abi/GitHubIssue#2718037402> a abi:GitHubIssue,
         owl:NamedIndividual ;
     rdfs:label "Add documentation to create new integrations, workflows, and pipelines"@en ;
@@ -45,20 +395,22 @@
     abi:issue_node_id "I_kwDOKfslW86iAfWa"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "High"@en ;
-    abi:status "🏗 In progress"@en ;
-    abi:updated_date "2024-12-04T15:06:58+00:00"^^xsd:dateTime ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-06T09:37:09+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/195"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733324818> .
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733477829> .
 
 <http://ontology.naas.ai/abi/GitHubIssue#2718051921> a abi:GitHubIssue,
         owl:NamedIndividual ;
     rdfs:label "Domain Ontology: Deal, Develop deal with HubSpot integration example"@en ;
     abi:description "We need to create a domain ontology for 'Deal' and provide a detailed example of how to develop a deal with HubSpot integration. This will help users understand the practical application of the ontology in real-world scenarios."@en ;
-    abi:due_date "2024-12-09"@en ;
+    abi:due_date "2024-12-16"@en ;
     abi:estimate 3.0 ;
     abi:issue_node_id "I_kwDOKfslW86iAi5R"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "Medium"@en ;
+    abi:state "open"@en ;
     abi:status "🔖 Ready"@en ;
     abi:updated_date "2024-12-04T15:12:03+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/196"@en ;
@@ -68,11 +420,12 @@
         owl:NamedIndividual ;
     rdfs:label "Application Ontology: Create HubSpot ontology with deals, contacts, companies, notes integration"@en ;
     abi:description "We need to develop an application ontology for HubSpot that includes integrations for deals, contacts, companies, and notes. This ontology will serve as a framework for understanding and implementing HubSpot functionalities within our system."@en ;
-    abi:due_date "2024-12-09"@en ;
+    abi:due_date "2024-12-16"@en ;
     abi:estimate 3.0 ;
     abi:issue_node_id "I_kwDOKfslW86iAjbl"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "Medium"@en ;
+    abi:state "open"@en ;
     abi:status "🔖 Ready"@en ;
     abi:updated_date "2024-12-04T15:12:54+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/197"@en ;
@@ -87,10 +440,11 @@
     abi:issue_node_id "I_kwDOKfslW86iAl5L"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "High"@en ;
-    abi:status "🔖 Ready"@en ;
-    abi:updated_date "2024-12-04T17:13:54+00:00"^^xsd:dateTime ;
+    abi:state "open"@en ;
+    abi:status "🏗 In progress"@en ;
+    abi:updated_date "2024-12-06T09:37:22+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/198"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733332434> .
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733477842> .
 
 <http://ontology.naas.ai/abi/GitHubIssue#2718342893> a abi:GitHubIssue,
         owl:NamedIndividual ;
@@ -100,6 +454,7 @@
     abi:estimate 0 ;
     abi:issue_node_id "I_kwDOKfslW86iBp7t"@en ;
     abi:labels "enhancement"@en ;
+    abi:state "open"@en ;
     abi:status "🔖 Ready"@en ;
     abi:updated_date "2024-12-04T17:18:56+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/199"@en ;
@@ -114,10 +469,11 @@
     abi:issue_node_id "I_kwDOKfslW86iBtgr"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "Medium"@en ;
-    abi:status "👀 In review"@en ;
-    abi:updated_date "2024-12-04T17:19:08+00:00"^^xsd:dateTime ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T16:29:47+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/200"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733332748> .
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733416187> .
 
 <http://ontology.naas.ai/abi/GitHubIssue#2718359308> a abi:GitHubIssue,
         owl:NamedIndividual ;
@@ -128,30 +484,398 @@
     abi:issue_node_id "I_kwDOKfslW86iBt8M"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "High"@en ;
-    abi:status "🏗 In progress"@en ;
-    abi:updated_date "2024-12-04T17:19:35+00:00"^^xsd:dateTime ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T16:29:48+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/201"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733332775> .
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733416188> .
 
 <http://ontology.naas.ai/abi/GitHubIssue#2718361894> a abi:GitHubIssue,
         owl:NamedIndividual ;
     rdfs:label "Workflow: Improve SPARQL to Get Top Priorities from All Subclasses of abi:Task"@en ;
     abi:description "This issue is to enhance the SPARQL query used to retrieve top priorities from all subclasses of `abi:Task`. The goal is to ensure that the query efficiently fetches relevant data and improves overall performance."@en ;
-    abi:due_date ""@en ;
+    abi:due_date "2024-12-09"@en ;
     abi:estimate 0 ;
     abi:issue_node_id "I_kwDOKfslW86iBukm"@en ;
     abi:labels "enhancement"@en ;
-    abi:status "🔖 Ready"@en ;
-    abi:updated_date "2024-12-04T17:20:08+00:00"^^xsd:dateTime ;
+    abi:priority "High"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T16:29:48+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/202"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733332808> .
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733416188> .
 
-<http://ontology.naas.ai/abi/GitHubUser#22365519> a abi:GitHubUser,
+<http://ontology.naas.ai/abi/GitHubIssue#2720357533> a abi:GitHubIssue,
         owl:NamedIndividual ;
-    rdfs:label "Dr0p42"@en ;
-    abi:url "https://github.com/Dr0p42"@en .
+    rdfs:label "Associate Issue created to Project"@en ;
+    abi:description "This issue is created to associate it with the project ID: 12."@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJVyd"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:01:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/203"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720357533-1733403668> .
 
-<http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733324818> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/GitHubIssue#2720438176> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJpeg"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:03+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/204"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720438176-1733406183> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720439368> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJpxI"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:43:12+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/205"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720439368-1733406192> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720439745> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJp3B"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:20+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/206"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720439745-1733406200> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720439954> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJp6S"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:43:29+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/207"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720439954-1733406209> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720440170> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJp9q"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:37+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/208"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720440170-1733406217> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720440400> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJqBQ"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:43:45+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/209"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720440400-1733406225> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720440683> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJqFr"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:53+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/210"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720440683-1733406233> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720450697> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description """**Description:** 
+
+This issue is created to associate the current task with Project ID 12. The goal is to ensure that all relevant discussions, updates, and progress related to this task are tracked within the project.
+
+Please provide any specific details or requirements that need to be addressed in this project association."""@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJsiJ"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:42:51+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/211"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720450697-1733406171> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720451227> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description """**Description:** 
+
+This issue is created to associate the current task with Project ID 12. The goal is to ensure that all relevant discussions, updates, and progress related to this task are tracked within the project.
+
+Please provide any specific details or requirements that need to be addressed in this project association."""@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "I_kwDOKfslW86iJsqb"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:42:32+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/212"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720451227-1733406152> .
+
+<http://ontology.naas.ai/abi/GitHubIssue#2720516450> a abi:GitHubIssue,
+        owl:NamedIndividual ;
+    rdfs:label "feat: pipelines GitHub issue to ontology + workflows"@en ;
+    abi:estimate 0 ;
+    abi:issue_node_id "PR_kwDOKfslW86EMGKu"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T16:29:46+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/213"@en ;
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2720516450-1733416186> .
+
+<http://ontology.naas.ai/abi/BFO_0000203#1733416188> a bfo:BFO_0000203,
+        owl:NamedIndividual ;
+    rdfs:label "2024-12-05T16:29:48"@en .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2439646652-1733307400> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "WIP: 178 schedule abi using GitHub action"@en ;
+    abi:description "This pull request resolves #178"@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:issue_node_id "PR_kwDOKfslW852-TAn"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:16:40+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/183"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2439646652>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1722420113> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1722423825> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2441760865-1733307308> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "docs: Readme add Local Setup and Setup a New scheduler sections"@en ;
+    abi:description "This pull request is updating the README.md to add local setup section and how to add a new scheduler."@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:issue_node_id "PR_kwDOKfslW853FU9f"@en ;
+    abi:labels "documentation, released"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:15:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/184"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2441760865>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1722499197> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1724051268> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2448699625-1726498725> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Create Naas Completion When Plugin is Updated"@en ;
+    abi:due_date "2024-09-16"@en ;
+    abi:estimate 5.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86R9DDp"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-09-16T14:58:45+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/185"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2448699625>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1722868003> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1726498725> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2455386193-1733307399> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "ci: Make it possible to override runs-on"@en ;
+    abi:description """This pull request makes it possible to override runs-on in the CI/CD configuration. \r
+\r
+Pretty useful if you want to run the schedulers on a self-hosted runner in your own infrastructure."""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:issue_node_id "PR_kwDOKfslW8530K_s"@en ;
+    abi:labels "released"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:16:39+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/186"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2455386193>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1723111193> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1723111201> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2460977067-1728582093> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Create Class to Manage Datalake and Rework Storage"@en ;
+    abi:due_date "2024-09-23"@en ;
+    abi:estimate 0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86Sr4er"@en ;
+    abi:labels "enhancement"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-10-10T17:41:33+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/187"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2460977067>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1723468473> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1728582092> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2602182254-1729521232> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Create JSON Ontologies & Assistants"@en ;
+    abi:description """- outputs/demo/ontologies\r
+ABI: description, logo\r
+AIA: description, logo\r
+- outputs/demo/assistants\r
+..."""@en ;
+    abi:due_date "2024-10-28"@en ;
+    abi:estimate 3.0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86bGiZu"@en ;
+    abi:labels ""@en ;
+    abi:priority "High"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-10-21T14:33:52+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/189"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2602182254>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1729508666> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1729521231> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2602435503-1733307351> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "feat: add abi ontologies"@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "PR_kwDOKfslW85_UKuJ"@en ;
+    abi:labels "released"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-04T10:15:51+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/190"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2602435503>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1729514547> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1729520324> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2702653067-1732810627> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "New Feature Request"@en ;
+    abi:description "Request to add a new feature that enhances user experience. Please provide details on the feature and its expected impact."@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86hFzaL"@en ;
+    abi:labels "enhancement, feature"@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-11-28T16:17:07+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/191"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2702653067>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1732810586> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1732810627> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2717878076-1733324646> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: HubSpot, Contacts, Deals, Companies, Notes Endpoint"@en ;
+    abi:description """Implement integration with HubSpot to manage contacts, deals, companies, and notes. This will enhance our CRM capabilities and streamline workflows. Please ensure that the following functionalities are included:
+
+1. Fetch and update contacts
+2. Create and manage deals
+3. Retrieve and update company information
+4. Manage notes associated with contacts and deals
+
+Consider using the HubSpot API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 1.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86h_4c8"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-04T15:04:06+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/192"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2717878076>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733321358> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733324646> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2717882363-1733324639> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Integration: Stripe Customer Endpoint"@en ;
+    abi:description """Implement integration with Stripe to manage customer data. This will enhance our payment processing capabilities and streamline customer management. Please ensure that the following functionalities are included:
+
+1. Create and update customer profiles
+2. Retrieve customer information
+3. Manage customer payment methods
+4. Handle customer subscriptions and invoices
+
+Consider using the Stripe API for this integration and ensure proper authentication and error handling."""@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 1.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86h_5f7"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "Medium"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-04T15:03:59+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/193"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2717882363>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733321432> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733324639> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718018938-1733332209> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Workflows: What are the key priorities for today?"@en ;
+    abi:description "Create a SPARQL query to identify the key priorities for today."@en ;
+    abi:due_date "2024-12-09"@en ;
+    abi:estimate 2.0 ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iAa16"@en ;
+    abi:labels "enhancement"@en ;
+    abi:priority "High"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-04T17:10:09+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/194"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718018938>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733324439> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733332209> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733477829> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Add documentation to create new integrations, workflows, and pipelines"@en ;
     abi:description "We need to enhance the README file by adding comprehensive documentation on how to create new integrations, workflows, and pipelines. This will help users understand the process better and improve the overall usability of the project."@en ;
@@ -162,19 +886,20 @@
     abi:issue_node_id "I_kwDOKfslW86iAfWa"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "High"@en ;
-    abi:state "open"@en ;
-    abi:status "🏗 In progress"@en ;
-    abi:updated_date "2024-12-04T15:06:58+00:00"^^xsd:dateTime ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-06T09:37:09+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/195"@en ;
     bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718037402>,
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
-    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733324792> .
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733324792> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733477829> .
 
 <http://ontology.naas.ai/abi/TaskCompletion#2718051921-1733325123> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Domain Ontology: Deal, Develop deal with HubSpot integration example"@en ;
     abi:description "We need to create a domain ontology for 'Deal' and provide a detailed example of how to develop a deal with HubSpot integration. This will help users understand the practical application of the ontology in real-world scenarios."@en ;
-    abi:due_date "2024-12-09"@en ;
+    abi:due_date "2024-12-16"@en ;
     abi:estimate 3.0 ;
     abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
     abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
@@ -193,7 +918,7 @@
         owl:NamedIndividual ;
     rdfs:label "Application Ontology: Create HubSpot ontology with deals, contacts, companies, notes integration"@en ;
     abi:description "We need to develop an application ontology for HubSpot that includes integrations for deals, contacts, companies, and notes. This ontology will serve as a framework for understanding and implementing HubSpot functionalities within our system."@en ;
-    abi:due_date "2024-12-09"@en ;
+    abi:due_date "2024-12-16"@en ;
     abi:estimate 3.0 ;
     abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
     abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
@@ -208,20 +933,20 @@
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
     bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733325067> .
 
-<http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733332434> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733477842> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Create Agent Support to Enable Feedback Loop"@en ;
     abi:description "Develop a mechanism for the agent to enable a feedback loop. If a user's intent or tool is not mapped, the system should automatically create an issue in the repository. This will help in continuously improving the agent's capabilities and ensuring that user needs are met."@en ;
     abi:due_date "2024-12-09"@en ;
     abi:estimate 8.0 ;
-    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#22365519> ;
+    abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
     abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
     abi:issue_node_id "I_kwDOKfslW86iAl5L"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "High"@en ;
     abi:state "open"@en ;
-    abi:status "🔖 Ready"@en ;
-    abi:updated_date "2024-12-04T17:13:54+00:00"^^xsd:dateTime ;
+    abi:status "🏗 In progress"@en ;
+    abi:updated_date "2024-12-06T09:37:22+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/198"@en ;
     bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718064203>,
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
@@ -245,7 +970,7 @@
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
     bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332147> .
 
-<http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733332748> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733416187> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Integration: GitHub GraphQL"@en ;
     abi:description "This issue is to discuss and implement the integration of GitHub's GraphQL API into the ABI system. The goal is to leverage the capabilities of GraphQL for more efficient data retrieval and manipulation."@en ;
@@ -256,15 +981,16 @@
     abi:issue_node_id "I_kwDOKfslW86iBtgr"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "Medium"@en ;
-    abi:state "open"@en ;
-    abi:status "👀 In review"@en ;
-    abi:updated_date "2024-12-04T17:19:08+00:00"^^xsd:dateTime ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T16:29:47+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/200"@en ;
     bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718357547>,
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
-    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332566> .
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332566> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733416187> .
 
-<http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733332775> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733416188> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Pipeline: Complete Mapping GitHub Issue to Ontology"@en ;
     abi:description "This issue is to ensure the complete mapping of GitHub issues to the ontology used in the ABI system. The goal is to create a structured representation of issues that aligns with the existing ontology framework."@en ;
@@ -275,44 +1001,267 @@
     abi:issue_node_id "I_kwDOKfslW86iBt8M"@en ;
     abi:labels "enhancement"@en ;
     abi:priority "High"@en ;
-    abi:state "open"@en ;
-    abi:status "🏗 In progress"@en ;
-    abi:updated_date "2024-12-04T17:19:35+00:00"^^xsd:dateTime ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T16:29:48+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/201"@en ;
     bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718359308>,
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
-    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332621> .
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332621> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733416188> .
 
-<http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733332808> a abi:TaskCompletion,
+<http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733416188> a abi:TaskCompletion,
         owl:NamedIndividual ;
     rdfs:label "Workflow: Improve SPARQL to Get Top Priorities from All Subclasses of abi:Task"@en ;
     abi:description "This issue is to enhance the SPARQL query used to retrieve top priorities from all subclasses of `abi:Task`. The goal is to ensure that the query efficiently fetches relevant data and improves overall performance."@en ;
-    abi:due_date ""@en ;
+    abi:due_date "2024-12-09"@en ;
     abi:estimate 0 ;
     abi:hasAssignee <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
     abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
     abi:issue_node_id "I_kwDOKfslW86iBukm"@en ;
     abi:labels "enhancement"@en ;
-    abi:state "open"@en ;
-    abi:status "🔖 Ready"@en ;
-    abi:updated_date "2024-12-04T17:20:08+00:00"^^xsd:dateTime ;
+    abi:priority "High"@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T16:29:48+00:00"^^xsd:dateTime ;
     abi:url "https://github.com/jupyter-naas/abi/issues/202"@en ;
     bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2718361894>,
         <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
-    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332695> .
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733332695> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733416188> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720357533-1733403668> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue created to Project"@en ;
+    abi:description "This issue is created to associate it with the project ID: 12."@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJVyd"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:01:08+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/203"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720357533>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733403630> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733403668> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720438176-1733406183> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJpeg"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:03+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/204"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720438176>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405769> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406183> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720439368-1733406192> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJpxI"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:43:12+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/205"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720439368>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405795> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406192> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720439745-1733406200> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJp3B"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:20+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/206"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720439745>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405804> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406199> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720439954-1733406209> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJp6S"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:43:29+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/207"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720439954>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405810> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406208> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720440170-1733406217> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJp9q"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:37+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/208"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720440170>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405816> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406217> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720440400-1733406225> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJqBQ"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:43:45+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/209"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720440400>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405822> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406224> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720440683-1733406233> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description "This issue needs to be associated with Project ID 12 to ensure it is tracked and managed effectively. Please review the details and confirm the association."@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJqFr"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:43:53+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/210"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720440683>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733405829> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406232> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720450697-1733406171> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description """**Description:** 
+
+This issue is created to associate the current task with Project ID 12. The goal is to ensure that all relevant discussions, updates, and progress related to this task are tracked within the project.
+
+Please provide any specific details or requirements that need to be addressed in this project association."""@en ;
+    abi:due_date ""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJsiJ"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:status "✅ Done"@en ;
+    abi:updated_date "2024-12-05T13:42:51+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/211"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720450697>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733406066> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406171> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720451227-1733406152> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "Associate Issue with Project"@en ;
+    abi:description """**Description:** 
+
+This issue is created to associate the current task with Project ID 12. The goal is to ensure that all relevant discussions, updates, and progress related to this task are tracked within the project.
+
+Please provide any specific details or requirements that need to be addressed in this project association."""@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "I_kwDOKfslW86iJsqb"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T13:42:32+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/issues/212"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720451227>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733406073> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733406151> .
+
+<http://ontology.naas.ai/abi/TaskCompletion#2720516450-1733416186> a abi:TaskCompletion,
+        owl:NamedIndividual ;
+    rdfs:label "feat: pipelines GitHub issue to ontology + workflows"@en ;
+    abi:estimate 0 ;
+    abi:hasCreator <http://ontology.naas.ai/abi/GitHubUser#48032461> ;
+    abi:issue_node_id "PR_kwDOKfslW86EMGKu"@en ;
+    abi:labels ""@en ;
+    abi:state "closed"@en ;
+    abi:updated_date "2024-12-05T16:29:46+00:00"^^xsd:dateTime ;
+    abi:url "https://github.com/jupyter-naas/abi/pull/213"@en ;
+    bfo:BFO_0000058 <http://ontology.naas.ai/abi/GitHubIssue#2720516450>,
+        <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> ;
+    bfo:BFO_0000222 <http://ontology.naas.ai/abi/BFO_0000203#1733407626> ;
+    bfo:BFO_0000224 <http://ontology.naas.ai/abi/BFO_0000203#1733416186> .
+
+<http://ontology.naas.ai/abi/GitHubUser#22365519> a abi:GitHubUser,
+        owl:NamedIndividual ;
+    rdfs:label "Dr0p42"@en ;
+    abi:url "https://github.com/Dr0p42"@en .
 
 <http://ontology.naas.ai/abi/GitHubRepository#/jupyter-naas/abi> a abi:GitHubRepository,
         owl:NamedIndividual ;
     rdfs:label "/jupyter-naas/abi"@en ;
     abi:url "https://api.github.com/repos/jupyter-naas/abi"@en ;
-    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733324818>,
+    bfo:BFO_0000059 <http://ontology.naas.ai/abi/TaskCompletion#2439646652-1733307400>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2441760865-1733307308>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2448699625-1726498725>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2455386193-1733307399>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2460977067-1728582093>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2602182254-1729521232>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2602435503-1733307351>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2702653067-1732810627>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2717878076-1733324646>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2717882363-1733324639>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718018938-1733332209>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718037402-1733477829>,
         <http://ontology.naas.ai/abi/TaskCompletion#2718051921-1733325123>,
         <http://ontology.naas.ai/abi/TaskCompletion#2718054117-1733325174>,
-        <http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733332434>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718064203-1733477842>,
         <http://ontology.naas.ai/abi/TaskCompletion#2718342893-1733332736>,
-        <http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733332748>,
-        <http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733332775>,
-        <http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733332808> .
+        <http://ontology.naas.ai/abi/TaskCompletion#2718357547-1733416187>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718359308-1733416188>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2718361894-1733416188>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720357533-1733403668>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720438176-1733406183>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720439368-1733406192>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720439745-1733406200>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720439954-1733406209>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720440170-1733406217>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720440400-1733406225>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720440683-1733406233>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720450697-1733406171>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720451227-1733406152>,
+        <http://ontology.naas.ai/abi/TaskCompletion#2720516450-1733416186> .
 
 <http://ontology.naas.ai/abi/GitHubUser#48032461> a abi:GitHubUser,
         owl:NamedIndividual ;
