@@ -274,3 +274,7 @@ cco:ont00000443 rdf:type owl:Class ;
                 rdfs:label "Commercial Organization"@en ;
                 skos:definition "An Organization that is the bearer of a Commercial Role and whose primary objective is to make a profit from the provision of goods or services."@en ;
                 cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+#################################################################
+#    Individuals
+#################################################################
