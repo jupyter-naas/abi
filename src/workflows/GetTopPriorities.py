@@ -5,6 +5,8 @@ from src import secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
+from rdflib import Graph
+from abi import logger
 
 
 @dataclass
@@ -29,12 +31,30 @@ class GetTopPrioritiesWorkflow(Workflow):
         self.__ontology_store = OntologyStoreService(onto_store_adaptor)
         
     def run(self) -> str:
+        # First, get all task subclasses
+        task_subclasses_query = """
+            PREFIX abi: <http://ontology.naas.ai/abi/>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            
+            SELECT DISTINCT ?taskType
+            WHERE {
+                ?taskType rdfs:subClassOf+ abi:Task .
+            }
+        """
+        g = Graph()
+        g.parse("src/ontologies/consolidated_ontology.ttl", format="turtle")
+        task_types = g.query(task_subclasses_query)
+        
+        # Create VALUES clause instead of UNION
+        task_types_values = "VALUES ?taskType {" + " ".join([f"<{str(row['taskType'])}>" for row in task_types]) + "}"
+
         # Calculate the due date based on configuration
         today = datetime.now()
         due_date = today + timedelta(days=self.__configuration.days)
         due_date_str = due_date.strftime("%Y-%m-%d")
 
-        results = self.__ontology_store.query(f"""
+        # Main query using dynamic task types
+        query = f"""
             PREFIX abi: <http://ontology.naas.ai/abi/>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             PREFIX bfo: <http://purl.obolibrary.org/obo/> 
@@ -42,15 +62,16 @@ class GetTopPrioritiesWorkflow(Workflow):
 
             SELECT DISTINCT ?issue ?title ?description ?url ?status ?priority ?labels ?due_date ?updated_date ?assignee_label
             WHERE {{
-                # Match tasks of type GitHubIssue
-                ?issue a abi:GitHubIssue ;
-                       rdfs:label ?title ;
+                # Use VALUES clause for task types
+                {task_types_values}
+                ?issue a ?taskType .
+                
+                ?issue rdfs:label ?title ;
                        abi:state ?state .
                 
-                # Filter for open state
+                # Rest of the query remains the same
                 FILTER (LCASE(STR(?state)) = "open")
                 
-                # Get required properties
                 OPTIONAL {{ ?issue abi:description ?description }}
                 OPTIONAL {{ ?issue abi:url ?url }}
                 OPTIONAL {{ ?issue abi:status ?status }}
@@ -59,34 +80,33 @@ class GetTopPrioritiesWorkflow(Workflow):
                 OPTIONAL {{ ?issue abi:due_date ?due_date }}
                 OPTIONAL {{ ?issue abi:updated_date ?updated_date }}
                 
-                # Filter for due dates that exist and are not empty
                 FILTER (BOUND(?due_date) && ?due_date != "")
-                
-                # Filter for due dates before or equal to the calculated end date
                 FILTER (STR(?due_date) != '' && STR(?due_date) != 'None')
                 FILTER (STR(?due_date) <= "{due_date_str}")
                 
-                # Get associated task completion if it exists
                 OPTIONAL {{
                     ?task_completion bfo:BFO_0000058 ?issue ;
                                     a abi:TaskCompletion .
-                    # Get assignee if it exists
                     OPTIONAL {{
                         ?task_completion abi:hasAssignee ?assignee .
-                        ?assignee a abi:GitHubUser ; # Ensure it's a GitHub user
+                        ?assignee a abi:GitHubUser ;
                                  rdfs:label ?assignee_label .
                     }}
                 }}
             }}
             ORDER BY DESC(?due_date) ?title
-        """)
+        """
+        logger.info(f"Query: {query}")
+        results = self.__ontology_store.query(query)
+        
         # Convert tasks to a list of dictionaries for better LLM consumption
         data = []
         for row in results:
             data_dict = {}
-            for x in row.labels:
-                data_dict[x] = str(row[x])
-                data.append(data_dict)
+            # Create dictionary directly from row without the nested loop
+            for key in row.labels:
+                data_dict[key] = str(row[key]) if row[key] else None
+            data.append(data_dict)
             
         return data
 
