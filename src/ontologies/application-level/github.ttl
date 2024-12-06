@@ -1,12 +1,11 @@
-@prefix abi: <http://ontology.naas.ai/abi/> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/> .
-@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://purl.obolibrary.org/obo/bfo.owl> rdf:type owl:Ontology ;
                                     owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
