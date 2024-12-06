@@ -7,7 +7,7 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://purl.obolibrary.org/obo/bfo.owl> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/stripe.ttl> rdf:type owl:Ontology ;
                                     owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
                                     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/stripe.ttl> ;
                                     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
