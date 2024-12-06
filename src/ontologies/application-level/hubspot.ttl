@@ -1,0 +1,44 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://purl.obolibrary.org/obo/bfo.owl> rdf:type owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/hubspot.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for HubSpot."@en ;
+                                    dc:license "" ;
+                                    dc:title "HubSpot Application Ontology" .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+#################################################################
+#    Data properties
+#################################################################
+
+#################################################################
+#    Object Properties
+#################################################################
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:HubSpotSite rdf:type owl:Class ;
+    rdfs:subClassOf abi:SitePlatform ;
+    rdfs:label "HubSpot Site"@en ;
+    skos:definition "A HubSpot instance is a CRM platform where businesses manage their marketing, sales, and customer service operations."@en ;
+    skos:example "A company's HubSpot portal where they manage contacts, deals, and marketing campaigns."@en .
+
+abi:HubSpotUser a owl:Class ;
+    rdfs:subClassOf abi:User ;
+    rdfs:label "HubSpot User"@en ;
+    skos:definition "An individual who uses HubSpot's platform to manage customer relationships, marketing campaigns, and sales processes."@en ;
+    skos:example "A marketing manager using HubSpot to create and track email campaigns."@en . 

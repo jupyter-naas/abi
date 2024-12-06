@@ -1,11 +1,21 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/accounting.ttl> rdf:type owl:Ontology ;
+                                        owl:imports <> ;
+                                        owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/accounting.ttl> ;
+                                        dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                        dc:description "Domain ontology for accounting and financial transactions."@en ;
+                                        dc:license "" ;
+                                        dc:title "Accounting Domain Ontology" .
 
 # General Ledger Classes
 abi:GeneralLedgerEntry a owl:Class ;
