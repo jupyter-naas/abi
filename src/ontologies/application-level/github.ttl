@@ -12,8 +12,8 @@
                                     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/github.ttl> ;
                                     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
                                     dc:description "Application ontology for GitHub."@en ;
-                                    dc:license ""> ;
-                                    dc:title "GitHub Application Ontology" ;
+                                    dc:license "" ;
+                                    dc:title "GitHub Application Ontology" .
 
 #################################################################
 #    Annotation properties
