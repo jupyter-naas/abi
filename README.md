@@ -38,25 +38,25 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
    a. **Clone the Repository** (for personal use)
    ```bash
-   git clone https://github.com/jupyter-naas/abi-framework.git
-   cd abi-framework
+   git clone https://github.com/jupyter-naas/abi.git
+   cd abi
    ```
 
    b. **Fork the Repository** (to contribute changes)
    ```bash
    # 1. Fork via GitHub UI
    # 2. Clone your fork
-   git clone https://github.com/YOUR-USERNAME/abi-framework.git
-   cd abi-framework
+   git clone https://github.com/YOUR-USERNAME/abi.git
+   cd abi
    ```
 
    c. **Create a Private Fork** (for private development)
    ```bash
    # 1. Create private repository via GitHub UI
    # 2. Clone your private repository
-   git clone https://github.com/YOUR-USERNAME/abi-framework-private.git
-   cd abi-framework-private
-   git remote add upstream https://github.com/jupyter-naas/abi-framework.git
+   git clone https://github.com/YOUR-USERNAME/abi-private.git
+   cd abi-private
+   git remote add upstream https://github.com/jupyter-naas/abi.git
    git pull --rebase upstream main
    git push
    ```
