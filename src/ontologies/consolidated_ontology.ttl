@@ -562,6 +562,18 @@ abi:Honor a owl:Class ;
     skos:definition "A generically dependent continuant representing recognition or accolades."@en ;
     skos:example "Nobel Prize in Literature"@en .
 
+abi:HubSpotSite a owl:Class ;
+    rdfs:label "HubSpot Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A HubSpot instance is a CRM platform where businesses manage their marketing, sales, and customer service operations."@en ;
+    skos:example "A company's HubSpot portal where they manage contacts, deals, and marketing campaigns."@en .
+
+abi:HubSpotUser a owl:Class ;
+    rdfs:label "HubSpot User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses HubSpot's platform to manage customer relationships, marketing campaigns, and sales processes."@en ;
+    skos:example "A marketing manager using HubSpot to create and track email campaigns."@en .
+
 abi:IT a abi:Department ;
     rdfs:label "Information Technology (IT)"@en .
 
@@ -649,6 +661,18 @@ abi:Monthly a abi:ContractUnit,
 
 abi:MonthlyRate a abi:ContractUnit .
 
+abi:NaasSite a owl:Class ;
+    rdfs:label "Naas Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Naas platform instance where users can create, manage, and automate data workflows and notebooks."@en ;
+    skos:example "A data team's Naas workspace where they create and schedule automated data pipelines."@en .
+
+abi:NaasUser a owl:Class ;
+    rdfs:label "Naas User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses Naas's platform to create and manage data workflows and automated processes."@en ;
+    skos:example "A data analyst creating automated reports using Naas notebooks."@en .
+
 abi:OnHold a abi:ProjectStatus .
 
 <http://ontology.naas.ai/abi/Organization#naas.ai> a abi:Organization ;
@@ -673,6 +697,18 @@ abi:Patent a owl:Class ;
     rdfs:subClassOf bfo1:BFO_0000031 ;
     skos:definition "A legal document granting exclusive rights to an inventor or assignee."@en ;
     skos:example "A patent for a new smartphone design"@en .
+
+abi:PerplexitySite a owl:Class ;
+    rdfs:label "Perplexity Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Perplexity platform instance where users can interact with AI to get answers and insights from various sources."@en ;
+    skos:example "A user's Perplexity interface where they ask questions and receive AI-generated responses."@en .
+
+abi:PerplexityUser a owl:Class ;
+    rdfs:label "Perplexity User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses Perplexity's AI platform to ask questions and receive AI-powered responses."@en ;
+    skos:example "A researcher using Perplexity to gather information and analyze data."@en .
 
 <http://ontology.naas.ai/abi/Post#cf0e458f8a05f02d7ef833d11d0cf8606b76f48b26e523d8b30cfecfc41826dd> a abi:VideoPost ;
     rdfs:label "How does using BFO and CCO help with ontology alignment?" ;
@@ -772,6 +808,18 @@ abi:Publisher a owl:Class ;
 
 abi:Refunded a abi:TransactionStatus .
 
+abi:ReplicateSite a owl:Class ;
+    rdfs:label "Replicate Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Replicate platform instance where users can deploy and run machine learning models in the cloud."@en ;
+    skos:example "A developer's Replicate workspace where they deploy and run AI models."@en .
+
+abi:ReplicateUser a owl:Class ;
+    rdfs:label "Replicate User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses Replicate's platform to deploy and interact with machine learning models."@en ;
+    skos:example "A data scientist deploying a custom machine learning model on Replicate."@en .
+
 abi:ResearchAndDevelopment a abi:Department ;
     rdfs:label "Research and Development (R&D)"@en .
 
@@ -822,6 +870,18 @@ abi:ServiceAgreement a abi:ContractType .
 
 abi:StrategyAndBusinessDevelopment a abi:Department ;
     rdfs:label "Strategy and Business Development"@en .
+
+abi:StripeSite a owl:Class ;
+    rdfs:label "Stripe Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Stripe account is a payment processing platform where businesses manage transactions, payments, and financial operations."@en ;
+    skos:example "A business's Stripe dashboard where they process payments and manage subscriptions."@en .
+
+abi:StripeUser a owl:Class ;
+    rdfs:label "Stripe User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual or business who uses Stripe's platform to process payments and manage financial transactions."@en ;
+    skos:example "A business owner who processes payments through Stripe."@en .
 
 abi:SubscriptionAgreement a abi:ContractType .
 
@@ -1965,13 +2025,28 @@ bfo1:bfo.owl a owl:Ontology ;
         "Jeremy Ravenel",
         "Maxime Jublou" ;
     dc:description "Application ontology for GitHub."@en,
+        "Application ontology for HubSpot."@en,
+        "Application ontology for Naas."@en,
+        "Application ontology for Perplexity."@en,
+        "Application ontology for Replicate."@en,
+        "Application ontology for Stripe."@en,
         "Domain ontology for tasks."@en ;
     dc:license "" ;
     dc:title "GitHub Application Ontology",
+        "HubSpot Application Ontology",
+        "Naas Application Ontology",
+        "Perplexity Application Ontology",
+        "Replicate Application Ontology",
+        "Stripe Application Ontology",
         "Task Domain Ontology" ;
     owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl>,
         cco1:AgentOntology ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/github.ttl>,
+        <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/hubspot.ttl>,
+        <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/naas.ttl>,
+        <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/perplexity.ttl>,
+        <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/replicate.ttl>,
+        <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/stripe.ttl>,
         <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> .
 
 dc11:contributor a owl:AnnotationProperty .
@@ -2327,12 +2402,6 @@ abi:ResearchAgreement a abi:ContractType .
 
 abi:RevenueAccount a abi:AccountType .
 
-abi:SitePlatform a owl:Class ;
-    rdfs:label "Site Platform"@en ;
-    rdfs:subClassOf cco1:ont00000509 ;
-    skos:definition "A platform that provides online services and hosts content through a website interface."@en ;
-    skos:example "Platforms like GitHub, GitLab, or Bitbucket that host repositories and provide collaboration services."@en .
-
 abi:Supportive a abi:Sentiment ;
     rdfs:label "Supportive"@en .
 
@@ -2567,12 +2636,6 @@ abi:Score a owl:Class ;
 abi:TransactionStatus a owl:Class ;
     rdfs:label "Transaction Status"@en .
 
-abi:User a owl:Class ;
-    rdfs:label "User"@en ;
-    rdfs:subClassOf cco1:ont00001017 ;
-    skos:definition "An individual who interacts with a system or platform, such as creating, modifying, or managing content."@en ;
-    skos:example "A user with access to a platform or service."@en .
-
 abi:Completed a abi:ContractStatus,
         abi:ProjectStatus,
         abi:TransactionStatus .
@@ -2582,6 +2645,12 @@ abi:ContractUnit a owl:Class ;
 
 abi:EventType a owl:Class ;
     rdfs:label "Event Type"@en .
+
+abi:SitePlatform a owl:Class ;
+    rdfs:label "Site Platform"@en ;
+    rdfs:subClassOf cco1:ont00000509 ;
+    skos:definition "A platform that provides online services and hosts content through a website interface."@en ;
+    skos:example "Platforms like GitHub, GitLab, or Bitbucket that host repositories and provide collaboration services."@en .
 
 abi:AssetAccount a abi:AccountType .
 
@@ -2642,6 +2711,12 @@ abi:EngagementMetrics a owl:Class ;
 abi:GeneralLedgerEntry a owl:Class ;
     rdfs:label "General Ledger Entry"@en ;
     skos:definition "An accounting entry in the general ledger" .
+
+abi:User a owl:Class ;
+    rdfs:label "User"@en ;
+    rdfs:subClassOf cco1:ont00001017 ;
+    skos:definition "An individual who interacts with a system or platform, such as creating, modifying, or managing content."@en ;
+    skos:example "A user with access to a platform or service."@en .
 
 abi:Interaction a owl:Class ;
     rdfs:label "Interaction"@en ;
