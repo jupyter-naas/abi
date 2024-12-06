@@ -1,27 +1,28 @@
-from dataclasses import dataclass
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from abi.pipeline import Pipeline, PipelineConfiguration
 from abi.utils.Graph import ABIGraph
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
-
 from src.data.pipelines.github.github_issue_pipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
+from dataclasses import dataclass
 from rdflib import Graph
 from src import secret
 from abi import logger
 import pydash as _
 
+
 @dataclass
 class GithubIssuesPipelineConfiguration(PipelineConfiguration):
     github_repository: str
+    limit: int = 10
     state: str = "all"
     github_project_id: int = 0
     ontology_store_name: str = "github"
 
+
 class GithubIssuesPipeline(Pipeline):
-    def __init__(self, integration: GithubIntegration, integration_graphql: GithubGraphqlIntegration, ontology_store: IOntologyStoreService, configuration: GithubIssuesPipelineConfiguration):
+    def __init__(self, integration: GithubIntegration, integration_graphql: GithubGraphqlIntegration, ontology_store: OntologyStoreService, configuration: GithubIssuesPipelineConfiguration):
         super().__init__([integration], configuration)
         
         self.__integration = integration
@@ -31,7 +32,7 @@ class GithubIssuesPipeline(Pipeline):
         
     def run(self) -> Graph:
         # Get all issues from the repository
-        issues_data = self.__integration.get_issues(self.__configuration.github_repository, state=self.__configuration.state)
+        issues_data = self.__integration.get_issues(self.__configuration.github_repository, state=self.__configuration.state, limit=self.__configuration.limit)
         logger.debug(f"Issues fetched: {len(issues_data)}")
 
         # Get project data from GithubGraphqlIntegration
@@ -75,7 +76,8 @@ if __name__ == "__main__":
     @click.option('--github_repository', '--ghr', required=True, help='GitHub repository in format owner/repo')
     @click.option('--github_project_id', '--ghp', default=None, help='GitHub project ID')
     @click.option('--state', '--st', default="all", help='GitHub issue state')
-    def main(github_access_token, github_repository, github_project_id, state):
+    @click.option('--limit', '--l', default=10, help='Maximum number of issues to fetch')
+    def main(github_access_token, github_repository, github_project_id, state, limit):
         # Use provided token or fall back to secret
         token = github_access_token or secret.get("GITHUB_ACCESS_TOKEN")
         
@@ -86,7 +88,8 @@ if __name__ == "__main__":
             configuration=GithubIssuesPipelineConfiguration(
                 github_repository=github_repository,
                 github_project_id=github_project_id,
-                state=state
+                state=state,
+                limit=limit
             )
         ).run()
         
