@@ -319,10 +319,10 @@ class GithubGraphqlIntegration(Integration):
         }
         
         data = self.execute_query(add_mutation, variables)
-        
+        return data
         # Get the item ID from the response
-        item_id = data["addProjectV2ItemById"]["item"]["id"]
-        return item_id
+        # item_id = data["addProjectV2ItemById"]["item"]["id"]
+        # return item_id
 
         # # Update fields mutation
         # update_mutation = """
