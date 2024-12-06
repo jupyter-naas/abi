@@ -79,9 +79,69 @@ class GithubIntegration(Integration):
         """Get an issue from a repository."""
         return self._make_request("GET", f"/repos/{repo_name}/issues/{issue_id}")
 
-    def get_issues(self, repo_name: str, state: str = "all") -> List[Dict]:
-        """Get issues from a repository."""
-        return self._make_request("GET", f"/repos/{repo_name}/issues?state={state}")
+    def get_issues(
+            self, 
+            repo_name: str, 
+            filter: Optional[str] = "all", 
+            state: Optional[str] = "open", 
+            sort: Optional[str] = "created", 
+            direction: Optional[str] = "desc",
+            limit: Optional[int] = -1,
+            since: Optional[str] = None,
+            labels: Optional[str] = None, 
+        ) -> List[Dict]:
+        """Get issues from a repository.
+        
+        Args:
+            repo_name (str): Repository name in 'owner/repo' format
+            filter (str, optional): Filter issues by: assigned, created, mentioned, subscribed, repos, all. 
+                Defaults to "assigned"
+            state (str, optional): Filter issues by state: open, closed, all. Defaults to "open"
+            labels (str, optional): Comma-separated list of label names. Example: "bug,ui,@high"
+            sort (str, optional): Sort issues by: created, updated, comments. Defaults to "created"
+            direction (str, optional): Sort direction: asc, desc. Defaults to "desc"
+            since (str, optional): Only show results updated after timestamp (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)
+            limit (int, optional): Maximum number of issues to return. If -1, returns all issues.
+            
+        Returns:
+            List[Dict]: List of issues matching the specified criteria
+        """
+        all_issues = []
+        page = 1
+        per_page = 100  # Max allowed by GitHub API
+        
+        while True:
+            params = {
+                "filter": filter,
+                "state": state,
+                "sort": sort,
+                "direction": direction,
+                "pulls": False,
+                "per_page": per_page,
+                "page": page
+            }
+            
+            if labels:
+                params["labels"] = labels
+            if since:
+                params["since"] = since
+                
+            query_string = "&".join(f"{k}={v}" for k,v in params.items())
+            response = self._make_request("GET", f"/repos/{repo_name}/issues?{query_string}")
+            
+            if len(response) == 0:
+                break
+                
+            all_issues.extend(response)
+            
+            # Break if we've reached the requested limit
+            if limit != -1 and len(all_issues) >= limit:
+                all_issues = all_issues[:limit]
+                break
+                
+            page += 1
+            
+        return all_issues
 
     def create_pull_request(self, repo_name: str, title: str, body: str, head: str, base: str) -> Dict:
         """Create a pull request."""
@@ -154,10 +214,6 @@ def as_tools(configuration: GithubIntegrationConfiguration):
         body: str = Field(..., description="Content/description of the issue (mandatory)")
         labels: Optional[List[str]] = Field(None, description="List of labels to apply to the issue (optional)")
 
-    # class GetIssuesSchema(BaseModel):
-    #     repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
-    #     state: str = Field("open", description="State of issues to fetch: 'open', 'closed', or 'all'")
-
     class CreatePullRequestSchema(BaseModel):
         repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
         title: str = Field(..., description="Title of the pull request")
@@ -194,12 +250,6 @@ def as_tools(configuration: GithubIntegrationConfiguration):
         #     description="Create a new issue in a GitHub repository.",
         #     func=lambda repo_name, title, body, labels=None: integration.create_issue(repo_name, title, body, labels),
         #     args_schema=CreateIssueSchema
-        # ),
-        # StructuredTool(
-        #     name="get_github_issues",
-        #     description="Get list of issues from a GitHub repository",
-        #     func=lambda repo_name, state="open": integration.get_issues(repo_name, state),
-        #     args_schema=GetIssuesSchema
         # ),
         StructuredTool(
             name="create_github_pull_request",
