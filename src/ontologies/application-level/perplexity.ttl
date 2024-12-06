@@ -1,0 +1,44 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://purl.obolibrary.org/obo/bfo.owl> rdf:type owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/perplexity.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for Perplexity."@en ;
+                                    dc:license "" ;
+                                    dc:title "Perplexity Application Ontology" .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+#################################################################
+#    Data properties
+#################################################################
+
+#################################################################
+#    Object Properties
+#################################################################
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:PerplexitySite rdf:type owl:Class ;
+    rdfs:subClassOf abi:SitePlatform ;
+    rdfs:label "Perplexity Site"@en ;
+    skos:definition "A Perplexity platform instance where users can interact with AI to get answers and insights from various sources."@en ;
+    skos:example "A user's Perplexity interface where they ask questions and receive AI-generated responses."@en .
+
+abi:PerplexityUser a owl:Class ;
+    rdfs:subClassOf abi:User ;
+    rdfs:label "Perplexity User"@en ;
+    skos:definition "An individual who uses Perplexity's AI platform to ask questions and receive AI-powered responses."@en ;
+    skos:example "A researcher using Perplexity to gather information and analyze data."@en . 
