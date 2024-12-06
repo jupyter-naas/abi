@@ -30,7 +30,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
 ### Getting Started
 
 1. **Prerequisites**
-   - Docker Desktop 
+   - Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 2. **Get the Repository**
    
