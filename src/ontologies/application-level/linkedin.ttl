@@ -348,7 +348,7 @@ cco:ont00000181 rdf:type owl:Class ;
 cco:ont00000408 rdf:type owl:Class ;
                  rdfs:subClassOf cco:ont00001180 ,
                                  [ rdf:type owl:Restriction ;
-                                   owl:onProperty obo:BFO_0000176 ;
+                                   owl:onProperty bfo:BFO_0000176 ;
                                    owl:someValuesFrom cco:ont00001335
                                  ] ;
                  rdfs:label "Government Organization"@en ;
@@ -360,7 +360,7 @@ cco:ont00000408 rdf:type owl:Class ;
 cco:ont00000443 rdf:type owl:Class ;
                  owl:equivalentClass [ owl:intersectionOf ( cco:ont00001180
                                                             [ rdf:type owl:Restriction ;
-                                                              owl:onProperty obo:BFO_0000196 ;
+                                                              owl:onProperty bfo:BFO_0000196 ;
                                                               owl:someValuesFrom cco:ont00000485
                                                             ]
                                                           ) ;
@@ -383,7 +383,7 @@ cco:ont00000564 rdf:type owl:Class ;
 cco:ont00001302 rdf:type owl:Class ;
                  owl:equivalentClass [ owl:intersectionOf ( cco:ont00001180
                                                             [ rdf:type owl:Restriction ;
-                                                              owl:onProperty obo:BFO_0000196 ;
+                                                              owl:onProperty bfo:BFO_0000196 ;
                                                               owl:someValuesFrom cco:ont00000173
                                                             ]
                                                           ) ;
