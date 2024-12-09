@@ -1,19 +1,51 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Asset Class Definition
+<http://ontology.naas.ai/abi/Asset> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/asset.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for digital assets."@en ;
+    dc:license "" ;
+    dc:title "Asset Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Asset a owl:Class ;
     rdfs:label "Asset"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ; # Referencing generically dependent continuant from:
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
     skos:definition "A digital asset generated through task execution" .
 
-# Properties
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasAuthor a owl:ObjectProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range abi:Person .
+
+abi:generatedFromTask a owl:ObjectProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range abi:Task .
+
+abi:relatedToPost a owl:ObjectProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range abi:Post .
+
+#################################################################
+#    Data Properties
+#################################################################
+
 abi:hasScenario a owl:DatatypeProperty ;
     rdfs:domain abi:Asset ;
     rdfs:range xsd:string .
@@ -54,10 +86,6 @@ abi:hasTags a owl:DatatypeProperty ;
     rdfs:domain abi:Asset ;
     rdfs:range xsd:string .
 
-abi:hasAuthor a owl:ObjectProperty ;
-    rdfs:domain abi:Asset ;
-    rdfs:range abi:Person .
-
 abi:hasAuthorURL a owl:DatatypeProperty ;
     rdfs:domain abi:Asset ;
     rdfs:range xsd:anyURI .
@@ -69,29 +97,4 @@ abi:hasCreatedDate a owl:DatatypeProperty ;
 abi:hasLastUpdateDate a owl:DatatypeProperty ;
     rdfs:domain abi:Asset ;
     rdfs:range xsd:dateTime .
-
-abi:generatedFromTask a owl:ObjectProperty ;
-    rdfs:domain abi:Asset ;
-    rdfs:range abi:Task .
-
-abi:relatedToPost a owl:ObjectProperty ;
-    rdfs:domain abi:Asset ;
-    rdfs:range abi:Post .
-
-# Example Asset Instance
-<http://ontology.naas.ai/abi/Asset#ContentTrend20240126> a abi:Asset ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasSource "Content Assistant" ;
-    abi:hasLogo "Content Assistant.png" ;
-    abi:hasPath "2024-01-26_content_trend.png" ;
-    abi:hasName "Content Trend 2024-01-26" ;
-    abi:hasDescription "Content trend as of..." ;
-    abi:hasBody "<html>" ;
-    abi:hasMeaningType "Technical Domain" ;
-    abi:hasTags "#content-engine" ;
-    abi:hasAuthor <http://ontology.naas.ai/abi/Person#Abi> ;
-    abi:hasAuthorURL "naas.ai/chat/001"^^xsd:anyURI ;
-    abi:hasCreatedDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:hasLastUpdateDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:generatedFromTask <http://ontology.naas.ai/abi/Task#14> ;
-    abi:relatedToPost <http://ontology.naas.ai/abi/Post#280715173cff5dd3ffe8fd318a67098483cf5e8adf677c17c9c34915b7d031b6> . 
+ 

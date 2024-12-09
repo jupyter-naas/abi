@@ -1,0 +1,12 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:Conversation_11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny a abi:Conversation ;
+    abi:hasScenario "W04-2024" ;
+    abi:hasSource "Google Meet" ;
+    abi:hasCreatedDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
+    abi:hasID "11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny" ;
+    abi:hasTitle "John Doe and Abi" ;
+    abi:hasLength "3246.58"^^xsd:decimal ;
+    abi:hasLengthUnit "seconds" ;
+    abi:hasURL "https://drive.google.com/file/d/11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny/view?usp=drivesdk" . 
