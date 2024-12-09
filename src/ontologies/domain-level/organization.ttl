@@ -1,121 +1,96 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Organization Class Definition
+<http://ontology.naas.ai/abi/Organization> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/organization.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for organizations and companies."@en ;
+    dc:license "" ;
+    dc:title "Organization Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Organization a owl:Class ;
     rdfs:label "Organization"@en ;
-    rdfs:subClassOf bfo:BFO_0000027 ;  # Object aggregate
-    skos:definition "A business or company entity with associated metadata"@en .
+    rdfs:subClassOf bfo:BFO_0000027 ; # Object Aggregate
+    skos:definition "A formal group of people with shared goals and objectives"@en .
 
-# Staff Range Class
 abi:StaffRange a owl:Class ;
-    rdfs:label "Staff Range"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 .
+    rdfs:label "Staff Range"@en .
 
-abi:MicroTeam a abi:StaffRange ;
-    rdfs:label "Micro Team (2-10)"@en .
+abi:MicroTeam a abi:StaffRange .
+abi:SmallTeam a abi:StaffRange .
+abi:MediumTeam a abi:StaffRange .
+abi:LargeTeam a abi:StaffRange .
+abi:EnterpriseTeam a abi:StaffRange .
 
-abi:MajorCorporation a abi:StaffRange ;
-    rdfs:label "Major Corporation (1001-5000)"@en .
-
-# Industry Class
-abi:Industry a owl:Class ;
-    rdfs:label "Industry"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 .
-
-# Properties
-abi:hasIndustry a owl:DatatypeProperty ;
-    rdfs:label "has industry"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
-
-abi:hasCity a owl:DatatypeProperty ;
-    rdfs:label "has city"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
-
-abi:hasCountry a owl:DatatypeProperty ;
-    rdfs:label "has country"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
+#################################################################
+#    Object Properties
+#################################################################
 
 abi:hasStaffRange a owl:ObjectProperty ;
-    rdfs:label "has staff range"@en ;
     rdfs:domain abi:Organization ;
     rdfs:range abi:StaffRange .
 
-abi:hasInteractionScore a owl:DatatypeProperty ;
-    rdfs:label "has interaction score"@en ;
+abi:hasMembers a owl:ObjectProperty ;
     rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+    rdfs:range abi:Person .
 
-abi:hasDirectInteractions a owl:DatatypeProperty ;
-    rdfs:label "has direct interactions"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+#################################################################
+#    Data Properties
+#################################################################
 
-abi:hasIndirectInteractions a owl:DatatypeProperty ;
-    rdfs:label "has indirect interactions"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
-
-abi:hasStaffCount a owl:DatatypeProperty ;
-    rdfs:label "has staff count"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
-
-abi:hasFollowersCount a owl:DatatypeProperty ;
-    rdfs:label "has followers count"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
-
-abi:hasWebsite a owl:DatatypeProperty ;
-    rdfs:label "has website"@en ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:anyURI .
-
-abi:hasTagline a owl:DatatypeProperty ;
-    rdfs:label "has tagline"@en ;
+abi:hasName a owl:DatatypeProperty ;
     rdfs:domain abi:Organization ;
     rdfs:range xsd:string .
 
 abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:label "has description"@en ;
     rdfs:domain abi:Organization ;
     rdfs:range xsd:string .
 
+abi:hasTagline a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:string .
+
+abi:hasWebsite a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:anyURI .
+
 abi:hasLinkedInID a owl:DatatypeProperty ;
-    rdfs:label "has LinkedIn ID"@en ;
     rdfs:domain abi:Organization ;
     rdfs:range xsd:string .
 
 abi:hasCRMOrgID a owl:DatatypeProperty ;
-    rdfs:label "has CRM organization ID"@en ;
     rdfs:domain abi:Organization ;
     rdfs:range xsd:string .
 
-# Organization Instances
-<http://ontology.naas.ai/abi/Organization#naas.ai> a abi:Organization ;
-    rdfs:label "naas.ai" ;
-    abi:hasIndustry "Software Development" ;
-    abi:hasCity "Paris" ;
-    abi:hasCountry "France" ;
-    abi:hasStaffRange abi:MicroTeam ;
-    abi:hasInteractionScore 71 ;
-    abi:hasDirectInteractions 3 ;
-    abi:hasIndirectInteractions 56 ;
-    abi:hasStaffCount 22 ;
-    abi:hasFollowersCount 2993 ;
-    abi:hasWebsite "https://www.naas.ai/"^^xsd:anyURI ;
-    abi:hasTagline "⚡️ All-in-one open source data platform #lowcode #templates #dataproducts" ;
-    abi:hasDescription """Naas is the first Jupyter based data-science platform...""" ;
-    abi:hasLinkedInID "70506391" ;
-    abi:hasCRMOrgID "1" .
+abi:hasInteractionScore a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
 
-# [Additional organization instances following the same pattern...] 
+abi:hasDirectInteractions a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasIndirectInteractions a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasStaffCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasFollowersCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .

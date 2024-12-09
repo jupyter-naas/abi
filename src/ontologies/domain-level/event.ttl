@@ -1,62 +1,59 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Base Event Class
+<http://ontology.naas.ai/abi/Event> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/ProcessOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/event.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for events and occurrences."@en ;
+    dc:license "" ;
+    dc:title "Event Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Event a owl:Class ;
     rdfs:label "Event"@en ;
-    rdfs:subClassOf cco:ont00000821 ; # Referencing CCO's Event class
+    rdfs:subClassOf cco:ont00000821 ; # Processual Entity
     skos:definition "A processual entity that happens, occurs, takes place, or is performed." .
 
-# Event Types (Data format)
 abi:EventType a owl:Class ;
     rdfs:label "Event Type"@en .
 
-abi:Article a abi:EventType .
-abi:Number a abi:EventType .
-abi:JSON a abi:EventType .
-abi:TimeSeries a abi:EventType .
-abi:Alert a abi:EventType .
-
-# Core Properties
-abi:hasEntity a owl:DatatypeProperty ;
-    rdfs:domain abi:Event ;
-    rdfs:range xsd:string .
-
-abi:hasScenario a owl:DatatypeProperty ;
-    rdfs:domain abi:Event ;
-    rdfs:range xsd:string .
-
-abi:hasCreatedDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Event ;
-    rdfs:range xsd:dateTime .
-
-abi:hasSource a owl:DatatypeProperty ;
-    rdfs:domain abi:Event ;
-    rdfs:range xsd:string .
+#################################################################
+#    Object Properties
+#################################################################
 
 abi:hasType a owl:ObjectProperty ;
     rdfs:domain abi:Event ;
     rdfs:range abi:EventType .
 
-abi:hasAuthor a owl:ObjectProperty ;
+abi:relatedToEvent a owl:ObjectProperty ;
     rdfs:domain abi:Event ;
-    rdfs:range abi:Person .
+    rdfs:range abi:Event .
+
+#################################################################
+#    Data Properties
+#################################################################
 
 abi:hasTitle a owl:DatatypeProperty ;
     rdfs:domain abi:Event ;
     rdfs:range xsd:string .
 
-abi:hasContent a owl:DatatypeProperty ;
+abi:hasTracker a owl:DatatypeProperty ;
     rdfs:domain abi:Event ;
     rdfs:range xsd:string .
 
-abi:hasTracker a owl:DatatypeProperty ;
+abi:hasContent a owl:DatatypeProperty ;
     rdfs:domain abi:Event ;
     rdfs:range xsd:string .
 
@@ -68,135 +65,11 @@ abi:hasUnit a owl:DatatypeProperty ;
     rdfs:domain abi:Event ;
     rdfs:range xsd:string .
 
-# Event Relationships
-abi:relatedToEvent a owl:ObjectProperty ;
-    rdfs:domain abi:Event ;
-    rdfs:range abi:Event .
-
-abi:causedByEvent a owl:ObjectProperty ;
-    rdfs:domain abi:Event ;
-    rdfs:range abi:Event .
-
-# Example Instance
-<http://ontology.naas.ai/abi/Event#TeslaStock> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:hasSource "YahooFinance" ;
-    abi:hasType abi:Number ;
-    abi:hasAuthor <http://ontology.naas.ai/abi/Person#JohnDoe> ;
-    abi:hasTitle "Equity" ;
-    abi:hasTracker "TESLA" ;
-    abi:hasValue "191.5"^^xsd:decimal ;
-    abi:hasUnit "$" .
-
-# Open Data Events
-<http://ontology.naas.ai/abi/Event#TeslaStockPrice> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:hasSource "YahooFinance" ;
-    abi:hasType abi:Number ;
-    abi:hasTitle "Tesla Stock Price" ;
-    abi:hasTracker "TSLA" ;
-    abi:hasValue "191.5"^^xsd:decimal ;
-    abi:hasUnit "$" .
-
-<http://ontology.naas.ai/abi/Event#ParisAirQuality> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:hasSource "Airquality" ;
-    abi:hasType abi:Number ;
-    abi:hasTitle "Paris Air Quality Index" ;
-    abi:hasTracker "Paris" ;
-    abi:hasValue "22"^^xsd:decimal ;
-    abi:hasUnit "AQI" .
-
-<http://ontology.naas.ai/abi/Event#BitcoinPrice> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T18:10:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "CoinGecko" ;
-    abi:hasType abi:Number ;
-    abi:hasTitle "Bitcoin Price" ;
-    abi:hasTracker "BTC" ;
-    abi:hasValue "39850.00"^^xsd:decimal ;
-    abi:hasUnit "USD" .
-
-<http://ontology.naas.ai/abi/Event#OpenAIUpdate> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T15:30:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "OpenAI Blog" ;
-    abi:hasType abi:Article ;
-    abi:hasTitle "GPT-4 Turbo Update" ;
-    abi:hasContent "OpenAI announces improvements to GPT-4 Turbo..." ;
-    abi:hasTracker "OpenAI" .
-
-# Internal Events
-<http://ontology.naas.ai/abi/Event#NewContract> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T09:00:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "CRM" ;
-    abi:hasType abi:Alert ;
-    abi:hasTitle "New Enterprise Contract Signed" ;
-    abi:hasTracker "Sales" ;
-    abi:hasValue "50000.00"^^xsd:decimal ;
-    abi:hasUnit "EUR" ;
-    abi:relatedToEvent <http://ontology.naas.ai/abi/Event#ClientMeeting> .
-
-<http://ontology.naas.ai/abi/Event#ServerUpgrade> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-24T22:00:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "Infrastructure" ;
-    abi:hasType abi:Alert ;
-    abi:hasTitle "Server Upgrade Completed" ;
-    abi:hasTracker "IT" ;
-    abi:hasContent "Successfully upgraded all production servers to latest version" .
-
-<http://ontology.naas.ai/abi/Event#NewHire> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T10:00:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "HR" ;
-    abi:hasType abi:Alert ;
-    abi:hasTitle "New Developer Onboarding" ;
-    abi:hasTracker "HR" ;
-    abi:hasContent "New senior developer starting next month" .
-
-<http://ontology.naas.ai/abi/Event#APIUsage> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T18:00:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "Analytics" ;
-    abi:hasType abi:Number ;
-    abi:hasTitle "Daily API Calls" ;
-    abi:hasTracker "API" ;
-    abi:hasValue "150000"^^xsd:decimal ;
-    abi:hasUnit "calls" .
-
-<http://ontology.naas.ai/abi/Event#UserFeedback> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T14:15:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "Support" ;
-    abi:hasType abi:Article ;
-    abi:hasTitle "Feature Request: Enhanced Analytics" ;
-    abi:hasTracker "Product" ;
-    abi:hasContent "Users requesting more detailed analytics dashboards..." .
-
-# Composite Event (Linking Multiple Events)
-<http://ontology.naas.ai/abi/Event#ProductLaunch> a abi:Event ;
-    abi:hasEntity "Abi" ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-25T16:00:00+01:00"^^xsd:dateTime ;
-    abi:hasSource "Product" ;
-    abi:hasType abi:Alert ;
-    abi:hasTitle "New Feature Launch" ;
-    abi:hasTracker "Product" ;
-    abi:relatedToEvent <http://ontology.naas.ai/abi/Event#ServerUpgrade> ;
-    abi:relatedToEvent <http://ontology.naas.ai/abi/Event#APIUsage> ;
-    abi:relatedToEvent <http://ontology.naas.ai/abi/Event#UserFeedback> . 
+#################################################################
+#    Individuals
+#################################################################
+abi:Article a abi:EventType .
+abi:Number a abi:EventType .
+abi:JSON a abi:EventType .
+abi:TimeSeries a abi:EventType .
+abi:Alert a abi:EventType .

@@ -1,0 +1,23 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Interaction#e47a4a33ddefb8d0d7a9669f286f5a752ec46c3d1bdec10d2bb7a46b66ea9b4f> a abi:Interaction ;
+    abi:hasInteractionDate "2024-11-06T04:06:26+01:00"^^xsd:dateTime ;
+    abi:hasType abi:PostLike ;
+    abi:hasSentiment abi:Positive ;
+    abi:hasScore 4 ;
+    abi:hasLanguage "English" ;
+    abi:hasCommentsCount 0 ;
+    abi:hasLikesCount 1 ;
+    abi:relatedTo <http://ontology.naas.ai/abi/Post#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> .
+
+<http://ontology.naas.ai/abi/Interaction#d58569dc1feacc2e5ec4e3592f62a7a2136455ba83ec96c05ecdc49ccbdd420b> a abi:Interaction ;
+    abi:hasInteractionDate "2024-11-06T04:06:26+01:00"^^xsd:dateTime ;
+    abi:hasType abi:PostComment ;
+    abi:hasContent """Jérémy Ravenel A number of companies, including Lexis-Nexis, have tried to use LLMs with RAG to produce queryable legal databases, but they still get error rates of between 17% and 33%.""" ;
+    abi:hasSentiment abi:Neutral ;
+    abi:hasScore 3 ;
+    abi:hasLanguage "English" ;
+    abi:hasCommentsCount 0 ;
+    abi:hasLikesCount 0 ;
+    abi:relatedTo <http://ontology.naas.ai/abi/Post#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> . 

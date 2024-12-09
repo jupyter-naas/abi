@@ -60,14 +60,14 @@ class GithubIssuePipeline(Pipeline):
         if self.__configuration.github_project_id != 0:
             # Get project data from GithubGraphqlIntegration
             organization = self.__configuration.github_repository.split("/")[0]
-            project_data : dict = self.__integration_graphql.get_org_project_node_id(organization, self.__configuration.github_project_id) # type: ignore
+            project_data : dict = self.__integration_graphql.get_project_node_id(organization, self.__configuration.github_project_id) # type: ignore
             logger.debug(f"Project data: {project_data}")
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
             logger.debug(f"Project node ID: {project_node_id}")
         
         if project_node_id != "":
             # Get item id from node id from GithubGraphqlIntegration
-            project_item = dict = self.__integration_graphql.get_project_item_from_node(issue_node_id) # type: ignore
+            project_item = dict = self.__integration_graphql.get_item_id_from_node_id(issue_node_id) # type: ignore
             logger.debug(f"Project item: {project_item}")
             item_id = None
             for x in project_item.get("data").get("node").get("projectItems").get("nodes"):
@@ -78,7 +78,7 @@ class GithubIssuePipeline(Pipeline):
 
             if item_id:
                 # Get item data from GithubGraphqlIntegration
-                item_data : dict = self.__integration_graphql.get_project_item_by_id(item_id) # type: ignore
+                item_data : dict = self.__integration_graphql.get_item_details(item_id) # type: ignore
                 issue_iteration = {}
                 issue_eta = ""
 

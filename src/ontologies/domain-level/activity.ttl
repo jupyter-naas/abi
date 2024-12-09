@@ -9,21 +9,46 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/activity.ttl> rdf:type owl:Ontology ;
-                                        owl:imports <> ;
-                                        owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/activity.ttl> ;
-                                        dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-                                        dc:description "Domain ontology for activities."@en ;
-                                        dc:license "" ;
-                                        dc:title "Activity Domain Ontology" .
+<http://ontology.naas.ai/abi/Activity> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/ProcessOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/activity.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for activities."@en ;
+    dc:license "" ;
+    dc:title "Activity Domain Ontology" .
 
-# Activity Class Definition
+#################################################################
+#    Classes
+#################################################################
+
 abi:Activity a owl:Class ;
     rdfs:label "Activity"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
     skos:definition "A planned business activity with associated timeline and context" .
 
-# Properties
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:relatedToDeal a owl:ObjectProperty ;
+    rdfs:label "related to deal"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Deal .
+
+abi:relatedToContact a owl:ObjectProperty ;
+    rdfs:label "related to contact"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Contact .
+
+abi:relatedToOrganization a owl:ObjectProperty ;
+    rdfs:label "related to organization"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Organization .
+
+#################################################################
+#    Data Properties
+#################################################################
+
 abi:hasScenario a owl:DatatypeProperty ;
     rdfs:label "has scenario"@en ;
     rdfs:domain abi:Activity ;
@@ -48,30 +73,4 @@ abi:hasDescription a owl:DatatypeProperty ;
     rdfs:label "has description"@en ;
     rdfs:domain abi:Activity ;
     rdfs:range xsd:string .
-
-# Object Properties
-abi:relatedToDeal a owl:ObjectProperty ;
-    rdfs:label "related to deal"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range abi:Deal .
-
-abi:relatedToContact a owl:ObjectProperty ;
-    rdfs:label "related to contact"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range abi:Contact .
-
-abi:relatedToOrganization a owl:ObjectProperty ;
-    rdfs:label "related to organization"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range abi:Organization .
-
-# Activity Instance Example
-<http://ontology.naas.ai/abi/Activity#KristenPhillipsFirstMessage> a abi:Activity ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasCreatedDate "2024-01-26"^^xsd:date ;
-    abi:hasDueDate "2024-01-29"^^xsd:date ;
-    abi:hasTitle "Send first message on LinkedIn to connect" ;
-    abi:hasDescription "Hi Kristen, I noticed that you've been engaging..." ;
-    abi:relatedToDeal <http://ontology.naas.ai/abi/Deal#75> ;
-    abi:relatedToContact <http://ontology.naas.ai/abi/Contact#91> ;
-    abi:relatedToOrganization <http://ontology.naas.ai/abi/Organization#Redkite> . 
+  
