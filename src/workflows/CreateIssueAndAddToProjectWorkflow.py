@@ -2,9 +2,9 @@ from abi.workflow import Workflow, WorkflowConfiguration
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from src import secret
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from abi import logger
 import pydash as _
 
@@ -19,6 +19,8 @@ class CreateIssueAndAddToProjectWorkflowConfiguration(WorkflowConfiguration):
         issue_title: Title of the issue
         issue_body: Body content of the issue
         project_id: Project number (from GitHub project URL)
+        assignees: List of assignees
+        labels: List of labels
         status_field_id: Field ID for status column
         priority_field_id: Field ID for priority column
         status_option_id: Option ID for status value
@@ -30,6 +32,8 @@ class CreateIssueAndAddToProjectWorkflowConfiguration(WorkflowConfiguration):
     issue_title: str
     issue_body: str
     project_id: int = 0
+    assignees: Optional[List[str]] = field(default_factory=list)
+    labels: Optional[List[str]] = field(default_factory=list)
     status_field_id: Optional[str] = None
     priority_field_id: Optional[str] = None
     status_option_id: Optional[str] = None
@@ -51,13 +55,15 @@ class CreateIssueAndAddToProjectWorkflow(Workflow):
         issue = self.__github_integration.create_issue(
             repo_name=self.__configuration.repo_name,
             title=self.__configuration.issue_title,
-            body=self.__configuration.issue_body
+            body=self.__configuration.issue_body,
+            assignees=self.__configuration.assignees,
+            labels=self.__configuration.labels
         )
         
         # Get project node id
         if self.__configuration.project_id != 0:
             organization = self.__configuration.repo_name.split("/")[0]
-            project_data : dict = self.__github_graphql_integration.get_org_project_node_id(organization, self.__configuration.project_id) # type: ignore
+            project_data : dict = self.__github_graphql_integration.get_project_node_id(organization, self.__configuration.project_id) # type: ignore
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
             logger.debug(f"Project node ID: {project_node_id}")
 
@@ -114,6 +120,8 @@ def main():
         issue_title="New Issue",
         issue_body="This is a new issue.",
         project_id="project_id",
+        assignees=["assignee1", "assignee2"],
+        labels=["label1", "label2"],
         status_field_id="status_field_id",
         priority_field_id="priority_field_id",
         status_option_id="status_option_id",
@@ -132,6 +140,8 @@ def as_tool():
         issue_title: str = Field(..., description="The title of the issue to create")
         issue_body: str = Field(..., description="The description of the issue")
         project_id: int = Field(..., description="The project number in GitHub (Project URL)")
+        assignees: Optional[List[str]] = Field(None, description="The assignees of the issue")
+        labels: Optional[List[str]] = Field(None, description="The labels of the issue")
         status_field_id: Optional[str] = Field(None, description="The field ID for the status column in the project")
         priority_field_id: Optional[str] = Field(None, description="The field ID for the priority column in the project")
         status_option_id: Optional[str] = Field(None, description="The option ID for the status value to set")
@@ -142,6 +152,8 @@ def as_tool():
         issue_title: str, 
         issue_body: str, 
         project_id: int,
+        assignees: Optional[List[str]] = [],
+        labels: Optional[List[str]] = [],
         status_field_id: Optional[str] = None,
         priority_field_id: Optional[str] = None,
         status_option_id: Optional[str] = None,
@@ -154,6 +166,8 @@ def as_tool():
             issue_title=issue_title,
             issue_body=issue_body,
             project_id=project_id,
+            assignees=assignees,
+            labels=labels,
             status_field_id=status_field_id,
             priority_field_id=priority_field_id,
             status_option_id=status_option_id,
