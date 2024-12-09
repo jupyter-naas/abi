@@ -1,0 +1,23 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Growth#BrianLee> a abi:Growth ;
+    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAAAN-qABJh1OezwYE6D8j3zKucT8rF0KxLA> ;
+    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W28-2024> ;
+    abi:hasInteractionScore 7 ;
+    abi:hasLastInteractionDate "2024-11-05T03:11:55+01:00"^^xsd:dateTime ;
+    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#e47a4a33ddefb8d0d7a9669f286f5a752ec46c3d1bdec10d2bb7a46b66ea9b4f> .
+
+<http://ontology.naas.ai/abi/Growth#JBittner> a abi:Growth ;
+    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAASxAaoBkN1ugcCIJNd0ZYeH2chOD3rMBi4> ;
+    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W51-2023> ;
+    abi:hasInteractionScore 6 ;
+    abi:hasLastInteractionDate "2024-11-05T02:55:11+01:00"^^xsd:dateTime ;
+    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#e47a4a33ddefb8d0d7a9669f286f5a752ec46c3d1bdec10d2bb7a46b66ea9b4f> .
+
+<http://ontology.naas.ai/abi/Growth#AlexanderSolonko> a abi:Growth ;
+    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAAT5M28B8CpPDtWogIN7wxI4Iu0cnHUT3SQ> ;
+    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W15-2024> ;
+    abi:hasInteractionScore 4 ;
+    abi:hasLastInteractionDate "2024-11-06T09:24:56+01:00"^^xsd:dateTime ;
+    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> . 
