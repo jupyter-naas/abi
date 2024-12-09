@@ -139,13 +139,12 @@ def as_tool():
         workflow = GeneratePeopleOntologyWorkflow(configuration)
         return workflow.run()
     
-    
     class GeneratePeopleOntologyToolSchema(BaseModel):
         workspace_id: str = Field(..., description="The ID (UUID) of the naas workspace.")
     
     return StructuredTool(
         name="naas_generate_people_ontology",
-        description="Generate the ontology of people in naas.",
+        description="Create or update the People Ontology from AIA plugins available in the workspace.",
         func=lambda workspace_id: generate_people_ontology(workspace_id),
         args_schema=GeneratePeopleOntologyToolSchema
     )
