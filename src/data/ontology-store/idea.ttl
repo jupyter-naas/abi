@@ -1,0 +1,26 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Idea#FrenchStartupJourney> a abi:Idea ;
+    rdfs:label "Building Bridges: A French Startups Journey" ;
+    abi:hasDescription """This article will delve into the unique challenges and triumphs of building a startup in France, with a focus on the experiences of Jeremy Ravenel and his team. The content will be informative and engaging, aiming to inspire other entrepreneurs and startup enthusiasts.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7156331037667565568> ;
+    abi:hasTopic "Startups" , "French Language" , "Product Development" .
+
+<http://ontology.naas.ai/abi/Idea#AICodeProduction> a abi:Idea ;
+    rdfs:label "The Pros and Cons of Generative AI in Code Production: A Deep Dive" ;
+    abi:hasDescription """This article could explore the benefits of using generative AI in code production, such as increased efficiency and reduced human error, while also discussing the potential pitfalls, such as the risk of blindly copying and pasting code without fully understanding it.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7156278144277073922> ;
+    abi:hasTopic "Generative AI" , "Code Production" , "Accountability in Coding" .
+
+<http://ontology.naas.ai/abi/Idea#NotebookTransition> a abi:Idea ;
+    rdfs:label "The Transition from Exploratory to Operational Notebooks" ;
+    abi:hasDescription """This content will delve into the process of transitioning from exploratory to operational notebooks, highlighting the benefits of this shift and providing a step-by-step guide on how to make this transition effectively using the Naas template.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7155915766783967235> ;
+    abi:hasTopic "Data Science" , "Artificial Intelligence" , "Open Source Software" .
+
+<http://ontology.naas.ai/abi/Idea#DataBusinessTech> a abi:Idea ;
+    rdfs:label "The Intersection of Data, Business, and Tech: A Personal Perspective" ;
+    abi:hasDescription """An article that delves into Jeremy Ravenels experiences and insights on the convergence of data, business, and technology. It could include anecdotes, lessons learned, and advice for others navigating this intersection.""" ;
+    abi:generatedFrom <http://ontology.naas.ai/abi/Post#7155889078645702658> ;
+    abi:hasTopic "Data Management" , "Business Strategy" , "Technology Integration" . 
