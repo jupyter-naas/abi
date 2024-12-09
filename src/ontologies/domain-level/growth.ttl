@@ -1,94 +1,60 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
+<http://ontology.naas.ai/abi/Growth> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/MeasurementOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/growth.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for growth metrics and cohort analysis."@en ;
+    dc:license "" ;
+    dc:title "Growth Domain Ontology" .
 
-# Growth Class Definition
+#################################################################
+#    Classes
+#################################################################
+
 abi:Growth a owl:Class ;
     rdfs:label "Growth"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ;  # Process
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
     skos:definition "A measurement of user engagement and interaction growth over time"@en .
 
-# Cohort Class
 abi:Cohort a owl:Class ;
     rdfs:label "Cohort"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ;  # Generically dependent continuant
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
     skos:definition "A group of users classified by their joining period"@en .
 
-# Properties
-abi:hasInteractionScore a owl:DatatypeProperty ;
-    rdfs:label "has interaction score"@en ;
-    rdfs:domain abi:Growth ;
-    rdfs:range xsd:integer ;
-    skos:definition "The cumulative interaction score of a user"@en .
-
-abi:hasLastInteractionDate a owl:DatatypeProperty ;
-    rdfs:label "has last interaction date"@en ;
-    rdfs:domain abi:Growth ;
-    rdfs:range xsd:dateTime ;
-    skos:definition "The date of the user's last interaction"@en .
-
-abi:hasCohort a owl:ObjectProperty ;
-    rdfs:label "has cohort"@en ;
-    rdfs:domain abi:Growth ;
-    rdfs:range abi:Cohort ;
-    skos:definition "The cohort to which the user belongs"@en .
+#################################################################
+#    Object Properties
+#################################################################
 
 abi:hasProfile a owl:ObjectProperty ;
-    rdfs:label "has profile"@en ;
     rdfs:domain abi:Growth ;
-    rdfs:range abi:Person ;
-    skos:definition "The user profile associated with the growth metrics"@en .
+    rdfs:range abi:Person .
+
+abi:hasCohort a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Cohort .
 
 abi:hasLastInteraction a owl:ObjectProperty ;
-    rdfs:label "has last interaction"@en ;
     rdfs:domain abi:Growth ;
-    rdfs:range abi:Interaction ;
-    skos:definition "The user's most recent interaction"@en .
+    rdfs:range abi:Interaction .
 
-# Cohort Instances
-<http://ontology.naas.ai/abi/Cohort#W03-2024> a abi:Cohort ;
-    rdfs:label "Week 03 2024"@en .
+#################################################################
+#    Data Properties
+#################################################################
 
-<http://ontology.naas.ai/abi/Cohort#W15-2024> a abi:Cohort ;
-    rdfs:label "Week 15 2024"@en .
+abi:hasInteractionScore a owl:DatatypeProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range xsd:integer .
 
-<http://ontology.naas.ai/abi/Cohort#W28-2024> a abi:Cohort ;
-    rdfs:label "Week 28 2024"@en .
-
-<http://ontology.naas.ai/abi/Cohort#W51-2023> a abi:Cohort ;
-    rdfs:label "Week 51 2023"@en .
-
-# Growth Instances
-<http://ontology.naas.ai/abi/Growth#JeremyRavenel> a abi:Growth ;
-    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAAJHE7sB5OxuKHuzguZ9L6lfDHqw--cdnJg> ;
-    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W03-2024> ;
-    abi:hasInteractionScore 9 ;
-    abi:hasLastInteractionDate "2024-11-06T02:02:38+01:00"^^xsd:dateTime ;
-    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> .
-
-<http://ontology.naas.ai/abi/Growth#BrianLee> a abi:Growth ;
-    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAAAN-qABJh1OezwYE6D8j3zKucT8rF0KxLA> ;
-    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W28-2024> ;
-    abi:hasInteractionScore 7 ;
-    abi:hasLastInteractionDate "2024-11-05T03:11:55+01:00"^^xsd:dateTime ;
-    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#e47a4a33ddefb8d0d7a9669f286f5a752ec46c3d1bdec10d2bb7a46b66ea9b4f> .
-
-<http://ontology.naas.ai/abi/Growth#JBittner> a abi:Growth ;
-    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAASxAaoBkN1ugcCIJNd0ZYeH2chOD3rMBi4> ;
-    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W51-2023> ;
-    abi:hasInteractionScore 6 ;
-    abi:hasLastInteractionDate "2024-11-05T02:55:11+01:00"^^xsd:dateTime ;
-    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#e47a4a33ddefb8d0d7a9669f286f5a752ec46c3d1bdec10d2bb7a46b66ea9b4f> .
-
-<http://ontology.naas.ai/abi/Growth#AlexanderSolonko> a abi:Growth ;
-    abi:hasProfile <http://ontology.naas.ai/abi/Person#ACoAAAT5M28B8CpPDtWogIN7wxI4Iu0cnHUT3SQ> ;
-    abi:hasCohort <http://ontology.naas.ai/abi/Cohort#W15-2024> ;
-    abi:hasInteractionScore 4 ;
-    abi:hasLastInteractionDate "2024-11-06T09:24:56+01:00"^^xsd:dateTime ;
-    abi:hasLastInteraction <http://ontology.naas.ai/abi/Interaction#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> . 
+abi:hasLastInteractionDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range xsd:dateTime . 

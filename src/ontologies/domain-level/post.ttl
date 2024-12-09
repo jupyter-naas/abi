@@ -1,185 +1,75 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Post Class Definition
+<http://ontology.naas.ai/abi/Post> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/post.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for social media posts."@en ;
+    dc:license "" ;
+    dc:title "Post Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Post a owl:Class ;
     rdfs:label "Post"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ;
-    skos:definition "A social media post or article that follows specific guidelines"@en ;
-    skos:example "A LinkedIn post about AI technology"@en .
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
+    skos:definition "A social media post with associated content and metrics"@en .
 
-# Post Type Classes
-abi:TextPost a owl:Class ;
-    rdfs:label "Text Post"@en ;
-    rdfs:subClassOf abi:Post ;
-    skos:definition "A post primarily consisting of text content"@en .
-
-abi:ImagePost a owl:Class ;
-    rdfs:label "Image Post"@en ;
-    rdfs:subClassOf abi:Post ;
-    skos:definition "A post containing one or more images"@en .
-
-abi:VideoPost a owl:Class ;
-    rdfs:label "Video Post"@en ;
-    rdfs:subClassOf abi:Post ;
-    skos:definition "A post containing video content"@en .
-
-abi:DocumentPost a owl:Class ;
-    rdfs:label "Document Post"@en ;
-    rdfs:subClassOf abi:Post ;
-    skos:definition "A post containing document attachments"@en .
-
-# Post Properties
-abi:hasAuthor a owl:ObjectProperty ;
-    rdfs:label "has author"@en ;
-    rdfs:domain abi:Post ;
-    rdfs:range abi:Person ;
-    rdfs:subPropertyOf cco:has_agent ;
-    skos:definition "Links a post to its author"@en .
-
-abi:hasPublicationTime a owl:ObjectProperty ;
-    rdfs:label "has publication time"@en ;
-    rdfs:domain abi:Post ;
-    rdfs:range abi:TimeInterval ;
-    rdfs:subPropertyOf bfo:BFO_0000202 ;
-    skos:definition "Specifies when the post was published"@en .
-
-abi:hasContent a owl:DatatypeProperty ;
-    rdfs:label "has content"@en ;
-    rdfs:domain abi:Post ;
-    rdfs:range xsd:string ;
-    rdfs:subPropertyOf cco:has_text_value ;
-    skos:definition "The main text content of the post"@en .
-
-abi:hasEngagementMetrics a owl:ObjectProperty ;
-    rdfs:label "has engagement metrics"@en ;
-    rdfs:domain abi:Post ;
-    rdfs:range abi:EngagementMetrics ;
-    skos:definition "Links a post to its engagement metrics"@en .
-
-abi:followsGuidelines a owl:ObjectProperty ;
-    rdfs:label "follows guidelines"@en ;
-    rdfs:domain abi:Post ;
-    rdfs:range abi:PostGuidelines ;
-    skos:definition "Links a post to the guidelines it follows"@en .
-
-# Engagement Metrics Class
 abi:EngagementMetrics a owl:Class ;
     rdfs:label "Engagement Metrics"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ;
-    skos:definition "Metrics measuring post engagement including views, likes, comments, and shares"@en .
+    rdfs:subClassOf cco:MeasurementInformation .
 
-# Engagement Properties
-abi:hasViews a owl:DatatypeProperty ;
-    rdfs:label "has views"@en ;
-    rdfs:domain abi:EngagementMetrics ;
-    rdfs:range xsd:integer .
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasAuthor a owl:ObjectProperty ;
+    rdfs:domain abi:Post ;
+    rdfs:range abi:Person .
+
+abi:hasMetrics a owl:ObjectProperty ;
+    rdfs:domain abi:Post ;
+    rdfs:range abi:EngagementMetrics .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:hasContent a owl:DatatypeProperty ;
+    rdfs:domain abi:Post ;
+    rdfs:range xsd:string .
+
+abi:hasURL a owl:DatatypeProperty ;
+    rdfs:domain abi:Post ;
+    rdfs:range xsd:anyURI .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Post ;
+    rdfs:range xsd:dateTime .
 
 abi:hasLikes a owl:DatatypeProperty ;
-    rdfs:label "has likes"@en ;
     rdfs:domain abi:EngagementMetrics ;
     rdfs:range xsd:integer .
 
 abi:hasComments a owl:DatatypeProperty ;
-    rdfs:label "has comments"@en ;
     rdfs:domain abi:EngagementMetrics ;
     rdfs:range xsd:integer .
 
 abi:hasShares a owl:DatatypeProperty ;
-    rdfs:label "has shares"@en ;
     rdfs:domain abi:EngagementMetrics ;
     rdfs:range xsd:integer .
 
 abi:hasEngagementScore a owl:DatatypeProperty ;
-    rdfs:label "has engagement score"@en ;
     rdfs:domain abi:EngagementMetrics ;
     rdfs:range xsd:decimal .
-
-# Post Instances
-<http://ontology.naas.ai/abi/Post#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> a abi:ImagePost ;
-    rdfs:label "How can we balance the impressive generalization abilities of LLMs..." ;
-    abi:hasAuthor "Jérémy Ravenel" ;
-    abi:hasPublicationTime "2024-11-06T00:02:46+01:00"^^xsd:dateTime ;
-    abi:hasContent """How can we balance the impressive generalization abilities of LLMs with the need for structured, factual outputs in our everyday business?
-
-Ontologies and knowledge graphs might hold the answer...""" ;
-    abi:hasEngagementMetrics [
-        a abi:EngagementMetrics ;
-        abi:hasViews 1641 ;
-        abi:hasLikes 39 ;
-        abi:hasComments 9 ;
-        abi:hasShares 1 ;
-        abi:hasEngagementScore "0.0293"^^xsd:decimal
-    ] .
-
-<http://ontology.naas.ai/abi/Post#cf0e458f8a05f02d7ef833d11d0cf8606b76f48b26e523d8b30cfecfc41826dd> a abi:VideoPost ;
-    rdfs:label "How does using BFO and CCO help with ontology alignment?" ;
-    abi:hasAuthor "Jérémy Ravenel" ;
-    abi:hasPublicationTime "2024-11-04T22:59:33+01:00"^^xsd:dateTime ;
-    abi:hasContent """How does using BFO and CCO help with ontology alignment?
-
-Using BFO as an upper-level ontology creates a shared foundation...""" ;
-    abi:hasEngagementMetrics [
-        a abi:EngagementMetrics ;
-        abi:hasViews 1060 ;
-        abi:hasLikes 43 ;
-        abi:hasComments 5 ;
-        abi:hasShares 6 ;
-        abi:hasEngagementScore "0.0453"^^xsd:decimal
-    ] .
-
-<http://ontology.naas.ai/abi/Post#e47a4a33ddefb8d0d7a9669f286f5a752ec46c3d1bdec10d2bb7a46b66ea9b4f> a abi:ImagePost ;
-    rdfs:label "Is the future of AI management more decentralized than we think?" ;
-    abi:hasAuthor "Jérémy Ravenel" ;
-    abi:hasPublicationTime "2024-11-04T00:22:25+01:00"^^xsd:dateTime ;
-    abi:hasContent """Is the future of AI management more decentralized than we think? 
-
-I've been wondering for some time if a new kind of role could emerge...""" ;
-    abi:hasEngagementMetrics [
-        a abi:EngagementMetrics ;
-        abi:hasViews 1994 ;
-        abi:hasLikes 24 ;
-        abi:hasComments 13 ;
-        abi:hasShares 1 ;
-        abi:hasEngagementScore "0.0186"^^xsd:decimal
-    ] .
-
-# Post Guidelines Instances
-<http://ontology.naas.ai/abi/PostGuidelines#Conversationalstyle> a abi:PostGuidelines ;
-    rdfs:label "Conversational style" ;
-    abi:description "All posts should have a conversational style." .
-
-<http://ontology.naas.ai/abi/PostGuidelines#Noemojis> a abi:PostGuidelines ;
-    rdfs:label "No emojis" ;
-    abi:description "All posts should not contain emojis." .
-
-<http://ontology.naas.ai/abi/PostGuidelines#Postlength> a abi:PostGuidelines ;
-    rdfs:label "Post length" ;
-    abi:description "All posts should have between 1200 and 1500 characters." .
-
-<http://ontology.naas.ai/abi/PostGuidelines#Startwithquestion> a abi:PostGuidelines ;
-    rdfs:label "Start with question" ;
-    abi:description "All posts should start with a question." .
-
-# Additional Post Instances (showing first few - add more as needed)
-<http://ontology.naas.ai/abi/Post#280715173cff5dd3ffe8fd318a67098483cf5e8adf677c17c9c34915b7d031b6> a abi:ImagePost ;
-    rdfs:label "How do ontologies transform raw data into meaningful knowledge for businesses?" ;
-    abi:hasAuthor "Jérémy Ravenel" ;
-    abi:hasPublicationTime "2024-11-01T22:39:35+01:00"^^xsd:dateTime ;
-    abi:hasContent """How do ontologies transform raw data into meaningful knowledge for businesses?
-
-Imagine you're exploring a vast, unfamiliar city without a map or guide...""" ;
-    abi:hasEngagementMetrics [
-        a abi:EngagementMetrics ;
-        abi:hasViews 7973 ;
-        abi:hasLikes 172 ;
-        abi:hasComments 48 ;
-        abi:hasShares 15 ;
-        abi:hasEngagementScore "0.0276"^^xsd:decimal
-    ] .

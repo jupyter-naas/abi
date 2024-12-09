@@ -1,106 +1,67 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Interaction Class Definition
+<http://ontology.naas.ai/abi/Interaction> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/ProcessOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/interaction.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for social media interactions."@en ;
+    dc:license "" ;
+    dc:title "Interaction Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Interaction a owl:Class ;
     rdfs:label "Interaction"@en ;
-    rdfs:subClassOf bfo:BFO_0000015 ;  # Process
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
     skos:definition "A social media interaction with a post"@en .
 
-# Interaction Type Class
 abi:InteractionType a owl:Class ;
-    rdfs:label "Interaction Type"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 .
+    rdfs:label "Interaction Type"@en .
 
-abi:PostComment a abi:InteractionType ;
-    rdfs:label "Post Comment"@en .
+abi:Like a abi:InteractionType .
+abi:Comment a abi:InteractionType .
+abi:Share a abi:InteractionType .
+abi:View a abi:InteractionType .
 
-abi:PostReaction a abi:InteractionType ;
-    rdfs:label "Post Reaction"@en .
-
-# Sentiment Class
-abi:Sentiment a owl:Class ;
-    rdfs:label "Sentiment"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 .
-
-# Sentiment Instances
-abi:Supportive a abi:Sentiment ;
-    rdfs:label "Supportive"@en .
-
-abi:Neutral a abi:Sentiment ;
-    rdfs:label "Neutral"@en .
-
-abi:Praise a abi:Sentiment ;
-    rdfs:label "Praise"@en .
-
-# Properties
-abi:hasInteractionDate a owl:DatatypeProperty ;
-    rdfs:label "has interaction date"@en ;
-    rdfs:domain abi:Interaction ;
-    rdfs:range xsd:dateTime .
+#################################################################
+#    Object Properties
+#################################################################
 
 abi:hasType a owl:ObjectProperty ;
-    rdfs:label "has type"@en ;
     rdfs:domain abi:Interaction ;
     rdfs:range abi:InteractionType .
 
-abi:hasContent a owl:DatatypeProperty ;
-    rdfs:label "has content"@en ;
+abi:relatedTo a owl:ObjectProperty ;
     rdfs:domain abi:Interaction ;
-    rdfs:range xsd:string .
+    rdfs:range abi:Post .
 
-abi:hasSentiment a owl:ObjectProperty ;
-    rdfs:label "has sentiment"@en ;
-    rdfs:domain abi:Interaction ;
-    rdfs:range abi:Sentiment .
+#################################################################
+#    Data Properties
+#################################################################
 
-abi:hasScore a owl:DatatypeProperty ;
-    rdfs:label "has score"@en ;
+abi:hasCreatedDate a owl:DatatypeProperty ;
     rdfs:domain abi:Interaction ;
-    rdfs:range xsd:integer .
+    rdfs:range xsd:dateTime .
 
 abi:hasLanguage a owl:DatatypeProperty ;
-    rdfs:label "has language"@en ;
     rdfs:domain abi:Interaction ;
     rdfs:range xsd:string .
 
 abi:hasCommentsCount a owl:DatatypeProperty ;
-    rdfs:label "has comments count"@en ;
     rdfs:domain abi:Interaction ;
     rdfs:range xsd:integer .
 
 abi:hasLikesCount a owl:DatatypeProperty ;
-    rdfs:label "has likes count"@en ;
     rdfs:domain abi:Interaction ;
     rdfs:range xsd:integer .
-
-# Interaction Instances
-<http://ontology.naas.ai/abi/Interaction#8d590cad9fe5b00b8265af6e10f77619e69d0f1cab3ff6764114f5aad8310c74> a abi:Interaction ;
-    abi:hasInteractionDate "2024-11-06T09:24:56+01:00"^^xsd:dateTime ;
-    abi:hasType abi:PostComment ;
-    abi:hasContent """Hermann Dagys ...absolutely agree with you - basing on my experience of contact with "AI folks" here in Moscow I understood: unfortunately "the HYPE is ruling" ))))""" ;
-    abi:hasSentiment abi:Supportive ;
-    abi:hasScore 3 ;
-    abi:hasLanguage "English" ;
-    abi:hasCommentsCount 0 ;
-    abi:hasLikesCount 1 ;
-    abi:relatedTo <http://ontology.naas.ai/abi/Post#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> .
-
-<http://ontology.naas.ai/abi/Interaction#d58569dc1feacc2e5ec4e3592f62a7a2136455ba83ec96c05ecdc49ccbdd420b> a abi:Interaction ;
-    abi:hasInteractionDate "2024-11-06T04:06:26+01:00"^^xsd:dateTime ;
-    abi:hasType abi:PostComment ;
-    abi:hasContent """Jérémy Ravenel A number of companies, including Lexis-Nexis, have tried to use LLMs with RAG to produce queryable legal databases, but they still get error rates of between 17% and 33%.""" ;
-    abi:hasSentiment abi:Neutral ;
-    abi:hasScore 3 ;
-    abi:hasLanguage "English" ;
-    abi:hasCommentsCount 0 ;
-    abi:hasLikesCount 0 ;
-    abi:relatedTo <http://ontology.naas.ai/abi/Post#8a0e7802bec2802d842971473a422f0926ce627fa3b03ad8830a4b45d660be69> .
-
-# [Additional interaction instances following the same pattern...] 
