@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src.integrations import GithubIntegration, PerplexityIntegration, LinkedinIntegration, GithubGraphqlIntegration, ReplicateIntegration, NaasIntegration, AiaIntegration, HubSpotIntegration, StripeIntegration
 from src import secret
 
-def create_custom_integration_agent(agent_shared_state: AgentSharedState, agent_configuration: AgentConfiguration):
+def create_integration_agent(agent_shared_state: AgentSharedState, agent_configuration: AgentConfiguration):
     """Creates a custom integration agent with specific tools.
     
     Args:
