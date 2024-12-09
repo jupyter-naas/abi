@@ -1,0 +1,44 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/stripe.ttl> rdf:type owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/stripe.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for Stripe."@en ;
+                                    dc:license "" ;
+                                    dc:title "Stripe Application Ontology" .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+#################################################################
+#    Data properties
+#################################################################
+
+#################################################################
+#    Object Properties
+#################################################################
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:StripeSite rdf:type owl:Class ;
+    rdfs:subClassOf abi:SitePlatform ;
+    rdfs:label "Stripe Site"@en ;
+    skos:definition "A Stripe account is a payment processing platform where businesses manage transactions, payments, and financial operations."@en ;
+    skos:example "A business's Stripe dashboard where they process payments and manage subscriptions."@en .
+
+abi:StripeUser a owl:Class ;
+    rdfs:subClassOf abi:User ;
+    rdfs:label "Stripe User"@en ;
+    skos:definition "An individual or business who uses Stripe's platform to process payments and manage financial transactions."@en ;
+    skos:example "A business owner who processes payments through Stripe."@en . 

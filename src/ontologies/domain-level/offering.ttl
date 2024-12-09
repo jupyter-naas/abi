@@ -1,51 +1,66 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
-@prefix off: <http://example.com/offering-ontology#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Ontology Declaration
-off: rdf:type owl:Ontology ;
-    rdfs:label "Offering Ontology"@en ;
-    rdfs:comment "An ontology for describing offerings (products and services) aligned with BFO and CCO"@en .
+<http://ontology.naas.ai/abi/Offering> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/offering.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for products and services offerings."@en ;
+    dc:license "" ;
+    dc:title "Offering Domain Ontology" .
 
-# 1. Offering Classes
-off:Offering rdfs:subClassOf cco:InformationContentEntity ;
-    rdfs:label "Offering"@en .
+#################################################################
+#    Classes
+#################################################################
 
-off:Product rdfs:subClassOf cco:Artifact ;
-    rdfs:label "Product"@en .
+abi:Offering a owl:Class ;
+    rdfs:label "Offering"@en ;
+    rdfs:subClassOf cco:InformationContentEntity ;
+    skos:definition "A product or service offering with associated metadata"@en .
 
-off:Service rdfs:subClassOf cco:Process ;
-    rdfs:label "Service"@en .
+abi:MarketShare a owl:Class ;
+    rdfs:label "Market Share"@en ;
+    rdfs:subClassOf cco:MeasurementInformation .
 
-off:HybridOffering rdfs:subClassOf off:Offering ;
-    rdfs:label "Hybrid Offering"@en .
+abi:CustomerSatisfactionScore a owl:Class ;
+    rdfs:label "Customer Satisfaction Score"@en ;
+    rdfs:subClassOf cco:MeasurementInformation .
 
-# 2. Offering Attributes
-off:name rdfs:subPropertyOf cco:Appellation ;
-    rdfs:label "name"@en .
+#################################################################
+#    Object Properties
+#################################################################
 
-off:description rdfs:subPropertyOf cco:TextValue ;
-    rdfs:label "description"@en .
+abi:hasMarketShare a owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:MarketShare .
 
-off:price rdfs:subPropertyOf cco:MonetaryValue ;
-    rdfs:label "price"@en .
+abi:hasCustomerSatisfaction a owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:CustomerSatisfactionScore .
 
-off:Category rdfs:subClassOf cco:Classification ;
-    rdfs:label "Category"@en .
+#################################################################
+#    Data Properties
+#################################################################
 
-off:Brand rdfs:subClassOf cco:Organization ;
-    rdfs:label "Brand"@en .
+abi:hasName a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range xsd:string .
 
-off:Feature rdfs:subClassOf cco:Quality ;
-    rdfs:label "Feature"@en .
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range xsd:string .
 
-# 3. Target Market
-off:TargetMarket rdfs:subClassOf cco:Group ;
-    rdfs:label "Target Market"@en .
+abi:hasVersion a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range xsd:string .
 
 off:CustomerSegment rdfs:subClassOf cco:HumanGroup ;
     rdfs:label "Customer Segment"@en .
@@ -192,22 +207,22 @@ off:hasSustainabilityAspect rdf:type owl:ObjectProperty ;
     rdfs:range off:SustainabilityAspect .
 
 # Data Properties
-off:launchDate rdf:type owl:DatatypeProperty ;
+abi:launchDate rdf:type owl:DatatypeProperty ;
     rdfs:domain off:Offering ;
     rdfs:range xsd:dateTime .
 
-off:endOfLifeDate rdf:type owl:DatatypeProperty ;
-    rdfs:domain off:Offering ;
+abi:hasEndOfLifeDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
     rdfs:range xsd:dateTime .
 
-off:priceValue rdf:type owl:DatatypeProperty ;
-    rdfs:domain off:Offering ;
+abi:priceValue a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
     rdfs:range xsd:decimal .
 
-off:marketShareValue rdf:type owl:DatatypeProperty ;
-    rdfs:domain off:MarketShare ;
+abi:marketShareValue a owl:DatatypeProperty ;
+    rdfs:domain abi:MarketShare ;
     rdfs:range xsd:decimal .
 
-off:satisfactionScore rdf:type owl:DatatypeProperty ;
-    rdfs:domain off:CustomerSatisfactionScore ;
+abi:satisfactionScore a owl:DatatypeProperty ;
+    rdfs:domain abi:CustomerSatisfactionScore ;
     rdfs:range xsd:decimal . 

@@ -1,0 +1,44 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/naas.ttl> rdf:type owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/naas.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for Naas."@en ;
+                                    dc:license "" ;
+                                    dc:title "Naas Application Ontology" .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+#################################################################
+#    Data properties
+#################################################################
+
+#################################################################
+#    Object Properties
+#################################################################
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:NaasSite rdf:type owl:Class ;
+    rdfs:subClassOf abi:SitePlatform ;
+    rdfs:label "Naas Site"@en ;
+    skos:definition "A Naas platform instance where users can create, manage, and automate data workflows and notebooks."@en ;
+    skos:example "A data team's Naas workspace where they create and schedule automated data pipelines."@en .
+
+abi:NaasUser a owl:Class ;
+    rdfs:subClassOf abi:User ;
+    rdfs:label "Naas User"@en ;
+    skos:definition "An individual who uses Naas's platform to create and manage data workflows and automated processes."@en ;
+    skos:example "A data analyst creating automated reports using Naas notebooks."@en . 

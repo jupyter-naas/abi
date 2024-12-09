@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from abi.pipeline import Pipeline, PipelineConfiguration
 from rdflib import Graph
-from abi.services.ontology_processor.OntologyService import OntologyService
-from abi.services.ontology_processor.adaptors.secondary.OntologyService_SecondaryAdaptor_NERPort import OntologyService_SecondaryAdaptor_NERPort
+from abi.services.ontology.OntologyService import OntologyService
+from abi.services.ontology.adaptors.secondary.OntologyService_SecondaryAdaptor_NERPort import OntologyService_SecondaryAdaptor_NERPort
 @dataclass
 class OntologyNERPipelineConfiguration(PipelineConfiguration):
     """Configuration for Ontology NER pipeline.
