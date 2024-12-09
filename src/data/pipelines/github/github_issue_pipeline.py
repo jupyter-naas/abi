@@ -34,22 +34,16 @@ class GithubIssuePipeline(Pipeline):
         # Get issue data from GithubIntegration
         issue_data : dict = self.__integration.get_issue(self.__configuration.github_repository, self.__configuration.github_issue_id) # type: ignore
         issue_id = issue_data.get("id")
-        logger.debug(f"Issue ID: {issue_id}")
         issue_label = issue_data.get("title")
-        logger.debug(f"Issue label: {issue_label}")
         issue_node_id = issue_data.get("node_id")
-        logger.debug(f"Issue node ID: {issue_node_id}")
         issue_description = issue_data.get("body")
-        logger.debug(f"Issue description: {issue_description}")
         issue_url = issue_data.get("html_url")
-        logger.debug(f"Issue URL: {issue_url}")
         issue_state = issue_data.get("state")
-        logger.debug(f"Issue state: {issue_state}")
         issue_labels = ", ".join([x.get("name") for x in issue_data.get("labels")])
-        logger.debug(f"Issue labels: {issue_labels}")
         issue_created_at = datetime.strptime(issue_data['created_at'], "%Y-%m-%dT%H:%M:%SZ")
         issue_updated_at = datetime.strptime(issue_data['updated_at'], "%Y-%m-%dT%H:%M:%SZ")
         issue_closed_at = datetime.strptime(issue_data['closed_at'], "%Y-%m-%dT%H:%M:%SZ") if issue_data.get("closed_at") else None
+        logger.debug(f"Issue: {issue_label} - {issue_url}")
 
         # Init issue properties from GithubGraphQLIntegration
         issue_status = None
@@ -61,9 +55,8 @@ class GithubIssuePipeline(Pipeline):
             # Get project data from GithubGraphqlIntegration
             organization = self.__configuration.github_repository.split("/")[0]
             project_data : dict = self.__integration_graphql.get_project_node_id(organization, self.__configuration.github_project_id) # type: ignore
-            logger.debug(f"Project data: {project_data}")
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
-            logger.debug(f"Project node ID: {project_node_id}")
+            logger.info(f"Project node ID: {project_node_id}")
         
         if project_node_id != "":
             # Get item id from node id from GithubGraphqlIntegration
@@ -74,7 +67,7 @@ class GithubIssuePipeline(Pipeline):
                 if x.get("project", {}).get("id") == project_node_id:
                     item_id = _.get(x, "id")
                     break
-            logger.debug(f"Item ID: {item_id}")
+            logger.info(f"Item ID: {item_id}")
 
             if item_id:
                 # Get item data from GithubGraphqlIntegration
