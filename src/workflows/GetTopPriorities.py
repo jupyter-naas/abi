@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from rdflib import Graph
 from abi import logger
+from typing import Union, Optional
 
 
 @dataclass
@@ -15,8 +16,10 @@ class GetTopPrioritiesConfiguration(WorkflowConfiguration):
     
     Attributes:
         days (int): Number of days to look ahead for issues. Defaults to 7.
+        assignee_label (str, optional): Filter tasks by assignee label. Defaults to None.
     """
     days: int = 7
+    assignee_label: Optional[str] = None
 
 
 class GetTopPrioritiesWorkflow(Workflow):
@@ -103,12 +106,15 @@ class GetTopPrioritiesWorkflow(Workflow):
         data = []
         for row in results:
             data_dict = {}
-            # Create dictionary directly from row without the nested loop
             for key in row.labels:
                 data_dict[key] = str(row[key]) if row[key] else None
-            data.append(data_dict)
             
-        return data
+            # Only add the task if it matches the assignee filter (if provided)
+            if (self.__configuration.assignee_label is None or 
+                data_dict.get('assignee_label') == self.__configuration.assignee_label):
+                data.append(data_dict)
+            
+        return {"message": "Sort data providedby due date and priority in descending order", "data": data}
 
 def main():
     configuration = GetTopPrioritiesConfiguration()
@@ -118,17 +124,18 @@ def main():
 def as_tool():
     from langchain_core.tools import StructuredTool
     
-    def get_top_priorities(days: int = 7):
-        configuration = GetTopPrioritiesConfiguration(days=days)
+    def get_top_priorities(days: int = 7, assignee_label: Optional[str] = None):
+        configuration = GetTopPrioritiesConfiguration(days=days, assignee_label=assignee_label)
         workflow = GetTopPrioritiesWorkflow(configuration)
         return workflow.run()
     
     class GetTopPrioritiesSchema(BaseModel):
         days: int = Field(default=7, description="Number of days to look ahead for tasks.")
+        assignee_label: Optional[str] = Field(default=None, description="Filter tasks by assignee label.")
     
     return StructuredTool(
         name="get_top_priorities",
-        description="Intent: Get top priorities",
+        description="Intent: Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
         func=get_top_priorities,
         args_schema=GetTopPrioritiesSchema
     )
