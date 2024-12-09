@@ -1,0 +1,121 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Chart of Accounts Individuals
+<http://ontology.naas.ai/abi/Account#1000> a abi:Account ;
+    rdfs:label "Cash in Bank" ;
+    abi:accountNumber "1000" ;
+    abi:accountType abi:AssetAccount .
+
+<http://ontology.naas.ai/abi/Account#1001> a abi:Account ;
+    rdfs:label "Petty Cash" ;
+    abi:accountNumber "1001" ;
+    abi:accountType abi:AssetAccount .
+
+<http://ontology.naas.ai/abi/Account#4000> a abi:Account ;
+    rdfs:label "Sales Revenue" ;
+    abi:accountNumber "4000" ;
+    abi:accountType abi:RevenueAccount .
+
+<http://ontology.naas.ai/abi/Account#5000> a abi:Account ;
+    rdfs:label "Operating Expenses" ;
+    abi:accountNumber "5000" ;
+    abi:accountType abi:ExpenseAccount .
+
+# Example Transactions
+<http://ontology.naas.ai/abi/Transaction#ClientCashPayment> a abi:Transaction ;
+    abi:hasJournalEntry [
+        a abi:GeneralLedgerEntry ;
+        abi:hasAccount <http://ontology.naas.ai/abi/Account#1001> ;
+        abi:hasDebitAmount "500.00"^^xsd:decimal ;
+        abi:hasCreditAmount "0.00"^^xsd:decimal ;
+        abi:hasPostingDate "2024-02-20T14:30:00Z"^^xsd:dateTime ;
+        abi:hasJournalReference "JE-2024-123" ;
+        abi:hasDescription "Cash received from client" ;
+        abi:hasFiscalYear "2024" ;
+        abi:hasFiscalPeriod "02"
+    ], [
+        a abi:GeneralLedgerEntry ;
+        abi:hasAccount <http://ontology.naas.ai/abi/Account#4000> ;
+        abi:hasDebitAmount "0.00"^^xsd:decimal ;
+        abi:hasCreditAmount "500.00"^^xsd:decimal ;
+        abi:hasPostingDate "2024-02-20T14:30:00Z"^^xsd:dateTime ;
+        abi:hasJournalReference "JE-2024-123" ;
+        abi:hasDescription "Revenue from cash payment" ;
+        abi:hasFiscalYear "2024" ;
+        abi:hasFiscalPeriod "02"
+    ] .
+
+<http://ontology.naas.ai/abi/Transaction#CiscoFirstMilestone> a abi:Transaction ;
+    abi:hasJournalEntry [
+        a abi:GeneralLedgerEntry ;
+        abi:hasAccount <http://ontology.naas.ai/abi/Account#1000> ;
+        abi:hasDebitAmount "75000.00"^^xsd:decimal ;
+        abi:hasCreditAmount "0.00"^^xsd:decimal ;
+        abi:hasPostingDate "2024-02-15T14:45:00Z"^^xsd:dateTime ;
+        abi:hasJournalReference "JE-2024-124" ;
+        abi:hasDescription "Cisco milestone payment received" ;
+        abi:hasFiscalYear "2024" ;
+        abi:hasFiscalPeriod "02" ;
+        abi:hasCurrency "USD" ;
+        abi:hasExchangeRate "0.92"^^xsd:decimal
+    ], [
+        a abi:GeneralLedgerEntry ;
+        abi:hasAccount <http://ontology.naas.ai/abi/Account#4000> ;
+        abi:hasDebitAmount "0.00"^^xsd:decimal ;
+        abi:hasCreditAmount "75000.00"^^xsd:decimal ;
+        abi:hasPostingDate "2024-02-15T14:45:00Z"^^xsd:dateTime ;
+        abi:hasJournalReference "JE-2024-124" ;
+        abi:hasDescription "Revenue from Cisco milestone" ;
+        abi:hasFiscalYear "2024" ;
+        abi:hasFiscalPeriod "02" ;
+        abi:hasCurrency "USD" ;
+        abi:hasExchangeRate "0.92"^^xsd:decimal
+    ] .
+
+# US GAAP Chart of Accounts Structure
+<http://ontology.naas.ai/abi/Account#1000_Assets> a abi:AccountCategory ;
+    rdfs:label "Assets" ;
+    abi:categoryCode "1000" ;
+    abi:accountType abi:AssetAccount .
+
+<http://ontology.naas.ai/abi/Account#1010> a abi:Account ;
+    rdfs:label "Cash in Banks" ;
+    abi:accountNumber "1010" ;
+    abi:accountType abi:AssetAccount ;
+    abi:parentCategory <http://ontology.naas.ai/abi/Account#1000_Assets> ;
+    abi:isCurrentAsset true .
+
+<http://ontology.naas.ai/abi/Account#1020> a abi:Account ;
+    rdfs:label "Petty Cash" ;
+    abi:accountNumber "1020" ;
+    abi:accountType abi:AssetAccount ;
+    abi:parentCategory <http://ontology.naas.ai/abi/Account#1000_Assets> ;
+    abi:isCurrentAsset true .
+
+<http://ontology.naas.ai/abi/Account#1100> a abi:Account ;
+    rdfs:label "Accounts Receivable" ;
+    abi:accountNumber "1100" ;
+    abi:accountType abi:AssetAccount ;
+    abi:parentCategory <http://ontology.naas.ai/abi/Account#1000_Assets> ;
+    abi:isCurrentAsset true .
+
+<http://ontology.naas.ai/abi/Account#1500> a abi:Account ;
+    rdfs:label "Property, Plant, and Equipment" ;
+    abi:accountNumber "1500" ;
+    abi:accountType abi:AssetAccount ;
+    abi:parentCategory <http://ontology.naas.ai/abi/Account#1000_Assets> ;
+    abi:isCurrentAsset false .
+
+<http://ontology.naas.ai/abi/Account#2000_Liabilities> a abi:AccountCategory ;
+    rdfs:label "Liabilities" ;
+    abi:categoryCode "2000" ;
+    abi:accountType abi:LiabilityAccount .
+
+<http://ontology.naas.ai/abi/Account#2010> a abi:Account ;
+    rdfs:label "Accounts Payable" ;
+    abi:accountNumber "2010" ;
+    abi:accountType abi:LiabilityAccount ;
+    abi:parentCategory <http://ontology.naas.ai/abi/Account#2000_Liabilities> ;
+    abi:isCurrentLiability true . 
