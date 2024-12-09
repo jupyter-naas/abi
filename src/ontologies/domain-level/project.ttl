@@ -10,7 +10,7 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/Project> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/ProcessOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/project.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for projects and initiatives."@en ;

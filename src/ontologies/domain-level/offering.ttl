@@ -10,7 +10,7 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/Offering> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/ProductOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/offering.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for products and services offerings."@en ;
