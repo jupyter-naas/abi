@@ -50,6 +50,7 @@ class GetTopPrioritiesWorkflow(Workflow):
         
         # Create VALUES clause instead of UNION
         task_types_values = "VALUES ?taskType {" + " ".join([f"<{str(row['taskType'])}>" for row in task_types]) + "}"
+        logger.info(f"Task subclasses: {task_types_values}")
 
         # Calculate the due date based on configuration
         today = datetime.now()
