@@ -1,10 +1,14 @@
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from langchain_openai import ChatOpenAI
-from src.assistants.custom.support_agent import create_support_agent
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
-from src.assistants.prompts import SUPER_ASSISTANT_INSTRUCTIONS
 from src import secret
+from src.assistants.prompt import SUPER_ASSISTANT_INSTRUCTIONS
 
+SUPER_ASSISTANT_INSTRUCTIONS_ABI = SUPER_ASSISTANT_INSTRUCTIONS.format(
+    name="Abi",
+    role="Super AI Assistant by NaasAI Research",
+    description="A cutting-edge AI assistant developed by the research team at NaasAI, focused on providing maximum value and support to users. Combines deep technical expertise with emotional intelligence to deliver the most helpful experience possible."
+)
 def create_agent():
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     
@@ -43,7 +47,8 @@ def create_agent():
     if stripe_key := secret.get('STRIPE_API_KEY'):
         tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
             
-    return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS))
+    return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS_ABI))
+
 
 def create_graph_agent():
     agent_shared_state = AgentSharedState()
@@ -52,23 +57,42 @@ def create_graph_agent():
         on_tool_response=lambda message: print_tool_response(f'\n{message.content}')
     )
     
-    # Import and create agents from custom module
-    from src.assistants.custom.integration_agent import create_integration_agent
-    from src.assistants.custom.workflow_agent import create_workflow_agent
-    from src.assistants.custom.support_agent import create_support_agent
+    # Import and create agents from domain assistants
+    from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
+    from src.assistants.domain.ContentAssistant import create_content_assistant
+    from src.assistants.domain.GrowthAssistant import create_growth_assistant
+    from src.assistants.domain.SalesAssistant import create_sales_assistant
+    from src.assistants.domain.OperationsAssistant import create_operations_assistant
+    from src.assistants.domain.FinanceAssistant import create_finance_assistant 
+    from src.assistants.foundation.SupportAssitant import create_support_assistant
     
-    integration_agent = create_integration_agent(AgentSharedState(thread_id=1), agent_configuration)
-    workflow_agent = create_workflow_agent(AgentSharedState(thread_id=2), agent_configuration)
-    support_agent = create_support_agent(AgentSharedState(thread_id=3), agent_configuration)
-    
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
-    
+    model = ChatOpenAI(model="gpt-4o", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
+
+    open_data_assistant = create_open_data_assistant(AgentSharedState(thread_id=1), agent_configuration)
+    content_assistant = create_content_assistant(AgentSharedState(thread_id=2), agent_configuration)
+    growth_assistant = create_growth_assistant(AgentSharedState(thread_id=3), agent_configuration)
+    sales_assistant = create_sales_assistant(AgentSharedState(thread_id=4), agent_configuration)
+    operations_assistant = create_operations_assistant(AgentSharedState(thread_id=5), agent_configuration)
+    finance_assistant = create_finance_assistant(AgentSharedState(thread_id=6), agent_configuration)
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=7), agent_configuration)
+
     tools = [
-        workflow_agent.as_tool(name="workflow_agent", description="ALWAYS CALL THIS FIRST"),
-        integration_agent.as_tool(name="integration_agent", description="THEN CALL THIS IF workflow_agent DID NOT RETURN THE RESULT YOU WANTED"),
-        support_agent.as_tool(name="support_agent", description="Use this for additional support if needed")
+        open_data_assistant.as_tool(name="open_data_assistant", description="Use for open data analysis"),
+        content_assistant.as_tool(name="content_assistant", description="Use for content analysis and optimization"),
+        growth_assistant.as_tool(name="growth_assistant", description="Use for growth and marketing analysis"),
+        sales_assistant.as_tool(name="sales_assistant", description="Use for sales and marketing analysis"),
+        operations_assistant.as_tool(name="operations_assistant", description="Use for operations and marketing analysis"),
+        finance_assistant.as_tool(name="finance_assistant", description="Use for financial analysis and insights"),
+        support_assistant.as_tool(name="support_assistant", description="User support and issue handling")
     ]
     
-    agent_configuration.system_prompt = "You are a helpful assistant. Always use the workflow_agent first, then use the integration_agent if the result is not what you want. IF workflow_agent FAILS you must use the integration_agent to get the result you want. Use support_agent for additional assistance if needed."
-    
-    return Agent(model, tools, state=AgentSharedState(thread_id=4), configuration=agent_configuration, memory=MemorySaver()) 
+    agent_configuration.system_prompt = SUPER_ASSISTANT_INSTRUCTIONS_ABI + """
+        - Use open_data_assistant for external data analysis with Perplexity and Replicate Integrations.  
+        - Use content_assistant for content strategy and analysis with Linkedin, Perplexity and Replicate Integrations.   
+        - Use growth_assistant for marketing and growth insights with HubSpot Integration.
+        - Use sales_assistant for sales and marketing analysis with HubSpot and Stripe Integrations.
+        - Use operations_assistant for operations and marketing analysis with Github and Github Graphql Integrations.
+        - Use finance_assistant for financial data and transactions with Stripe Integrations.
+        - Use support_assistant if you can't answer user intent with all the assistants already created or if user ask for a new tool, integration or workflow.
+        """
+    return Agent(model, tools, state=AgentSharedState(thread_id=8), configuration=agent_configuration, memory=MemorySaver())
