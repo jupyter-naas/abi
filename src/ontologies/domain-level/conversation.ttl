@@ -1,19 +1,43 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Conversation Class Definition
+<http://ontology.naas.ai/abi/Conversation> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/CommunicationOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/conversation.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for conversations and communications."@en ;
+    dc:license "" ;
+    dc:title "Conversation Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Conversation a owl:Class ;
     rdfs:label "Conversation"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
     skos:definition "A recorded communication interaction between participants" .
 
-# Properties
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasParticipants a owl:ObjectProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range abi:Person .
+
+#################################################################
+#    Data Properties
+#################################################################
+
 abi:hasScenario a owl:DatatypeProperty ;
     rdfs:domain abi:Conversation ;
     rdfs:range xsd:string .
@@ -34,10 +58,6 @@ abi:hasTitle a owl:DatatypeProperty ;
     rdfs:domain abi:Conversation ;
     rdfs:range xsd:string .
 
-abi:hasParticipants a owl:ObjectProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range abi:Person .
-
 abi:hasLength a owl:DatatypeProperty ;
     rdfs:domain abi:Conversation ;
     rdfs:range xsd:decimal .
@@ -49,38 +69,4 @@ abi:hasLengthUnit a owl:DatatypeProperty ;
 abi:hasURL a owl:DatatypeProperty ;
     rdfs:domain abi:Conversation ;
     rdfs:range xsd:anyURI .
-
-abi:hasContent a owl:DatatypeProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range xsd:string .
-
-abi:hasSummary a owl:DatatypeProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range xsd:string .
-
-abi:hasKeyPoints a owl:DatatypeProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range xsd:string .
-
-abi:hasActionItems a owl:DatatypeProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range xsd:string .
-
-abi:hasSentiment a owl:DatatypeProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range xsd:string .
-
-abi:hasGeneratedTasks a owl:ObjectProperty ;
-    rdfs:domain abi:Conversation ;
-    rdfs:range abi:Task .
-
-# Example Instance
-abi:Conversation_11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny a abi:Conversation ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasSource "Google Meet" ;
-    abi:hasCreatedDate "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:hasID "11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny" ;
-    abi:hasTitle "John Doe and Abi" ;
-    abi:hasLength "3246.58"^^xsd:decimal ;
-    abi:hasLengthUnit "seconds" ;
-    abi:hasURL "https://drive.google.com/file/d/11AUpFyUKOiBw1JhTZFl11Swl3q1g0Uny/view?usp=drivesdk" . 
+ 

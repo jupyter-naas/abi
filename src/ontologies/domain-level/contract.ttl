@@ -1,61 +1,60 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Contract Class Definition
+<http://ontology.naas.ai/abi/Contract> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/DocumentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/contract.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for contracts and agreements."@en ;
+    dc:license "" ;
+    dc:title "Contract Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Contract a owl:Class ;
     rdfs:label "Contract"@en ;
     rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
     skos:definition "A formal agreement defining terms, conditions, and financial obligations" .
 
-# Contract Status Class
 abi:ContractStatus a owl:Class ;
     rdfs:label "Contract Status"@en .
 
-abi:Live a abi:ContractStatus .
-abi:Paused a abi:ContractStatus .
-abi:Completed a abi:ContractStatus .
-abi:Cancelled a abi:ContractStatus .
-
-# Contract Unit Class
 abi:ContractUnit a owl:Class ;
     rdfs:label "Contract Unit"@en .
 
-abi:HourlyRate a abi:ContractUnit .
-abi:Annual a abi:ContractUnit .
-abi:MonthlyRate a abi:ContractUnit .
-abi:Fixed a abi:ContractUnit .
-
-# Additional Contract Types
 abi:ContractType a owl:Class ;
     rdfs:label "Contract Type"@en .
 
-abi:ServiceAgreement a abi:ContractType .
-abi:SubscriptionAgreement a abi:ContractType .
-abi:EnterpriseAgreement a abi:ContractType .
-abi:ConsultingAgreement a abi:ContractType .
-abi:LicenseAgreement a abi:ContractType .
-abi:MaintenanceAgreement a abi:ContractType .
-abi:ResearchAgreement a abi:ContractType .
+#################################################################
+#    Object Properties
+#################################################################
 
-# Enhanced Financial Tracking
-abi:FinancialTerms a owl:Class ;
-    rdfs:label "Financial Terms"@en .
+abi:hasStatus a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractStatus .
 
-abi:PaymentSchedule a owl:Class ;
-    rdfs:label "Payment Schedule"@en .
+abi:hasUnit a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractUnit .
 
-abi:Monthly a abi:PaymentSchedule .
-abi:Quarterly a abi:PaymentSchedule .
-abi:Annually a abi:PaymentSchedule .
-abi:Milestone a abi:PaymentSchedule .
+abi:hasContractType a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractType .
 
-# Properties
+#################################################################
+#    Data Properties
+#################################################################
+
 abi:hasScenario a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
     rdfs:range xsd:string .
@@ -63,10 +62,6 @@ abi:hasScenario a owl:DatatypeProperty ;
 abi:hasSource a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
     rdfs:range xsd:string .
-
-abi:hasCreatedDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range xsd:date .
 
 abi:hasTitle a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
@@ -79,10 +74,6 @@ abi:hasDescription a owl:DatatypeProperty ;
 abi:hasTerms a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
     rdfs:range xsd:string .
-
-abi:hasLink a owl:DatatypeProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range xsd:anyURI .
 
 abi:hasDomain a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
@@ -100,17 +91,9 @@ abi:hasEndDate a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
     rdfs:range xsd:date .
 
-abi:hasStatus a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:ContractStatus .
-
 abi:hasUnitPrice a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
     rdfs:range xsd:decimal .
-
-abi:hasUnit a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:ContractUnit .
 
 abi:hasQuantity a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
@@ -124,152 +107,20 @@ abi:hasCurrency a owl:DatatypeProperty ;
     rdfs:domain abi:Contract ;
     rdfs:range xsd:string .
 
-# Additional Properties
-abi:hasContractType a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:ContractType .
+#################################################################
+#    Individuals
+#################################################################
 
-abi:hasFinancialTerms a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:FinancialTerms .
+abi:Live a abi:ContractStatus .
+abi:Paused a abi:ContractStatus .
+abi:Completed a abi:ContractStatus .
+abi:Cancelled a abi:ContractStatus .
 
-abi:hasPaymentSchedule a owl:ObjectProperty ;
-    rdfs:domain abi:FinancialTerms ;
-    rdfs:range abi:PaymentSchedule .
+abi:HourlyRate a abi:ContractUnit .
+abi:Annual a abi:ContractUnit .
+abi:MonthlyRate a abi:ContractUnit .
+abi:Fixed a abi:ContractUnit .
 
-abi:hasTaxRate a owl:DatatypeProperty ;
-    rdfs:domain abi:FinancialTerms ;
-    rdfs:range xsd:decimal .
-
-abi:hasDiscountAmount a owl:DatatypeProperty ;
-    rdfs:domain abi:FinancialTerms ;
-    rdfs:range xsd:decimal .
-
-# Relationship Properties
-abi:relatedToProject a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:Project .
-
-abi:relatedToOrganization a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:Organization .
-
-abi:hasSignatory a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:Person .
-
-abi:hasApprover a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:Person .
-
-abi:relatedToAsset a owl:ObjectProperty ;
-    rdfs:domain abi:Contract ;
-    rdfs:range abi:Asset .
-
-# Example Contract Instances
-<http://ontology.naas.ai/abi/Contract#UpworkEngineer> a abi:Contract ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasSource "Upwork" ;
-    abi:hasCreatedDate "2024-01-25"^^xsd:date ;
-    abi:hasTitle "Software Engineer at Abi" ;
-    abi:hasDescription """Senior software engineer contract for AI platform development 
-    and ontology implementation""" ;
-    abi:hasTerms """1. 20-hour weekly commitment
-    2. Code ownership transfers to Abi
-    3. Weekly progress reports required
-    4. Payment terms Net-15
-    5. Non-disclosure agreement included""" ;
-    abi:hasLink "https://upwork.com/contracts/abc123"^^xsd:anyURI ;
-    abi:hasDomain "Operations" ;
-    abi:hasPLCategory "OPEX" ;
-    abi:hasStartDate "2024-01-25"^^xsd:date ;
-    abi:hasEndDate "2024-02-04"^^xsd:date ;
-    abi:hasStatus abi:Paused ;
-    abi:hasUnitPrice "20.00"^^xsd:decimal ;
-    abi:hasUnit abi:HourlyRate ;
-    abi:hasQuantity 20 ;
-    abi:hasAmount "400.00"^^xsd:decimal ;
-    abi:hasCurrency "USD" .
-
-<http://ontology.naas.ai/abi/Contract#SurfeSubscription> a abi:Contract ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasSource "Surfe" ;
-    abi:hasCreatedDate "2024-01-25"^^xsd:date ;
-    abi:hasTitle "Surfe Club Member" ;
-    abi:hasDescription "Annual subscription for Surfe CRM integration platform" ;
-    abi:hasTerms """1. Annual billing cycle
-    2. Up to 3 user licenses
-    3. Premium support included
-    4. Automatic renewal
-    5. 30-day cancellation notice required""" ;
-    abi:hasLink "https://surfe.com/subscriptions/xyz789"^^xsd:anyURI ;
-    abi:hasDomain "Sales" ;
-    abi:hasPLCategory "OPEX" ;
-    abi:hasStartDate "2024-01-01"^^xsd:date ;
-    abi:hasEndDate "2024-12-31"^^xsd:date ;
-    abi:hasStatus abi:Live ;
-    abi:hasUnitPrice "100.00"^^xsd:decimal ;
-    abi:hasUnit abi:Annual ;
-    abi:hasQuantity 3 ;
-    abi:hasAmount "300.00"^^xsd:decimal ;
-    abi:hasCurrency "USD" .
-
-<http://ontology.naas.ai/abi/Contract#CiscoIntegration> a abi:Contract ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasSource "Cisco" ;
-    abi:hasCreatedDate "2024-01-26"^^xsd:date ;
-    abi:hasTitle "Cisco Platform Integration Services" ;
-    abi:hasDescription """Enterprise integration services for Cisco chat platform 
-    including API development, policy enforcement, and custom connectors""" ;
-    abi:hasTerms """1. Fixed price deliverables
-    2. Quarterly milestone payments
-    3. Source code escrow
-    4. 12-month maintenance included
-    5. Service level agreement attached""" ;
-    abi:hasLink "https://cisco.com/contracts/def456"^^xsd:anyURI ;
-    abi:hasDomain "Technology" ;
-    abi:hasPLCategory "Revenue" ;
-    abi:hasStartDate "2024-02-01"^^xsd:date ;
-    abi:hasEndDate "2024-12-31"^^xsd:date ;
-    abi:hasStatus abi:Live ;
-    abi:hasUnitPrice "250000.00"^^xsd:decimal ;
-    abi:hasUnit abi:Fixed ;
-    abi:hasQuantity 1 ;
-    abi:hasAmount "250000.00"^^xsd:decimal ;
-    abi:hasCurrency "USD" .
-
-# Example Enhanced Contract Instance
-<http://ontology.naas.ai/abi/Contract#BMWResearch> a abi:Contract ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasSource "BMW" ;
-    abi:hasContractType abi:ResearchAgreement ;
-    abi:hasCreatedDate "2024-01-28"^^xsd:date ;
-    abi:hasTitle "BMW AI Research Partnership" ;
-    abi:hasDescription """Joint research initiative for automotive AI applications 
-    using ABI platform""" ;
-    abi:hasTerms """1. Joint IP ownership
-    2. Quarterly research reports
-    3. Publication rights
-    4. Research data sharing
-    5. Academic collaboration allowed""" ;
-    abi:hasFinancialTerms [
-        a abi:FinancialTerms ;
-        abi:hasPaymentSchedule abi:Quarterly ;
-        abi:hasTaxRate "20.00"^^xsd:decimal ;
-        abi:hasDiscountAmount "5000.00"^^xsd:decimal
-    ] ;
-    abi:hasDomain "Research" ;
-    abi:hasPLCategory "Revenue" ;
-    abi:hasStartDate "2024-03-01"^^xsd:date ;
-    abi:hasEndDate "2025-02-28"^^xsd:date ;
-    abi:hasStatus abi:Live ;
-    abi:hasUnitPrice "75000.00"^^xsd:decimal ;
-    abi:hasUnit abi:Quarterly ;
-    abi:hasQuantity 4 ;
-    abi:hasAmount "300000.00"^^xsd:decimal ;
-    abi:hasCurrency "USD" ;
-    abi:relatedToProject <http://ontology.naas.ai/abi/Project#BMWResearch> ;
-    abi:relatedToOrganization <http://ontology.naas.ai/abi/Organization#BMW> ;
-    abi:hasSignatory <http://ontology.naas.ai/abi/Person#Jeremy> ;
-    abi:hasApprover <http://ontology.naas.ai/abi/Person#BMWResearchHead> ;
-    abi:relatedToAsset
+abi:ServiceAgreement a abi:ContractType .
+abi:SubscriptionAgreement a abi:ContractType .
+abi:EnterpriseAgreement a abi:ContractType .
