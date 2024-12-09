@@ -25,6 +25,10 @@ langchain-openai = "^0.2.9"
 rich = "^13.9.4"
 
 
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+
 [tool.poetry.scripts]
 ingest-github-user = "src.workflows.ingest_github_user:main"
 ingest-github-user-api = "src.workflows.ingest_github_user:api"
