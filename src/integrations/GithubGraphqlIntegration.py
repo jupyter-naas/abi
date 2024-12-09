@@ -73,7 +73,7 @@ class GithubGraphqlIntegration(Integration):
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"Github GraphQL API request failed: {str(e)}")
 
-    def get_org_project_node_id(self, organization: str, number: int) -> str:
+    def get_project_node_id(self, organization: str, number: int) -> str:
         """Get the node ID of an organization project.
         
         Args:
@@ -98,7 +98,127 @@ class GithubGraphqlIntegration(Integration):
         }
         return self.execute_query(query, variables)
     
-    def get_project_item_from_node(self, node_id: str) -> Dict[str, Any]:
+    def get_project_details(self, project_node_id: str) -> Dict[str, Any]:
+        """Get detailed information about a GitHub Project.
+        
+        Args:
+            project_node_id (str): The node ID of the GitHub Project
+            
+        Returns:
+            Dict[str, Any]: Response containing project details including:
+                - Basic project info (title, number, url)
+                - Fields configuration
+                - Items count
+            
+        Raises:
+            IntegrationConnectionError: If the API request fails
+        """
+        query = """
+        query($projectId: ID!) {
+            node(id: $projectId) {
+                ... on ProjectV2 {
+                    id
+                    title
+                    number
+                    url
+                    shortDescription
+                    public
+                    closed
+                    items(first: 0) {
+                        totalCount
+                    }
+                    fields(first: 20) {
+                        nodes {
+                            ... on ProjectV2Field {
+                                id
+                                name
+                                dataType
+                            }
+                            ... on ProjectV2IterationField {
+                                id
+                                name
+                                configuration {
+                                    iterations {
+                                        id
+                                        title
+                                        duration
+                                        startDate
+                                    }
+                                }
+                            }
+                            ... on ProjectV2SingleSelectField {
+                                id
+                                name
+                                options {
+                                    id
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "projectId": project_node_id
+        }
+        return self.execute_query(query, variables)
+    
+    def get_project_fields(self, project_id: str):
+        """Get information about project fields in a GitHub Project.
+
+        Args:
+            project_id (str): The node ID of the GitHub Project
+
+        Returns:
+            dict: Response containing project field information including:
+                - Regular fields with id and name
+                - Iteration fields with id, name and iteration configuration
+                - Single select fields with id, name and options
+        """
+        query = """
+        query($projectId: ID!) {
+            node(id: $projectId) {
+                ... on ProjectV2 {
+                    fields(first: 20) {
+                        nodes {
+                            ... on ProjectV2Field {
+                                id
+                                name
+                            }
+                            ... on ProjectV2IterationField {
+                                id
+                                name
+                                configuration {
+                                    iterations {
+                                        startDate
+                                        id
+                                    }
+                                }
+                            }
+                            ... on ProjectV2SingleSelectField {
+                                id
+                                name
+                                options {
+                                    id
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "projectId": project_id
+        }
+        return self.execute_query(query, variables)
+    
+    def get_item_id_from_node_id(self, node_id: str) -> Dict[str, Any]:
         """Retrieves a project item ID from a node ID using the GitHub GraphQL API.
         
         Args:
@@ -146,7 +266,7 @@ class GithubGraphqlIntegration(Integration):
         }
         return self.execute_query(query, variables)
     
-    def get_project_item_by_id(self, item_id: str) -> Dict[str, Any]:
+    def get_item_details(self, item_id: str) -> Dict[str, Any]:
         """Retrieves a project item using its ID from the GitHub GraphQL API.
         
         Args:
@@ -231,58 +351,6 @@ class GithubGraphqlIntegration(Integration):
         }
         return self.execute_query(query, variables)
     
-    def get_project_fields(self, project_id: str):
-        """Get information about project fields in a GitHub Project.
-
-        Args:
-            project_id (str): The node ID of the GitHub Project
-
-        Returns:
-            dict: Response containing project field information including:
-                - Regular fields with id and name
-                - Iteration fields with id, name and iteration configuration
-                - Single select fields with id, name and options
-        """
-        query = """
-        query($projectId: ID!) {
-            node(id: $projectId) {
-                ... on ProjectV2 {
-                    fields(first: 20) {
-                        nodes {
-                            ... on ProjectV2Field {
-                                id
-                                name
-                            }
-                            ... on ProjectV2IterationField {
-                                id
-                                name
-                                configuration {
-                                    iterations {
-                                        startDate
-                                        id
-                                    }
-                                }
-                            }
-                            ... on ProjectV2SingleSelectField {
-                                id
-                                name
-                                options {
-                                    id
-                                    name
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        """
-        
-        variables = {
-            "projectId": project_id
-        }
-        return self.execute_query(query, variables)
-    
     def add_issue_to_project(self, project_node_id: str, issue_node_id: str, status_field_id: Optional[str] = None, priority_field_id: Optional[str] = None, status_option_id: Optional[str] = None, priority_option_id: Optional[str] = None) -> dict:
         """
         Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields.
@@ -319,49 +387,49 @@ class GithubGraphqlIntegration(Integration):
         }
         
         data = self.execute_query(add_mutation, variables)
-        return data
+
         # Get the item ID from the response
-        # item_id = data["addProjectV2ItemById"]["item"]["id"]
-        # return item_id
+        item_id = data['data']["addProjectV2ItemById"]["item"]["id"]
 
-        # # Update fields mutation
-        # update_mutation = """
-        # mutation UpdateFields($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $priorityFieldId: ID!, $statusOptionId: String!, $priorityOptionId: String!) {
-        #     updateStatus: updateProjectV2ItemFieldValue(input: {
-        #         projectId: $projectId
-        #         itemId: $itemId
-        #         fieldId: $statusFieldId
-        #         value: { singleSelectOptionId: $statusOptionId }
-        #     }) {
-        #         projectV2Item {
-        #             id
-        #         }
-        #     }
-        #     updatePriority: updateProjectV2ItemFieldValue(input: {
-        #         projectId: $projectId
-        #         itemId: $itemId
-        #         fieldId: $priorityFieldId
-        #         value: { singleSelectOptionId: $priorityOptionId }
-        #     }) {
-        #         projectV2Item {
-        #             id
-        #         }
-        #     }
-        # }
-        # """
+        # Update fields mutation
+        if (status_field_id and status_option_id) or (priority_field_id and priority_option_id):
+            update_mutation = """
+            mutation UpdateFields($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $priorityFieldId: ID!, $statusOptionId: String!, $priorityOptionId: String!) {
+                updateStatus: updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $statusFieldId
+                    value: { singleSelectOptionId: $statusOptionId }
+                }) {
+                    projectV2Item {
+                        id
+                    }
+                }
+                updatePriority: updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $priorityFieldId
+                    value: { singleSelectOptionId: $priorityOptionId }
+                }) {
+                    projectV2Item {
+                        id
+                    }
+                }
+            }
+            """
 
-        # # Update the fields
-        # variables = {
-        #     "projectId": project_node_id,
-        #     "itemId": item_id,
-        #     # "statusFieldId": status_field_id,
-        #     # "priorityFieldId": priority_field_id,
-        #     # "statusOptionId": status_option_id,
-        #     # "priorityOptionId": priority_option_id
-        # }
-        
-        # return self.execute_query(update_mutation, variables)
-    
+            # Update the fields
+            variables = {
+                "projectId": project_node_id,
+                "itemId": item_id,
+                "statusFieldId": status_field_id,
+                "priorityFieldId": priority_field_id,
+                "statusOptionId": status_option_id,
+                "priorityOptionId": priority_option_id
+            }
+            data = self.execute_query(update_mutation, variables)
+        return data
+
 def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
@@ -369,41 +437,24 @@ def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
     
     integration = GithubGraphqlIntegration(configuration)
     
-    class GetOrgProjectNodeIdSchema(BaseModel):
+    class GetProjectNodeIdSchema(BaseModel):
         organization: str = Field(..., description="The organization login name")
         number: int = Field(..., description="The project number")
-        
-    class GetProjectItemFromNodeSchema(BaseModel):
-        node_id: str = Field(..., description="The Node ID to look up")
 
-    class GetProjectItemByIdSchema(BaseModel):
-        item_id: str = Field(..., description="The Node ID of the project item")
+    class GetProjectDetailsSchema(BaseModel):
+        project_node_id: str = Field(..., description="The Node ID of the GitHub Project")     
 
-    class AddIssueToProjectSchema(BaseModel):
-        project_node_id: int = Field(..., description="The Node ID of the project (ProjectV2)")
-        issue_node_id: str = Field(..., description="The Node ID of the issue")
-        status_field_id: Optional[str] = Field(None, description="The field ID for status")
-        priority_field_id: Optional[str] = Field(None, description="The field ID for priority")
-        status_option_id: Optional[str] = Field(None, description="The option ID for status")
-        priority_option_id: Optional[str] = Field(None, description="The option ID for priority")
-        
     return [
         StructuredTool(
-            name="get_github_org_project_node_id",
-            description="Find the node ID of an organization project in GitHub",
-            func=lambda organization, number: integration.get_org_project_node_id(organization, number),
-            args_schema=GetOrgProjectNodeIdSchema
+            name="get_github_project_node_id",
+            description="Get the node ID of an organization project in GitHub from its number.",
+            func=lambda organization, number: integration.get_project_node_id(organization, number),
+            args_schema=GetProjectNodeIdSchema
         ),
         StructuredTool(
-            name="get_github_project_item_from_node",
-            description="Retrieves a project item ID from a node ID using the GitHub GraphQL API",
-            func=lambda node_id: integration.get_project_item_from_node(node_id),
-            args_schema=GetProjectItemFromNodeSchema
+            name="get_github_project_details",
+            description="Get detailed information about a GitHub Project including fields configuration and items count from its node ID.",
+            func=lambda project_node_id: integration.get_project_details(project_node_id),
+            args_schema=GetProjectDetailsSchema
         ),
-        StructuredTool(
-            name="get_github_project_item_by_id",
-            description="Retrieves a project item using its ID from the GitHub GraphQL API",
-            func=lambda item_id: integration.get_project_item_by_id(item_id),
-            args_schema=GetProjectItemByIdSchema
-        )
     ]
