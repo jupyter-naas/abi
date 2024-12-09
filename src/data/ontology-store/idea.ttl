@@ -1,6 +1,6 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 <http://ontology.naas.ai/abi/Idea#FrenchStartupJourney> a abi:Idea ;
     rdfs:label "Building Bridges: A French Startups Journey" ;
     abi:hasDescription """This article will delve into the unique challenges and triumphs of building a startup in France, with a focus on the experiences of Jeremy Ravenel and his team. The content will be informative and engaging, aiming to inspire other entrepreneurs and startup enthusiasts.""" ;
