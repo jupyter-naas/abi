@@ -9,6 +9,5 @@ pipelines:
 
 config:
   storage_name: 
-  workspace_description: 
   workspace_id: 
   workspace_name: 
