@@ -105,9 +105,6 @@ class GeneratePeopleOntologyWorkflow(Workflow):
             
         return "People ontology generated"
                 
-        
-        
-
 def api():
     import fastapi
     import uvicorn
