@@ -12,7 +12,11 @@ lock:
 
 sh: .venv
 	docker compose run -it abi bash
+
 chat: .venv
 	docker compose run abi bash -c 'poetry install && poetry run chat-single-assistant'
+
+super-agent: .venv
+	docker compose run abi bash -c 'poetry install && poetry run chat-multiple-assistants'
 
 .DEFAULT_GOAL := chat
