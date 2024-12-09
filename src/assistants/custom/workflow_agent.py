@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src.workflows import tools as workflow_tools
 from src import secret
 
-def create_custom_workflow_agent(agent_shared_state: AgentSharedState, agent_configuration: AgentConfiguration):
+def create_workflow_agent(agent_shared_state: AgentSharedState, agent_configuration: AgentConfiguration):
     """Creates a custom workflow agent with workflow-specific tools.
     
     Args:
