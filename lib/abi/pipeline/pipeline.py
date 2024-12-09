@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from abi.integration import Integration
+from abi.utils.Expose import Expose
 from rdflib import Graph
 
 
