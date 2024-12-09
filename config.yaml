@@ -8,6 +8,7 @@ pipelines:
 
 
 config:
+  ontology_store_path: "src/data/ontology-store"
   storage_name: 
   workspace_description: 
   workspace_id: 
