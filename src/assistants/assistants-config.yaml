@@ -1,7 +1,0 @@
-assistants:
-  - slug: "aia/Name"
-    name: "AIA"
-    description: "Name's Personal AI Assistant"
-    id: ""
-    workspace: ""
-    status: "Active"

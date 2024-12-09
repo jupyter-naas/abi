@@ -4,7 +4,7 @@ from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrat
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from abi.pipeline import Pipeline, PipelineConfiguration
 from abi.utils.Graph import ABIGraph
-from src.data.pipelines.github.github_issue_pipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
+from src.data.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
 from dataclasses import dataclass
 from rdflib import Graph
 from src import secret
