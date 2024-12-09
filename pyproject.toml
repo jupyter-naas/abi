@@ -33,7 +33,7 @@ pytest = "^8.3.4"
 ingest-github-user = "src.workflows.ingest_github_user:main"
 ingest-github-user-api = "src.workflows.ingest_github_user:api"
 chat-single-assistant = "src.apps.terminal_agent.main:run_single"
-chat-multiple-assistant = "src.apps.terminal_agent.main:run_multiple"
+chat-multiple-assistants = "src.apps.terminal_agent.main:run_multiple"
 abi = "src.cli:main"
 
 

@@ -3,6 +3,23 @@ from rdflib import Graph, BNode
 from typing import List
 
 class OntologyStoreService(IOntologyStoreService):
+    """OntologyStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
+    
+    This service acts as a facade for ontology storage and retrieval operations. It handles storing,
+    retrieving, merging and querying of RDF ontologies while providing optional filtering of 
+    non-named individuals.
+    
+    Attributes:
+        __ontology_adaptor (IOntologyStorePort): The storage adapter implementation used for
+            persisting and retrieving ontologies.
+            
+    Example:
+        >>> store = OntologyStoreService(FileSystemOntologyStore("ontologies/"))
+        >>> ontology = Graph()
+        >>> # ... populate ontology ...
+        >>> store.store("my_ontology", ontology)
+        >>> results = store.query("SELECT ?s WHERE { ?s a owl:Class }")
+    """
     def __init__(self, ontology_adaptor: IOntologyStorePort):
         self.__ontology_adaptor = ontology_adaptor
 

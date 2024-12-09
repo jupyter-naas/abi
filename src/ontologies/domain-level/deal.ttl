@@ -1,19 +1,49 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Deal Class Definition
+<http://ontology.naas.ai/abi/Deal> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/deal.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for business deals and opportunities."@en ;
+    dc:license "" ;
+    dc:title "Deal Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Deal a owl:Class ;
     rdfs:label "Deal"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
     skos:definition "A business opportunity with an associated score and scenario" .
 
-# Properties
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasContact a owl:ObjectProperty ;
+    rdfs:label "has contact"@en ;
+    rdfs:domain abi:Deal ;
+    rdfs:range abi:Contact .
+
+abi:hasOrganization a owl:ObjectProperty ;
+    rdfs:label "has organization"@en ;
+    rdfs:domain abi:Deal ;
+    rdfs:range abi:Organization .
+
+#################################################################
+#    Data Properties
+#################################################################
+
 abi:hasScenario a owl:DatatypeProperty ;
     rdfs:label "has scenario"@en ;
     rdfs:domain abi:Deal ;
@@ -28,24 +58,4 @@ abi:hasCreatedDate a owl:DatatypeProperty ;
     rdfs:label "has created date"@en ;
     rdfs:domain abi:Deal ;
     rdfs:range xsd:dateTime .
-
-# Object Properties
-abi:hasContact a owl:ObjectProperty ;
-    rdfs:label "has contact"@en ;
-    rdfs:domain abi:Deal ;
-    rdfs:range abi:Contact .
-
-abi:hasOrganization a owl:ObjectProperty ;
-    rdfs:label "has organization"@en ;
-    rdfs:domain abi:Deal ;
-    rdfs:range abi:Organization .
-
-# Deal Instance Example
-<http://ontology.naas.ai/abi/Deal#KristenPhillipsRedkite> a abi:Deal ;
-    abi:hasScenario "W04-2024" ;
-    abi:hasDealName "Kristen Phillips (Redkite)" ;
-    abi:hasCreatedDate "2024-01-26"^^xsd:date ;
-    abi:hasDealScore 8 ;
-    abi:hasContact <http://ontology.naas.ai/abi/Contact#KristenPhillips> ;
-    abi:hasOrganization <http://ontology.naas.ai/abi/Organization#Redkite> ;
-    abi:hasCRMDealId "75" . 
+ 

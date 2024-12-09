@@ -1,0 +1,12 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Activity#KristenPhillipsFirstMessage> a abi:Activity ;
+    abi:hasScenario "W04-2024" ;
+    abi:hasCreatedDate "2024-01-26"^^xsd:date ;
+    abi:hasDueDate "2024-01-29"^^xsd:date ;
+    abi:hasTitle "Send first message on LinkedIn to connect" ;
+    abi:hasDescription "Hi Kristen, I noticed that you've been engaging..." ;
+    abi:relatedToDeal <http://ontology.naas.ai/abi/Deal#75> ;
+    abi:relatedToContact <http://ontology.naas.ai/abi/Contact#91> ;
+    abi:relatedToOrganization <http://ontology.naas.ai/abi/Organization#Redkite> . 

@@ -1,155 +1,63 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Core Resource Class
+<http://ontology.naas.ai/abi/Resource> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/resource.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for digital resources and assets."@en ;
+    dc:license "" ;
+    dc:title "Resource Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Resource a owl:Class ;
     rdfs:label "Resource"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ;
-    skos:definition "Any measurable or quantifiable source of information" .
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
+    skos:definition "A digital resource with associated metadata and metrics"@en .
 
-# Generic Classification System
-abi:Classification a owl:Class ;
-    rdfs:label "Classification"@en .
+#################################################################
+#    Object Properties
+#################################################################
 
-abi:Dimension a owl:Class ;
-    rdfs:label "Dimension"@en .
+abi:hasOwner a owl:ObjectProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range abi:Person .
 
-abi:Metric a owl:Class ;
-    rdfs:label "Metric"@en .
+#################################################################
+#    Data Properties
+#################################################################
 
-# Core Properties
-abi:hasIdentifier a owl:DatatypeProperty ;
+abi:hasName a owl:DatatypeProperty ;
     rdfs:domain abi:Resource ;
     rdfs:range xsd:string .
 
-abi:hasTimestamp a owl:DatatypeProperty ;
-    rdfs:domain abi:Resource ;
-    rdfs:range xsd:dateTime .
-
-abi:hasProvider a owl:DatatypeProperty ;
+abi:hasDescription a owl:DatatypeProperty ;
     rdfs:domain abi:Resource ;
     rdfs:range xsd:string .
 
-# Classification Properties
-abi:hasClassification a owl:ObjectProperty ;
+abi:hasType a owl:DatatypeProperty ;
     rdfs:domain abi:Resource ;
-    rdfs:range abi:Classification .
-
-abi:hasDimension a owl:ObjectProperty ;
-    rdfs:domain abi:Resource ;
-    rdfs:range abi:Dimension .
-
-abi:hasMetric a owl:ObjectProperty ;
-    rdfs:domain abi:Resource ;
-    rdfs:range abi:Metric .
-
-# Measurement System
-abi:Measurement a owl:Class ;
-    rdfs:label "Measurement"@en .
-
-abi:hasValue a owl:DatatypeProperty ;
-    rdfs:domain abi:Measurement ;
-    rdfs:range xsd:decimal .
-
-abi:hasUnit a owl:DatatypeProperty ;
-    rdfs:domain abi:Measurement ;
     rdfs:range xsd:string .
 
-abi:hasRange a owl:ObjectProperty ;
-    rdfs:domain abi:Measurement ;
-    rdfs:range abi:Range .
+abi:hasFormat a owl:DatatypeProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range xsd:string .
 
-# Scoring System
-abi:Score a owl:Class ;
-    rdfs:label "Score"@en .
+abi:hasSize a owl:DatatypeProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range xsd:integer .
 
-abi:hasRawScore a owl:DatatypeProperty ;
-    rdfs:domain abi:Score ;
-    rdfs:range xsd:decimal .
-
-abi:hasNormalizedScore a owl:DatatypeProperty ;
-    rdfs:domain abi:Score ;
-    rdfs:range xsd:decimal .
-
-abi:hasWeight a owl:DatatypeProperty ;
-    rdfs:domain abi:Score ;
-    rdfs:range xsd:decimal .
-
-abi:hasImpact a owl:DatatypeProperty ;
-    rdfs:domain abi:Score ;
-    rdfs:range xsd:decimal .
-
-# Example Instance
-<http://ontology.naas.ai/abi/Resource#Example> a abi:Resource ;
-    # Identity
-    abi:hasIdentifier "RESOURCE-001" ;
-    abi:hasTimestamp "2024-01-25T18:04:37+01:00"^^xsd:dateTime ;
-    abi:hasProvider "Provider Name" ;
-    
-    # Classification
-    abi:hasClassification [
-        a abi:Classification ;
-        abi:primaryType "Financial" ;
-        abi:subType "Market Data" ;
-        abi:tags ("stock" "equity" "nasdaq")
-    ] ;
-    
-    # Dimensions
-    abi:hasDimension [
-        a abi:Dimension ;
-        abi:name "Geographic" ;
-        abi:value "Global"
-    ], [
-        a abi:Dimension ;
-        abi:name "Temporal" ;
-        abi:value "Real-time"
-    ] ;
-    
-    # Metrics
-    abi:hasMetric [
-        a abi:Metric ;
-        abi:name "Price" ;
-        abi:measurement [
-            a abi:Measurement ;
-            abi:hasValue "156.78"^^xsd:decimal ;
-            abi:hasUnit "USD" ;
-            abi:hasRange [
-                abi:minValue "0.00"^^xsd:decimal ;
-                abi:maxValue "1000.00"^^xsd:decimal
-            ]
-        ]
-    ] ;
-    
-    # Scoring
-    abi:hasScore [
-        a abi:Score ;
-        abi:hasRawScore "156.78"^^xsd:decimal ;
-        abi:hasNormalizedScore "7.8"^^xsd:decimal ;
-        abi:hasWeight "3"^^xsd:decimal ;
-        abi:hasImpact "23.4"^^xsd:decimal ;
-        abi:scoringMethod "linear_normalization" ;
-        abi:confidenceLevel "0.95"^^xsd:decimal
-    ] .
-
-# Scoring Methods
-abi:ScoringMethod a owl:Class ;
-    rdfs:label "Scoring Method"@en .
-
-<http://ontology.naas.ai/abi/ScoringMethod#LinearNormalization> a abi:ScoringMethod ;
-    abi:formula "score = (value - min) / (max - min) * 10" ;
-    abi:outputRange [
-        abi:minValue "0"^^xsd:decimal ;
-        abi:maxValue "10"^^xsd:decimal
-    ] .
-
-<http://ontology.naas.ai/abi/ScoringMethod#LogarithmicScale> a abi:ScoringMethod ;
-    abi:formula "score = log10(value) * scaling_factor" .
-
-<http://ontology.naas.ai/abi/ScoringMethod#CustomWeighting> a abi:ScoringMethod ;
-    abi:formula "impact = normalized_score * weight" . 
+abi:hasSizeUnit a owl:DatatypeProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range xsd:string . 

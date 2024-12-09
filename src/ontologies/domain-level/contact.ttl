@@ -1,19 +1,31 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/bfo/> .
-@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-# Contact Class Definition
+<http://ontology.naas.ai/abi/Contact> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/contact.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for business contacts."@en ;
+    dc:license "" ;
+    dc:title "Contact Domain Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
 abi:Contact a owl:Class ;
     rdfs:label "Contact"@en ;
-    rdfs:subClassOf bfo:BFO_0000023 ;  # Role
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
     skos:definition "A business contact with associated lead status and interaction history"@en .
 
-# Lead Status Class
 abi:LeadStatus a owl:Class ;
     rdfs:label "Lead Status"@en ;
     rdfs:subClassOf bfo:BFO_0000031 .
@@ -24,11 +36,34 @@ abi:MarketingQualifiedLead a abi:LeadStatus ;
 abi:SalesQualifiedLead a abi:LeadStatus ;
     rdfs:label "Sales Qualified Lead"@en .
 
-# Properties
+abi:ContractStatus a owl:Class ;
+    rdfs:label "Contract Status"@en .
+
+abi:ContractUnit a owl:Class ;
+    rdfs:label "Contract Unit"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
 abi:hasLeadStatus a owl:ObjectProperty ;
     rdfs:label "has lead status"@en ;
     rdfs:domain abi:Contact ;
     rdfs:range abi:LeadStatus .
+
+abi:relatedToPerson a owl:ObjectProperty ;
+    rdfs:label "related to person"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:Person .
+
+abi:relatedToOrganization a owl:ObjectProperty ;
+    rdfs:label "related to organization"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:Organization .
+
+#################################################################
+#    Data Properties
+#################################################################
 
 abi:hasCreatedDate a owl:DatatypeProperty ;
     rdfs:label "has created date"@en ;
@@ -54,36 +89,3 @@ abi:hasMessagingOptions a owl:DatatypeProperty ;
     rdfs:label "has messaging options"@en ;
     rdfs:domain abi:Contact ;
     rdfs:range rdf:List .
-
-abi:relatedToPerson a owl:ObjectProperty ;
-    rdfs:label "related to person"@en ;
-    rdfs:domain abi:Contact ;
-    rdfs:range abi:Person .
-
-abi:relatedToOrganization a owl:ObjectProperty ;
-    rdfs:label "related to organization"@en ;
-    rdfs:domain abi:Contact ;
-    rdfs:range abi:Organization .
-
-
-# Contract Status Class
-abi:ContractStatus a owl:Class ;
-    rdfs:label "Contract Status"@en .
-
-abi:Live a abi:ContractStatus .
-abi:Paused a abi:ContractStatus .
-abi:Completed a abi:ContractStatus .
-abi:Cancelled a abi:ContractStatus .
-
-# Contract Unit Class
-abi:ContractUnit a owl:Class ;
-    rdfs:label "Contract Unit"@en .
-
-abi:HourlyRate a abi:ContractUnit .
-abi:Annual a abi:ContractUnit .
-abi:Monthly a abi:ContractUnit .
-abi:Fixed a abi:ContractUnit .
-
-# Additional Contract Types
-abi:ContractType a owl:Class ;
-    rdfs:label "Contract Type"@en . 
