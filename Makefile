@@ -16,7 +16,7 @@ sh: .venv
 chat: .venv
 	docker compose run abi bash -c 'poetry install && poetry run chat-single-assistant'
 
-super-agent: .venv
+super-assistant: .venv
 	docker compose run abi bash -c 'poetry install && poetry run chat-multiple-assistants'
 
 .DEFAULT_GOAL := chat
