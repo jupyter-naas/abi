@@ -1,0 +1,11 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Deal#KristenPhillipsRedkite> a abi:Deal ;
+    abi:hasScenario "W04-2024" ;
+    abi:hasDealName "Kristen Phillips (Redkite)" ;
+    abi:hasCreatedDate "2024-01-26"^^xsd:date ;
+    abi:hasDealScore 8 ;
+    abi:hasContact <http://ontology.naas.ai/abi/Contact#KristenPhillips> ;
+    abi:hasOrganization <http://ontology.naas.ai/abi/Organization#Redkite> ;
+    abi:hasCRMDealId "75" . 

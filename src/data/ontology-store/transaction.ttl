@@ -1,0 +1,14 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Transaction#PettyExpense20240220> a abi:Transaction ;
+    abi:hasTransactionDate "2024-02-20T14:30:00Z"^^xsd:dateTime ;
+    abi:hasType abi:Expense ;
+    abi:hasAmount "127.50"^^xsd:decimal ;
+    abi:hasCurrency "EUR" ;
+    abi:hasReference "PETTY-2024-015" ;
+    abi:hasCashRegister <http://ontology.naas.ai/abi/CashRegister#MainOffice> ;
+    abi:hasReceiptNumber "PET-2024-015" ;
+    abi:hasCategory "Office Supplies" ;
+    abi:hasApprovedBy <http://ontology.naas.ai/abi/Person#OfficeManager> ;
+    abi:hasReceiptImage <http://ontology.naas.ai/abi/Asset#Receipt20240220> . 
