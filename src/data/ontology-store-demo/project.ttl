@@ -1,0 +1,17 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/Project#BMWResearch> a abi:Project ;
+    abi:hasName "BMW AI Research Partnership" ;
+    abi:hasStartDate "2024-03-01"^^xsd:date ;
+    abi:hasEndDate "2024-09-30"^^xsd:date ;
+    abi:hasStatus abi:Active ;
+    abi:hasDescription """Customization of ABI system for BMW's internal use:
+    - Custom agent development
+    - Integration with internal systems
+    - Enterprise deployment
+    - Training and documentation""" ;
+    abi:hasBudget "180000.00"^^xsd:decimal ;
+    abi:hasOwner <http://ontology.naas.ai/abi/Person#Max> ;
+    abi:hasTeamMembers <http://ontology.naas.ai/abi/Person#Jeremy> ;
+    abi:hasRelatedPosts <http://ontology.naas.ai/abi/Post#7156278144277073922> . 
