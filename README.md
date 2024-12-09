@@ -25,6 +25,29 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
 ![ABI Terminal](https://naasai-public.s3.eu-west-3.amazonaws.com/abi2.gif)
 
+## Table of Content
+
+- [ABI](#abi)
+  - [Overview](#overview)
+    - [Key Features](#key-features)
+    - [License](#license)
+  - [Sneak peek 👀](#sneak-peek-)
+  - [Table of Content](#table-of-content)
+  - [Setup Project](#setup-project)
+    - [Getting Started](#getting-started)
+    - [Managing Dependencies](#managing-dependencies)
+      - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
+      - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
+  - [Creating a new Integration](#creating-a-new-integration)
+  - [Creating a new Pipeline](#creating-a-new-pipeline)
+  - [Creating a new Workflow](#creating-a-new-workflow)
+    - [Learn more](#learn-more)
+    - [Upcoming Changes](#upcoming-changes)
+      - [Standardization of Pipeline and Workflow Interfaces](#standardization-of-pipeline-and-workflow-interfaces)
+  - [Cursor users](#cursor-users)
+  - [Contributing](#contributing)
+  - [Support](#support)
+
 ## Setup Project
 
 ### Getting Started
