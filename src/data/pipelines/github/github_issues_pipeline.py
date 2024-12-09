@@ -38,7 +38,7 @@ class GithubIssuesPipeline(Pipeline):
         # Get project data from GithubGraphqlIntegration
         if self.__configuration.github_project_id != 0:
             organization = self.__configuration.github_repository.split("/")[0]
-            project_data : dict = self.__integration_graphql.get_org_project_node_id(organization, self.__configuration.github_project_id) # type: ignore
+            project_data : dict = self.__integration_graphql.get_project_node_id(organization, self.__configuration.github_project_id) # type: ignore
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
             logger.debug(f"Project node ID: {project_node_id}")
         else:
