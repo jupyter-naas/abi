@@ -1,7 +1,7 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations import GithubIntegration, GithubGraphqlIntegration, AiaIntegration
+from src.integrations import AiaIntegration, NaasIntegration
 from src.workflows import AssignIssuesToProjectWorkflow, CreateIssueAndAddToProjectWorkflow, GetTopPrioritiesWorkflow
 
 OPERATIONS_ASSISTANT_INSTRUCTIONS = '''You are an Operations Assistant. 
@@ -29,16 +29,18 @@ def create_operations_assistant(
     # Add integrations based on available credentials
     if (naas_key := secret.get('NAAS_API_KEY')) and (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
         tools += AiaIntegration.as_tools(AiaIntegration.AiaIntegrationConfiguration(api_key=naas_key))
-    
-    if github_token := secret.get('GITHUB_ACCESS_TOKEN'):
-        tools += GithubIntegration.as_tools(GithubIntegration.GithubIntegrationConfiguration(access_token=github_token))
-        tools += GithubGraphqlIntegration.as_tools(GithubGraphqlIntegration.GithubGraphqlIntegrationConfiguration(access_token=github_token))
+
+    if naas_key := secret.get('NAAS_API_KEY'):
+        tools += NaasIntegration.as_tools(NaasIntegration.NaasIntegrationConfiguration(api_key=naas_key))
 
     # Add CreateIssueAndAddToProjectWorkflow tool
     tools.append(CreateIssueAndAddToProjectWorkflow.as_tool())
     
     # Add GetTopPrioritiesWorkflow tool
     tools.append(GetTopPrioritiesWorkflow.as_tool())
+
+    # Add AssignIssuesToProjectWorkflow tool
+    tools.append(AssignIssuesToProjectWorkflow.as_tool())
     
     # Use provided configuration or create default one
     if agent_configuration is None:
