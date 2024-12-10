@@ -23,7 +23,7 @@ def create_operations_assistant(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
-    model = ChatOpenAI(model="gpt-4", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     tools = []
 
     # Add integrations based on available credentials
