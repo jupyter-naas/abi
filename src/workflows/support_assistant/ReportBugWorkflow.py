@@ -33,10 +33,10 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
     project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
     assignees: Optional[List[str]] = field(default_factory=list)
     labels: Optional[List[str]] = field(default_factory=lambda: ["bug"])
-    status_field_id: Optional[str] = None
-    priority_field_id: Optional[str] = None
-    status_option_id: Optional[str] = None
-    priority_option_id: Optional[str] = None
+    status_field_id: str = "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
+    priority_field_id: str = 'PVTSSF_lADOBESWNM4AKRt3zgGac0g'
+    status_option_id: str = '97363483'
+    priority_option_id: Optional[str] = '4fb76f2d'
 
 class ReportBugWorkflow(Workflow):
     __configuration: ReportBugWorkflowConfiguration
