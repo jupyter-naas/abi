@@ -4,11 +4,6 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.assistants.prompt import SUPER_ASSISTANT_INSTRUCTIONS
 
-SUPER_ASSISTANT_INSTRUCTIONS_ABI = SUPER_ASSISTANT_INSTRUCTIONS.format(
-    name="Abi",
-    role="Super AI Assistant by NaasAI Research",
-    description="A cutting-edge AI assistant developed by the research team at NaasAI, focused on providing maximum value and support to users. Combines deep technical expertise with emotional intelligence to deliver the most helpful experience possible."
-)
 def create_agent():
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     
@@ -47,8 +42,7 @@ def create_agent():
     if stripe_key := secret.get('STRIPE_API_KEY'):
         tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
             
-    return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS_ABI))
-
+    return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS))
 
 def create_graph_agent():
     agent_shared_state = AgentSharedState()
@@ -83,16 +77,19 @@ def create_graph_agent():
         sales_assistant.as_tool(name="sales_assistant", description="Use for sales and marketing analysis"),
         operations_assistant.as_tool(name="operations_assistant", description="Use for operations and marketing analysis"),
         finance_assistant.as_tool(name="finance_assistant", description="Use for financial analysis and insights"),
-        support_assistant.as_tool(name="support_assistant", description="User support and issue handling")
+        support_assistant.as_tool(name="support_assistant", description="Use to get any feedbacks or needs from user, create new integrations (external API), ontology pipelines or workflows. Always use this tool if you can't answer user intent with all the assistants already created.")
     ]
     
-    agent_configuration.system_prompt = SUPER_ASSISTANT_INSTRUCTIONS_ABI + """
-        - Use open_data_assistant for external data analysis with Perplexity and Replicate Integrations.  
-        - Use content_assistant for content strategy and analysis with Linkedin, Perplexity and Replicate Integrations.   
-        - Use growth_assistant for marketing and growth insights with HubSpot Integration.
-        - Use sales_assistant for sales and marketing analysis with HubSpot and Stripe Integrations.
-        - Use operations_assistant for operations and marketing analysis with Github and Github Graphql Integrations.
-        - Use finance_assistant for financial data and transactions with Stripe Integrations.
-        - Use support_assistant if you can't answer user intent with all the assistants already created or if user ask for a new tool, integration or workflow.
-        """
+    agent_configuration.system_prompt = """You are a super-assistant with access to specialized sub-assistant:
+    - OpenData Assistant: Use for open data analysis, can access the web through Perplexity integration.
+    - Content Assistant: Use for content analysis and optimization.
+    - Growth Assistant: Use for growth and marketing analysis.
+    - Sales Assistant: Use for sales and marketing analysis.
+    - Operations Assistant: Use for operations and marketing analysis.
+    - Finance Assistant: Use for financial analysis and insights.
+    - Support Assistant: Use to get any feedbacks or needs from user, create new integrations (external API), ontology pipelines or workflows. Always use this tool if you can't answer user intent with all the assistants already created.
+    Your role is to understand user intent and use the right assistant to answer the user's question.
+    NEVER try to solve a problem yourself, always use the right assistant to answer the user's question.
+    When you identify the right assistant to use, access its tools and use them to answer the user's question. Make sure to validate input arguments mandatory fields (not optional) with the user in human readable terms according to the provided schema before proceeding.
+    """
     return Agent(model, tools, state=AgentSharedState(thread_id=8), configuration=agent_configuration, memory=MemorySaver())
