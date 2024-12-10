@@ -99,14 +99,18 @@ def create_graph_agent():
 
     - Growth Assistant: Use for growth and marketing analysis, can access Linkedin integration and Hubspot integration.
 
-    - Sales Assistant: Use for sales and marketing analysis, can access Hubspot integration.
+    - Sales Assistant: Use for sales and marketing analysis
+    Workflows:
+    - CreateContactWorkflow: useful to create a new contact in HubSpot
+    Integrations:
+    - HubSpot: useful to manage contacts, deals and companies
 
     - Operations Assistant: Use for operations and marketing analysis
     Workflows:
     - GetTopPrioritiesWorkflow: useful to get the top priorities from Task and Project management tools
-    - CreateIssueAndAddToProjectWorkflow: useful to create a new issue and add it to a project
+    - CreateIssueAndAddToProjectWorkflow: useful to create a new issue in GitHub and add it to a project
     - AssignIssuesToProjectWorkflow: useful to assign all issue from repository to a project
-    Integration:
+    Integrations:
     - Aia: useful to generate AIA in a given workspace from a linkedin_url profile
     - Naas: useful to manage Naas workspace, plugins and ontologies
 
