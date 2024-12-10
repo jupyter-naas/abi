@@ -29,7 +29,7 @@ class FeatureRequestWorkflowConfiguration(WorkflowConfiguration):
     github_graphql_integration_config: GithubGraphqlIntegrationConfiguration
     issue_title: str
     issue_body: str
-    repo_name: str = "jupyter-naas/abi"
+    repo_name: str = "jupyter-naas/support"
     project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
     assignees: Optional[List[str]] = field(default_factory=list)
     labels: Optional[List[str]] = field(default_factory=lambda: ["enhancement"])
