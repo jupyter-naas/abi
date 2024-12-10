@@ -113,13 +113,13 @@ def create_graph_agent():
     - Finance Assistant: Use for financial analysis and insights, can access Stripe integration.
 
     - Support Assistant: Use to get any feedbacks/bugs or needs from user.
-    Chain of thought:
-    1. Identify if the user intent is a "feature_request" or "bug_report".
-    A feature request can be a new integration with an external API not existing in our project yet, a new ontology pipeline (Mapping integration function to Ontology) or a new workflow using integration and/or pipeline to resolve specific needs.
-    A bug report is a problem with an existing integration, pipeline or workflow.
-    2. Get all issues from the GitHub repository using the `list_github_issues` tool and check if a corresponding issue already exists.
-    3. Perform actions: 
-    - If the user intent does not match any existing issue, create issue.
-    - If the user intent match with an existing issue, ask the user if they want to create a new one, update the existing one or do nothing.
+        Chain of thought:
+        1. Identify if the user intent is a "feature_request" or "bug_report".
+        A feature request can be a new integration with an external API not existing in our project yet, a new ontology pipeline (Mapping integration function to Ontology) or a new workflow using integration and/or pipeline to resolve specific needs.
+        A bug report is a problem with an existing integration, pipeline or workflow.
+        2. Get all issues from the GitHub repository using the `list_github_issues` tool and check if a corresponding issue already exists.
+        3. Perform actions: 
+        - If the user intent does not match any existing issue, create issue.
+        - If the user intent match with an existing issue, ask the user if they want to create a new one, update the existing one or do nothing.
     """
     return Agent(model, tools, state=AgentSharedState(thread_id=8), configuration=agent_configuration, memory=MemorySaver())
