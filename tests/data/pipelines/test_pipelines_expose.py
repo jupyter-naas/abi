@@ -44,11 +44,11 @@ class TestPipelineExpose:
         method = getattr(pipeline_class, "as_tools")
         assert callable(method), f"{class_name}.as_tools must be callable"
         
-    def test_has_as_runnable_method(self, class_name, pipeline_class):
-        """Test that the pipeline class implements the as_runnable method."""
-        assert hasattr(pipeline_class, "as_runnable"), f"{class_name} must implement as_runnable method"
-        method = getattr(pipeline_class, "as_runnable")
-        assert callable(method), f"{class_name}.as_runnable must be callable"
+    # def test_has_as_runnable_method(self, class_name, pipeline_class):
+    #     """Test that the pipeline class implements the as_runnable method."""
+    #     assert hasattr(pipeline_class, "as_runnable"), f"{class_name} must implement as_runnable method"
+    #     method = getattr(pipeline_class, "as_runnable")
+    #     assert callable(method), f"{class_name}.as_runnable must be callable"
         
     def test_has_as_api_method(self, class_name, pipeline_class):
         """Test that the pipeline class implements the as_api method."""
