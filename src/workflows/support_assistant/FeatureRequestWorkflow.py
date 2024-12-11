@@ -2,7 +2,7 @@ from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
-from src import secret
+from src import secret, config
 from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -24,6 +24,7 @@ class FeatureRequestWorkflowParameters(WorkflowParameters):
     """Parameters for FeatureRequestWorkflow execution.
     
     Attributes:
+        repo_name: Repository name in format owner/repo (defaults to config's github_support_repository)
         issue_title: Title of the feature request
         issue_body: Body content of the feature request
         repo_name: Repository name in format owner/repo
@@ -38,7 +39,7 @@ class FeatureRequestWorkflowParameters(WorkflowParameters):
     issue_title: str = Field(..., description="Title of the feature request")
     issue_body: str = Field(..., description="Body content of the feature request")
     repo_name: str = Field(default="jupyter-naas/support", description="Repository name in format owner/repo")
-    project_node_id: str = Field(default="PVT_kwDOBESWNM4AKRt3", description="Project node ID")
+    project_node_id: str = Field(default=config.github_support_repository, description="Project node ID")
     assignees: Optional[List[str]] = Field(default_factory=list, description="List of assignees")
     labels: Optional[List[str]] = Field(default_factory=lambda: ["enhancement"], description="List of labels")
     status_field_id: Optional[str] = Field(None, description="Field ID for status column")
