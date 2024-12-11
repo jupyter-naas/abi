@@ -1,7 +1,9 @@
 from dataclasses import dataclass
-from abi.pipeline import Pipeline, PipelineConfiguration
+from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from rdflib import Graph, RDF, OWL, URIRef, Namespace, Literal, XSD
 from src.integrations.GithubIntegration import GithubIntegration
+from langchain_core.tools import StructuredTool
+from fastapi import APIRouter
 
 @dataclass
 class GithubUserDetailsPipelineConfiguration(PipelineConfiguration):
@@ -10,21 +12,48 @@ class GithubUserDetailsPipelineConfiguration(PipelineConfiguration):
     Attributes:
         github_username (str): Username of the Github user to fetch details for
     """
+    github_integration: GithubIntegration
+
+
+class GithubUserDetailsPipelineParameters(PipelineParameters):
+    """Parameters for GithubUserDetailsPipeline execution.
+    
+    Attributes:
+        github_username (str): Username of the Github user to fetch details for
+    """
     github_username: str
 
 class GithubUserDetailsPipeline(Pipeline):
-    __github_integration: GithubIntegration
     __configuration: GithubUserDetailsPipelineConfiguration
     
-    def __init__(self, github_integration: GithubIntegration, configuration: GithubUserDetailsPipelineConfiguration):
-        super().__init__([github_integration], configuration)
-        
-        self.__github_integration = github_integration
+    def __init__(self, configuration: GithubUserDetailsPipelineConfiguration):
         self.__configuration = configuration
-        
 
-    def run(self) -> Graph:
-        user_details = self.__github_integration.get_user_details(self.__configuration.github_username)
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this pipeline.
+        
+        Returns:
+            list[StructuredTool]: List containing the pipeline tool
+        """
+        return [StructuredTool(
+            name="github_user_details_pipeline",
+            description="Fetches GitHub user details based on username",
+            func=lambda **kwargs: self.run(GithubUserDetailsPipelineParameters(**kwargs)),
+            args_schema=GithubUserDetailsPipelineParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this pipeline to the given router.
+        
+        Args:
+            router (APIRouter): FastAPI router to add endpoints to
+        """
+        @router.post("/GithubUserDetailsPipeline")
+        def run(parameters: GithubUserDetailsPipelineParameters):
+            return self.run(parameters).serialize(format="turtle")
+
+    def run(self, parameters: GithubUserDetailsPipelineParameters) -> Graph:
+        user_details = self.__configuration.github_integration.get_user_details(parameters.github_username)
         
         graph = Graph()
         

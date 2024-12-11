@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 
+
 class IntegrationConnectionError(Exception):
     pass
 
+
 @dataclass
-class IntegrationConfiguration:
+class IntegrationConfiguration():
     pass
 
 class Integration():
