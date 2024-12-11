@@ -1,12 +1,16 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-
+from abi.utils.Expose import Expose
+from pydantic import BaseModel
 
 @dataclass
 class WorkflowConfiguration:
     pass
 
-class Workflow(ABC):
+class WorkflowParameters(BaseModel):
+    pass
+
+class Workflow(Expose):
     """A workflow represents a sequence of operations that can be exposed in multiple ways.
     
     Workflows encapsulate business logic that can be:
@@ -32,5 +36,5 @@ class Workflow(ABC):
     def __init__(self, configuration: WorkflowConfiguration):
         self.__configuration = configuration
         
-    def run(self):
+    def run(self, parameters: WorkflowParameters):
         pass
