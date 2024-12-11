@@ -1,14 +1,16 @@
 from abi.workflow import Workflow, WorkflowConfiguration
+from abi.workflow.workflow import WorkflowParameters
 from src.integrations.LinkedinIntegration import LinkedinIntegration, LinkedinIntegrationConfiguration
 from src import secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 import pandas as pd
 from abi import logger
-from typing import List, Tuple
+from typing import List, Optional
 from pytz.exceptions import NonExistentTimeError
 import pytz
-from typing import Optional
+from fastapi import APIRouter
+from langchain_core.tools import StructuredTool
 
 @dataclass
 class LinkedinPostsInteractionsWorkflowConfiguration(WorkflowConfiguration):
@@ -16,12 +18,19 @@ class LinkedinPostsInteractionsWorkflowConfiguration(WorkflowConfiguration):
     
     Attributes:
         linkedin_integration_config (LinkedinIntegrationConfiguration): LinkedIn integration configuration
-        linkedin_urls (List[str]): List of LinkedIn post URLs
-        limit (int, optional): Maximum number of reactions and comments to retrieve. Defaults to 100.
     """
     linkedin_integration_config: LinkedinIntegrationConfiguration
-    linkedin_urls: List[str]
-    limit: int = 100
+
+class LinkedinPostsInteractionsWorkflowParameters(WorkflowParameters):
+    """Parameters for LinkedIn Posts Interactions Workflow.
+    
+    Attributes:
+        linkedin_urls (List[str]): List of LinkedIn post URLs
+        limit (Optional[int]): Maximum number of reactions and comments to retrieve. Defaults to 100.
+    """
+    linkedin_urls: List[str] = Field(..., description="List of LinkedIn post URLs. The URLs must contain 'activity'")
+    limit: Optional[int] = Field(default=100, description="Optional. Maximum number of reactions and comments to retrieve. Defaults to 100.")
+
 class LinkedinPostsInteractionsWorkflow(Workflow):
     __configuration: LinkedinPostsInteractionsWorkflowConfiguration
     
@@ -29,7 +38,29 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__linkedin = LinkedinIntegration(configuration.linkedin_integration_config)
+
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow.
         
+        Returns:
+            list[StructuredTool]: List containing the workflow tool
+        """
+        return [StructuredTool(
+            name="get_linkedin_posts_interactions",
+            description="Get people (linkedin profiles) who interacted (reactions and comments) with one or more LinkedIn posts.",
+            func=lambda **kwargs: self.run(LinkedinPostsInteractionsWorkflowParameters(**kwargs)),
+            args_schema=LinkedinPostsInteractionsWorkflowParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router.
+        
+        Args:
+            router (APIRouter): FastAPI router to add endpoints to
+        """
+        @router.post("/linkedin/posts/interactions")
+        def get_posts_interactions(parameters: LinkedinPostsInteractionsWorkflowParameters):
+            return self.run(parameters).to_dict('records')
 
     def handle_time_error(self, df_init, column):
         # Handle NonExistentTimeError
@@ -43,9 +74,12 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
                     df.loc[i, column] = actual_time       
         return df
 
-    def run(self) -> pd.DataFrame:
+    def run(self, parameters: LinkedinPostsInteractionsWorkflowParameters) -> pd.DataFrame:
         """Get reactions and comments for LinkedIn posts.
         
+        Args:
+            parameters (LinkedinPostsInteractionsWorkflowParameters): Workflow parameters
+            
         Returns:
             pd.DataFrame: DataFrame containing combined reactions and comments data
         """
@@ -54,18 +88,19 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
         df_comments = pd.DataFrame()
         df1 = pd.DataFrame()
         df2 = pd.DataFrame()
-        logger.info(f"Linkedin URLs: {self.__configuration.linkedin_urls}")
-        logger.info(f"Limit: {self.__configuration.limit}")
         
-        if len(self.__configuration.linkedin_urls) == 0:
+        logger.info(f"Linkedin URLs: {parameters.linkedin_urls}")
+        logger.info(f"Limit: {parameters.limit}")
+        
+        if len(parameters.linkedin_urls) == 0:
             return pd.DataFrame()
         
         # Process each post
-        for i, linkedin_url in enumerate(self.__configuration.linkedin_urls):
+        for linkedin_url in parameters.linkedin_urls:
             # Get reactions
             tmp_reactions = self.__linkedin.get_post_reactions(
                 linkedin_url, 
-                limit=self.__configuration.limit
+                limit=parameters.limit
             )
             
             if tmp_reactions is not None:
@@ -74,7 +109,7 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
             # Get comments
             tmp_comments = self.__linkedin.get_post_comments(
                 linkedin_url,
-                limit=self.__configuration.limit
+                limit=parameters.limit
             )
             
             if tmp_comments is not None:
@@ -122,26 +157,6 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
         df = pd.concat([df1, df2]).reset_index(drop=True)
         
         return df
-def api():
-    import fastapi
-    import uvicorn
-    
-    app = fastapi.FastAPI()
-    
-    @app.post("/linkedin/posts/interactions")
-    def get_posts_interactions(linkedin_urls: List[str], limit: int):
-        configuration = LinkedinPostsInteractionsWorkflowConfiguration(
-            linkedin_integration_config=LinkedinIntegrationConfiguration(
-                li_at=secret.get('li_at'),
-                jsessionid=secret.get('jsessionid')
-            ),
-            linkedin_urls=linkedin_urls,
-            limit=limit
-        )
-        workflow = LinkedinPostsInteractionsWorkflow(configuration)
-        return workflow.run().to_dict('records')
-    
-    uvicorn.run(app, host="0.0.0.0", port=9878)
 
 def main():
     linkedin_urls = ["https://www.linkedin.com/feed/update/urn:li:activity:1234567890"]
@@ -149,44 +164,15 @@ def main():
         linkedin_integration_config=LinkedinIntegrationConfiguration(
             li_at=secret.get("LINKEDIN_LI_AT").value,
             jsessionid=secret.get("LINKEDIN_JSESSIONID").value
-        ),
+        )
+    )
+    workflow = LinkedinPostsInteractionsWorkflow(config)
+    parameters = LinkedinPostsInteractionsWorkflowParameters(
         linkedin_urls=linkedin_urls,
         limit=100
     )
-    workflow = LinkedinPostsInteractionsWorkflow(config)
-    df = workflow.run()
+    df = workflow.run(parameters)
     print(df)
-
-def as_tool():
-    """Convert workflow into a LangChain tool."""
-    from langchain_core.tools import StructuredTool
-    
-    class LinkedinPostsInteractionsSchema(BaseModel):
-        linkedin_urls: List[str] = Field(..., description="List of LinkedIn post URLs. The URLs must contain 'activity'")
-        limit: Optional[int] = Field(default=100, description="Optional. Maximum number of reactions and comments to retrieve. Defaults to 100.")
-        
-    def get_linkedin_posts_interactions(
-        linkedin_urls: List[str],
-        limit: Optional[int] = 100
-    ) -> dict:
-        configuration = LinkedinPostsInteractionsWorkflowConfiguration(
-            linkedin_integration_config=LinkedinIntegrationConfiguration(
-                li_at=secret.get("li_at"),
-                jsessionid=secret.get("jsessionid")
-            ),
-            linkedin_urls=linkedin_urls,
-            limit=limit
-        )
-        workflow = LinkedinPostsInteractionsWorkflow(configuration)
-        df = workflow.run()
-        return df.to_dict('records')
-    
-    return StructuredTool(
-        name="get_linkedin_posts_interactions",
-        description="Get people (linkedin profiles) who interacted (reactions and comments) with one or more LinkedIn posts.",
-        func=lambda **kwargs: get_linkedin_posts_interactions(**kwargs),
-        args_schema=LinkedinPostsInteractionsSchema
-    )
 
 if __name__ == "__main__":
     main()

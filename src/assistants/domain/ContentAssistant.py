@@ -2,7 +2,11 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.integrations import LinkedinIntegration, ReplicateIntegration
+from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
+from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
 from src.workflows.content_assistant import LinkedinPostsWorkflow
+
+from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 
 CONTENT_ASSISTANT_INSTRUCTIONS = """
 You are a Content Assistant with access to valuable data and insights about content strategy.
@@ -37,13 +41,16 @@ def create_content_assistant(
     tools = []
     
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        tools += LinkedinIntegration.as_tools(LinkedinIntegration.LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+
+        linkedin_posts_workflow = LinkedinPostsWorkflow(LinkedinPostsWorkflowConfiguration(
+            linkedin_integration_config=LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+        ))
+        tools += linkedin_posts_workflow.as_tools()
 
     if replicate_key := secret.get('REPLICATE_API_KEY'):
-        tools += ReplicateIntegration.as_tools(ReplicateIntegration.ReplicateIntegrationConfiguration(api_key=replicate_key))
+        tools += ReplicateIntegration.as_tools(ReplicateIntegrationConfiguration(api_key=replicate_key))
 
-    tools.append(LinkedinPostsWorkflow.as_tool())
-    
     # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(

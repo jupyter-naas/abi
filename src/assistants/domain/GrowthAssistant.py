@@ -2,8 +2,9 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.integrations import HubSpotIntegration, LinkedinIntegration
-from src.workflows.growth_assistant import LinkedinPostsInteractionsWorkflow
-
+from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
+from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.workflows.growth_assistant.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
 
 GROWTH_ASSISTANT_INSTRUCTIONS = """
 You are a Growth Assistant with access to a list of interactions from content that enable users to get marketing qualified contacts.
@@ -36,13 +37,15 @@ def create_growth_assistant(
     tools = []
 
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        tools += LinkedinIntegration.as_tools(LinkedinIntegration.LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        
+        linkedin_posts_interactions_workflow = LinkedinPostsInteractionsWorkflow(LinkedinPostsInteractionsWorkflowConfiguration(
+            linkedin_integration_config=LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+        ))
+        tools += linkedin_posts_interactions_workflow.as_tools()
     
     if hubspot_key := secret.get('HUBSPOT_API_KEY'):
-        tools += HubSpotIntegration.as_tools(HubSpotIntegration.HubSpotIntegrationConfiguration(api_key=hubspot_key))
-
-    # Add LinkedinPostsInteractionsWorkflow
-    tools.append(LinkedinPostsInteractionsWorkflow.as_tool())
+        tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(api_key=hubspot_key))
     
     # Use provided configuration or create default one
     if agent_configuration is None:
