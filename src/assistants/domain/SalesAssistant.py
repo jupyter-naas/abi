@@ -2,7 +2,8 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.integrations import HubSpotIntegration
-from src.workflows.sales_assistant import CreateContactWorkflow
+from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.workflows.sales_assistant.CreateContactWorkflow import CreateContactWorkflow, CreateContactWorkflowConfiguration
 
 SALES_ASSISTANT_INSTRUCTIONS = """You are a Sales Assistant.
 
@@ -27,10 +28,16 @@ def create_sales_assistant(
     tools = []
     
     if hubspot_access_token := secret.get('HUBSPOT_ACCESS_TOKEN'):
-        tools += HubSpotIntegration.as_tools(HubSpotIntegration.HubSpotIntegrationConfiguration(access_token=hubspot_access_token))
+        hubspot_integration_config = HubSpotIntegrationConfiguration(access_token=hubspot_access_token)
+        
+        tools += HubSpotIntegration.as_tools(hubspot_integration_config)
 
-    # Add CreateContactWorkflow tool
-    tools.append(CreateContactWorkflow.as_tool())
+        create_contact_workflow = CreateContactWorkflow(CreateContactWorkflowConfiguration(
+            hubspot_integration_config=hubspot_integration_config
+        ))
+
+        # Add CreateContactWorkflow tool
+        tools.append(create_contact_workflow.as_tools())
     
     # Use provided configuration or create default one
     if agent_configuration is None:
