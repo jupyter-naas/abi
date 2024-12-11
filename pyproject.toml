@@ -28,8 +28,8 @@ rich = "^13.9.4"
 [tool.poetry.scripts]
 ingest-github-user = "src.workflows.ingest_github_user:main"
 ingest-github-user-api = "src.workflows.ingest_github_user:api"
-chat-single-assistant = "src.apps.terminal_agent.main:run_single"
-chat-multiple-assistants = "src.apps.terminal_agent.main:run_multiple"
+chat-single-agent = "src.apps.terminal_agent.main:run_single_agent"
+chat-supervisor-agent = "src.apps.terminal_agent.main:run_supervisor_agent"
 
 
 [build-system]
