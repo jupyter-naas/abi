@@ -94,7 +94,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
 4. **Create Docker Container & Start Chatting**
    ```bash
-   make chat
+   make
    ```
 
 
