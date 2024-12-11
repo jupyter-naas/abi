@@ -9,6 +9,9 @@ venv/
 ENV/
 env/
 
+# Config
+config.yaml
+
 # Python
 __pycache__/
 *.py[cod]
