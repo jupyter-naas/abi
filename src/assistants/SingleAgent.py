@@ -1,6 +1,9 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration
 from src import secret
+from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.workflows.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
 
 SINGLE_AGENT_INSTRUCTIONS = """
 {
@@ -53,14 +56,20 @@ def create_single_agent():
         ReplicateIntegration, NaasIntegration, AiaIntegration, 
         HubSpotIntegration, StripeIntegration, GithubGraphqlIntegration
     )
-    from src.workflows import tools as workflow_tools
     
-    tools = [] + workflow_tools
+    tools = []
     
     # Add integrations based on available credentials
     if github_token := secret.get('GITHUB_ACCESS_TOKEN'):
         tools += GithubIntegration.as_tools(GithubIntegration.GithubIntegrationConfiguration(access_token=github_token))
         tools += GithubGraphqlIntegration.as_tools(GithubGraphqlIntegration.GithubGraphqlIntegrationConfiguration(access_token=github_token))
+    
+        create_issue_and_add_to_project_workflow = CreateIssueAndAddToProjectWorkflow(CreateIssueAndAddToProjectWorkflowConfiguration(
+            github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+            github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
+        ))
+
+        tools += create_issue_and_add_to_project_workflow.as_tools()
     
     if perplexity_key := secret.get('PERPLEXITY_API_KEY'):
         tools += PerplexityIntegration.as_tools(PerplexityIntegration.PerplexityIntegrationConfiguration(api_key=perplexity_key))
