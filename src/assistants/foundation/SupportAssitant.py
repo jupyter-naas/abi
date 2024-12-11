@@ -1,6 +1,8 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
+from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
+from src.integrations.GithubIntegration import GithubIntegration,GithubIntegrationConfiguration
 from src.workflows.support_assistant import FeatureRequestWorkflow, ReportBugWorkflow, IssueListWorkflow
 
 SUPPORT_ASSISTANT_INSTRUCTIONS = """
@@ -23,13 +25,24 @@ def create_support_assistant(
     tools = []
 
     # Add GetIssuesWorkflow tool
-    tools.append(IssueListWorkflow.as_tool())
+    get_issues_workflow = IssueListWorkflow.IssueListWorkflow(IssueListWorkflow.IssueListWorkflowConfiguration(
+        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
+    ))
+    tools += get_issues_workflow.as_tools()
 
     # Add FeatureRequestWorkflow tool
-    tools.append(FeatureRequestWorkflow.as_tool())
+    feature_request_workflow = FeatureRequestWorkflow.FeatureRequestWorkflow(FeatureRequestWorkflow.FeatureRequestWorkflowConfiguration(
+        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+    ))
+    tools += feature_request_workflow.as_tools()
     
     # Add ReportBugWorkflow tool
-    tools.append(ReportBugWorkflow.as_tool())
+    report_bug_workflow = ReportBugWorkflow.ReportBugWorkflow(ReportBugWorkflow.ReportBugWorkflowConfiguration(
+        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+    ))
+    tools += report_bug_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:

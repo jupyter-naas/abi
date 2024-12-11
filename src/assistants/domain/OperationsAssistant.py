@@ -2,7 +2,14 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.integrations import AiaIntegration, NaasIntegration
-from src.workflows import AssignIssuesToProjectWorkflow, CreateIssueAndAddToProjectWorkflow, GetTopPrioritiesWorkflow
+
+from src.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+
+from src.workflows.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
+from src.workflows.GetTopPrioritiesWorkflow import GetTopPrioritiesWorkflow, GetTopPrioritiesConfiguration
+from src.workflows.AssignIssuesToProjectWorkflow import AssignIssuesToProjectWorkflow, AssignIssuesToProjectWorkflowConfiguration
 
 OPERATIONS_ASSISTANT_INSTRUCTIONS = '''You are an Operations Assistant. 
 
@@ -31,16 +38,27 @@ def create_operations_assistant(
         tools += AiaIntegration.as_tools(AiaIntegration.AiaIntegrationConfiguration(api_key=naas_key))
 
     if naas_key := secret.get('NAAS_API_KEY'):
-        tools += NaasIntegration.as_tools(NaasIntegration.NaasIntegrationConfiguration(api_key=naas_key))
+        tools += NaasIntegration.as_tools(NaasIntegrationConfiguration(api_key=naas_key))
 
     # Add CreateIssueAndAddToProjectWorkflow tool
-    tools.append(CreateIssueAndAddToProjectWorkflow.as_tool())
+    create_issue_and_add_to_project_workflow = CreateIssueAndAddToProjectWorkflow(CreateIssueAndAddToProjectWorkflowConfiguration(
+        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+    ))
+    tools += create_issue_and_add_to_project_workflow.as_tools()
     
     # Add GetTopPrioritiesWorkflow tool
-    tools.append(GetTopPrioritiesWorkflow.as_tool())
+    get_top_priorities_workflow = GetTopPrioritiesWorkflow(GetTopPrioritiesConfiguration(
+        ontology_store_path=secret.get('ONTOLOGY_STORE_PATH')
+    ))
+    tools += get_top_priorities_workflow.as_tools()
 
     # Add AssignIssuesToProjectWorkflow tool
-    tools.append(AssignIssuesToProjectWorkflow.as_tool())
+    assign_issues_to_project_workflow = AssignIssuesToProjectWorkflow(AssignIssuesToProjectWorkflowConfiguration(
+        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
+    ))
+    tools += assign_issues_to_project_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:
