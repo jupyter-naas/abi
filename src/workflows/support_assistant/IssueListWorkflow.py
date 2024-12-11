@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from src import secret
+from src import secret, config
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
@@ -26,7 +26,7 @@ class IssueListWorkflowParameters(WorkflowParameters):
         state (str): Filter issues by state
         limit (int): Maximum number of issues to return
     """
-    repo_name: str = Field("jupyter-naas/support", description="Repository name in format owner/repo")
+    repo_name: str = Field( config.github_support_repository, description="Repository name in format owner/repo")
     state: str = Field("open", description="Filter issues by state (open, closed, or all)")
     limit: int = Field(-1, description="Maximum number of issues to return (-1 for all issues)")
 

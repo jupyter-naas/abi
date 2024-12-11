@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
-from src import secret
+from src import secret, config
 from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -33,9 +33,14 @@ class ReportBugWorkflowParameters(WorkflowParameters):
     """
     issue_title: str = Field(..., description="The title of the bug report")
     issue_body: str = Field(..., description="The description of the bug, including steps to reproduce")
-    repo_name: str = Field(default="jupyter-naas/support", description="Repository name in format owner/repo")
+    project_node_id: str = Field(default=config.github_project_id, description="Project node ID (defaults to config's config.github_project_id)")
+    repo_name: str = Field(default="jupyter-naas/support", description="Repository name in format owner/repo (defaults to config's github_support_repository)")
     assignees: Optional[List[str]] = Field(default_factory=list, description="Optional list of GitHub usernames to assign")
     labels: Optional[List[str]] = Field(default_factory=lambda: ["bug"], description="Optional list of labels to apply")
+    status_field_id: Optional[str] = Field(default="PVTSSF_lADOBESWNM4AKRt3zgGZRV8", description="Field ID for status column")
+    priority_field_id: Optional[str] = Field(default="PVTSSF_lADOBESWNM4AKRt3zgGac0g", description="Field ID for priority column") 
+    status_option_id: Optional[str] = Field(default="97363483", description="Option ID for status value")
+    priority_option_id: Optional[str] = Field(default="4fb76f2d", description="Option ID for priority value")
 
 class ReportBugWorkflow(Workflow):
     __configuration: ReportBugWorkflowConfiguration
