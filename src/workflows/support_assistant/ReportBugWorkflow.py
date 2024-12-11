@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
-from src import secret
+from src import secret, config
 from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -14,7 +14,7 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
     Attributes:
         github_integration_config: Configuration for GitHub REST API
         github_graphql_integration_config: Configuration for GitHub GraphQL API
-        repo_name: Repository name in format owner/repo (defaults to "jupyter-naas/abi")
+        repo_name: Repository name in format owner/repo (defaults to config's github_support_repository)
         issue_title: Title of the bug report
         issue_body: Body content of the bug report
         project_node_id: Project node ID (defaults to "PVT_kwDOBESWNM4AKRt3")
@@ -29,7 +29,7 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
     github_graphql_integration_config: GithubGraphqlIntegrationConfiguration
     issue_title: str
     issue_body: str
-    repo_name: str = "jupyter-naas/support"
+    repo_name: str = config.github_support_repository
     project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
     assignees: Optional[List[str]] = field(default_factory=list)
     labels: Optional[List[str]] = field(default_factory=lambda: ["bug"])
