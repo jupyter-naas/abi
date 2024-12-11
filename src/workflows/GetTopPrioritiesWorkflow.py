@@ -8,32 +8,64 @@ from datetime import datetime, timedelta
 from rdflib import Graph
 from abi import logger
 from typing import Union, Optional
-
+from abi.workflow.workflow import WorkflowParameters
+from fastapi import APIRouter
+from langchain_core.tools import StructuredTool
 
 @dataclass
 class GetTopPrioritiesConfiguration(WorkflowConfiguration):
     """Configuration for GetTopPriorities workflow.
     
     Attributes:
-        days (int): Number of days to look ahead for issues. Defaults to 7.
-        assignee_label (str, optional): Filter tasks by assignee label. Defaults to None.
+        ontology_store_path (str): Path to the ontology store
     """
-    days: int = 7
-    assignee_label: Optional[str] = None
+    ontology_store_path: str
+
+
+class GetTopPrioritiesParameters(WorkflowParameters):
+    """Parameters for GetTopPriorities workflow.
+    
+    Attributes:
+        days (int): Number of days to look ahead for issues
+        assignee_label (Optional[str]): Filter tasks by assignee label
+    """
+    days: int = Field(default=7, description="Number of days to look ahead for tasks")
+    assignee_label: Optional[str] = Field(default=None, description="Filter tasks by assignee label")
 
 
 class GetTopPrioritiesWorkflow(Workflow):
     __configuration: GetTopPrioritiesConfiguration
     
     def __init__(self, configuration: GetTopPrioritiesConfiguration):
-        super().__init__(configuration)
         self.__configuration = configuration
         
-        
-        onto_store_adaptor = OntologyStoreService__SecondaryAdaptor__Filesystem(secret.get('ONTOLOGY_STORE_PATH'))
+        onto_store_adaptor = OntologyStoreService__SecondaryAdaptor__Filesystem(self.__configuration.ontology_store_path)
         self.__ontology_store = OntologyStoreService(onto_store_adaptor)
+
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow.
         
-    def run(self) -> str:
+        Returns:
+            list[StructuredTool]: List containing the workflow tool
+        """
+        return [StructuredTool(
+            name="get_top_priorities",
+            description="Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
+            func=lambda **kwargs: self.run(GetTopPrioritiesParameters(**kwargs)),
+            args_schema=GetTopPrioritiesParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router.
+        
+        Args:
+            router (APIRouter): FastAPI router to add endpoints to
+        """
+        @router.post("/get_top_priorities")
+        def get_priorities(parameters: GetTopPrioritiesParameters):
+            return self.run(parameters)
+
+    def run(self, parameters: GetTopPrioritiesParameters) -> dict:
         # First, get all task subclasses
         task_subclasses_query = """
             PREFIX abi: <http://ontology.naas.ai/abi/>
@@ -54,7 +86,7 @@ class GetTopPrioritiesWorkflow(Workflow):
 
         # Calculate the due date based on configuration
         today = datetime.now()
-        due_date = today + timedelta(days=self.__configuration.days)
+        due_date = today + timedelta(days=parameters.days)
         due_date_str = due_date.strftime("%Y-%m-%d")
 
         # Main query using dynamic task types
@@ -111,35 +143,22 @@ class GetTopPrioritiesWorkflow(Workflow):
                 data_dict[key] = str(row[key]) if row[key] else None
             
             # Only add the task if it matches the assignee filter (if provided)
-            if (self.__configuration.assignee_label is None or 
-                data_dict.get('assignee_label') == self.__configuration.assignee_label):
+            if (parameters.assignee_label is None or 
+                data_dict.get('assignee_label') == parameters.assignee_label):
                 data.append(data_dict)
             
         return {"message": "Sort data providedby due date and priority in descending order", "data": data}
 
-def main():
-    configuration = GetTopPrioritiesConfiguration()
-    workflow = GetTopPrioritiesWorkflow(configuration)
-    result = workflow.run()
 
-def as_tool():
-    from langchain_core.tools import StructuredTool
-    
-    def get_top_priorities(days: int = 7, assignee_label: Optional[str] = None):
-        configuration = GetTopPrioritiesConfiguration(days=days, assignee_label=assignee_label)
-        workflow = GetTopPrioritiesWorkflow(configuration)
-        return workflow.run()
-    
-    class GetTopPrioritiesSchema(BaseModel):
-        days: int = Field(default=7, description="Number of days to look ahead for tasks.")
-        assignee_label: Optional[str] = Field(default=None, description="Filter tasks by assignee label.")
-    
-    return StructuredTool(
-        name="get_top_priorities",
-        description="Intent: Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
-        func=get_top_priorities,
-        args_schema=GetTopPrioritiesSchema
+def main():
+    configuration = GetTopPrioritiesConfiguration(
+        ontology_store_path=secret.get('ONTOLOGY_STORE_PATH')
     )
+    workflow = GetTopPrioritiesWorkflow(configuration)
+    parameters = GetTopPrioritiesParameters(days=7)
+    result = workflow.run(parameters)
+    print(result)
+
 
 if __name__ == "__main__":
     main() 

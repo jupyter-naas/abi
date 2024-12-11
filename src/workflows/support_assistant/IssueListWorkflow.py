@@ -1,66 +1,74 @@
 from abi.workflow import Workflow, WorkflowConfiguration
+from abi.workflow.workflow import WorkflowParameters
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src import secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from abi import logger
+from fastapi import APIRouter
+from langchain_core.tools import StructuredTool
 
 @dataclass
 class IssueListWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for listing GitHub issues.
     
     Attributes:
-        github_integration_config: Configuration for GitHub REST API
-        repo_name: Repository name in format owner/repo (defaults to "jupyter-naas/abi")
-        state: Filter issues by state (defaults to "open")
-        limit: Maximum number of issues to return (defaults to -1, meaning all issues)
+        github_integration_config (GithubIntegrationConfiguration): Configuration for GitHub REST API
     """
     github_integration_config: GithubIntegrationConfiguration
-    repo_name: str = "jupyter-naas/support"
-    state: str = "open"
-    limit: int = -1
+
+class IssueListWorkflowParameters(WorkflowParameters):
+    """Parameters for IssueListWorkflow execution.
+    
+    Attributes:
+        repo_name (str): Repository name in format owner/repo
+        state (str): Filter issues by state
+        limit (int): Maximum number of issues to return
+    """
+    repo_name: str = Field("jupyter-naas/support", description="Repository name in format owner/repo")
+    state: str = Field("open", description="Filter issues by state (open, closed, or all)")
+    limit: int = Field(-1, description="Maximum number of issues to return (-1 for all issues)")
 
 class IssueListWorkflow(Workflow):
     __configuration: IssueListWorkflowConfiguration
     
     def __init__(self, configuration: IssueListWorkflowConfiguration):
-        super().__init__(configuration)
         self.__configuration = configuration
         self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
 
-    def run(self) -> List[Dict]:
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow.
+        
+        Returns:
+            list[StructuredTool]: List containing the workflow tool
+        """
+        return [StructuredTool(
+            name="list_github_issues",
+            description="Lists GitHub issues from the specified repository",
+            func=lambda **kwargs: self.run(IssueListWorkflowParameters(**kwargs)),
+            args_schema=IssueListWorkflowParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router.
+        
+        Args:
+            router (APIRouter): FastAPI router to add endpoints to
+        """
+        @router.post("/list_issues")
+        def list_issues(parameters: IssueListWorkflowParameters):
+            return self.run(parameters)
+
+    def run(self, parameters: IssueListWorkflowParameters) -> List[str]:
         # Get issues using the GitHub integration
         issues = self.__github_integration.get_issues(
-            repo_name=self.__configuration.repo_name,
-            state=self.__configuration.state,
-            limit=self.__configuration.limit
+            repo_name=parameters.repo_name,
+            state=parameters.state,
+            limit=parameters.limit
         )
         logger.info(f"Found {len(issues)} issues:")
         return [f"#{issue['number']} - {issue['title']}: {issue['body']}" for issue in issues]
-
-def api():
-    import fastapi
-    import uvicorn
-    
-    app = fastapi.FastAPI()
-    
-    @app.get("/list_issues")
-    def list_issues(
-        state: str = "open",
-        limit: int = -1
-    ):
-        configuration = IssueListWorkflowConfiguration(
-            github_integration_config=GithubIntegrationConfiguration(
-                access_token=secret.get('GITHUB_ACCESS_TOKEN')
-            ),
-            state=state,
-            limit=limit
-        )
-        workflow = IssueListWorkflow(configuration)
-        return workflow.run()
-    
-    uvicorn.run(app, host="0.0.0.0", port=9879)
 
 def main():
     configuration = IssueListWorkflowConfiguration(
@@ -70,37 +78,11 @@ def main():
     )
     
     workflow = IssueListWorkflow(configuration)
-    issues = workflow.run()
+    parameters = IssueListWorkflowParameters()
+    issues = workflow.run(parameters)
     print(f"Found {len(issues)} issues:")
     for issue in issues:
-        print(f"#{issue['number']} - {issue['title']}")
-
-def as_tool():
-    from langchain_core.tools import StructuredTool
-    
-    class IssueListSchema(BaseModel):
-        pass
-
-    def issue_list_tool(
-        state: str = "open",
-        limit: int = -1
-    ):
-        configuration = IssueListWorkflowConfiguration(
-            github_integration_config=GithubIntegrationConfiguration(
-                access_token=secret.get('GITHUB_ACCESS_TOKEN')
-            ),
-            state=state,
-            limit=limit
-        )
-        workflow = IssueListWorkflow(configuration)
-        return workflow.run()
-
-    return StructuredTool(
-        name="list_github_issues",
-        description="Lists GitHub issues from the GitHub repository.",
-        func=lambda **kwargs: issue_list_tool(**kwargs),
-        args_schema=IssueListSchema
-    )
+        print(issue)
 
 if __name__ == "__main__":
     main() 
