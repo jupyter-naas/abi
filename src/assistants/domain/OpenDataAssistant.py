@@ -28,7 +28,7 @@ def create_open_data_assistant(
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
     model = ChatOpenAI(
-        model="gpt-4", 
+        model="gpt-4o", 
         temperature=0, 
         api_key=secret.get('OPENAI_API_KEY')
     ) 

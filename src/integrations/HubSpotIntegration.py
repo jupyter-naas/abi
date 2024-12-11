@@ -15,7 +15,7 @@ class HubSpotIntegrationConfiguration(IntegrationConfiguration):
         base_url (str): Base URL for HubSpot API
     """
     access_token: str
-    base_url: str = "https://api.hubapi.com/crm/v3"
+    base_url: str = "https://api.hubapi.com"
 
 class HubSpotIntegration(Integration):
     __configuration: HubSpotIntegrationConfiguration
@@ -33,7 +33,7 @@ class HubSpotIntegration(Integration):
         
         # Test connection
         try:
-            self._make_request("GET", "/objects/contacts")
+            self._make_request("GET", "/crm/v3/objects/contacts")
         except Exception as e:
             raise IntegrationConnectionError(f"Failed to connect to HubSpot: {str(e)}")
 
@@ -78,7 +78,7 @@ class HubSpotIntegration(Integration):
     def create_contact(self, properties: Dict) -> Dict:
         """Create a new contact in HubSpot."""
         data = {"properties": properties}
-        return self._make_request("POST", "/objects/contacts", data)
+        return self._make_request("POST", "/crm/v3/objects/contacts", data)
     
     def get_contacts(self, properties: Optional[List[str]] = None) -> pd.DataFrame:
         """Get all contacts from HubSpot with optional property filtering.
@@ -89,7 +89,7 @@ class HubSpotIntegration(Integration):
         Returns:
             DataFrame containing all contacts with specified properties.
         """
-        return self.get_all("/objects/contacts", properties)
+        return self.get_all("/crm/v3/objects/contacts", properties)
     
     def get_contact(self, contact_id: str, properties: Optional[List[str]] = None, associations: Optional[List[str]] = None) -> Dict:
         """Get a contact by ID.
@@ -108,7 +108,7 @@ class HubSpotIntegration(Integration):
         if associations:
             params["associations"] = ",".join(associations)
             
-        return self._make_request("GET", f"/objects/contacts/{contact_id}", params=params)
+        return self._make_request("GET", f"/crm/v3/objects/contacts/{contact_id}", params=params)
 
     def get_contact_by_email(self, email: str, properties: Optional[List[str]] = None, associations: Optional[List[str]] = None) -> Dict:
         """Get a contact by email address.
@@ -129,12 +129,12 @@ class HubSpotIntegration(Integration):
         if associations:
             params["associations"] = ",".join(associations)
             
-        return self._make_request("GET", f"/objects/contacts/{email}", params=params)
+        return self._make_request("GET", f"/crm/v3/objects/contacts/{email}", params=params)
 
     def update_contact(self, contact_id: str, properties: Dict) -> Dict:
         """Update an existing contact in HubSpot."""
         data = {"properties": properties}
-        return self._make_request("PATCH", f"/objects/contacts/{contact_id}", data)
+        return self._make_request("PATCH", f"/crm/v3/objects/contacts/{contact_id}", data)
 
     def create_note(
         self,
@@ -198,7 +198,7 @@ class HubSpotIntegration(Integration):
             },
             "associations": associations
         }
-        return self._make_request("POST", "/objects/notes", data=data)
+        return self._make_request("POST", "/crm/v3/objects/notes", data=data)
     
     def get_deals(self, properties: Optional[List[str]] = None) -> pd.DataFrame:
         """Get all deals from HubSpot with optional property filtering.
@@ -209,7 +209,7 @@ class HubSpotIntegration(Integration):
         Returns:
             DataFrame containing all deals with specified properties.
         """
-        return self.get_all("/objects/deals", properties)
+        return self.get_all("/crm/v3/objects/deals", properties)
 
     def get_companies(self, properties: Optional[List[str]] = None) -> pd.DataFrame:
         """Get all companies from HubSpot with optional property filtering.
@@ -220,7 +220,7 @@ class HubSpotIntegration(Integration):
         Returns:
             DataFrame containing all companies with specified properties.
         """
-        return self.get_all("/objects/companies", properties)
+        return self.get_all("/crm/v3/objects/companies", properties)
     
     def get_pipeline_stages(self, pipeline: Optional[str] = None, pipeline_id: Optional[str] = None) -> pd.DataFrame:
         """Get all pipeline stages or stages for a specific pipeline.
@@ -242,7 +242,7 @@ class HubSpotIntegration(Integration):
             - updatedAt: Stage last update timestamp
             - archived: Whether stage is archived
         """
-        response = self._make_request("GET", "/pipelines/deals")
+        response = self._make_request("GET", "/crm/v3/pipelines/deals")
         
         deal_stages = []
         results = response.get("results", [])
@@ -289,7 +289,7 @@ class HubSpotIntegration(Integration):
         if object_type not in valid_types:
             raise ValueError(f"Invalid object type. Must be one of: {', '.join(valid_types)}")
 
-        url = f"{self.__configuration.base_url}/properties/{object_type}"
+        url = f"{self.__configuration.base_url}/crm/v3/properties/{object_type}"
         response = requests.get(url, headers=self.headers)
 
         if response.status_code == 200:
@@ -330,7 +330,7 @@ class HubSpotIntegration(Integration):
         if properties:
             data["properties"] = properties
         
-        results = self._make_request("POST", f"/objects/{object_type}/search", data=data)
+        results = self._make_request("POST", f"/crm/v3/objects/{object_type}/search", data=data)
         
         items = []
         for row in results.get("results", []):
@@ -340,15 +340,33 @@ class HubSpotIntegration(Integration):
         
         return pd.DataFrame(items).reset_index(drop=True)
 
+    def get_associations(self, from_object_type: str, object_ids: List[str], to_object_type: str, after: Optional[str] = None, limit: Optional[int] = 100) -> Dict:
+        """Get associations between objects in HubSpot.
+        
+        Args:
+            from_object_type: Type of the source objects (contacts, companies, deals, etc.)
+            object_ids: List of source object IDs to get associations for
+            to_object_type: Type of the target objects to get associations for
+            after: Optional cursor for pagination
+            limit: Maximum number of results to return (default: 500)
+        """
+        results = []
+        for object_id in object_ids:
+            endpoint = f"/crm/v4/objects/{from_object_type}/{object_id}/associations/{to_object_type}"
+            params = {"limit": limit}
+            if after:
+                params["after"] = after
+            result = self._make_request("GET", endpoint, params=params)
+            results.append(result)
+            
+        return {"results": results}
+
 def as_tools(configuration: HubSpotIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
     from typing import List, Optional
     
     integration : HubSpotIntegration = HubSpotIntegration(configuration)
-
-    class CreateContactSchema(BaseModel):
-        properties: Dict = Field(..., description="Properties to create for the contact")
 
     class GetContactSchema(BaseModel):
         contact_id: Optional[str] = Field(None, description="ID of the HubSpot contact to retrieve")
@@ -368,9 +386,6 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         hs_timestamp: Optional[int] = Field(..., description="Optional timestamp for the note (milliseconds since epoch)")
         unique_id: Optional[str] = Field(..., description="Optional unique identifier for the note")
 
-    class ListPropertiesSchema(BaseModel):
-        object_type: str = Field(..., description="Type of HubSpot object to list properties for")
-
     class SearchObjectsSchema(BaseModel):
         object_type: str = Field(..., description="Type of HubSpot object to search for (contacts, companies, deals)")
         query: str = Field(..., description="Search query string")
@@ -378,12 +393,6 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         limit: Optional[int] = Field(100, description="Maximum number of results to return")
 
     return [
-        StructuredTool(
-            name="create_hubspot_contact",
-            description="Create a new contact in HubSpot if does not exist yet.",
-            func=integration.create_contact,
-            args_schema=CreateContactSchema
-        ),
         StructuredTool(
             name="get_hubspot_contact",
             description="Get details about a HubSpot contact by their ID or email address.",
@@ -405,15 +414,9 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
             args_schema=CreateNoteSchema
         ),
         StructuredTool(
-            name="list_hubspot_properties",
-            description="List properties of a specified HubSpot object type. It is useful if a user wants to create or update a contact, deal or company.",
-            func=integration.list_properties,
-            args_schema=ListPropertiesSchema
-        ),
-        StructuredTool(
             name="search_hubspot_objects",
             description="Search for objects in HubSpot using the Search API.",
             func=integration.search_objects,
             args_schema=SearchObjectsSchema
-        ),
+        )
     ]

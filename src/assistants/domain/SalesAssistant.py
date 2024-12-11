@@ -1,7 +1,8 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations import StripeIntegration, HubSpotIntegration
+from src.integrations import HubSpotIntegration
+from src.workflows.sales_assistant import CreateContactWorkflow
 
 SALES_ASSISTANT_INSTRUCTIONS = """You are a Sales Assistant.
 
@@ -25,11 +26,11 @@ def create_sales_assistant(
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     tools = []
     
-    if stripe_key := secret.get('STRIPE_API_KEY'):
-        tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
-    
-    if hubspot_key := secret.get('HUBSPOT_API_KEY'):
-        tools += HubSpotIntegration.as_tools(HubSpotIntegration.HubSpotIntegrationConfiguration(api_key=hubspot_key))
+    if hubspot_access_token := secret.get('HUBSPOT_ACCESS_TOKEN'):
+        tools += HubSpotIntegration.as_tools(HubSpotIntegration.HubSpotIntegrationConfiguration(access_token=hubspot_access_token))
+
+    # Add CreateContactWorkflow tool
+    tools.append(CreateContactWorkflow.as_tool())
     
     # Use provided configuration or create default one
     if agent_configuration is None:
