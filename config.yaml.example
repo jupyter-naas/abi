@@ -2,8 +2,8 @@ config:
   storage_name: 
   workspace_id: 
   workspace_name:
-  github_support_repository: "jupyter-naas/abi"
-  github_project_id: 12
+  github_support_repository: 
+  github_project_id:
 
 pipelines:
   - name: github.GithubIssuesPipeline
