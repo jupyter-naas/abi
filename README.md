@@ -2,7 +2,7 @@
 
 **An API-driven organizational AI system backend offering assistants, ontology, integrations, workflows, and analytics in a unified framework.**
 
-<img src="./assets/images/abi-flywheel.png" width="100%" height="100%">
+<img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
 ## Overview
 
