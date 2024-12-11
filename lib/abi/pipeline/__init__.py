@@ -1,1 +1,1 @@
-from abi.pipeline.pipeline import Pipeline, PipelineConfiguration
+from abi.pipeline.pipeline import Pipeline, PipelineConfiguration, PipelineParameters

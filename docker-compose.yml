@@ -3,7 +3,7 @@ services:
   abi:
     build: .
     ports:
-      - "8888:8888"
+      - 9879:9879
     volumes:
       - .:/app
     environment:

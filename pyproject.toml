@@ -35,8 +35,7 @@ ingest-github-user-api = "src.workflows.ingest_github_user:api"
 chat-single-assistant = "src.apps.terminal_agent.main:run_single"
 chat-multiple-assistants = "src.apps.terminal_agent.main:run_multiple"
 abi = "src.cli:main"
-
-
+api = "src.api:api"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
