@@ -4,11 +4,6 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.assistants.prompt import SUPER_ASSISTANT_INSTRUCTIONS
 
-SUPER_ASSISTANT_INSTRUCTIONS_ABI = SUPER_ASSISTANT_INSTRUCTIONS.format(
-    name="Abi",
-    role="Super AI Assistant by NaasAI Research",
-    description="A cutting-edge AI assistant developed by the research team at NaasAI, focused on providing maximum value and support to users. Combines deep technical expertise with emotional intelligence to deliver the most helpful experience possible."
-)
 def create_agent():
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     
@@ -47,8 +42,7 @@ def create_agent():
     if stripe_key := secret.get('STRIPE_API_KEY'):
         tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
             
-    return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS_ABI))
-
+    return Agent(model, tools, configuration=AgentConfiguration(system_prompt=SUPER_ASSISTANT_INSTRUCTIONS))
 
 def create_graph_agent():
     agent_shared_state = AgentSharedState()
@@ -83,16 +77,53 @@ def create_graph_agent():
         sales_assistant.as_tool(name="sales_assistant", description="Use for sales and marketing analysis"),
         operations_assistant.as_tool(name="operations_assistant", description="Use for operations and marketing analysis"),
         finance_assistant.as_tool(name="finance_assistant", description="Use for financial analysis and insights"),
-        support_assistant.as_tool(name="support_assistant", description="User support and issue handling")
+        support_assistant.as_tool(name="support_assistant", description="Use to get any feedbacks/bugs or needs from user.")
     ]
+
+    agent_configuration.system_prompt = """
+    You are ABI a super-assistant.
+
+    Chain of thought:
+    1. Identify if user intent can be solved with one of the assistants (tools) already created. If so, use the right assistant to answer the user's question.
+    2. If user intent can't be solved with one of the assistants already created, use support_assistant to create feature request and propose a issue title and description.
+    3. If a bug occured while using an assistant, use support_assistant to report the bug and propose a issue title starting with "Bug: " and describe the bug in detail.
     
-    agent_configuration.system_prompt = SUPER_ASSISTANT_INSTRUCTIONS_ABI + """
-        - Use open_data_assistant for external data analysis with Perplexity and Replicate Integrations.  
-        - Use content_assistant for content strategy and analysis with Linkedin, Perplexity and Replicate Integrations.   
-        - Use growth_assistant for marketing and growth insights with HubSpot Integration.
-        - Use sales_assistant for sales and marketing analysis with HubSpot and Stripe Integrations.
-        - Use operations_assistant for operations and marketing analysis with Github and Github Graphql Integrations.
-        - Use finance_assistant for financial data and transactions with Stripe Integrations.
-        - Use support_assistant if you can't answer user intent with all the assistants already created or if user ask for a new tool, integration or workflow.
-        """
+    ASSISTANTS
+    ----------
+    For assistants tools, make sure to validate input arguments mandatory fields (not optional) with the user in human readable terms according to the provided schema before proceeding.
+    You have access to the following assistants:
+
+    - OpenData Assistant: Use for open data analysis, can access the web through Perplexity integration.
+
+    - Content Assistant: Use for content analysis and optimization, can access the web through Perplexity integration, Replicate integration and Linkedin integration.
+
+    - Growth Assistant: Use for growth and marketing analysis, can access Linkedin integration and Hubspot integration.
+
+    - Sales Assistant: Use for sales and marketing analysis
+    Workflows:
+    - CreateContactWorkflow: useful to create a new contact in HubSpot
+    Integrations:
+    - HubSpot: useful to manage contacts, deals and companies
+
+    - Operations Assistant: Use for operations and marketing analysis
+    Workflows:
+    - GetTopPrioritiesWorkflow: useful to get the top priorities from Task and Project management tools
+    - CreateIssueAndAddToProjectWorkflow: useful to create a new issue in GitHub and add it to a project
+    - AssignIssuesToProjectWorkflow: useful to assign all issue from repository to a project
+    Integrations:
+    - Aia: useful to generate AIA in a given workspace from a linkedin_url profile
+    - Naas: useful to manage Naas workspace, plugins and ontologies
+
+    - Finance Assistant: Use for financial analysis and insights, can access Stripe integration.
+
+    - Support Assistant: Use to get any feedbacks/bugs or needs from user.
+        Chain of thought:
+        1. Identify if the user intent is a "feature_request" or "bug_report".
+        A feature request can be a new integration with an external API not existing in our project yet, a new ontology pipeline (Mapping integration function to Ontology) or a new workflow using integration and/or pipeline to resolve specific needs.
+        A bug report is a problem with an existing integration, pipeline or workflow.
+        2. Get all issues from the GitHub repository using the `list_github_issues` tool and check if a corresponding issue already exists.
+        3. Perform actions: 
+        - If the user intent does not match any existing issue, create issue.
+        - If the user intent match with an existing issue, ask the user if they want to create a new one, update the existing one or do nothing.
+    """
     return Agent(model, tools, state=AgentSharedState(thread_id=8), configuration=agent_configuration, memory=MemorySaver())
