@@ -5,6 +5,7 @@ from lib.abi.integration.integration import Integration, IntegrationConnectionEr
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 
+
 @dataclass
 class GithubIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Github integration.
@@ -22,7 +23,6 @@ class GithubIntegration(Integration):
 
     def __init__(self, configuration: GithubIntegrationConfiguration):
         """Initialize Github client with access token."""
-        super().__init__(configuration)
         self.__configuration = configuration
         
         self.headers = {
