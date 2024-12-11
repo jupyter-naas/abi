@@ -1,7 +1,7 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations import PerplexityIntegration, ReplicateIntegration, LinkedinIntegration
+from src.integrations import PerplexityIntegration
 
 OPEN_DATA_ASSISTANT_INSTRUCTIONS = """You are an Open Data Assistant with access to various data sources including news, financial data, extra-financial data, and alternative data.
 
@@ -33,15 +33,9 @@ def create_open_data_assistant(
         api_key=secret.get('OPENAI_API_KEY')
     ) 
     tools = []
-    if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        tools += LinkedinIntegration.as_tools(LinkedinIntegration.LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
     
     if perplexity_key := secret.get('PERPLEXITY_API_KEY'):
         tools += PerplexityIntegration.as_tools(PerplexityIntegration.PerplexityIntegrationConfiguration(api_key=perplexity_key))
-    
-    if replicate_key := secret.get('REPLICATE_API_KEY'):
-        tools += ReplicateIntegration.as_tools(ReplicateIntegration.ReplicateIntegrationConfiguration(api_key=replicate_key))
-    
     
     # Use provided configuration or create default one
     if agent_configuration is None:
