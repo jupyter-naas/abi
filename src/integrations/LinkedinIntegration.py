@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 import pandas as pd
 import time
+from abi import logger
 
 @dataclass
 class LinkedinIntegrationConfiguration(IntegrationConfiguration):
@@ -51,8 +52,7 @@ class LinkedinIntegration(Integration):
             "Content-Type": "application/json"
         }
 
-    @staticmethod
-    def manage_api_error(res):
+    def manage_api_error(self, res):
         """Manage API error responses.
         
         Args:
@@ -64,7 +64,6 @@ class LinkedinIntegration(Integration):
         """
         if res.status_code != 200:
             if int(res.status_code) == 302:
-                # LinkedIn.send_email_renewed_cookies()
                 raise requests.TooManyRedirects(res.status_code, res.text)
             else:
                 raise BaseException(res.status_code, res.text)
@@ -74,7 +73,7 @@ class LinkedinIntegration(Integration):
         base = self.__configuration.custom_api_url if use_custom_api else self.__configuration.base_url
         url = f"{base}{endpoint}"
         headers = self.custom_headers if use_custom_api else self.headers
-        
+
         try:
             response = requests.request(
                 method=method,
@@ -84,15 +83,35 @@ class LinkedinIntegration(Integration):
                 params=params,
                 json=self.cookies if use_custom_api else data
             )
-            self.manage_api_error(response)  # Add error management before raise_for_status
-            response.raise_for_status()
+            if use_custom_api:
+                self.manage_api_error(response)  # Add error management before raise_for_status
+                response.raise_for_status()
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
         
-    def get_profile_id(url: str) -> str:
+    def get_public_id(self, linkedin_url: str) -> str:
         """Extract profile ID from LinkedIn profile URL."""
-        return url.rsplit("/in/")[-1].rsplit("/")[0]
+        return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
+    
+    def get_profile_id(self, linkedin_url: str) -> str:
+        public_id = self.get_public_id(linkedin_url)
+        res = requests.get(
+            f"https://www.linkedin.com/voyager/api/identity/profiles/{public_id}",
+            cookies=self.cookies,
+            headers=self.headers,
+        )
+        # Check if requests is successful
+        try:
+            res.raise_for_status()
+            res_json = res.json()
+            return (
+                res_json.get("data", {})
+                .get("entityUrn")
+                .replace("urn:li:fs_profile:", "")
+            )
+        except requests.HTTPError as e:
+            return e
 
     def get_profile_view(self, linkedin_url: str = None, sleep: bool = True) -> pd.DataFrame:
         """Get profile view information for a LinkedIn profile.
@@ -103,7 +122,7 @@ class LinkedinIntegration(Integration):
         """
 
         # Get profile info
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_public_id(linkedin_url)
         endpoint = f"/identity/profiles/{profile_id}/profileView"
         return self._make_request("GET", endpoint)
     
@@ -116,7 +135,7 @@ class LinkedinIntegration(Integration):
         """
 
         # Get profile info
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_public_id(linkedin_url)
         endpoint = f"/identity/profiles/{profile_id}/networkinfo"
         return self._make_request("GET", endpoint)
 
@@ -129,7 +148,7 @@ class LinkedinIntegration(Integration):
         """
 
         # Get profile info
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_public_id(linkedin_url)
         endpoint = f"/identity/profiles/{profile_id}/profileContactInfo"
         return self._make_request("GET", endpoint)
 
@@ -139,7 +158,7 @@ class LinkedinIntegration(Integration):
         Args:
             linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/username/")
         """
-        profile_id = self._get_profile_id(linkedin_url)
+        profile_id = self.get_public_id(linkedin_url)
         return self._make_request("POST", f"/profile/getTopCard?profile_id={profile_id}", use_custom_api=True)
     
     def get_profile_resume(self, linkedin_url: str) -> Dict:
@@ -151,7 +170,7 @@ class LinkedinIntegration(Integration):
         Returns:
             Dict: Resume data including experience, education, skills etc.
         """
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_public_id(linkedin_url)
         return self._make_request("POST", f"/profile/getResume?profile_urn={profile_id}", use_custom_api=True)
 
     def get_profile_posts(
@@ -180,6 +199,7 @@ class LinkedinIntegration(Integration):
 
         # Get profile ID if not provided
         profile_id = self.get_profile_id(linkedin_url)
+        logger.debug(f"Profile ID: {profile_id}")
 
         # Initialize until check
         until_check = False
