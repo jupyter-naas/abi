@@ -152,7 +152,7 @@ def as_tool():
         linkedin_url: str,
         days_start: Optional[int] = 3,
         timezone: Optional[str] = "Europe/Paris"
-    ) -> pd.DataFrame:
+    ) -> dict:
         configuration = LinkedinPostsWorkflowConfiguration(
             linkedin_integration_config=LinkedinIntegrationConfiguration(
                 li_at=secret.get('li_at'),
@@ -163,7 +163,8 @@ def as_tool():
             timezone=timezone
         )
         workflow = LinkedinPostsWorkflow(configuration)
-        return workflow.run()
+        df = workflow.run()
+        return df.to_dict('records')
     
     return StructuredTool(
         name="get_linkedin_posts",
