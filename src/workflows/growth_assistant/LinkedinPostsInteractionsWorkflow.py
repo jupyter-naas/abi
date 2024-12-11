@@ -168,7 +168,7 @@ def as_tool():
     def get_linkedin_posts_interactions(
         linkedin_urls: List[str],
         limit: Optional[int] = 100
-    ) -> pd.DataFrame:
+    ) -> dict:
         configuration = LinkedinPostsInteractionsWorkflowConfiguration(
             linkedin_integration_config=LinkedinIntegrationConfiguration(
                 li_at=secret.get("li_at"),
@@ -178,7 +178,8 @@ def as_tool():
             limit=limit
         )
         workflow = LinkedinPostsInteractionsWorkflow(configuration)
-        return workflow.run()
+        df = workflow.run()
+        return df.to_dict('records')
     
     return StructuredTool(
         name="get_linkedin_posts_interactions",
