@@ -3,6 +3,15 @@ import importlib
 import yaml
 from pathlib import Path
 
+def load_config():
+    """Load config.yaml and return as Python dictionary."""
+    config_path = Path('config.yaml')
+    if not config_path.exists():
+        return {}
+
+    with open(config_path) as f:
+        return yaml.safe_load(f) or {}
+
 @click.group()
 def cli():
     pass
@@ -17,43 +26,25 @@ def run():
 def pipeline(name):
     """Run a specific pipeline"""
     # Load config file
-    config_path = Path('config.yaml')
-    if not config_path.exists():
-        click.echo("Error: config.yaml not found")
+    config = load_config()
+
+    if 'pipelines' not in config:
+        click.echo("Error: 'pipelines' section not found in config.yaml")
         return
-
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-
-    # Find pipeline configuration
+    
     pipeline_config = None
-    for p in config.get('pipelines', []):
-        if p.get('name') == name:
-            pipeline_config = p
+    for pipeline in config['pipelines']:
+        if pipeline['name'] == name:
+            pipeline_config = pipeline
             break
-
+        
     if not pipeline_config:
         click.echo(f"Error: Pipeline '{name}' not found in config.yaml")
         return
 
     # Import and run pipeline
-    try:
-        module_path = f"src.data.pipelines.{name}"
-        module = importlib.import_module(module_path)
-        
-        # Get the pipeline class (assumed to be the last part of the name)
-        class_name = ''.join(word.capitalize() for word in name.split('.')[-1].split('_'))
-        pipeline_class = getattr(module, class_name)
-        
-        # Initialize and run pipeline with config parameters
-        pipeline = pipeline_class(**pipeline_config.get('parameters', {}))
-        result = pipeline.run()
-        
-        click.echo(f"Pipeline '{name}' completed successfully")
-        click.echo(result.serialize(format="turtle"))
-        
-    except Exception as e:
-        click.echo(f"Error running pipeline '{name}': {str(e)}")
+    module_path = f"src.data.pipelines.{name}"
+    module = importlib.import_module(module_path)
 
 def main():
     cli()

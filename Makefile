@@ -10,8 +10,9 @@ add:
 lock:
 	docker compose run abi poetry lock --no-update
 
+path=tests/
 test:
-	docker compose run abi poetry run pytest tests/
+	docker compose run abi poetry run pytest $(path)
 
 sh: .venv
 	docker compose run -it abi bash
@@ -19,6 +20,9 @@ sh: .venv
 chat: .venv
 	docker compose run abi bash -c 'poetry install && poetry run chat-single-assistant'
 .DEFAULT_GOAL := chat
+
+api: .venv
+	docker compose run -p 9879:9879 abi poetry run api
 
 .PHONY: test
 super-assistant: .venv
