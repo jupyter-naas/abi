@@ -1,10 +1,8 @@
 from dataclasses import dataclass
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from abi.services.ontology.OntologyPorts import IOntologyService
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStore
+from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
 from rdflib import Graph
-from abi.services.ontology.OntologyService import OntologyService
-from abi.services.ontology.adaptors.secondary.OntologyService_SecondaryAdaptor_NERPort import OntologyService_SecondaryAdaptor_NERPort
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -15,10 +13,10 @@ class OntologyNERPipelineConfiguration(PipelineConfiguration):
     
     Attributes:
         ontology_service (IOntologyService): Service for performing ontology operations
-        ontology_store (IOntologyStore): Store for persisting ontology data
+        ontology_store (IOntologyStoreService): Store for persisting ontology data
     """
     ontology_service: IOntologyService
-    ontology_store: IOntologyStore
+    ontology_store: IOntologyStoreService
     ontology_store_name: str
 
 class OntologyNERPipelineParameters(PipelineParameters):
