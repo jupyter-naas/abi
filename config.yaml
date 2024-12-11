@@ -1,4 +1,5 @@
 config:
+  ontology_store_path: "src/data/ontology-store"
   storage_name: 
   workspace_id: 
   workspace_name:

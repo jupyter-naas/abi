@@ -5,7 +5,6 @@ description = "AI system"
 authors = ["AI Team <aiteam@company.com>"]
 readme = "README.md"
 
-
 [tool.poetry.dependencies]
 python = "^3.9"
 pyyaml = "^6.0.1"
@@ -18,19 +17,21 @@ pydash = "^8.0.4"
 pandas = "^2.2.3"
 click = "^8.1.7"
 
-
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
 langchain-openai = "^0.2.9"
 rich = "^13.9.4"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
 
 [tool.poetry.scripts]
 ingest-github-user = "src.workflows.ingest_github_user:main"
 ingest-github-user-api = "src.workflows.ingest_github_user:api"
 chat-single-agent = "src.apps.terminal_agent.main:run_single_agent"
 chat-supervisor-agent = "src.apps.terminal_agent.main:run_supervisor_agent"
-
+abi = "src.cli:main"
+api = "src.api:api"
 
 [build-system]
 requires = ["poetry-core"]
