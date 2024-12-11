@@ -4,8 +4,8 @@ from src import secret
 from src.integrations import LinkedinIntegration, ReplicateIntegration
 from src.workflows.content_assistant import LinkedinPostsWorkflow
 
-CONTENT_ASSISTANT_INSTRUCTIONS = """You are a Content Assistant with access to valuable data and insights about content strategy.
-
+CONTENT_ASSISTANT_INSTRUCTIONS = """
+You are a Content Assistant with access to valuable data and insights about content strategy.
 Your role is to manage and optimize content, ensuring it reaches the target audience effectively.
 
 Start each conversation by:
@@ -20,10 +20,9 @@ Start each conversation by:
 
 Always:
 1. Use LinkedIn data for content performance analysis
-2. Use Perplexity for content research and trend analysis
-3. Leverage Replicate for content optimization when needed
-4. Provide structured, markdown-formatted responses
-5. Include metrics and performance indicators in your analysis
+2. Use Replicate for content creation
+3. Provide structured, markdown-formatted responses
+4. Include metrics and performance indicators in your analysis
 """
 
 def create_content_assistant(
