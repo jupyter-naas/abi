@@ -90,12 +90,12 @@ class LinkedinIntegration(Integration):
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
         
-    def get_public_id(self, linkedin_url: str) -> str:
+    def get_public_profile_id(self, linkedin_url: str) -> str:
         """Extract profile ID from LinkedIn profile URL."""
         return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
     
     def get_profile_id(self, linkedin_url: str) -> str:
-        public_id = self.get_public_id(linkedin_url)
+        public_id = self.get_public_profile_id(linkedin_url)
         res = requests.get(
             f"https://www.linkedin.com/voyager/api/identity/profiles/{public_id}",
             cookies=self.cookies,
@@ -122,7 +122,7 @@ class LinkedinIntegration(Integration):
         """
 
         # Get profile info
-        profile_id = self.get_public_id(linkedin_url)
+        profile_id = self.get_public_profile_id(linkedin_url)
         endpoint = f"/identity/profiles/{profile_id}/profileView"
         return self._make_request("GET", endpoint)
     
@@ -135,7 +135,7 @@ class LinkedinIntegration(Integration):
         """
 
         # Get profile info
-        profile_id = self.get_public_id(linkedin_url)
+        profile_id = self.get_public_profile_id(linkedin_url)
         endpoint = f"/identity/profiles/{profile_id}/networkinfo"
         return self._make_request("GET", endpoint)
 
@@ -148,7 +148,7 @@ class LinkedinIntegration(Integration):
         """
 
         # Get profile info
-        profile_id = self.get_public_id(linkedin_url)
+        profile_id = self.get_public_profile_id(linkedin_url)
         endpoint = f"/identity/profiles/{profile_id}/profileContactInfo"
         return self._make_request("GET", endpoint)
 
@@ -158,7 +158,7 @@ class LinkedinIntegration(Integration):
         Args:
             linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/username/")
         """
-        profile_id = self.get_public_id(linkedin_url)
+        profile_id = self.get_public_profile_id(linkedin_url)
         return self._make_request("POST", f"/profile/getTopCard?profile_id={profile_id}", use_custom_api=True)
     
     def get_profile_resume(self, linkedin_url: str) -> Dict:
@@ -170,7 +170,7 @@ class LinkedinIntegration(Integration):
         Returns:
             Dict: Resume data including experience, education, skills etc.
         """
-        profile_id = self.get_public_id(linkedin_url)
+        profile_id = self.get_public_profile_id(linkedin_url)
         return self._make_request("POST", f"/profile/getResume?profile_urn={profile_id}", use_custom_api=True)
 
     def get_profile_posts(
@@ -199,7 +199,6 @@ class LinkedinIntegration(Integration):
 
         # Get profile ID if not provided
         profile_id = self.get_profile_id(linkedin_url)
-        logger.debug(f"Profile ID: {profile_id}")
 
         # Initialize until check
         until_check = False
@@ -388,13 +387,24 @@ class LinkedinIntegration(Integration):
         """
         TIME_SLEEP = 3  # Seconds between requests
         
-        # Get activity ID if not provided
+        # Get activity ID and validate
         activity_id = self.get_activity_id(linkedin_url)
+        if not activity_id:
+            logger.warning(f"Could not extract activity ID from URL: {linkedin_url}")
+            return pd.DataFrame()
+            
+        logger.info(f"Activity ID: {activity_id}")
 
         df = pd.DataFrame()
+        total_fetched = 0
+        
         while True:
-            if limit != -1 and limit < count:
-                count = limit
+            # Adjust count if we're near the limit
+            if limit != -1:
+                remaining = limit - total_fetched
+                if remaining <= 0:
+                    break
+                count = min(count, remaining)
 
             # Make request
             response = self._make_request(
@@ -403,18 +413,26 @@ class LinkedinIntegration(Integration):
                 use_custom_api=True
             )
 
+            # Break if no more results
             if not response or len(response) == 0:
                 break
 
             # Convert to DataFrame and combine results
             tmp_df = pd.DataFrame(response)
             df = pd.concat([df, tmp_df], axis=0)
+            
+            # Update counters
+            records_fetched = len(tmp_df)
+            total_fetched += records_fetched
+            start += records_fetched
 
-            start += count
-            if limit != -1:
-                limit -= count
+            # Sleep between requests if needed
             if sleep:
                 time.sleep(TIME_SLEEP)
+
+            # Break if we got fewer records than requested (means we hit the end)
+            if records_fetched < count:
+                break
 
         return df.reset_index(drop=True)
 
@@ -435,13 +453,22 @@ class LinkedinIntegration(Integration):
         """
         TIME_SLEEP = 3  # Seconds between requests
         
-        # Get activity ID if not provided
+        # Get activity ID and validate
         activity_id = self.get_activity_id(linkedin_url)
+        if not activity_id:
+            logger.warning(f"Could not extract activity ID from URL: {linkedin_url}")
+            return pd.DataFrame()
 
         df = pd.DataFrame()
+        total_fetched = 0
+        
         while True:
-            if limit != -1 and limit < count:
-                count = limit
+            # Adjust count if we're near the limit
+            if limit != -1:
+                remaining = limit - total_fetched
+                if remaining <= 0:
+                    break
+                count = min(count, remaining)
 
             # Make request
             response = self._make_request(
@@ -450,18 +477,26 @@ class LinkedinIntegration(Integration):
                 use_custom_api=True
             )
 
+            # Break if no more results
             if not response or len(response) == 0:
                 break
 
             # Convert to DataFrame and combine results
             tmp_df = pd.DataFrame(response)
             df = pd.concat([df, tmp_df], axis=0)
+            
+            # Update counters
+            records_fetched = len(tmp_df)
+            total_fetched += records_fetched
+            start += records_fetched
 
-            start += count
-            if limit != -1:
-                limit -= count
+            # Sleep between requests if needed
             if sleep:
                 time.sleep(TIME_SLEEP)
+
+            # Break if we got fewer records than requested (means we hit the end)
+            if records_fetched < count:
+                break
 
         return df.reset_index(drop=True)
 

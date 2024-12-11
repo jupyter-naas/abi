@@ -26,9 +26,11 @@ Workflows:
 Integrations:
 - Replicate: useful to generate images and videos
 
-- Growth Assistant: Use for growth and marketing analysis, can access Linkedin integration and Hubspot integration.
+- Growth Assistant: Use for growth and marketing analysis.
+Workflows:
+- LinkedinPostsInteractionsWorkflow: Use to extract people (firstname, lastname, occupation, profile_url) or organization who interacted with a LinkedIn post.
 Integrations:
-- Linkedin: useful to published content with LinkedIn posts and get insights from LinkedIn profiles and organizations.
+- Linkedin: useful to get insights from LinkedIn posts, profiles and organizations.
 - HubSpot: useful to manage contacts, deals and companies
 
 - Sales Assistant: Use for sales and marketing analysis
