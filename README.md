@@ -88,6 +88,8 @@ ABI Framework is open-source and available for non-production use under the [AGP
    ```bash
    cp .env.example .env
    # Edit .env with your configuration
+   cp config.yaml.example config.yaml
+   # Edit config.yaml with your configuration
    ```
 
 4. **Create Docker Container & Start Chatting**
@@ -120,7 +122,7 @@ make abi-add dep=<library-name>
 To create a new integration, follow these steps:
 
 1. **Create Integration File**
-   Create a new file in `src/integrations/YourIntegration.py` using template: `src/integrations/__integration_template__.py`.
+   Create a new file in `src/integrations/YourIntegration.py` using template: `src/integrations/__IntegrationTemplate__.py`.
 
 2. **Add Required Methods**
    Implement the necessary methods for your integration. Common patterns include:
@@ -143,7 +145,7 @@ For more detailed examples, check the existing integrations in the `src/integrat
 Pipelines in ABI are used to process and transform data. Here's how to create a new pipeline:
 
 1. **Create Pipeline File**
-   Create a new file in `src/data/pipelines/YourPipeline.py` using template: `src/data/pipelines/__pipeline_template__.py`.
+   Create a new file in `src/data/pipelines/YourPipeline.py` using template: `src/data/pipelines/__PipelineTemplate__.py`.
    
 3. **Implement Pipeline Logic**
    - Add your data processing logic in the `run()` method
@@ -164,7 +166,7 @@ For examples, see existing pipelines in the `src/data/pipelines/` directory.
 To create a new workflow in ABI, follow these steps:
 
 1. **Create Workflow File**
-   Create a new file in `src/workflows/YourWorkflow.py` using template: `src/workflows/__workflow_template__.py`.
+   Create a new file in `src/workflows/YourWorkflow.py` using template: `src/workflows/__WorkflowTemplate__.py`.
 
 2. **Implement Workflow Logic**
    - Add your business logic in the `run()` method
