@@ -8,6 +8,7 @@ import os
 import datetime
 import time
 
+
 @dataclass
 class NaasIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Naas integration.
@@ -18,6 +19,7 @@ class NaasIntegrationConfiguration(IntegrationConfiguration):
     """
     api_key: str
     base_url: str = "https://api.naas.ai"
+
 
 class NaasIntegration(Integration):
     def __init__(self, configuration: NaasIntegrationConfiguration):
@@ -211,61 +213,61 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="get_workspaces",
+            name="get_naas_workspaces",
             description="Get all workspaces from naas.ai platform",
             func=lambda: integration.get_workspaces(),
             args_schema=GetWorkspacesSchema
         ),
         StructuredTool(
-            name="get_personal_workspace",
+            name="get_naas_personal_workspace",
             description="Get personal workspace ID from naas.ai platform",
             func=lambda: integration.get_personal_workspace(),
             args_schema=GetPersonalWorkspaceSchema
         ),
         StructuredTool(
-            name="create_plugin",
+            name="create_naas_assistant",
             description="Create a new plugin or assistant from workspace",
             func=lambda workspace_id, data: integration.create_plugin(workspace_id, data),
             args_schema=CreatePluginSchema
         ),
         StructuredTool(
-            name="get_plugin",
+            name="get_naas_assistant",
             description="Get plugin detail or assistant from workspace",
             func=lambda workspace_id, plugin_id: integration.get_plugin(workspace_id, plugin_id),
             args_schema=GetPluginSchema
         ),
         StructuredTool(
-            name="get_plugins",
+            name="get_naas_assistants",
             description="Get all plugins or assistants from workspace",
             func=lambda workspace_id: integration.get_plugins(workspace_id),
             args_schema=GetPluginsSchema
         ),
         StructuredTool(
-            name="update_plugin",
+            name="update_naas_assistant",
             description="Update an existing plugin or assistant from workspace",
             func=lambda workspace_id, plugin_id, data: integration.update_plugin(workspace_id, plugin_id, data),
             args_schema=UpdatePluginSchema
         ),
         StructuredTool(
-            name="create_ontology",
+            name="create_naas_ontology",
             description="Create a new ontology from workspace",
             func=lambda workspace_id, label, ontology, level: integration.create_ontology(workspace_id, label, ontology, level),
             args_schema=CreateOntologySchema
         ),
         StructuredTool(
-            name="get_ontology",
+            name="get_naas_ontology",
             description="Get ontology by ID",
             func=lambda workspace_id, ontology_id: integration.get_ontology(workspace_id, ontology_id),
             args_schema=GetOntologySchema
         ),
         StructuredTool(
-            name="get_ontologies",
+            name="get_naas_ontologies",
             description="Get all ontologies from workspace",
             func=lambda workspace_id: integration.get_ontologies(workspace_id),
             args_schema=GetOntologiesSchema
         ),
         StructuredTool(
-            name="update_ontology",
+            name="update_naas_ontology",
             description="Update an existing ontology from workspace",
             func=lambda workspace_id, ontology_id, ontology_source, level: integration.update_ontology(workspace_id, ontology_id, ontology_source, level),
             args_schema=UpdateOntologySchema

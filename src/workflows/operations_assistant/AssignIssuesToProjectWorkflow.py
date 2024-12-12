@@ -111,20 +111,3 @@ class AssignIssuesToProjectWorkflow(Workflow):
                 logger.debug(f"Issue {issue['number']} already assigned to project {parameters.project_id}")
 
         return assigned_issues
-
-def main():
-    configuration = AssignIssuesToProjectWorkflowConfiguration(
-        github_integration_config=GithubIntegrationConfiguration(
-            access_token=secret.get('GITHUB_ACCESS_TOKEN')
-        ),
-        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(
-            access_token=secret.get('GITHUB_ACCESS_TOKEN')
-        )
-    )
-    workflow = AssignIssuesToProjectWorkflow(configuration)
-    parameters = AssignIssuesToProjectWorkflowParameters(
-        repo_name="owner/repo",
-        project_id=1
-    )
-    result = workflow.run(parameters)
-    print(result) 

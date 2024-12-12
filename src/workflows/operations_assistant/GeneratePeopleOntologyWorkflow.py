@@ -139,18 +139,3 @@ class GeneratePeopleOntologyWorkflow(Workflow):
             self.__naas_integration.update_ontology(parameters.workspace_id, people_ontology['id'], merged_ontologies_yaml, 'USE_CASE')
             
         return "People ontology generated"
-                
-def main():
-    workspace_id = '59d41231-e6c2-498f-9f2b-77c564a7e45f'
-    
-    configuration = GeneratePeopleOntologyWorkflowConfiguration(
-        naas_integration_config=NaasIntegrationConfiguration(
-            api_key=secret.get('NAAS_API_KEY')
-        )
-    )
-    workflow = GeneratePeopleOntologyWorkflow(configuration)
-    result = workflow.run(GeneratePeopleOntologyWorkflowParameters(workspace_id=workspace_id))
-    print(result)
-
-if __name__ == "__main__":
-    main()

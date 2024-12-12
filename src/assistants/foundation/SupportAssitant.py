@@ -1,8 +1,8 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
-from src.integrations.GithubIntegration import GithubIntegration,GithubIntegrationConfiguration
+from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.workflows.support_assistant import FeatureRequestWorkflow, ReportBugWorkflow, IssueListWorkflow
 
 SUPPORT_ASSISTANT_INSTRUCTIONS = """
@@ -20,29 +20,36 @@ def create_support_assistant(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
-    model = ChatOpenAI(model="gpt-4o", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
-    
+    model = ChatOpenAI(
+        model="gpt-4o",
+        temperature=0, 
+        api_key=secret.get('OPENAI_API_KEY')
+    )
     tools = []
 
-    # Add GetIssuesWorkflow tool
-    get_issues_workflow = IssueListWorkflow.IssueListWorkflow(IssueListWorkflow.IssueListWorkflowConfiguration(
-        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
-    ))
-    tools += get_issues_workflow.as_tools()
+    if github_access_token := secret.get('GITHUB_ACCESS_TOKEN'):
+        github_integration_config = GithubIntegrationConfiguration(access_token=github_access_token)
+        github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=github_access_token)
 
-    # Add FeatureRequestWorkflow tool
-    feature_request_workflow = FeatureRequestWorkflow.FeatureRequestWorkflow(FeatureRequestWorkflow.FeatureRequestWorkflowConfiguration(
-        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
-        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
-    ))
-    tools += feature_request_workflow.as_tools()
-    
-    # Add ReportBugWorkflow tool
-    report_bug_workflow = ReportBugWorkflow.ReportBugWorkflow(ReportBugWorkflow.ReportBugWorkflowConfiguration(
-        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
-        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
-    ))
-    tools += report_bug_workflow.as_tools()
+        # Add GetIssuesWorkflow tool
+        get_issues_workflow = IssueListWorkflow.IssueListWorkflow(IssueListWorkflow.IssueListWorkflowConfiguration(
+            github_integration_config=github_integration_config
+        ))
+        tools += get_issues_workflow.as_tools()
+
+        # Add FeatureRequestWorkflow tool
+        feature_request_workflow = FeatureRequestWorkflow.FeatureRequestWorkflow(FeatureRequestWorkflow.FeatureRequestWorkflowConfiguration(
+            github_integration_config=github_integration_config,
+            github_graphql_integration_config=github_graphql_integration_config,
+        ))
+        tools += feature_request_workflow.as_tools()
+        
+        # Add ReportBugWorkflow tool
+        report_bug_workflow = ReportBugWorkflow.ReportBugWorkflow(ReportBugWorkflow.ReportBugWorkflowConfiguration(
+            github_integration_config=github_integration_config,
+            github_graphql_integration_config=github_graphql_integration_config,
+        ))
+        tools += report_bug_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:

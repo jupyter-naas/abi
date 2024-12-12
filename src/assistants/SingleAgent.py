@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration
 from src import secret
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.workflows.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
+from src.workflows.operations_assistant.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
 
 SINGLE_AGENT_INSTRUCTIONS = """
 {

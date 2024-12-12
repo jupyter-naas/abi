@@ -41,7 +41,7 @@ Integrations:
 
 - Operations Assistant: Use for operations and marketing analysis
 Workflows:
-- GetTopPrioritiesWorkflow: useful to get the top priorities from Task and Project management tools
+- GetTopPrioritiesWorkflow: useful to get the top priorities from ontology store
 - CreateIssueAndAddToProjectWorkflow: useful to create a new issue in GitHub and add it to a project
 - AssignIssuesToProjectWorkflow: useful to assign all issue from repository to a project
 Integrations:

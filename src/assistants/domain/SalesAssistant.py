@@ -35,12 +35,11 @@ def create_sales_assistant(
         hubspot_integration_config = HubSpotIntegrationConfiguration(access_token=hubspot_access_token)
         
         tools += HubSpotIntegration.as_tools(hubspot_integration_config)
-
+        
+        # Add CreateContactWorkflow tool
         create_hubspot_contact_workflow = CreateHubSpotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
             hubspot_integration_config=hubspot_integration_config
         ))
-
-        # Add CreateContactWorkflow tool
         tools += create_hubspot_contact_workflow.as_tools()
     
     # Use provided configuration or create default one

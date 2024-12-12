@@ -103,29 +103,3 @@ class CreateIssueAndAddToProjectWorkflow(Workflow):
             logger.debug("No project ID provided, skipping project data")
         
         return f"Issue '{parameters.issue_title}' created and added to project: {issue}."
-
-def main():
-    configuration = CreateIssueAndAddToProjectWorkflowConfiguration(
-        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN')),
-        github_graphql_integration_config=GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
-    )
-    
-    parameters = CreateIssueAndAddToProjectParameters(
-        repo_name="owner/repo",
-        issue_title="New Issue",
-        issue_body="This is a new issue.",
-        project_id=1,
-        assignees=["assignee1", "assignee2"],
-        labels=["label1", "label2"],
-        status_field_id="status_field_id",
-        priority_field_id="priority_field_id",
-        status_option_id="status_option_id",
-        priority_option_id="priority_option_id"
-    )
-    
-    workflow = CreateIssueAndAddToProjectWorkflow(configuration)
-    result = workflow.run(parameters)
-    print(result)
-
-if __name__ == "__main__":
-    main() 

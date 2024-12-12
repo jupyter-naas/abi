@@ -12,6 +12,7 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 
+
 @dataclass
 class GetTopPrioritiesConfiguration(WorkflowConfiguration):
     """Configuration for GetTopPriorities workflow.
@@ -148,17 +149,3 @@ class GetTopPrioritiesWorkflow(Workflow):
                 data.append(data_dict)
             
         return {"message": "Sort data providedby due date and priority in descending order", "data": data}
-
-
-def main():
-    configuration = GetTopPrioritiesConfiguration(
-        ontology_store_path=secret.get('ONTOLOGY_STORE_PATH')
-    )
-    workflow = GetTopPrioritiesWorkflow(configuration)
-    parameters = GetTopPrioritiesParameters(days=7)
-    result = workflow.run(parameters)
-    print(result)
-
-
-if __name__ == "__main__":
-    main() 
