@@ -1,13 +1,13 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-from src import secret
+from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from src import config
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from pydantic import Field
 from datetime import datetime, timedelta
 from rdflib import Graph
 from abi import logger
-from typing import Union, Optional
+from typing import Optional
 from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
@@ -18,9 +18,9 @@ class GetTopPrioritiesConfiguration(WorkflowConfiguration):
     """Configuration for GetTopPriorities workflow.
     
     Attributes:
-        ontology_store_path (str): Path to the ontology store
+        ontology_store (IOntologyStoreService): Ontology store service
     """
-    ontology_store_path: str
+    ontology_store: IOntologyStoreService
 
 
 class GetTopPrioritiesParameters(WorkflowParameters):
@@ -38,33 +38,9 @@ class GetTopPrioritiesWorkflow(Workflow):
     __configuration: GetTopPrioritiesConfiguration
     
     def __init__(self, configuration: GetTopPrioritiesConfiguration):
+        super().__init__(configuration)
         self.__configuration = configuration
-        
-        onto_store_adaptor = OntologyStoreService__SecondaryAdaptor__Filesystem(self.__configuration.ontology_store_path)
-        self.__ontology_store = OntologyStoreService(onto_store_adaptor)
-
-    def as_tools(self) -> list[StructuredTool]:
-        """Returns a list of LangChain tools for this workflow.
-        
-        Returns:
-            list[StructuredTool]: List containing the workflow tool
-        """
-        return [StructuredTool(
-            name="get_top_priorities",
-            description="Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
-            func=lambda **kwargs: self.run(GetTopPrioritiesParameters(**kwargs)),
-            args_schema=GetTopPrioritiesParameters
-        )]
-
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this workflow to the given router.
-        
-        Args:
-            router (APIRouter): FastAPI router to add endpoints to
-        """
-        @router.post("/get_top_priorities")
-        def get_priorities(parameters: GetTopPrioritiesParameters):
-            return self.run(parameters)
+        self.__ontology_store = self.__configuration.ontology_store
 
     def run(self, parameters: GetTopPrioritiesParameters) -> dict:
         # First, get all task subclasses
@@ -149,3 +125,26 @@ class GetTopPrioritiesWorkflow(Workflow):
                 data.append(data_dict)
             
         return {"message": "Sort data providedby due date and priority in descending order", "data": data}
+    
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow.
+        
+        Returns:
+            list[StructuredTool]: List containing the workflow tool
+        """
+        return [StructuredTool(
+            name="get_top_priorities",
+            description="Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
+            func=lambda **kwargs: self.run(GetTopPrioritiesParameters(**kwargs)),
+            args_schema=GetTopPrioritiesParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router.
+        
+        Args:
+            router (APIRouter): FastAPI router to add endpoints to
+        """
+        @router.post("/get_top_priorities")
+        def get_priorities(parameters: GetTopPrioritiesParameters):
+            return self.run(parameters)
