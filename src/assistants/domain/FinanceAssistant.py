@@ -42,8 +42,10 @@ def create_finance_assistant(
         agent_shared_state = AgentSharedState()
     
     return Agent(
-        model, 
-        tools, 
+        name="finance_assistant", 
+        description="Use for financial analysis and insights",
+        chat_model=model, 
+        tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()

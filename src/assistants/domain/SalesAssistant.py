@@ -53,8 +53,10 @@ def create_sales_assistant(
         agent_shared_state = AgentSharedState()
     
     return Agent(
-        model, 
-        tools, 
+        name="sales_assistant", 
+        description="Use for sales and marketing analysis",
+        chat_model=model, 
+        tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()

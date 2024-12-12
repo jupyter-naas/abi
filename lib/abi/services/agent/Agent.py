@@ -17,6 +17,8 @@ from langgraph.prebuilt import ToolNode
 # Pydantic imports for schema validation
 from pydantic import BaseModel, Field
 
+from abi.utils.Expose import Expose
+
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
 
@@ -39,7 +41,7 @@ class AgentConfiguration:
     on_tool_response: Callable[[AnyMessage], None] = field(default_factory=lambda: lambda _: None)
     system_prompt: str = field(default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'")
 
-class Agent:
+class Agent(Expose):
     
     """An Agent class that orchestrates interactions between a language model and tools.
 
@@ -48,6 +50,8 @@ class Agent:
     and handling tool usage in a structured way.
 
     Attributes:
+        __name (str): The name of the agent
+        __description (str): The description of the agent
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
@@ -67,6 +71,9 @@ class Agent:
     2. Conditionally route to either tools or end based on agent output
     3. Route back to agent after tool usage
     """
+    __name: str
+    __description: str
+    
     __chat_model: BaseChatModel
     __tools: list[Tool]
     __chekpointer: BaseCheckpointSaver
@@ -79,7 +86,7 @@ class Agent:
     __on_tool_usage: Callable[[AnyMessage], None]
     __on_tool_response: Callable[[AnyMessage], None]
 
-    def __init__(self, chat_model: BaseChatModel, tools: list[Tool], memory: BaseCheckpointSaver = MemorySaver(), state: AgentSharedState = AgentSharedState(), configuration: AgentConfiguration = AgentConfiguration()):
+    def __init__(self, name: str, description: str, chat_model: BaseChatModel, tools: list[Tool], memory: BaseCheckpointSaver = MemorySaver(), state: AgentSharedState = AgentSharedState(), configuration: AgentConfiguration = AgentConfiguration()):
         """Initialize a new Agent instance.
         
         Args:
@@ -89,6 +96,8 @@ class Agent:
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 Defaults to an in-memory saver.
         """
+        self.__name = name
+        self.__description = description
         self.__tools = tools
         self.__chat_model = chat_model.bind_tools(self.__tools)
         self.__checkpointer = memory
@@ -267,13 +276,13 @@ class Agent:
         
         return response
     
-    def as_tool(self, name: str, description: str) -> StructuredTool:
+    def as_tools(self) -> list[StructuredTool]:
         class AgentToolSchema(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
         
-        return StructuredTool(
-            name=name,
-            description=description,
+        return [StructuredTool(
+            name=self.__name,
+            description=self.__description,
             func=self.__tool_function,
             args_schema=AgentToolSchema
-        )
+        )]
