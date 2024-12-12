@@ -9,9 +9,9 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Contract> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/ContractOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/contract.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ContractOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for contracts and agreements."@en ;
     dc:license "" ;

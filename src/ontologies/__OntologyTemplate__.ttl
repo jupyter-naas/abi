@@ -12,9 +12,8 @@
 <http://ontology.naas.ai/abi/YourDomain> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/YourImport> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/your_domain.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc11:contributor "Your Name" ;
     dc:description "Domain ontology for your domain."@en ;
-    dc:license "" ;
     dc:title "Your Domain Ontology" .
 
 #################################################################
@@ -43,11 +42,3 @@ abi:hasAttribute a owl:DatatypeProperty ;
     rdfs:label "has attribute"@en ;
     rdfs:domain abi:YourClass ;
     rdfs:range xsd:string .
-
-#################################################################
-#    Individuals
-#################################################################
-
-<http://ontology.naas.ai/abi/YourClass#Example> a abi:YourClass ;
-    rdfs:label "Example Instance" ;
-    abi:hasAttribute "Example Value" . 
