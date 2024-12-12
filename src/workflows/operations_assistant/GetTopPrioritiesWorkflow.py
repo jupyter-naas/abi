@@ -54,7 +54,7 @@ class GetTopPrioritiesWorkflow(Workflow):
             }
         """
         g = Graph()
-        g.parse("src/ontologies/consolidated_ontology.ttl", format="turtle")
+        g.parse("src/ontologies/ConsolidatedOntology.ttl", format="turtle")
         task_types = g.query(task_subclasses_query)
         
         # Create VALUES clause instead of UNION
