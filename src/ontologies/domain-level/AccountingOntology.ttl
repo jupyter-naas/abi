@@ -14,7 +14,6 @@
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AccountingOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for accounting and financial transactions."@en ;
-    dc:license "" ;
     dc:title "Accounting Domain Ontology" .
 
 #################################################################

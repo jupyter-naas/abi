@@ -9,9 +9,9 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Conversation> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/CommunicationOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/conversation.ttl> ;
+<http://ontology.naas.ai/abi/ConversationOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ConversationOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for conversations and communications."@en ;
     dc:license "" ;

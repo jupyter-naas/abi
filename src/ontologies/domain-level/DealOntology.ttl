@@ -9,9 +9,9 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Deal> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/DealOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/deal.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/DealOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for business deals and opportunities."@en ;
     dc:license "" ;
