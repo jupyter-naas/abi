@@ -9,13 +9,13 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Post> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/PublicationOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/post.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PublicationOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for social media posts."@en ;
+    dc:description "Domain ontology for publications."@en ;
     dc:license "" ;
-    dc:title "Post Domain Ontology" .
+    dc:title "Publication Domain Ontology" .
 
 #################################################################
 #    Classes

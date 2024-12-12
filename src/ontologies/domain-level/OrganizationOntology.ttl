@@ -9,9 +9,9 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Organization> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/OrganizationOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/organization.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OrganizationOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for organizations and companies."@en ;
     dc:license "" ;
