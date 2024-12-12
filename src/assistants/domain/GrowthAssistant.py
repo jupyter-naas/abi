@@ -58,8 +58,10 @@ def create_growth_assistant(
         agent_shared_state = AgentSharedState()
     
     return Agent(
-        model, 
-        tools, 
+        name="growth_assistant", 
+        description="Use for growth and marketing analysis",
+        chat_model=model, 
+        tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
