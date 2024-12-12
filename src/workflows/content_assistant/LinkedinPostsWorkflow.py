@@ -1,16 +1,17 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from src.integrations.LinkedinIntegration import LinkedinIntegration, LinkedinIntegrationConfiguration
-from src import secret
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from pydantic import Field
 from datetime import datetime, date, timedelta
 import pandas as pd
 import pytz
 from abi import logger
 from typing import Optional
 from abi.workflow.workflow import WorkflowParameters
-from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
+from fastapi import APIRouter
+
+
 @dataclass
 class LinkedinPostsWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for LinkedIn Posts Workflow.
@@ -19,6 +20,7 @@ class LinkedinPostsWorkflowConfiguration(WorkflowConfiguration):
         linkedin_integration_config (LinkedinIntegrationConfiguration): LinkedIn integration configuration
     """
     linkedin_integration_config: LinkedinIntegrationConfiguration
+
 
 class LinkedinPostsWorkflowParameters(WorkflowParameters):
     """Parameters for LinkedIn Posts Workflow execution.
@@ -123,17 +125,3 @@ class LinkedinPostsWorkflow(Workflow):
                 break
 
         return df.reset_index(drop=True)
-
-def main():
-    configuration = LinkedinPostsWorkflowConfiguration(
-        linkedin_integration_config=LinkedinIntegrationConfiguration(
-            li_at=secret.get('li_at'),
-            jsessionid=secret.get('jsessionid')
-        )
-    )
-    workflow = LinkedinPostsWorkflow(configuration)
-    params = LinkedinPostsWorkflowParameters(
-        linkedin_url="https://www.linkedin.com/in/username/"
-    )
-    df = workflow.run(params)
-    print(df)
