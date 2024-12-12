@@ -47,12 +47,50 @@ class GithubIssuePipeline(Pipeline):
         self.__github_graphql_integration = GithubGraphqlIntegration(self.__configuration.github_graphql_integration_config)
 
     def run(self, parameters: GithubIssuePipelineParameters) -> Graph:
-        
         # Init graph
         graph = ABIGraph()
 
         # Get issue data from GithubIntegration
-        issue_data : dict = self.__github_integration.get_issue(parameters.github_repository, parameters.github_issue_id) # type: ignore
+        # GitHub Issue API Response Schema:
+        # {
+        #   "url": "API URL for the issue", 
+        #   "repository_url": "API URL for the repository",
+        #   "labels_url": "Template URL for labels with {/name} parameter",
+        #   "comments_url": "API URL for comments",
+        #   "events_url": "API URL for events", 
+        #   "html_url": "Web URL for the issue",
+        #   "id": "Unique identifier",
+        #   "node_id": "Global node ID",
+        #   "number": "Issue number in repository",
+        #   "title": "Issue title",
+        #   "user": {
+        #     "login": "Username",
+        #     "id": "User ID",
+        #     "node_id": "User node ID",
+        #     "type": "User type",
+        #     "site_admin": "Admin status"
+        #   },
+        #   "labels": "Array of label objects",
+        #   "state": "open/closed",
+        #   "locked": "Lock status",
+        #   "assignee": "User object of assignee",
+        #   "assignees": "Array of assignee user objects",
+        #   "comments": "Number of comments",
+        #   "created_at": "Creation timestamp",
+        #   "updated_at": "Last update timestamp", 
+        #   "closed_at": "Close timestamp if closed",
+        #   "author_association": "Author's association with repository",
+        #   "body": "Issue description",
+        #   "reactions": {
+        #     "url": "Reactions API URL",
+        #     "total_count": "Total reaction count",
+        #     "+1": "Count of +1 reactions",
+        #     "-1": "Count of -1 reactions"
+        #   }
+        # }
+
+        # Get issue metadata
+        issue_data = self.__github_integration.get_issue(parameters.github_repository, parameters.github_issue_id)
         issue_id = issue_data.get("id")
         issue_label = issue_data.get("title")
         issue_node_id = issue_data.get("node_id")
