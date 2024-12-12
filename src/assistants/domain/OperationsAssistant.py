@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
-from src import secret
+from src import secret, config
 from src.integrations import AiaIntegration, NaasIntegration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
@@ -8,6 +8,10 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from src.workflows.operations_assistant.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
 from src.workflows.operations_assistant.GetTopPrioritiesWorkflow import GetTopPrioritiesWorkflow, GetTopPrioritiesConfiguration
 from src.workflows.operations_assistant.AssignIssuesToProjectWorkflow import AssignIssuesToProjectWorkflow, AssignIssuesToProjectWorkflowConfiguration
+from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
+from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
+from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+
 
 OPERATIONS_ASSISTANT_INSTRUCTIONS = '''
 You are an Operations Assistant.
@@ -30,6 +34,7 @@ def create_operations_assistant(
     ) -> Agent:
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     tools = []
+    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
 
     # Add integrations & workflbased on available credentials
     if naas_key := secret.get('NAAS_API_KEY'):
@@ -58,9 +63,17 @@ def create_operations_assistant(
         ))
         tools += assign_issues_to_project_workflow.as_tools()
 
+        # Add GithubIssuesPipeline tool
+        github_issues_pipeline = GithubIssuesPipeline(GithubIssuesPipelineConfiguration(
+            github_integration_config=github_integration_config,
+            github_graphql_integration_config=github_graphql_integration_config,
+            ontology_store=ontology_store
+        ))
+        tools += github_issues_pipeline.as_tools()
+
     # Add GetTopPrioritiesWorkflow tool
     get_top_priorities_workflow = GetTopPrioritiesWorkflow(GetTopPrioritiesConfiguration(
-        ontology_store_path=secret.get('ontology_store_path')
+        ontology_store=ontology_store
     ))
     tools += get_top_priorities_workflow.as_tools()
     
