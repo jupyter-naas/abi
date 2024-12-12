@@ -4,8 +4,6 @@ from src import secret
 from src.integrations import LinkedinIntegration, ReplicateIntegration
 from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
 from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
-from src.workflows.content_assistant import LinkedinPostsWorkflow
-
 from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 
 CONTENT_ASSISTANT_INSTRUCTIONS = """
@@ -41,10 +39,13 @@ def create_content_assistant(
     tools = []
     
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+        
+        tools += LinkedinIntegration.as_tools(linkedin_integration_config)
 
+        # Add LinkedinPostsWorkflow tool
         linkedin_posts_workflow = LinkedinPostsWorkflow(LinkedinPostsWorkflowConfiguration(
-            linkedin_integration_config=LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+            linkedin_integration_config=linkedin_integration_config
         ))
         tools += linkedin_posts_workflow.as_tools()
 

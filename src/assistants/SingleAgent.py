@@ -59,7 +59,7 @@ def create_single_agent():
     
     tools = []
     
-    # Add integrations based on available credentials
+    # Add integrations & workflows based on available credentials
     if github_token := secret.get('GITHUB_ACCESS_TOKEN'):
         tools += GithubIntegration.as_tools(GithubIntegration.GithubIntegrationConfiguration(access_token=github_token))
         tools += GithubGraphqlIntegration.as_tools(GithubGraphqlIntegration.GithubGraphqlIntegrationConfiguration(access_token=github_token))
