@@ -10,7 +10,7 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/PersonOntology> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/AgentOntology> <https://www.commoncoreontologies.org/PlatformOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology>, <https://www.commoncoreontologies.org/PlatformOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PersonOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for persons and individuals."@en ;
