@@ -9,40 +9,35 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Activity> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/activity.ttl> ;
+<http://ontology.naas.ai/abi/DealOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/DealOntology.ttl> ;
     dc11:contributor "Emma Petit" , "Grace Lambert" , "Alice Dupont" ;
-    dc:description "Domain ontology for activities."@en ;
+    dc:description "Domain ontology for business deals and opportunities."@en ;
     dc:license "" ;
-    dc:title "Activity Domain Ontology" .
+    dc:title "Deal Domain Ontology" .
 
 #################################################################
 #    Classes
 #################################################################
 
-abi:Activity a owl:Class ;
-    rdfs:label "Activity"@en ;
+abi:Deal a owl:Class ;
+    rdfs:label "Deal"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
-    skos:definition "A planned business activity with associated timeline and context" .
+    skos:definition "A business opportunity with an associated score and scenario" .
 
 #################################################################
 #    Object Properties
 #################################################################
 
-abi:relatedToDeal a owl:ObjectProperty ;
-    rdfs:label "related to deal"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range abi:Deal .
-
-abi:relatedToContact a owl:ObjectProperty ;
-    rdfs:label "related to contact"@en ;
-    rdfs:domain abi:Activity ;
+abi:hasContact a owl:ObjectProperty ;
+    rdfs:label "has contact"@en ;
+    rdfs:domain abi:Deal ;
     rdfs:range abi:Contact .
 
-abi:relatedToOrganization a owl:ObjectProperty ;
-    rdfs:label "related to organization"@en ;
-    rdfs:domain abi:Activity ;
+abi:hasOrganization a owl:ObjectProperty ;
+    rdfs:label "has organization"@en ;
+    rdfs:domain abi:Deal ;
     rdfs:range abi:Organization .
 
 #################################################################
@@ -51,26 +46,16 @@ abi:relatedToOrganization a owl:ObjectProperty ;
 
 abi:hasScenario a owl:DatatypeProperty ;
     rdfs:label "has scenario"@en ;
-    rdfs:domain abi:Activity ;
+    rdfs:domain abi:Deal ;
     rdfs:range xsd:string .
+
+abi:hasDealScore a owl:DatatypeProperty ;
+    rdfs:label "has deal score"@en ;
+    rdfs:domain abi:Deal ;
+    rdfs:range xsd:integer .
 
 abi:hasCreatedDate a owl:DatatypeProperty ;
     rdfs:label "has created date"@en ;
-    rdfs:domain abi:Activity ;
+    rdfs:domain abi:Deal ;
     rdfs:range xsd:dateTime .
-
-abi:hasDueDate a owl:DatatypeProperty ;
-    rdfs:label "has due date"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:dateTime .
-
-abi:hasTitle a owl:DatatypeProperty ;
-    rdfs:label "has title"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:string .
-
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:label "has description"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:string .
-  
+ 
