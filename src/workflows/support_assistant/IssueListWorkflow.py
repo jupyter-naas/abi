@@ -37,6 +37,17 @@ class IssueListWorkflow(Workflow):
         self.__configuration = configuration
         self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
 
+    def run(self, parameters: IssueListWorkflowParameters) -> List[str]:
+        # Get issues using the GitHub integration
+        issues = self.__github_integration.get_issues(
+            repo_name=parameters.repo_name,
+            state=parameters.state,
+            limit=parameters.limit
+        )
+        logger.info(f"Found {len(issues)} issues:")
+        return [f"#{issue['number']} - {issue['title']}: {issue['body']}" for issue in issues]
+    
+
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow.
         
@@ -59,30 +70,3 @@ class IssueListWorkflow(Workflow):
         @router.post("/list_issues")
         def list_issues(parameters: IssueListWorkflowParameters):
             return self.run(parameters)
-
-    def run(self, parameters: IssueListWorkflowParameters) -> List[str]:
-        # Get issues using the GitHub integration
-        issues = self.__github_integration.get_issues(
-            repo_name=parameters.repo_name,
-            state=parameters.state,
-            limit=parameters.limit
-        )
-        logger.info(f"Found {len(issues)} issues:")
-        return [f"#{issue['number']} - {issue['title']}: {issue['body']}" for issue in issues]
-
-def main():
-    configuration = IssueListWorkflowConfiguration(
-        github_integration_config=GithubIntegrationConfiguration(
-            access_token=secret.get('GITHUB_ACCESS_TOKEN')
-        )
-    )
-    
-    workflow = IssueListWorkflow(configuration)
-    parameters = IssueListWorkflowParameters()
-    issues = workflow.run(parameters)
-    print(f"Found {len(issues)} issues:")
-    for issue in issues:
-        print(issue)
-
-if __name__ == "__main__":
-    main() 
