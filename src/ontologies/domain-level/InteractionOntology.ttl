@@ -9,59 +9,59 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Transaction> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/InteractionOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/transaction.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/InteractionOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for financial transactions."@en ;
+    dc:description "Domain ontology for social media interactions."@en ;
     dc:license "" ;
-    dc:title "Transaction Domain Ontology" .
+    dc:title "Interaction Domain Ontology" .
 
 #################################################################
 #    Classes
 #################################################################
 
-abi:Transaction a owl:Class ;
-    rdfs:label "Transaction"@en ;
+abi:Interaction a owl:Class ;
+    rdfs:label "Interaction"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
-    skos:definition "A financial transaction with associated metadata"@en .
+    skos:definition "A social media interaction with a post"@en .
+
+abi:InteractionType a owl:Class ;
+    rdfs:label "Interaction Type"@en .
+
+abi:Like a abi:InteractionType .
+abi:Comment a abi:InteractionType .
+abi:Share a abi:InteractionType .
+abi:View a abi:InteractionType .
 
 #################################################################
 #    Object Properties
 #################################################################
 
-abi:hasAsset a owl:ObjectProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range abi:Asset .
+abi:hasType a owl:ObjectProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range abi:InteractionType .
 
-abi:hasContract a owl:ObjectProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range abi:Contract .
+abi:relatedTo a owl:ObjectProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range abi:Post .
 
 #################################################################
 #    Data Properties
 #################################################################
 
-abi:hasTransactionID a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string .
-
-abi:hasAmount a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:decimal .
-
-abi:hasCurrency a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string .
-
-abi:hasTransactionDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Interaction ;
     rdfs:range xsd:dateTime .
 
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
+abi:hasLanguage a owl:DatatypeProperty ;
+    rdfs:domain abi:Interaction ;
     rdfs:range xsd:string .
 
-abi:hasStatus a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string . 
+abi:hasCommentsCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range xsd:integer .
+
+abi:hasLikesCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range xsd:integer .
