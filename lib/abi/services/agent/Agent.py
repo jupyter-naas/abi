@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any
+from typing import Callable, Literal, Any, AsyncGenerator
 
 # LangChain Core imports for base components
 from langchain_core.language_models import BaseChatModel
@@ -21,6 +21,11 @@ from abi.utils.Expose import Expose
 
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
+
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from typing import Generator
+from abi.utils.Logger import logger
 
 class AgentSharedState:
     __thread_id: int
@@ -276,6 +281,70 @@ class Agent(Expose):
         
         return response
     
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this agent to the given router."""
+        
+        class CompletionQuery(BaseModel):
+            prompt: str = Field(..., description="The prompt to send to the agent")
+        
+        @router.post("/completion")
+        def completion(query: CompletionQuery):
+            return self.invoke(query.prompt)
+            
+        @router.post("/stream-completion")
+        async def stream_completion(query: CompletionQuery):
+            return StreamingResponse(
+                self.stream_invoke(query.prompt),
+                media_type='text/event-stream'
+            )
+
+    async def stream_invoke(self, prompt: str):
+        """Process a user prompt through the agent and yield responses as they come.
+        
+        Args:
+            prompt (str): The user's text prompt to process
+            
+        Yields:
+            str: Chunks of the model's response text
+        """
+        
+        def stream_on_tool_usage(message: AnyMessage):
+            logger.debug(f"Tool usage: {message}")
+            yield f"data: message\n\n"
+            #yield message
+        
+        def stream_on_tool_response(message: AnyMessage):
+            logger.debug(f"Tool response: {message}")
+            yield f"data: message\n\n"
+            #yield message
+        
+        # self.on_tool_usage(stream_on_tool_usage)
+        # self.on_tool_response(stream_on_tool_response)
+        
+        self.__on_tool_usage = stream_on_tool_usage
+        self.__on_tool_response = stream_on_tool_response
+        
+        final_state = self.__app.invoke(
+            {"messages": [SystemMessage(content=self.__configuration.system_prompt), HumanMessage(content=prompt)]},
+            config={"configurable": {"thread_id": self.__state.thread_id}}
+        )
+        
+        response = final_state["messages"][-1].content
+        logger.debug(f"Response: {response}")
+
+        for line in response.splitlines():
+            payload = f'data: {line}'
+            # Remove all \n at the end of the line
+            payload = payload.rstrip('\n')
+            
+            # Make sure the payload is ending by only two \n
+            if not payload.endswith('\n\n'):
+                payload += '\n\n'
+            
+            yield payload
+            
+        yield 'data: [DONE]\n\n'
+
     def as_tools(self) -> list[StructuredTool]:
         class AgentToolSchema(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
