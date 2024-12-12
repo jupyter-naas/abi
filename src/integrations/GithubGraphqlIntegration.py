@@ -391,25 +391,15 @@ class GithubGraphqlIntegration(Integration):
         # Get the item ID from the response
         item_id = data['data']["addProjectV2ItemById"]["item"]["id"]
 
-        # Update fields mutation
-        if (status_field_id and status_option_id) or (priority_field_id and priority_option_id):
-            update_mutation = """
-            mutation UpdateFields($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $priorityFieldId: ID!, $statusOptionId: String!, $priorityOptionId: String!) {
-                updateStatus: updateProjectV2ItemFieldValue(input: {
+        # Update status field if provided
+        if status_field_id and status_option_id:
+            status_mutation = """
+            mutation UpdateStatus($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
                     projectId: $projectId
                     itemId: $itemId
-                    fieldId: $statusFieldId
-                    value: { singleSelectOptionId: $statusOptionId }
-                }) {
-                    projectV2Item {
-                        id
-                    }
-                }
-                updatePriority: updateProjectV2ItemFieldValue(input: {
-                    projectId: $projectId
-                    itemId: $itemId
-                    fieldId: $priorityFieldId
-                    value: { singleSelectOptionId: $priorityOptionId }
+                    fieldId: $fieldId
+                    value: { singleSelectOptionId: $optionId }
                 }) {
                     projectV2Item {
                         id
@@ -417,17 +407,38 @@ class GithubGraphqlIntegration(Integration):
                 }
             }
             """
-
-            # Update the fields
             variables = {
                 "projectId": project_node_id,
                 "itemId": item_id,
-                "statusFieldId": status_field_id,
-                "priorityFieldId": priority_field_id,
-                "statusOptionId": status_option_id,
-                "priorityOptionId": priority_option_id
+                "fieldId": status_field_id,
+                "optionId": status_option_id
             }
-            data = self.execute_query(update_mutation, variables)
+            data = self.execute_query(status_mutation, variables)
+
+        # Update priority field if provided
+        if priority_field_id and priority_option_id:
+            priority_mutation = """
+            mutation UpdatePriority($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { singleSelectOptionId: $optionId }
+                }) {
+                    projectV2Item {
+                        id
+                    }
+                }
+            }
+            """
+            variables = {
+                "projectId": project_node_id,
+                "itemId": item_id,
+                "fieldId": priority_field_id,
+                "optionId": priority_option_id
+            }
+            data = self.execute_query(priority_mutation, variables)
+
         return data
 
 def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
