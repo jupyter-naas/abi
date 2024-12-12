@@ -3,10 +3,10 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.workflows.sales_assistant.CreateContactWorkflow import CreateContactWorkflow, CreateContactWorkflowConfiguration
+from src.workflows.sales_assistant.CreateHubSpotContactWorkflow import CreateHubSpotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
 
-SALES_ASSISTANT_INSTRUCTIONS = """You are a Sales Assistant.
-
+SALES_ASSISTANT_INSTRUCTIONS = """
+You are a Sales Assistant.
 Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
 
 Start each conversation by:
@@ -24,7 +24,11 @@ def create_sales_assistant(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
+    model = ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=0,
+        api_key=secret.get('OPENAI_API_KEY')
+    )
     tools = []
     
     if hubspot_access_token := secret.get('HUBSPOT_ACCESS_TOKEN'):
@@ -32,12 +36,12 @@ def create_sales_assistant(
         
         tools += HubSpotIntegration.as_tools(hubspot_integration_config)
 
-        create_contact_workflow = CreateContactWorkflow(CreateContactWorkflowConfiguration(
+        create_hubspot_contact_workflow = CreateHubSpotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
             hubspot_integration_config=hubspot_integration_config
         ))
 
         # Add CreateContactWorkflow tool
-        tools.append(create_contact_workflow.as_tools())
+        tools += create_hubspot_contact_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:
