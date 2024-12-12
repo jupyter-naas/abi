@@ -20,12 +20,33 @@ sh: .venv
 api: .venv
 	@ docker compose run -p 9879:9879 abi poetry run api
 
-chat-single-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run chat-single-agent'
+chat-content-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-content-agent'
+
+chat-finance-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-finance-agent'
+
+chat-growth-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-growth-agent'
+
+chat-opendata-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-opendata-agent'
+
+chat-operations-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-operations-agent'
+
+chat-sales-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-sales-agent'
+
+chat-integration-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-integration-agent'
+
+chat-support-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-support-agent'
 
 chat-supervisor-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-supervisor-agent'
 
-.DEFAULT_GOAL := chat-single-agent
+.DEFAULT_GOAL := chat-integration-agent
 
-.PHONY: test chat-supervisor-agent chat-single-agent api sh lock add abi-add
+.PHONY: test chat-supervisor-agent chat-support-agent chat-integration-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add

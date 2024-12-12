@@ -12,7 +12,6 @@ from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline,
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 
-
 OPERATIONS_ASSISTANT_INSTRUCTIONS = '''
 You are an Operations Assistant.
 Your primary responsibility is to enhance operational efficiency by acccessing Task and Project management tools.
