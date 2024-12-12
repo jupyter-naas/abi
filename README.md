@@ -38,6 +38,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
     - [Managing Dependencies](#managing-dependencies)
       - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
       - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
+  - [Creating a new Assistant](#creating-a-new-assistant-single-agent)
   - [Creating a new Integration](#creating-a-new-integration)
   - [Creating a new Pipeline](#creating-a-new-pipeline)
   - [Creating a new Workflow](#creating-a-new-workflow)
@@ -94,9 +95,23 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
 4. **Create Docker Container & Start Chatting**
    ```bash
+   # Start default agent (chat-integration-agent)
    make
+
+   # Or start a specific agent:
+   make chat-content-agent      # Content agent
+   make chat-finance-agent      # Finance agent  
+   make chat-growth-agent       # Growth agent
+   make chat-opendata-agent     # Open Data agent
+   make chat-operations-agent   # Operations agent
+   make chat-sales-agent        # Sales agent
+   make chat-integration-agent  # Integration agent
+   make chat-support-agent     # Support agent
+   make chat-supervisor-agent  # Supervisor agent
    ```
 
+   You will only have a access to tools registered in .env file.
+   To change default agent please update: `.DEFAULT_GOAL := chat-integration-agent` in Makefile
 
 ### Managing Dependencies
 
@@ -116,6 +131,24 @@ This will automatically:
 ```bash
 make abi-add dep=<library-name>
 ```
+
+## Creating a new Assistant (Single Agent)
+
+To create a new assistant, follow these steps:
+
+1. **Create Assistant File**
+   Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/CustomAssistant.py`.
+
+2. **Add Integrations, Workflows and Pipelines as tools**
+   - Import necessary integrations, pipelines and workflows
+   - Configure integrations with required credentials
+   - Add tools using the `as_tools()` method (Class.as_tools(Configuration))
+
+3. **Chat with Assistant**
+   - Create function to run new assistant in `src/apps/terminal_agent/main.py` following the pattern of existing assistants
+   - Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.apps.terminal_agent.main:run_<assistant-name>-agent"`
+   - Add new function in Makefile: `make chat-<assistant-name>-agent`
+   - Run new assistant: `make chat-<assistant-name>-agent`
 
 ## Creating a new Integration
 
