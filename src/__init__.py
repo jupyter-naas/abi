@@ -19,6 +19,7 @@ class Config:
     workspace_name: Optional[str]
     github_support_repository: str
     github_project_id: int
+    ontology_store_path: str
     pipelines: List[PipelineConfig]
 
     @classmethod
@@ -39,6 +40,7 @@ class Config:
                 workspace_name=config_data.get('workspace_name'),
                 github_support_repository=config_data['github_support_repository'],
                 github_project_id=config_data['github_project_id'],
+                ontology_store_path=config_data['ontology_store_path'],
                 pipelines=pipeline_configs
             )
 
