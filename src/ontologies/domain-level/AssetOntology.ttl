@@ -9,9 +9,9 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Asset> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/AssetOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/asset.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AssetOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for digital assets."@en ;
     dc:license "" ;

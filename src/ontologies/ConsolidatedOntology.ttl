@@ -1,0 +1,1675 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:AccountingOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for accounting and financial transactions."@en ;
+    dc:title "Accounting Domain Ontology" ;
+    owl:imports <file:///home/ftp/abi/src/ontologies/domain-level/AccountingOntology.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AccountingOntology.ttl> .
+
+abi:ActOfBeingCertified a owl:Class ;
+    rdfs:label "Act Of Being Certified"@en ;
+    rdfs:subClassOf cco:ont00001374 ;
+    skos:definition "The act of obtaining a license or certification."@en ;
+    skos:example "A doctor completing their medical board certification exam."@en .
+
+abi:ActOfBeingHonored a owl:Class ;
+    rdfs:label "Act Of Being Honored"@en ;
+    rdfs:subClassOf cco:ont00000123 ;
+    skos:definition "A process that involves an individual or group receiving recognition, accolades, or awards for their achievements or excellence."@en ;
+    skos:example "The ceremony where John was awarded the Nobel Prize; the event where Jane received the Employee of the Month award."@en .
+
+abi:ActOfCreatingPatent a owl:Class ;
+    rdfs:label "Act Of Creating Patent"@en ;
+    rdfs:subClassOf cco:ont00001374 ;
+    skos:definition "A process involving the activities required to invent, document, file, and obtain a patent for a novel invention or discovery."@en ;
+    skos:example "An engineer developing a new technology, documenting the invention, and filing a patent application."@en .
+
+abi:ActOfParticipatinginProject a owl:Class ;
+    rdfs:label "Act Of Participating in Project"@en ;
+    rdfs:subClassOf cco:ont00000433 ;
+    skos:definition "A process where an individual or entity actively engages in a project, contributing to its objectives and outcomes."@en ;
+    skos:example "Researcher contributing to a scientific study by collecting data and analyzing results."@en .
+
+abi:ActOfPostingonLinkedIn a owl:Class ;
+    rdfs:label "Act Of Posting on LinkedIn"@en ;
+    rdfs:subClassOf cco:ont00000517 ;
+    skos:definition "A process of creating and publishing content on the LinkedIn platform."@en ;
+    skos:example "When a user composes a post about their recent job promotion and shares it with their professional network on the LinkedIn platform."@en .
+
+abi:ActOfPublishing a owl:Class ;
+    rdfs:label "Act Of Publishing"@en ;
+    rdfs:subClassOf cco:ont00000356 ;
+    skos:definition "The act of publishing articles, books, or other works."@en ;
+    skos:example "An author releasing a new book through a publishing house"@en .
+
+abi:ActOfStudying a owl:Class ;
+    rdfs:label "Act Of Studying"@en ;
+    rdfs:subClassOf cco:ont00000687 ;
+    skos:definition "The act of studying at an educational institution."@en ;
+    skos:example "Jane studying biology at Harvard University"@en .
+
+abi:ActivityOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for activities."@en ;
+    dc:license "" ;
+    dc:title "Activity Domain Ontology" ;
+    owl:imports cco:EventOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ActivityOntology.ttl> .
+
+abi:Alert a abi:EventType .
+
+abi:Annual a abi:ContractUnit .
+
+abi:Article a abi:EventType .
+
+abi:AssetAccount a abi:AccountType .
+
+abi:AssetOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for digital assets."@en ;
+    dc:license "" ;
+    dc:title "Asset Domain Ontology" ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AssetOntology.ttl> .
+
+abi:Cancelled a abi:ContractStatus .
+
+abi:Cause a owl:Class ;
+    rdfs:label "Cause"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A type of role that focuses on a specific area of interest or activity for social, cultural, or environmental improvement."@en ;
+    skos:example "Environmental conservation cause."@en .
+
+abi:Comment a abi:InteractionType .
+
+abi:Completed a abi:ContractStatus .
+
+abi:ContactOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for business contacts."@en ;
+    dc:license "" ;
+    dc:title "Contact Domain Ontology" ;
+    owl:imports cco:AgentOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ContactOntology.ttl> .
+
+abi:ContentCreationRole a owl:Class ;
+    rdfs:label "Content Creation Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that exists because an individual or organization is involved in the creation of content."@en ;
+    skos:example "A blogger writing articles for a website."@en .
+
+abi:ContractOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for contracts and agreements."@en ;
+    dc:license "" ;
+    dc:title "Contract Domain Ontology" ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ContractOntology.ttl> .
+
+abi:ConversationOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for conversations and communications."@en ;
+    dc:license "" ;
+    dc:title "Conversation Domain Ontology" ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ConversationOntology.ttl> .
+
+abi:Country a owl:Class ;
+    rdfs:label "Country"@en ;
+    rdfs:subClassOf cco:ont00000472 ;
+    skos:definition "A Geospatial Region that is defined by political and administrative boundaries, serving as the primary subdivision of the world into distinct geographic and governmental units."@en ;
+    skos:example "France"@en .
+
+abi:Course a owl:Class ;
+    rdfs:label "Course"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A generically dependent continuant representing the content of a course of study."@en ;
+    skos:example "Introduction to Computer Science"@en .
+
+abi:DealOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for business deals and opportunities."@en ;
+    dc:license "" ;
+    dc:title "Deal Domain Ontology" ;
+    owl:imports cco:AgentOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/DealOntology.ttl> .
+
+abi:EmployeeRange a owl:Class ;
+    rdfs:label "Employee Range"@en ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    skos:definition "A specific range or number of employees within an organization or company."@en ;
+    skos:example "50-100 employees in a medium-sized business."@en .
+
+abi:EnterpriseAgreement a abi:ContractType .
+
+abi:EnterpriseTeam a abi:StaffRange .
+
+abi:EquityAccount a abi:AccountType .
+
+abi:EventsOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for events and occurrences."@en ;
+    dc:license "" ;
+    dc:title "Event Domain Ontology" ;
+    owl:imports cco:EventOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/EventsOntology.ttl> .
+
+abi:ExpenseAccount a abi:AccountType .
+
+abi:Fixed a abi:ContractUnit .
+
+abi:GitHubIssue a owl:Class ;
+    rdfs:label "GitHub Issue"@en ;
+    rdfs:comment "A Directive Information Content Entity on the GitHub platform that describes a task, enhancement, or bug report and the steps to address it."@en ;
+    rdfs:subClassOf abi:Task ;
+    skos:definition "A GitHub Issue is a task, enhancement, or bug report on the GitHub platform."@en ;
+    skos:example "An issue created to track a bug in a software project."@en .
+
+abi:GitHubProject a owl:Class ;
+    rdfs:label "GitHub Project"@en ;
+    rdfs:comment "A project management tool on the GitHub platform used to organize and track work."@en ;
+    rdfs:subClassOf abi:Project ;
+    skos:definition "A GitHub Project is a customizable spreadsheet integrated with GitHub issues and pull requests that helps track and organize work."@en ;
+    skos:example "A GitHub Project board used to track development tasks across multiple repositories."@en .
+
+abi:GitHubPullRequest a owl:Class ;
+    rdfs:label "GitHub Pull Request"@en ;
+    rdfs:comment "A Directive Information Content Entity on the GitHub platform that proposes changes to a repository's codebase and facilitates code review."@en ;
+    rdfs:subClassOf abi:Task ;
+    skos:definition "A GitHub Pull Request is a task that proposes changes to a repository and enables collaborative code review."@en ;
+    skos:example "A pull request that adds a new feature to a software project."@en .
+
+abi:GitHubRepository a owl:Class ;
+    rdfs:label "GitHub Repository"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A GitHub Repository is a site on the GitHub platform where code, documentation, issues, and collaborative work are managed."@en ;
+    skos:example "The 'jupyter-naas/awesome-notebooks' repository on GitHub."@en .
+
+abi:GitHubUser a owl:Class ;
+    rdfs:label "GitHub User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who interacts with GitHub repositories, such as creating, modifying, or managing them."@en ;
+    skos:example "A developer with access to a GitHub repository."@en .
+
+abi:Github a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for GitHub."@en ;
+    dc:license "" ;
+    dc:title "GitHub Application Ontology" ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/platform.ttl>,
+        <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/github.ttl> .
+
+abi:GrowthOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for growth metrics and cohort analysis."@en ;
+    dc:license "" ;
+    dc:title "Growth Domain Ontology" ;
+    owl:imports cco:AgentOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/GrowthOntology.ttl> .
+
+abi:Honor a owl:Class ;
+    rdfs:label "Honor"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A generically dependent continuant representing recognition or accolades."@en ;
+    skos:example "Nobel Prize in Literature"@en .
+
+abi:HourlyRate a abi:ContractUnit .
+
+abi:HubSpotSite a owl:Class ;
+    rdfs:label "HubSpot Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A HubSpot instance is a CRM platform where businesses manage their marketing, sales, and customer service operations."@en ;
+    skos:example "A company's HubSpot portal where they manage contacts, deals, and marketing campaigns."@en .
+
+abi:HubSpotUser a owl:Class ;
+    rdfs:label "HubSpot User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses HubSpot's platform to manage customer relationships, marketing campaigns, and sales processes."@en ;
+    skos:example "A marketing manager using HubSpot to create and track email campaigns."@en .
+
+abi:IdeaOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for ideas and content concepts."@en ;
+    dc:license "" ;
+    dc:title "Idea Domain Ontology" ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/IdeaOntology.ttl> .
+
+abi:Industry a owl:Class ;
+    rdfs:label "Industry"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A type of role that focuses on a specific sector of economic activity."@en ;
+    skos:example "The technology industry."@en .
+
+abi:InteractionOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for social media interactions."@en ;
+    dc:license "" ;
+    dc:title "Interaction Domain Ontology" ;
+    owl:imports cco:EventOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/InteractionOntology.ttl> .
+
+abi:JSON a abi:EventType .
+
+abi:LanguageProficiencyLevel a owl:Class ;
+    rdfs:label "Language Proficiency Level"@en ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    skos:definition "A quality that indicates the degree of competence or skill in a particular language."@en ;
+    skos:example "Fluent in Spanish (C2 level)."@en .
+
+abi:LargeTeam a abi:StaffRange .
+
+abi:LiabilityAccount a abi:AccountType .
+
+abi:Like a abi:InteractionType .
+
+abi:Live a abi:ContractStatus .
+
+abi:Location a owl:Class ;
+    rdfs:label "Location"@en ;
+    rdfs:subClassOf cco:ont00000224 ;
+    skos:definition "A Populated Place characterized by a dense population, significant infrastructure, and serving as a central hub for economic, cultural, and political activities within a region."@en ;
+    skos:example "New York City"@en .
+
+abi:MarketingQualifiedLead a abi:LeadStatus ;
+    rdfs:label "Marketing Qualified Lead"@en .
+
+abi:MediumTeam a abi:StaffRange .
+
+abi:MicroTeam a abi:StaffRange .
+
+abi:MonthlyRate a abi:ContractUnit .
+
+abi:NaasSite a owl:Class ;
+    rdfs:label "Naas Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Naas platform instance where users can create, manage, and automate data workflows and notebooks."@en ;
+    skos:example "A data team's Naas workspace where they create and schedule automated data pipelines."@en .
+
+abi:NaasUser a owl:Class ;
+    rdfs:label "Naas User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses Naas's platform to create and manage data workflows and automated processes."@en ;
+    skos:example "A data analyst creating automated reports using Naas notebooks."@en .
+
+abi:Number a abi:EventType .
+
+abi:OfferingOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for products and services offerings."@en ;
+    dc:license "" ;
+    dc:title "Offering Domain Ontology" ;
+    owl:imports cco:AgentOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OfferingOntology.ttl> .
+
+abi:OrganizationOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for organizations and companies."@en ;
+    dc:license "" ;
+    dc:title "Organization Domain Ontology" ;
+    owl:imports cco:AgentOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OrganizationOntology.ttl> .
+
+abi:Patent a owl:Class ;
+    rdfs:label "Patent"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A legal document granting exclusive rights to an inventor or assignee."@en ;
+    skos:example "A patent for a new smartphone design"@en .
+
+abi:Paused a abi:ContractStatus .
+
+abi:PerplexitySite a owl:Class ;
+    rdfs:label "Perplexity Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Perplexity platform instance where users can interact with AI to get answers and insights from various sources."@en ;
+    skos:example "A user's Perplexity interface where they ask questions and receive AI-generated responses."@en .
+
+abi:PerplexityUser a owl:Class ;
+    rdfs:label "Perplexity User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses Perplexity's AI platform to ask questions and receive AI-powered responses."@en ;
+    skos:example "A researcher using Perplexity to gather information and analyze data."@en .
+
+abi:PersonOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for persons and individuals."@en ;
+    dc:title "Person Domain Ontology" ;
+    owl:imports cco:AgentOntology,
+        cco:PlatformOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PersonOntology.ttl> .
+
+abi:PlatformOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for the platform."@en ;
+    dc:license "" ;
+    dc:title "Platform Ontology" ;
+    owl:imports cco:Agent,
+        cco:EventOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PlatformOntology.ttl> .
+
+abi:ProfessionalRole a owl:Class ;
+    rdfs:label "Professional Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that an individual occupies in a professional context."@en ;
+    skos:example "The role of a doctor in a hospital."@en .
+
+abi:PublicationOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for publications."@en ;
+    dc:license "" ;
+    dc:title "Publication Domain Ontology" ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PublicationOntology.ttl> .
+
+abi:Publisher a owl:Class ;
+    rdfs:label "Publisher"@en ;
+    rdfs:subClassOf cco:ont00001017 ;
+    skos:definition "A material entity responsible for producing and distributing publications."@en ;
+    skos:example "Penguin Random House publishing company."@en .
+
+abi:ReplicateSite a owl:Class ;
+    rdfs:label "Replicate Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Replicate platform instance where users can deploy and run machine learning models in the cloud."@en ;
+    skos:example "A developer's Replicate workspace where they deploy and run AI models."@en .
+
+abi:ReplicateUser a owl:Class ;
+    rdfs:label "Replicate User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual who uses Replicate's platform to deploy and interact with machine learning models."@en ;
+    skos:example "A data scientist deploying a custom machine learning model on Replicate."@en .
+
+abi:ResourceOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for digital resources and assets."@en ;
+    dc:license "" ;
+    dc:title "Resource Domain Ontology" ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ResourceOntology.ttl> .
+
+abi:RevenueAccount a abi:AccountType .
+
+abi:SalesQualifiedLead a abi:LeadStatus ;
+    rdfs:label "Sales Qualified Lead"@en .
+
+abi:ServiceAgreement a abi:ContractType .
+
+abi:Share a abi:InteractionType .
+
+abi:SmallTeam a abi:StaffRange .
+
+abi:StripeSite a owl:Class ;
+    rdfs:label "Stripe Site"@en ;
+    rdfs:subClassOf abi:SitePlatform ;
+    skos:definition "A Stripe account is a payment processing platform where businesses manage transactions, payments, and financial operations."@en ;
+    skos:example "A business's Stripe dashboard where they process payments and manage subscriptions."@en .
+
+abi:StripeUser a owl:Class ;
+    rdfs:label "Stripe User"@en ;
+    rdfs:subClassOf abi:User ;
+    skos:definition "An individual or business who uses Stripe's platform to process payments and manage financial transactions."@en ;
+    skos:example "A business owner who processes payments through Stripe."@en .
+
+abi:SubscriptionAgreement a abi:ContractType .
+
+abi:TaskCompletion a owl:Class ;
+    rdfs:label "Task Completion"@en ;
+    rdfs:subClassOf cco:ont00000228 ;
+    skos:definition "A defined unit of work with timeline, ownership and metrics" ;
+    skos:example "Completing a report, cleaning a room, or conducting a meeting." .
+
+abi:TaskOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for tasks."@en ;
+    dc:title "Task Domain Ontology" ;
+    owl:imports cco:EventOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/TaskOntology.ttl> .
+
+abi:TimeInterval a owl:Class ;
+    rdfs:label "Time Interval"@en ;
+    rdfs:subClassOf bfo:BFO_0000202 ;
+    skos:definition "A subclass of temporal interval with specific date representation."@en ;
+    skos:example "2023-08_Current"@en .
+
+abi:TimeSeries a abi:EventType .
+
+abi:TransactionOntology a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for financial transactions."@en ;
+    dc:license "" ;
+    dc:title "Transaction Domain Ontology" ;
+    owl:imports cco:EventOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/TransactionOntology.ttl> .
+
+abi:UniversityRole a owl:Class ;
+    rdfs:label "University Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that an individual occupies within the context of a university or academic institution."@en ;
+    skos:example "The role of a professor at a university."@en .
+
+abi:View a abi:InteractionType .
+
+abi:VolunteeringRole a owl:Class ;
+    rdfs:label "Volunteering Role"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A role that exists because an individual is volunteering for various activities or services."@en ;
+    skos:example "A volunteer coach for a youth sports team."@en .
+
+abi:bio a owl:DatatypeProperty ;
+    rdfs:label "bio" ;
+    rdfs:comment "The bio of the user."@en ;
+    rdfs:range xsd:string .
+
+abi:created_date a owl:DatatypeProperty ;
+    rdfs:label "created date" ;
+    rdfs:range xsd:dateTime .
+
+abi:description a owl:DatatypeProperty ;
+    rdfs:label "description" ;
+    rdfs:range xsd:string .
+
+abi:domain a owl:DatatypeProperty ;
+    rdfs:label "domain"@en ;
+    rdfs:comment "The domain of the platform."@en ;
+    rdfs:domain abi:Platform ;
+    rdfs:range xsd:string .
+
+abi:due_date a owl:DatatypeProperty ;
+    rdfs:label "due date" ;
+    rdfs:range xsd:date .
+
+abi:employeecountrange a owl:DatatypeProperty ;
+    rdfs:label "employee count range" ;
+    rdfs:range xsd:string .
+
+abi:estimate a owl:DatatypeProperty ;
+    rdfs:label "estimate" ;
+    rdfs:range xsd:integer .
+
+abi:followers a owl:DatatypeProperty ;
+    rdfs:label "followers"@en ;
+    rdfs:comment "The number of users following the user."@en ;
+    rdfs:domain abi:User ;
+    rdfs:range xsd:integer .
+
+abi:following a owl:DatatypeProperty ;
+    rdfs:label "following"@en ;
+    rdfs:comment "The number of users the user is following."@en ;
+    rdfs:domain abi:User ;
+    rdfs:range xsd:integer .
+
+abi:generatedFrom a owl:ObjectProperty ;
+    rdfs:label "generated from"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range abi:Post .
+
+abi:generatedFromTask a owl:ObjectProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range abi:Task .
+
+abi:hasAccount a owl:ObjectProperty ;
+    rdfs:domain abi:GeneralLedgerEntry ;
+    rdfs:range abi:Account .
+
+abi:hasAmount a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract,
+        abi:Transaction ;
+    rdfs:range xsd:decimal .
+
+abi:hasAsset a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Asset .
+
+abi:hasAssignee a owl:ObjectProperty ;
+    rdfs:label "has assignee" ;
+    rdfs:comment "This property relates a task to an individual who is assigned to perform the task." ;
+    rdfs:domain bfo:TaskCompletion ;
+    rdfs:range abi:User ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    owl:inverseOf abi:assignedIn .
+
+abi:hasAuthor a owl:ObjectProperty ;
+    rdfs:domain abi:Asset,
+        abi:Post ;
+    rdfs:range abi:Person .
+
+abi:hasAuthorURL a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:anyURI .
+
+abi:hasBody a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:string .
+
+abi:hasCRMOrgID a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:string .
+
+abi:hasCohort a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Cohort .
+
+abi:hasComments a owl:DatatypeProperty ;
+    rdfs:domain abi:EngagementMetrics ;
+    rdfs:range xsd:integer .
+
+abi:hasCommentsCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range xsd:integer .
+
+abi:hasConcept a owl:ObjectProperty ;
+    rdfs:label "has concept"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Concept ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to a concept it expresses or discusses."@en ;
+    skos:example "A post about artificial intelligence has machine learning as one of its concepts."@en .
+
+abi:hasContent a owl:DatatypeProperty ;
+    rdfs:domain abi:Event,
+        abi:Post ;
+    rdfs:range xsd:string .
+
+abi:hasContract a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Contract .
+
+abi:hasContractType a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractType .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:label "has created date"@en ;
+    rdfs:domain abi:Activity,
+        abi:Asset,
+        abi:Contact,
+        abi:Conversation,
+        abi:Deal,
+        abi:Interaction,
+        abi:Post ;
+    rdfs:range xsd:dateTime .
+
+abi:hasCreator a owl:ObjectProperty ;
+    rdfs:label "has creator" ;
+    rdfs:comment "This property relates a task to the individual who created it." ;
+    rdfs:domain bfo:TaskCompletion ;
+    rdfs:range abi:User ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    owl:inverseOf abi:created .
+
+abi:hasCreditAmount a owl:DatatypeProperty ;
+    rdfs:domain abi:GeneralLedgerEntry ;
+    rdfs:range xsd:decimal .
+
+abi:hasCurrency a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract,
+        abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:hasCustomerSatisfaction a owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:CustomerSatisfactionScore .
+
+abi:hasDealScore a owl:DatatypeProperty ;
+    rdfs:label "has deal score"@en ;
+    rdfs:domain abi:Deal ;
+    rdfs:range xsd:integer .
+
+abi:hasDebitAmount a owl:DatatypeProperty ;
+    rdfs:domain abi:GeneralLedgerEntry ;
+    rdfs:range xsd:decimal .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:label "has description"@en ;
+    rdfs:domain abi:Activity,
+        abi:Asset,
+        abi:Contract,
+        abi:Idea,
+        abi:Offering,
+        abi:Organization,
+        abi:Project,
+        abi:Resource,
+        abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:hasDirectInteractions a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasDomain a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasDueDate a owl:DatatypeProperty ;
+    rdfs:label "has due date"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range xsd:dateTime .
+
+abi:hasEndDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract,
+        abi:Project ;
+    rdfs:range xsd:date,
+        xsd:dateTime .
+
+abi:hasEngagementScore a owl:DatatypeProperty ;
+    rdfs:domain abi:EngagementMetrics ;
+    rdfs:range xsd:decimal .
+
+abi:hasFillingDate a owl:ObjectProperty ;
+    rdfs:label "has filling date"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstantWithOffset ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    skos:definition "A relation between a process and the date it was filled or completed."@en ;
+    skos:example "The tax return has a filling date of 2024-04-15."@en .
+
+abi:hasFollowersCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasFormat a owl:DatatypeProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range xsd:string .
+
+abi:hasID a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasIndirectInteractions a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasInteractionScore a owl:DatatypeProperty ;
+    rdfs:domain abi:Growth,
+        abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasIssueDate a owl:ObjectProperty ;
+    rdfs:label "has issue date"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstantWithOffset ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    skos:definition "A relation between a process and the date it was issued."@en ;
+    skos:example "The passport has an issue date of 2023-01-15."@en .
+
+abi:hasJournalEntry a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:GeneralLedgerEntry .
+
+abi:hasJournalReference a owl:DatatypeProperty ;
+    rdfs:domain abi:GeneralLedgerEntry ;
+    rdfs:range xsd:string .
+
+abi:hasLanguage a owl:DatatypeProperty,
+        owl:ObjectProperty ;
+    rdfs:label "has language"@en ;
+    rdfs:domain abi:Interaction,
+        cco:ont00001262 ;
+    rdfs:range abi:Language,
+        xsd:string ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a person and a language they can speak or understand."@en ;
+    skos:example "Jane has the language English."@en .
+
+abi:hasLastInteraction a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Interaction .
+
+abi:hasLastInteractionDate a owl:DatatypeProperty ;
+    rdfs:label "has last interaction date"@en ;
+    rdfs:domain abi:Contact,
+        abi:Growth ;
+    rdfs:range xsd:dateTime .
+
+abi:hasLastUpdateDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:dateTime .
+
+abi:hasLeadStatus a owl:ObjectProperty ;
+    rdfs:label "has lead status"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:LeadStatus .
+
+abi:hasLength a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:decimal .
+
+abi:hasLengthUnit a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasLikes a owl:DatatypeProperty ;
+    rdfs:domain abi:EngagementMetrics ;
+    rdfs:range xsd:integer .
+
+abi:hasLikesCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range xsd:integer .
+
+abi:hasLinkedInID a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:string .
+
+abi:hasLinkedinPage a owl:ObjectProperty ;
+    rdfs:label "has linkedin page"@en ;
+    rdfs:domain bfo:BFO_0000030 ;
+    rdfs:range abi:LinkedInPage ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ;
+    skos:definition "A relation between an entity and its associated LinkedIn page."@en ;
+    skos:example "John has a LinkedIn page at linkedin.com/in/john-doe."@en .
+
+abi:hasLogo a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:string .
+
+abi:hasMQLDate a owl:DatatypeProperty ;
+    rdfs:label "has MQL date"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range xsd:dateTime .
+
+abi:hasMarketShare a owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:MarketShare .
+
+abi:hasMeaning a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:string .
+
+abi:hasMeaningType a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:string .
+
+abi:hasMembers a owl:ObjectProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:Person .
+
+abi:hasMessagingOptions a owl:DatatypeProperty ;
+    rdfs:label "has messaging options"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range rdf:List .
+
+abi:hasMetric a owl:ObjectProperty ;
+    rdfs:label "has metric"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:PostMetric ;
+    rdfs:subPropertyOf bfo:BFO_0000051 .
+
+abi:hasMetrics a owl:ObjectProperty ;
+    rdfs:domain abi:Post ;
+    rdfs:range abi:EngagementMetrics .
+
+abi:hasName a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset,
+        abi:Offering,
+        abi:Organization,
+        abi:Project,
+        abi:Resource ;
+    rdfs:range xsd:string .
+
+abi:hasObjective a owl:ObjectProperty ;
+    rdfs:label "has objective"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Objective ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to its intended goal or purpose."@en ;
+    skos:example "A post announcing a product launch has increasing brand awareness as its objective."@en .
+
+abi:hasOrganization a owl:ObjectProperty ;
+    rdfs:label "has organization"@en ;
+    rdfs:domain abi:Deal ;
+    rdfs:range abi:Organization .
+
+abi:hasOwner a owl:ObjectProperty ;
+    rdfs:domain abi:Project,
+        abi:Resource ;
+    rdfs:range abi:Person .
+
+abi:hasPLCategory a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasParticipants a owl:ObjectProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range abi:Person .
+
+abi:hasPath a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:string .
+
+abi:hasPostingDate a owl:DatatypeProperty ;
+    rdfs:domain abi:GeneralLedgerEntry ;
+    rdfs:range xsd:dateTime .
+
+abi:hasPriority a owl:DatatypeProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range xsd:string .
+
+abi:hasProfile a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Person .
+
+abi:hasPublicationDate a owl:ObjectProperty ;
+    rdfs:label "has publication date"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:TemporalInstantWithOffset ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ;
+    skos:definition "A relation between a process and the date it was published."@en ;
+    skos:example "The research paper has a publication date of 2024-03-01."@en .
+
+abi:hasQuantity a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:integer .
+
+abi:hasRelatedPosts a owl:ObjectProperty ;
+    rdfs:domain abi:Project ;
+    rdfs:range abi:Post .
+
+abi:hasSQLDate a owl:DatatypeProperty ;
+    rdfs:label "has SQL date"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range xsd:dateTime .
+
+abi:hasScenario a owl:DatatypeProperty ;
+    rdfs:label "has scenario"@en ;
+    rdfs:domain abi:Activity,
+        abi:Asset,
+        abi:Contract,
+        abi:Conversation,
+        abi:Deal ;
+    rdfs:range xsd:string .
+
+abi:hasSentiment a owl:ObjectProperty ;
+    rdfs:label "has sentiment"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Sentiment ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to its sentiment"@en .
+
+abi:hasShares a owl:DatatypeProperty ;
+    rdfs:domain abi:EngagementMetrics ;
+    rdfs:range xsd:integer .
+
+abi:hasSize a owl:DatatypeProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range xsd:integer .
+
+abi:hasSizeUnit a owl:DatatypeProperty ;
+    rdfs:domain abi:Resource ;
+    rdfs:range xsd:string .
+
+abi:hasSkill a owl:ObjectProperty ;
+    rdfs:label "has skill"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range abi:ProfessionalSkills ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a person and a professional skill they possess."@en ;
+    skos:example "John has the skill to play the piano."@en .
+
+abi:hasSource a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset,
+        abi:Contract,
+        abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasStaffCount a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:integer .
+
+abi:hasStaffRange a owl:ObjectProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range abi:StaffRange .
+
+abi:hasStartDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract,
+        abi:Project ;
+    rdfs:range xsd:date,
+        xsd:dateTime .
+
+abi:hasStatus a owl:DatatypeProperty,
+        owl:ObjectProperty ;
+    rdfs:domain abi:Contract,
+        abi:Project,
+        abi:Transaction ;
+    rdfs:range abi:ContractStatus,
+        xsd:string .
+
+abi:hasTagline a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:string .
+
+abi:hasTags a owl:DatatypeProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range xsd:string .
+
+abi:hasTarget a owl:ObjectProperty ;
+    rdfs:label "has target"@en ;
+    rdfs:domain abi:Publication ;
+    rdfs:range abi:Target ;
+    rdfs:subPropertyOf bfo:BFO_0000050 ;
+    skos:definition "Relates a publication content to its intended audience or subject."@en ;
+    skos:example "A LinkedIn post about new job opportunities has software developers as its target."@en .
+
+abi:hasTerms a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:label "has title"@en ;
+    rdfs:domain abi:Activity,
+        abi:Contract,
+        abi:Conversation,
+        abi:Event,
+        abi:Idea ;
+    rdfs:range xsd:string .
+
+abi:hasTopic a owl:DatatypeProperty ;
+    rdfs:label "has topic"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
+
+abi:hasTracker a owl:DatatypeProperty ;
+    rdfs:domain abi:Event ;
+    rdfs:range xsd:string .
+
+abi:hasTransactionDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:dateTime .
+
+abi:hasTransactionID a owl:DatatypeProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range xsd:string .
+
+abi:hasType a owl:DatatypeProperty,
+        owl:ObjectProperty ;
+    rdfs:domain abi:Event,
+        abi:Interaction,
+        abi:Resource ;
+    rdfs:range abi:EventType,
+        abi:InteractionType,
+        xsd:string .
+
+abi:hasURL a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation,
+        abi:Post ;
+    rdfs:range xsd:anyURI .
+
+abi:hasUnit a owl:DatatypeProperty,
+        owl:ObjectProperty ;
+    rdfs:domain abi:Contract,
+        abi:Event ;
+    rdfs:range abi:ContractUnit,
+        xsd:string .
+
+abi:hasUnitPrice a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:decimal .
+
+abi:hasValue a owl:DatatypeProperty ;
+    rdfs:domain abi:Event ;
+    rdfs:range xsd:decimal .
+
+abi:hasVersion a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range xsd:string .
+
+abi:hasWebsite a owl:DatatypeProperty ;
+    rdfs:domain abi:Organization ;
+    rdfs:range xsd:anyURI .
+
+abi:hubspot.ttl a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for HubSpot."@en ;
+    dc:license "" ;
+    dc:title "HubSpot Application Ontology" ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/hubspot.ttl> .
+
+abi:isEmailUsedBy a owl:ObjectProperty ;
+    rdfs:label "is email used by" ;
+    rdfs:comment "A subproperty that relates an email address to the agent who owns it." ;
+    rdfs:domain abi:EmailAddress ;
+    rdfs:range cco:Agent ;
+    rdfs:subPropertyOf bfo:BFO_0000102 ;
+    owl:inverseOf abi:usesEmail .
+
+abi:isLanguageOf a owl:ObjectProperty ;
+    rdfs:label "is language of"@en ;
+    rdfs:domain abi:Language ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a language and the person who can speak or understand it."@en ;
+    skos:example "English is a language of Jane."@en .
+
+abi:isSkillOf a owl:ObjectProperty ;
+    rdfs:label "is skill of"@en ;
+    rdfs:domain abi:ProfessionalSkills ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a professional skill and the person who possesses it."@en ;
+    skos:example "Playing the piano is a skill of John."@en .
+
+abi:issuer a owl:DatatypeProperty ;
+    rdfs:label "issuer" ;
+    rdfs:range xsd:string .
+
+abi:linkedin.ttl a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for LinkedIn."@en ;
+    dc:license "" ;
+    dc:title "LinkedIn Application Ontology" ;
+    owl:imports <file:///home/ftp/abi/src/ontologies/application-level/LinkedInOntology.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/linkedin.ttl> .
+
+abi:naas.ttl a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for Naas."@en ;
+    dc:license "" ;
+    dc:title "Naas Application Ontology" ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/naas.ttl> .
+
+abi:node_id a owl:DatatypeProperty ;
+    rdfs:label "description" ;
+    rdfs:range xsd:string .
+
+abi:occupation a owl:DatatypeProperty ;
+    rdfs:label "occupation" ;
+    rdfs:range xsd:string .
+
+abi:perplexity.ttl a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for Perplexity."@en ;
+    dc:license "" ;
+    dc:title "Perplexity Application Ontology" ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/perplexity.ttl> .
+
+abi:priority a owl:DatatypeProperty ;
+    rdfs:label "priority" ;
+    rdfs:range xsd:string .
+
+abi:public_gists a owl:DatatypeProperty ;
+    rdfs:label "public gists" ;
+    rdfs:range xsd:integer .
+
+abi:public_repos a owl:DatatypeProperty ;
+    rdfs:label "public repos" ;
+    rdfs:range xsd:integer .
+
+abi:relatedTo a owl:ObjectProperty ;
+    rdfs:domain abi:Interaction ;
+    rdfs:range abi:Post .
+
+abi:relatedToContact a owl:ObjectProperty ;
+    rdfs:label "related to contact"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Contact .
+
+abi:relatedToDeal a owl:ObjectProperty ;
+    rdfs:label "related to deal"@en ;
+    rdfs:domain abi:Activity ;
+    rdfs:range abi:Deal .
+
+abi:relatedToEvent a owl:ObjectProperty ;
+    rdfs:domain abi:Event ;
+    rdfs:range abi:Event .
+
+abi:relatedToOrganization a owl:ObjectProperty ;
+    rdfs:label "related to organization"@en ;
+    rdfs:domain abi:Activity,
+        abi:Contact ;
+    rdfs:range abi:Organization .
+
+abi:relatedToPerson a owl:ObjectProperty ;
+    rdfs:label "related to person"@en ;
+    rdfs:domain abi:Contact ;
+    rdfs:range abi:Person .
+
+abi:relatedToPost a owl:ObjectProperty ;
+    rdfs:domain abi:Asset ;
+    rdfs:range abi:Post .
+
+abi:replicate.ttl a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for Replicate."@en ;
+    dc:license "" ;
+    dc:title "Replicate Application Ontology" ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/replicate.ttl> .
+
+abi:state a owl:DatatypeProperty ;
+    rdfs:label "state" ;
+    rdfs:range xsd:string .
+
+abi:status a owl:DatatypeProperty ;
+    rdfs:label "status" ;
+    rdfs:range xsd:string .
+
+abi:stripe.ttl a owl:Ontology ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Application ontology for Stripe."@en ;
+    dc:license "" ;
+    dc:title "Stripe Application Ontology" ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/stripe.ttl> .
+
+abi:summary a owl:DatatypeProperty ;
+    rdfs:label "summary" ;
+    rdfs:range xsd:string .
+
+abi:tags a owl:DatatypeProperty ;
+    rdfs:label "tags" ;
+    rdfs:range xsd:string .
+
+abi:updated_date a owl:DatatypeProperty ;
+    rdfs:label "updated date" ;
+    rdfs:range xsd:dateTime .
+
+abi:url a owl:DatatypeProperty ;
+    rdfs:label "HTML URL to access the entity",
+        "url" ;
+    rdfs:range xsd:string .
+
+bfo:BFO_0000054 a owl:ObjectProperty ;
+    rdfs:label "has realization"@en ;
+    dc11:identifier "206-BFO" ;
+    rdfs:domain bfo:BFO_0000017 ;
+    rdfs:range bfo:BFO_0000015 ;
+    owl:inverseOf bfo:BFO_0000055 ;
+    skos:altLabel "realized in"@en ;
+    skos:definition "b has realization c =Def c realizes b"@en ;
+    skos:example "As for realizes"@en .
+
+bfo:BFO_0000058 a owl:ObjectProperty ;
+    rdfs:label "is concretized by"@en ;
+    dc11:identifier "258-BFO" ;
+    rdfs:domain bfo:BFO_0000031 ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( bfo:BFO_0000015 bfo:BFO_0000020 ) ] ;
+    owl:inverseOf bfo:BFO_0000059 ;
+    skos:definition "c is concretized by b =Def b concretizes c"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+bfo:BFO_0000066 a owl:ObjectProperty ;
+    rdfs:label "occurs in"@en ;
+    dc11:identifier "143-BFO" ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( bfo:BFO_0000015 bfo:BFO_0000035 ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( bfo:BFO_0000029 bfo:BFO_0000040 ) ] ;
+    owl:inverseOf bfo:BFO_0000183 ;
+    skos:definition "b occurs in c =Def b is a process or a process boundary & c is a material entity or site & there exists a spatiotemporal region r & b occupies spatiotemporal region r & for all time t, if b exists at t then c exists at t & there exist spatial regions s and s' where b spatially projects onto s at t & c occupies spatial region s' at t & s is a continuant part of s' at t"@en ;
+    skos:example "A process of digestion occurs in the interior of an organism; a process of loading artillery rounds into a tank cannon occurs in the interior of the tank"@en .
+
+bfo:BFO_0000222 a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "has first instant"@en ;
+    dc11:identifier "261-BFO" ;
+    rdfs:domain bfo:BFO_0000008 ;
+    rdfs:range bfo:BFO_0000203 ;
+    skos:definition "t has first instant t' =Def t' first instant of t"@en ;
+    skos:example "The first hour of a year has first instant midnight on December 31"@en .
+
+bfo:BFO_0000224 a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "has last instant"@en ;
+    dc11:identifier "215-BFO" ;
+    rdfs:domain bfo:BFO_0000008 ;
+    rdfs:range bfo:BFO_0000203 ;
+    skos:definition "t has last instant t' =Def t' last instant of t"@en ;
+    skos:example "The last hour of a year has last instant midnight December 31"@en .
+
+rdfs:comment a rdf:Property ;
+    rdfs:label "comment" ;
+    rdfs:comment "A description of the subject resource." ;
+    rdfs:domain rdfs:Resource ;
+    rdfs:isDefinedBy rdfs: ;
+    rdfs:range rdfs:Literal .
+
+rdfs:domain a rdf:Property ;
+    rdfs:label "domain" ;
+    rdfs:comment "A domain of the subject property." ;
+    rdfs:domain rdf:Property ;
+    rdfs:isDefinedBy rdfs: ;
+    rdfs:range rdfs:Class .
+
+rdfs:label a rdf:Property ;
+    rdfs:label "label" ;
+    rdfs:comment "A human-readable name for the subject." ;
+    rdfs:domain rdfs:Resource ;
+    rdfs:isDefinedBy rdfs: ;
+    rdfs:range rdfs:Literal .
+
+rdfs:range a rdf:Property ;
+    rdfs:label "range" ;
+    rdfs:comment "A range of the subject property." ;
+    rdfs:domain rdf:Property ;
+    rdfs:isDefinedBy rdfs: ;
+    rdfs:range rdfs:Class .
+
+rdfs:subClassOf a rdf:Property ;
+    rdfs:label "subClassOf" ;
+    rdfs:comment "The subject is a subclass of a class." ;
+    rdfs:domain rdfs:Class ;
+    rdfs:isDefinedBy rdfs: ;
+    rdfs:range rdfs:Class .
+
+rdfs:subPropertyOf a rdf:Property ;
+    rdfs:label "subPropertyOf" ;
+    rdfs:comment "The subject is a subproperty of a property." ;
+    rdfs:domain rdf:Property ;
+    rdfs:isDefinedBy rdfs: ;
+    rdfs:range rdf:Property .
+
+skos:definition a owl:AnnotationProperty .
+
+skos:example a owl:AnnotationProperty .
+
+cco:ont00000181 a owl:Class ;
+    rdfs:label "Language Skill"@en ;
+    rdfs:subClassOf cco:ont00000089 ;
+    skos:definition "A Skill that is realized by an Act which is prescribed by a Language."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+cco:ont00000408 a owl:Class ;
+    rdfs:label "Government Organization"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty bfo:BFO_0000176 ;
+            owl:someValuesFrom cco:ont00001335 ],
+        cco:ont00001180 ;
+    skos:definition "An Organization that is part of a Government and is responsible for the oversight or administration of specific governmental functions."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+cco:ont00000443 a owl:Class ;
+    rdfs:label "Commercial Organization"@en ;
+    rdfs:subClassOf cco:ont00001180 ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( cco:ont00001180 [ a owl:Restriction ;
+                        owl:onProperty bfo:BFO_0000196 ;
+                        owl:someValuesFrom cco:ont00000485 ] ) ] ;
+    skos:definition "An Organization that is the bearer of a Commercial Role and whose primary objective is to make a profit from the provision of goods or services."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+cco:ont00000564 a owl:Class ;
+    rdfs:label "Educational Organization"@en ;
+    rdfs:subClassOf cco:ont00001180 ;
+    skos:definition "An Organization whose primary purpose is to provide training or otherwise facilitate learning or the acquisition of knowledge, Skills, values, beliefs, or habits."@en ;
+    cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Education&oldid=1064011752"^^xsd:anyURI ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+cco:ont00001226 a owl:Class ;
+    rdfs:label "Act of Employment"@en ;
+    rdfs:subClassOf cco:ont00000433 ;
+    skos:definition "An Act of Association wherein an Organization assigns a set of activities to some Person to be performed in exchange for financial compensation."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/EventOntology"^^xsd:anyURI .
+
+cco:ont00001302 a owl:Class ;
+    rdfs:label "Civil Organization"@en ;
+    rdfs:subClassOf cco:ont00001180 ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( cco:ont00001180 [ a owl:Restriction ;
+                        owl:onProperty bfo:BFO_0000196 ;
+                        owl:someValuesFrom cco:ont00000173 ] ) ] ;
+    skos:definition "An Organization that is not commercial or military and is the bearer of a Civilian Role."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+cco:ont00001760 a owl:AnnotationProperty .
+
+abi:Account a owl:Class ;
+    rdfs:label "Account"@en ;
+    skos:definition "An accounting account in the chart of accounts" .
+
+abi:Cohort a owl:Class ;
+    rdfs:label "Cohort"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A group of users classified by their joining period"@en .
+
+abi:CustomerSatisfactionScore a owl:Class ;
+    rdfs:label "Customer Satisfaction Score"@en ;
+    rdfs:subClassOf cco:MeasurementInformation .
+
+abi:MarketShare a owl:Class ;
+    rdfs:label "Market Share"@en ;
+    rdfs:subClassOf cco:MeasurementInformation .
+
+abi:Platform a owl:Class ;
+    rdfs:label "Platform"@en ;
+    rdfs:subClassOf cco:ont00000509 ;
+    skos:definition "A platform that provides online services and hosts content through a website interface."@en ;
+    skos:example "Platforms like GitHub, GitLab, or Bitbucket that host repositories and provide collaboration services."@en .
+
+abi:assignedIn a owl:ObjectProperty ;
+    rdfs:label "assigned in" ;
+    rdfs:comment "This property relates an individual to a task they are assigned to perform." ;
+    rdfs:domain abi:User ;
+    rdfs:range bfo:TaskCompletion ;
+    rdfs:subPropertyOf bfo:BFO_0000056 .
+
+abi:created a owl:ObjectProperty ;
+    rdfs:label "created" ;
+    rdfs:comment "This property relates an individual to tasks they have created." ;
+    rdfs:domain abi:User ;
+    rdfs:range bfo:TaskCompletion ;
+    rdfs:subPropertyOf bfo:BFO_0000056 .
+
+abi:hasContact a owl:ObjectProperty ;
+    rdfs:label "has contact"@en ;
+    rdfs:comment "A subproperty that relates a person to their contact information." ;
+    rdfs:domain abi:Deal,
+        cco:ont00001262 ;
+    rdfs:range abi:Contact,
+        cco:ont00001017 ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf abi:isContactOf ;
+    skos:definition "Links a person to their contact information such as phone numbers, addresses, etc." .
+
+abi:hasEmailAddress a owl:ObjectProperty ;
+    rdfs:label "has Email Address" ;
+    rdfs:comment "A subproperty that relates a person to their email address." ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range abi:EmailAddress ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;
+    owl:inverseOf abi:isEmailAddressOf .
+
+abi:hasPlatformUser a owl:ObjectProperty ;
+    rdfs:label "has platform user" ;
+    rdfs:comment "A property that relates a person to their user representation within a platform, allowing tracking of platform-specific interactions and capabilities." ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range abi:User ;
+    owl:inverseOf abi:isPlatformUserOf ;
+    skos:definition "Links a person to their user account/profile on a specific platform or system." .
+
+abi:isContactOf a owl:ObjectProperty ;
+    rdfs:label "is contact of"@en ;
+    rdfs:comment "A subproperty that relates contact information back to the person it belongs to." ;
+    rdfs:domain cco:ont00001017 ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000102 ;
+    owl:inverseOf abi:hasContact .
+
+abi:isEmailAddressOf a owl:ObjectProperty ;
+    rdfs:label "is Email Address of" ;
+    rdfs:comment "A subproperty that relates an email address to the person who owns it." ;
+    rdfs:domain abi:EmailAddress ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000102 ;
+    owl:inverseOf abi:hasEmailAddress .
+
+abi:isPlatformUserOf a owl:ObjectProperty ;
+    rdfs:label "is platform user of" ;
+    rdfs:comment "A property that relates a platform user representation back to the person it represents." ;
+    rdfs:domain abi:User ;
+    rdfs:range cco:ont00001262 ;
+    owl:inverseOf abi:hasPlatformUser ;
+    skos:definition "Links a platform user account/profile back to the person who owns it." .
+
+abi:usesEmail a owl:ObjectProperty ;
+    rdfs:label "uses email" ;
+    rdfs:comment "A subproperty that relates an agent to their email address." ;
+    rdfs:domain cco:Agent ;
+    rdfs:range abi:EmailAddress ;
+    rdfs:subPropertyOf bfo:BFO_0000101 .
+
+bfo:BFO_0000055 a owl:ObjectProperty ;
+    rdfs:label "realizes"@en ;
+    dc11:identifier "059-BFO" ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000017 ;
+    skos:definition "(Elucidation) realizes is a relation between a process b and realizable entity c such that c inheres in some d & for all t, if b has participant d then c exists & the type instantiated by b is correlated with the type instantiated by c"@en ;
+    skos:example "A balding process realizes a disposition to go bald; a studying process realizes a student role; a process of pumping blood realizes the pumping function of a heart"@en .
+
+bfo:BFO_0000059 a owl:ObjectProperty ;
+    rdfs:label "concretizes"@en ;
+    dc11:identifier "256-BFO" ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( bfo:BFO_0000015 bfo:BFO_0000020 ) ] ;
+    rdfs:range bfo:BFO_0000031 ;
+    skos:definition "b concretizes c =Def b is a process or a specifically dependent continuant & c is a generically dependent continuant & there is some time t such that c is the pattern or content which b shares at t with actual or potential copies"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+abi:Language a owl:Class ;
+    rdfs:label "Language"@en ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    skos:definition "A disposition that enables an individual to communicate using a specific system of symbols, sounds, or gestures."@en ;
+    skos:example "English language proficiency."@en .
+
+abi:ProfessionalSkills a owl:Class ;
+    rdfs:label "Professional Skills"@en ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
+    skos:definition "A disposition that enables an individual to perform tasks associated with a specific profession or job role."@en ;
+    skos:example "Programming skills for a software developer."@en .
+
+bfo:BFO_0000056 a owl:ObjectProperty ;
+    rdfs:label "participates in"@en ;
+    dc11:identifier "250-BFO" ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( bfo:BFO_0000020 bfo:BFO_0000031 [ a owl:Class ;
+                        owl:intersectionOf ( bfo:BFO_0000004 [ a owl:Class ;
+                                    owl:complementOf bfo:BFO_0000006 ] ) ] ) ] ;
+    rdfs:range bfo:BFO_0000015 ;
+    owl:inverseOf bfo:BFO_0000057 ;
+    skos:definition "(Elucidation) participates in holds between some b that is either a specifically dependent continuant or generically dependent continuant or independent continuant that is not a spatial region & some process p such that b participates in p some way"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+abi:LeadStatus a owl:Class ;
+    rdfs:label "Lead Status"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 .
+
+abi:Task a owl:Class ;
+    rdfs:label "Task"@en ;
+    rdfs:comment "A defined unit of work that needs to be accomplished within a certain period of time."@en ;
+    rdfs:subClassOf cco:ont00000228 ;
+    skos:definition "A Task is a planned activity with a specific objective, timeline, and measurable outcome."@en ;
+    skos:example "Writing documentation, fixing a bug, or implementing a new feature."@en .
+
+bfo:BFO_0000057 a owl:ObjectProperty ;
+    rdfs:label "has participant"@en ;
+    dc11:identifier "248-BFO" ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( bfo:BFO_0000020 bfo:BFO_0000031 [ a owl:Class ;
+                        owl:intersectionOf ( bfo:BFO_0000004 [ a owl:Class ;
+                                    owl:complementOf bfo:BFO_0000006 ] ) ] ) ] ;
+    skos:definition "p has participant c =Def c participates in p"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
+abi:ContractType a owl:Class ;
+    rdfs:label "Contract Type"@en .
+
+abi:EmailAddress a owl:Class ;
+    rdfs:label "Email Address" ;
+    rdfs:comment "An Email Address is a Non-Name Identifier that consists of a string of characters formatted according to the syntax of an email, which includes a local part, an '@' symbol, and a domain part. It designates a communication endpoint for an agent." ;
+    rdfs:subClassOf cco:ont00000649 .
+
+abi:Idea a owl:Class ;
+    rdfs:label "Idea"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A concept or thought generated from content that could be developed into content"@en .
+
+abi:AccountType a owl:Class ;
+    rdfs:label "Account Type"@en .
+
+abi:ContractStatus a owl:Class ;
+    rdfs:label "Contract Status"@en .
+
+abi:ContractUnit a owl:Class ;
+    rdfs:label "Contract Unit"@en .
+
+abi:EngagementMetrics a owl:Class ;
+    rdfs:label "Engagement Metrics"@en ;
+    rdfs:subClassOf cco:MeasurementInformation .
+
+abi:Growth a owl:Class ;
+    rdfs:label "Growth"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A measurement of user engagement and interaction growth over time"@en .
+
+abi:InteractionType a owl:Class ;
+    rdfs:label "Interaction Type"@en .
+
+abi:Offering a owl:Class ;
+    rdfs:label "Offering"@en ;
+    rdfs:subClassOf cco:InformationContentEntity ;
+    skos:definition "A product or service offering with associated metadata"@en .
+
+abi:Deal a owl:Class ;
+    rdfs:label "Deal"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A business opportunity with an associated score and scenario" .
+
+abi:EventType a owl:Class ;
+    rdfs:label "Event Type"@en .
+
+abi:GeneralLedgerEntry a owl:Class ;
+    rdfs:label "General Ledger Entry"@en ;
+    skos:definition "An accounting entry in the general ledger" .
+
+abi:StaffRange a owl:Class ;
+    rdfs:label "Staff Range"@en .
+
+abi:Interaction a owl:Class ;
+    rdfs:label "Interaction"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A social media interaction with a post"@en .
+
+abi:Resource a owl:Class ;
+    rdfs:label "Resource"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A digital resource with associated metadata and metrics"@en .
+
+abi:Activity a owl:Class ;
+    rdfs:label "Activity"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A planned business activity with associated timeline and context" .
+
+abi:Event a owl:Class ;
+    rdfs:label "Event"@en ;
+    rdfs:subClassOf cco:ont00000821 ;
+    skos:definition "A processual entity that happens, occurs, takes place, or is performed." .
+
+abi:Conversation a owl:Class ;
+    rdfs:label "Conversation"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A recorded communication interaction between participants" .
+
+abi:Post a owl:Class ;
+    rdfs:label "Post"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A social media post with associated content and metrics"@en .
+
+abi:Project a owl:Class,
+        owl:Ontology ;
+    rdfs:label "Project"@en ;
+    dc11:contributor "Florent Ravenel",
+        "Jeremy Ravenel",
+        "Maxime Jublou" ;
+    dc:description "Domain ontology for projects and initiatives."@en ;
+    dc:license "" ;
+    dc:title "Project Domain Ontology" ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    owl:imports cco:InformationEntityOntology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/project.ttl> ;
+    skos:definition "A planned initiative with defined objectives and timeline"@en .
+
+abi:Transaction a owl:Class ;
+    rdfs:label "Transaction"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A financial transaction with associated metadata"@en .
+
+abi:Contact a owl:Class ;
+    rdfs:label "Contact"@en ;
+    rdfs:subClassOf bfo:BFO_0000023 ;
+    skos:definition "A business contact with associated lead status and interaction history"@en .
+
+cco:ont00001262 a owl:Class ;
+    rdfs:label "Person"@en ;
+    rdfs:subClassOf cco:ont00000562 ;
+    skos:altLabel "Human"@en ;
+    skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
+    cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Human&oldid=1063145185"^^xsd:anyURI ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+abi:User a owl:Class ;
+    rdfs:label "User"@en ;
+    rdfs:subClassOf cco:ont00001017 ;
+    skos:definition "An individual who interacts with a system or platform, such as creating, modifying, or managing content."@en ;
+    skos:example "A user with access to a platform or service."@en .
+
+abi:Organization a owl:Class ;
+    rdfs:label "Organization"@en ;
+    rdfs:subClassOf bfo:BFO_0000027 ;
+    skos:definition "A formal group of people with shared goals and objectives"@en .
+
+abi:Asset a owl:Class ;
+    rdfs:label "Asset"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A digital asset generated through task execution" .
+
+abi:Contract a owl:Class ;
+    rdfs:label "Contract"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A formal agreement defining terms, conditions, and financial obligations" .
+

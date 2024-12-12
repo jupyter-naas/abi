@@ -1,0 +1,98 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Platform Ontology
+<http://ontology.naas.ai/abi/PlatformOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/Agent>, <https://www.commoncoreontologies.org/EventOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PlatformOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for the platform."@en ;
+    dc:license "" ;
+    dc:title "Platform Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Platform rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00000509 ; # Service Provider
+    rdfs:label "Platform"@en ;
+    skos:definition "A platform that provides online services and hosts content through a website interface."@en ;
+    skos:example "Platforms like GitHub, GitLab, or Bitbucket that host repositories and provide collaboration services."@en .
+
+abi:User a owl:Class ;
+    rdfs:subClassOf cco:ont00001017 ; # Agent: has creator / has assignee
+    rdfs:label "User"@en ;
+    skos:definition "An individual who interacts with a system or platform, such as creating, modifying, or managing content."@en ;
+    skos:example "A user with access to a platform or service."@en .
+
+abi:EmailAddress a owl:Class ;
+    rdfs:subClassOf cco:ont00000649 ;
+    rdfs:label "Email Address" ;
+    rdfs:comment "An Email Address is a Non-Name Identifier that consists of a string of characters formatted according to the syntax of an email, which includes a local part, an '@' symbol, and a domain part. It designates a communication endpoint for an agent." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:usesEmail a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;  # is carrier of
+    rdfs:domain cco:Agent ;               # domain is agent
+    rdfs:range abi:EmailAddress ;         # range is email address
+    rdfs:label "uses email" ;
+    rdfs:comment "A subproperty that relates an agent to their email address." .
+
+abi:isEmailUsedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000102 ;  # is carried by
+    rdfs:domain abi:EmailAddress ;         # range is email address
+    rdfs:range cco:Agent ;               # domain is agent
+    rdfs:label "is email used by" ;
+    owl:inverseOf abi:usesEmail ;
+    rdfs:comment "A subproperty that relates an email address to the agent who owns it." .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:node_id a owl:DatatypeProperty ;
+    rdfs:label "description" ;
+    rdfs:range xsd:string .
+
+abi:bio a owl:DatatypeProperty ;
+    rdfs:label "bio" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The bio of the user."@en .
+
+abi:domain a owl:DatatypeProperty ;
+    rdfs:label "domain"@en ;
+    rdfs:comment "The domain of the platform."@en ; 
+    rdfs:domain abi:Platform ;
+    rdfs:range xsd:string .
+
+abi:following a owl:DatatypeProperty ;
+    rdfs:label "following"@en ;
+    rdfs:comment "The number of users the user is following."@en ;
+    rdfs:domain abi:User ;
+    rdfs:range xsd:integer .
+
+abi:followers a owl:DatatypeProperty ;
+    rdfs:label "followers"@en ;
+    rdfs:comment "The number of users following the user."@en ;
+    rdfs:domain abi:User ;
+    rdfs:range xsd:integer .
+
+abi:created_date a owl:DatatypeProperty ;
+    rdfs:label "created date" ;
+    rdfs:range xsd:dateTime .
+
+abi:updated_date a owl:DatatypeProperty ;
+    rdfs:label "updated date" ;
+    rdfs:range xsd:dateTime .

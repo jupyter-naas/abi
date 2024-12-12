@@ -1,8 +1,7 @@
-import requests
-from typing import Dict, List, Optional
-
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 from dataclasses import dataclass
+import requests
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -44,6 +43,35 @@ class GithubIntegration(Integration):
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"Github API request failed: {str(e)}")
+    
+    def get_user_details(self, username: str) -> Dict:
+        """Get detailed information about a specific GitHub user.
+        
+        Args:
+            username (str): The GitHub username of the user
+            
+        Returns:
+            Dict: Detailed user information including:
+                - Name
+                - Bio
+                - Location
+                - Email
+                - Number of public repos
+                - Number of followers
+                - Company
+                - Blog URL
+                - And more
+        """
+        return self._make_request("GET", f"/users/{username}")
+
+    def create_user_repository(self, name: str, private: bool = False, description: str = "") -> Dict:
+        """Create a new repository."""
+        data = {
+            "name": name,
+            "private": private,
+            "description": description
+        }
+        return self._make_request("POST", "/user/repos", data)
 
     def list_organization_repositories(self, org: str) -> List[Dict]:
         """Get all repositories for a given owner.
@@ -56,9 +84,20 @@ class GithubIntegration(Integration):
         """
         return self._make_request("GET", f"/users/{org}/repos")
 
-    def get_repository(self, repo_name: str) -> Dict:
+    def get_repository_details(self, repo_name: str) -> Dict:
         """Get a repository by full name (format: 'owner/repo')."""
         return self._make_request("GET", f"/repos/{repo_name}")
+    
+    def get_repository_contributors(self, repo_name: str) -> List[Dict]:
+        """Get a list of contributors for the specified repository.
+        
+        Args:
+            repo_name (str): Repository name in 'owner/repo' format
+            
+        Returns:
+            List[Dict]: List of contributors with their contribution details
+        """
+        return self._make_request("GET", f"/repos/{repo_name}/contributors")
 
     def create_issue(self, repo_name: str, title: str, body: str, labels: Optional[List[str]] = [], assignees: Optional[List[str]] = []) -> Dict:
         """Create an issue in the specified repository."""
@@ -147,50 +186,6 @@ class GithubIntegration(Integration):
             "base": base
         }
         return self._make_request("POST", f"/repos/{repo_name}/pulls", data)
-
-    def get_user(self) -> Dict:
-        """Get authenticated user information."""
-        return self._make_request("GET", "/user")
-
-    def create_repository(self, name: str, private: bool = False, description: str = "") -> Dict:
-        """Create a new repository."""
-        data = {
-            "name": name,
-            "private": private,
-            "description": description
-        }
-        return self._make_request("POST", "/user/repos", data)
-
-    def get_repository_contributors(self, repo_name: str) -> List[Dict]:
-        """Get a list of contributors for the specified repository.
-        
-        Args:
-            repo_name (str): Repository name in 'owner/repo' format
-            
-        Returns:
-            List[Dict]: List of contributors with their contribution details
-        """
-        return self._make_request("GET", f"/repos/{repo_name}/contributors")
-
-    def get_user_details(self, username: str) -> Dict:
-        """Get detailed information about a specific GitHub user.
-        
-        Args:
-            username (str): The GitHub username of the user
-            
-        Returns:
-            Dict: Detailed user information including:
-                - Name
-                - Bio
-                - Location
-                - Email
-                - Number of public repos
-                - Number of followers
-                - Company
-                - Blog URL
-                - And more
-        """
-        return self._make_request("GET", f"/users/{username}")
     
 def as_tools(configuration: GithubIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
@@ -218,11 +213,5 @@ def as_tools(configuration: GithubIntegrationConfiguration):
             description="Get details about a GitHub repository",
             func=lambda repo_name: integration.get_repository(repo_name),
             args_schema=GetRepositorySchema
-        ),
-        StructuredTool(
-            name="get_github_user_details",
-            description="Get detailed information about a specific GitHub user",
-            func=lambda username: integration.get_user_details(username),
-            args_schema=GetUserDetailsSchema
         )
     ]
