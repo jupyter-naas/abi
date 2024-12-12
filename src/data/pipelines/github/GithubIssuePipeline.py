@@ -1,50 +1,50 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from dataclasses import dataclass
-from src.integrations.GithubIntegration import GithubIntegration
+from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime, timedelta
-from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
 import pydash as _
-from src import secret
 from abi import logger
-
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
+from pydantic import Field
+from typing import Optional
+
 
 @dataclass
 class GithubIssuePipelineConfiguration(PipelineConfiguration):
-    github_integration: GithubIntegration
-    github_graphql_integration: GithubGraphqlIntegration
-    ontology_store: OntologyStoreService
+    """Configuration for GithubIssuePipeline.
+    
+    Attributes:
+        github_integration_config (GithubIntegrationConfiguration): The GitHub REST API integration instance
+        github_graphql_integration_config (GithubGraphqlIntegrationConfiguration): The GitHub GraphQL API integration instance
+        ontology_store (IOntologyStoreService): The ontology store service to use
+        ontology_store_name (str): Name of the ontology store to use. Defaults to "github"
+    """
+    github_integration_config: GithubIntegrationConfiguration
+    github_graphql_integration_config: GithubGraphqlIntegrationConfiguration
+    ontology_store: IOntologyStoreService
     ontology_store_name: str = "github"
 
 
 class GithubIssuePipelineParameters(PipelineParameters):
-    github_repository: str
-    github_issue_id: str
-    github_project_id: int = 0
-    github_project_node_id: str = ""
+    github_repository: str = Field(..., description="GitHub repository in format owner/repo")
+    github_issue_id: str = Field(..., description="GitHub issue ID")
+    github_project_id: Optional[int] = Field(default=0, description="GitHub project ID")
+    github_project_node_id: Optional[str] = Field(default="", description="GitHub project node ID")
+
 
 class GithubIssuePipeline(Pipeline):
     __configuration: GithubIssuePipelineConfiguration
     
     def __init__(self, configuration: GithubIssuePipelineConfiguration):
+        super().__init__(configuration)
         self.__configuration = configuration
-
-    def as_tools(self) -> list[StructuredTool]:
-        return [StructuredTool(
-            name="github_issue_pipeline",
-            description="Adds an issue to the ontology",
-            func=lambda **kwargs: self.run(GithubIssuePipelineParameters(**kwargs)),
-            args_schema=GithubIssuePipelineParameters
-        )]
-
-    def as_api(self, router: APIRouter) -> None:
-        @router.post("/GithubIssuePipeline")
-        def run(parameters: GithubIssuePipelineParameters):
-            return self.run(parameters).serialize(format="turtle")
+        self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
+        self.__github_graphql_integration = GithubGraphqlIntegration(self.__configuration.github_graphql_integration_config)
 
     def run(self, parameters: GithubIssuePipelineParameters) -> Graph:
         
@@ -52,7 +52,7 @@ class GithubIssuePipeline(Pipeline):
         graph = ABIGraph()
 
         # Get issue data from GithubIntegration
-        issue_data : dict = self.__configuration.github_integration.get_issue(parameters.github_repository, parameters.github_issue_id) # type: ignore
+        issue_data : dict = self.__github_integration.get_issue(parameters.github_repository, parameters.github_issue_id) # type: ignore
         issue_id = issue_data.get("id")
         issue_label = issue_data.get("title")
         issue_node_id = issue_data.get("node_id")
@@ -74,24 +74,24 @@ class GithubIssuePipeline(Pipeline):
         if parameters.github_project_id != 0:
             # Get project data from GithubGraphqlIntegration
             organization = parameters.github_repository.split("/")[0]
-            project_data : dict = self.__configuration.github_graphql_integration.get_project_node_id(organization, parameters.github_project_id) # type: ignore
+            project_data : dict = self.__github_graphql_integration.get_project_node_id(organization, parameters.github_project_id) # type: ignore
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
-            logger.info(f"Project node ID: {project_node_id}")
+            logger.debug(f"Project node ID: {project_node_id}")
         
         if project_node_id != "":
             # Get item id from node id from GithubGraphqlIntegration
-            project_item = dict = self.__configuration.github_graphql_integration.get_item_id_from_node_id(issue_node_id) # type: ignore
+            project_item = dict = self.__github_graphql_integration.get_item_id_from_node_id(issue_node_id) # type: ignore
             logger.debug(f"Project item: {project_item}")
             item_id = None
             for x in project_item.get("data").get("node").get("projectItems").get("nodes"):
                 if x.get("project", {}).get("id") == project_node_id:
                     item_id = _.get(x, "id")
                     break
-            logger.info(f"Item ID: {item_id}")
+            logger.debug(f"Item ID: {item_id}")
 
             if item_id:
                 # Get item data from GithubGraphqlIntegration
-                item_data : dict = self.__configuration.github_graphql_integration.get_item_details(item_id) # type: ignore
+                item_data : dict = self.__github_graphql_integration.get_item_details(item_id) # type: ignore
                 issue_iteration = {}
                 issue_eta = ""
 
@@ -228,21 +228,15 @@ class GithubIssuePipeline(Pipeline):
         
         return graph
     
-if __name__ == "__main__":
-    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-    from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-    
-    graph = GithubIssuePipeline(
-        configuration=GithubIssuePipelineConfiguration(
-            github_integration=GithubIntegration(GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))),
-            github_graphql_integration=GithubGraphqlIntegration(GithubGraphqlIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))),
-            ontology_store=OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path="src/data/ontology-store"))
-        )
-    ).run(parameters=GithubIssuePipelineParameters(
-        github_repository="jupyter-naas/abi",
-        github_issue_id="177",
-        github_project_id=0
-    ))
-    
-    print(graph.serialize(format="turtle"))
+    def as_tools(self) -> list[StructuredTool]:
+        return [StructuredTool(
+            name="github_issue_pipeline",
+            description="Adds an issue to the ontology",
+            func=lambda **kwargs: self.run(GithubIssuePipelineParameters(**kwargs)),
+            args_schema=GithubIssuePipelineParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        @router.post("/GithubIssuePipeline")
+        def run(parameters: GithubIssuePipelineParameters):
+            return self.run(parameters).serialize(format="turtle")

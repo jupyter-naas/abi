@@ -44,6 +44,7 @@ Workflows:
 - GetTopPrioritiesWorkflow: useful to get the top priorities from ontology store
 - CreateIssueAndAddToProjectWorkflow: useful to create a new issue in GitHub and add it to a project
 - AssignIssuesToProjectWorkflow: useful to assign all issue from repository to a project
+- GithubIssuesPipeline: useful to map github issues to ontology
 Integrations:
 - Aia: useful to generate AIA in a given workspace from a linkedin_url profile
 - Naas: useful to manage Naas workspace, plugins and ontologies
