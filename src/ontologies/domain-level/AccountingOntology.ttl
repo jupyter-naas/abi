@@ -9,12 +9,11 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/Accounting> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/AccountingOntology> rdf:type owl:Ontology ;
     owl:imports <> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/accounting.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AccountingOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for accounting and financial transactions."@en ;
-    dc:license "" ;
     dc:title "Accounting Domain Ontology" .
 
 #################################################################
