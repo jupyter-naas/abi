@@ -8,19 +8,14 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from src.workflows.operations_assistant.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
 from src.workflows.operations_assistant.GetTopPrioritiesWorkflow import GetTopPrioritiesWorkflow, GetTopPrioritiesConfiguration
 from src.workflows.operations_assistant.AssignIssuesToProjectWorkflow import AssignIssuesToProjectWorkflow, AssignIssuesToProjectWorkflowConfiguration
-from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
+from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
 
 OPERATIONS_ASSISTANT_INSTRUCTIONS = '''
 You are an Operations Assistant.
 Your primary responsibility is to enhance operational efficiency by acccessing Task and Project management tools.
-
-Start each conversation by:
-1. Introducing yourself
-2. Displaying this image showing operational metrics:
-   ![Ops](https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ops_trend.png)
-3. Providing a brief analysis of the week's meetings and tasks (max 3 bullet points)
 
 Always:
 1. Provide structured, markdown-formatted responses
@@ -69,6 +64,13 @@ def create_operations_assistant(
             ontology_store=ontology_store
         ))
         tools += github_issues_pipeline.as_tools()
+
+        # Add GithubUserDetailsPipeline tool
+        github_user_details_pipeline = GithubUserDetailsPipeline(GithubUserDetailsPipelineConfiguration(
+            github_integration_config=github_integration_config,
+            ontology_store=ontology_store
+        ))
+        tools += github_user_details_pipeline.as_tools()
 
     # Add GetTopPrioritiesWorkflow tool
     get_top_priorities_workflow = GetTopPrioritiesWorkflow(GetTopPrioritiesConfiguration(
