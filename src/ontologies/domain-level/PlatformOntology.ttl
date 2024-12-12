@@ -11,7 +11,7 @@
 
 # Platform Ontology
 <http://ontology.naas.ai/abi/PlatformOntology> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/Agent> <https://www.commoncoreontologies.org/EventOntology> ;
+    owl:imports <https://www.commoncoreontologies.org/Agent>, <https://www.commoncoreontologies.org/EventOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PlatformOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for the platform."@en ;
