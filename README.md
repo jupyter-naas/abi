@@ -4,6 +4,34 @@
 
 <img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
+## Table of Content
+
+- [Overview](#overview)
+  - [Key Features](#key-features)
+  - [License](#license)
+- [Setup Project](#setup-project)
+  - [Sneak peek 👀](#sneak-peek-)
+  - [Getting Started](#getting-started)
+  - [Managing Dependencies](#managing-dependencies)
+    - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
+    - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
+- [Build New Components](#build-new-components)
+  - [Creating a new Integration](#creating-a-new-integration)
+  - [Create New Pipeline](#create-new-pipeline)
+  - [Create New Workflow](#create-new-workflow)
+  - [Create New Assistant (Single Agent)](#create-new-assistant-single-agent)
+- [Standard Operating Procedure](#standard-operating-procedure)
+  - [Start with user intent](#start-with-user-intent)
+  - [Map Business Problem to Ontology](#map-business-problem-to-ontology)
+  - [Build Components](#build-components)
+  - [Setup Assistant](#setup-assistant)
+  - [Validate your solution](#validate-your-solution)
+  - [Deploy to production](#deploy-to-production)
+- [Learn more](#learn-more)
+- [Cursor users](#cursor-users)
+- [Contributing](#contributing)
+- [Support](#support)
+
 ## Overview
 
 The **ABI** (Augmented Business Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Organizational AI System. This system empowers businesses to integrate, manage, and scale AI-driven operations with a focus on ontology, assistant-driven workflows, and analytics. Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
@@ -21,35 +49,12 @@ The **ABI** (Augmented Business Intelligence) project is a Python-based backend 
 ### License
 ABI Framework is open-source and available for non-production use under the [AGPL license](https://opensource.org/licenses/AGPL). For production deployments, a commercial license is required. Please contact us at support@naas.ai for details on licensing options.
 
-## Sneak peek 👀
+## Setup Project
+
+### Sneak peek 👀
 
 ![ABI Terminal](https://naasai-public.s3.eu-west-3.amazonaws.com/abi2.gif)
 
-## Table of Content
-
-- [ABI](#abi)
-  - [Overview](#overview)
-    - [Key Features](#key-features)
-    - [License](#license)
-  - [Sneak peek 👀](#sneak-peek-)
-  - [Table of Content](#table-of-content)
-  - [Setup Project](#setup-project)
-    - [Getting Started](#getting-started)
-    - [Managing Dependencies](#managing-dependencies)
-      - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
-      - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
-  - [Creating a new Assistant](#creating-a-new-assistant-single-agent)
-  - [Creating a new Integration](#creating-a-new-integration)
-  - [Creating a new Pipeline](#creating-a-new-pipeline)
-  - [Creating a new Workflow](#creating-a-new-workflow)
-    - [Learn more](#learn-more)
-    - [Upcoming Changes](#upcoming-changes)
-      - [Standardization of Pipeline and Workflow Interfaces](#standardization-of-pipeline-and-workflow-interfaces)
-  - [Cursor users](#cursor-users)
-  - [Contributing](#contributing)
-  - [Support](#support)
-
-## Setup Project
 
 ### Getting Started
 
@@ -132,25 +137,9 @@ This will automatically:
 make abi-add dep=<library-name>
 ```
 
-## Creating a new Assistant (Single Agent)
+## Build New Components
 
-To create a new assistant, follow these steps:
-
-1. **Create Assistant File**
-   Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/CustomAssistant.py`.
-
-2. **Add Integrations, Workflows and Pipelines as tools**
-   - Import necessary integrations, pipelines and workflows
-   - Configure integrations with required credentials
-   - Add tools using the `as_tools()` method (Class.as_tools(Configuration))
-
-3. **Chat with Assistant**
-   - Create function to run new assistant in `src/apps/terminal_agent/main.py` following the pattern of existing assistants
-   - Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.apps.terminal_agent.main:run_<assistant-name>-agent"`
-   - Add new function in Makefile: `make chat-<assistant-name>-agent`
-   - Run new assistant: `make chat-<assistant-name>-agent`
-
-## Creating a new Integration
+### Creating a new Integration
 
 To create a new integration, follow these steps:
 
@@ -173,7 +162,7 @@ To create a new integration, follow these steps:
 
 For more detailed examples, check the existing integrations in the `src/integrations/` directory.
 
-## Creating a new Pipeline
+### Create New Pipeline
 
 Pipelines in ABI are used to process and transform data. Here's how to create a new pipeline:
 
@@ -194,7 +183,7 @@ Pipelines in ABI are used to process and transform data. Here's how to create a 
 
 For examples, see existing pipelines in the `src/data/pipelines/` directory.
 
-## Creating a new Workflow
+### Create New Workflow
 
 To create a new workflow in ABI, follow these steps:
 
@@ -222,46 +211,106 @@ To create a new workflow in ABI, follow these steps:
 
 For examples, see existing workflows in the `src/workflows/` directory.
 
+### Create New Assistant (Single Agent)
+
+To create a new assistant, follow these steps:
+
+#### Create Assistant File
+Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/CustomAssistant.py`.
+
+#### Add Integrations, Workflows and Pipelines as tools
+- Import necessary integrations, pipelines and workflows
+- Configure integrations with required credentials
+- Add tools using the `as_tools()` method (Class.as_tools(Configuration))
+
+#### Chat with Assistant in Terminal
+- Create function to run new assistant in `src/apps/terminal_agent/main.py` following the pattern of existing assistants
+- Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.apps.terminal_agent.main:run_<assistant-name>-agent"`
+- Add new function in Makefile: `make chat-<assistant-name>-agent`
+- Run new assistant: `make chat-<assistant-name>-agent`
+
+## Standard Operating Procedure
+
+This standard procedure explain how to answer to user intent using the ABI framework.
+
+### Start with user intent
+
+Begin by identifying the user's business problem and core question they want answered. 
+Understanding this clearly will help guide the solution design.
+For example, **"What are my top priorities?"**
+
+### Map Business Problem to Ontology
+
+Map your business problem to ontological concepts:
+
+1. Identify Domain Concepts
+   - Use `src/ontologies/domain-level` ontology
+   - Example for "What are my top priorities?":
+     - Task (core concept)
+     - Properties: assignee, creator, due date, status, priority, labels
+
+2. Map to Application Concepts 
+   - Use `src/ontologies/application-level` ontology
+   - Map domain concepts to your tools:
+     - Tasks → GitHub Issues, CRM Tasks, Marketing Campaigns
+   - Create subclasses that inherit from domain classes:
+     - abi:GitHubIssue ⊂ abi:Task
+     - abi:GithubUser ⊂ abi:User
+     - abi:GithubProject ⊂ abi:Project
+
+3. Write SPARQL Query
+   - Create query from `src/ontologies/ConsolidatedOntology.ttl`
+   - Use schema to retrieve data from all relevant subclasses
+   - Ensures solution remains tool-agnostic and reusable
+
+### Build Components
+
+Once you have your ontological concepts, build your solution in three steps:
+
+1. **Integration**
+   Create or update integrations in `src/integrations` to connect with required data sources.
+   Please checkout `src/integrations/GithubIntegration` or `src/integrations/GithubGraphqlIntegration` for more details.
+
+2. **Pipeline**
+   Create a pipeline to map data from integrations to ontological concepts. Keep mapping logic modular by:
+   - Building small pipelines for specific data transformations
+   - Combining smaller pipelines into larger ones as needed
+   You will be able to use function to easily create mapping to ontology. 
+   Please checkout `src/data/pipelines/GithubIssuePipeline` for more details.
+
+3. **Workflow**
+   Create a workflow that uses pipeline results via SPARQL queries. 
+   Workflows should focus on business logic rather than data transformation.
+   Please checkout `src/workflows/operations_assistant/GetTopPrioritiesWorkflow` for more details.
+
+NB: Each component (Integration, Pipeline, Workflow) can be used as both an AI assistant tool and a REST API endpoint.
+
+### Setup Assistant
+1. [Create or use an existing assistant](#create-new-assistant-single-agent) in `src/assistants`.
+2. Setup the workflow that answer to the user intent as a tool in the assistant. We recommend to put the user intent as description of your workflow so the assistant can understand it better.
+3. You can also add your pipelines and integrations function as tools if you want to trigger them from the assistant.
+
+### Validate your solution
+1. Setup your assistant to validate your solution with your terminal. See [Chat with Assistant](#chat-with-assistant-in-terminal) for detailed instructions.
+2. Ask the user intent and see if the solution is working as expected.
+3. If not, you can update your assistant configuration, workflow, pipeline and integration and test again.
+
+### Deploy to production
+Merge your branch into main.
+- Your assistant will be deployed to production and you will be able to use it with API but also in Naas platform.
+- Your workflows, pipelines and integrations will also be deployed as API.
+- Your pipelines will schedule according to your configuration.
+
 ### Learn more
 
 - lib/abi: [lib/abi/README.md](lib/README.md)
 - src: [src/README.md](src/README.md)
-
-### Upcoming Changes
-
-#### Standardization of Pipeline and Workflow Interfaces
-
-We are working on standardizing the interfaces for Pipelines and Workflows to provide a more consistent developer experience. The following changes are planned:
-
-1. **Unified Tool Interfaces**
-   - Both Pipelines and Workflows will expose standardized `as_tools()` methods
-   - Consistent schema definitions and argument handling
-   - Unified error handling patterns
-
-2. **Standardized API Endpoints**
-   - Common `as_api()` implementation patterns
-   - Consistent endpoint structures and response formats
-   - Unified error handling and status codes
-
-3. **CLI Interface Standardization**
-   - Unified `as_cli()` command structure
-   - Consistent parameter handling
-   - Standardized output formatting
-
-These changes will make it easier to:
-- Create new Pipelines and Workflows
-- Maintain consistent interfaces across components
-- Integrate components into larger systems
-- Test and validate component behavior
-
-The standardization will be rolled out gradually to maintain backward compatibility while improving the developer experience.
 
 ## Cursor users
 
 For Cursor users there is the [.cursorrules](.cursorrules) file already configured to help you create new Integrations, Pipelines and Workflows.
 
 More will be added as we add more components to the framework.
-
 
 ## Contributing
 
@@ -270,4 +319,5 @@ More will be added as we add more components to the framework.
 3. Open a pull request to the main branch.
 
 ## Support
-For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-1970s5rie-dXXkigAdEJYc~LPdQIEaLA) on Slack.
+For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2wjo50ks0-KhYxmgW6PZVe72Aj3tGi9Q) on Slack.
+
