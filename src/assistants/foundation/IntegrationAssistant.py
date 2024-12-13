@@ -5,7 +5,7 @@ from src.integrations import (
     GithubIntegration, PerplexityIntegration, LinkedinIntegration, 
     ReplicateIntegration, NaasIntegration, AiaIntegration, 
     HubSpotIntegration, StripeIntegration, GithubGraphqlIntegration, 
-    NotionIntegration
+    NotionIntegration, ClockifyIntegration
 )
 
 INTEGRATION_ASSISTANT_INSTRUCTIONS = """
@@ -49,6 +49,9 @@ def create_integration_agent():
 
     if notion_key := secret.get('NOTION_API_KEY'):
         tools += NotionIntegration.as_tools(NotionIntegration.NotionIntegrationConfiguration(api_key=notion_key))
+
+    if clockify_key := secret.get('CLOCKIFY_API_KEY'):
+        tools += ClockifyIntegration.as_tools(ClockifyIntegration.ClockifyIntegrationConfiguration(api_key=clockify_key))
 
     agent_configuration = AgentConfiguration(
         system_prompt=INTEGRATION_ASSISTANT_INSTRUCTIONS
