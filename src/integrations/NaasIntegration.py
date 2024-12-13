@@ -194,6 +194,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         label: str = Field(..., description="Label for the ontology")
         ontology: str = Field(..., description="Ontology source/content")
         level: str = Field(..., description="Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP")
+
     class GetOntologySchema(BaseModel):
         workspace_id: str = Field(..., description="Workspace ID to get an ontology from")
         ontology_id: Optional[str] = Field("", description="Optional ontology ID to get a specific ontology. If not provided, lists all ontologies")
@@ -206,10 +207,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         ontology_id: str = Field(..., description="ID of the ontology to update")
         ontology_source: Optional[str] = Field(None, description="Updated ontology source")
         level: Optional[str] = Field(None, description="Updated ontology level")
-
-    class DeleteOntologySchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to delete an ontology from")
-        ontology_id: str = Field(..., description="ID of the ontology to delete")
 
     return [
         StructuredTool(

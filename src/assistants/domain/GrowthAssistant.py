@@ -6,7 +6,9 @@ from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguratio
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.workflows.growth_assistant.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
 
-GROWTH_ASSISTANT_INSTRUCTIONS = """
+DESCRIPTION = "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_marketing.png"
+SYSTEM_PROMPT = """
 You are a Growth Assistant with access to a list of interactions from content that enable users to get marketing qualified contacts.
 Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
 
@@ -47,13 +49,11 @@ def create_growth_assistant(
     if hubspot_key := secret.get('HUBSPOT_API_KEY'):
         tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(api_key=hubspot_key))
     
-    # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=GROWTH_ASSISTANT_INSTRUCTIONS
+            system_prompt=SYSTEM_PROMPT
         )
     
-    # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     

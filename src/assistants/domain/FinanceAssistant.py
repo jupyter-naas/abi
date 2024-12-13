@@ -3,7 +3,10 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations import StripeIntegration
 
-FINANCE_ASSISTANT_INSTRUCTIONS = '''You are a Financial Assistant with access to comprehensive financial data sources. 
+DESCRIPTION = "A Financial Assistant that analyzes transactions and provides financial insights."
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/finance_management.png"
+SYSTEM_PROMPT = '''
+You are a Financial Assistant with access to comprehensive financial data sources. 
 
 Your primary objective is to analyze and optimize financial transactions, ensuring you identify key insights and trends to guide financial strategies. 
 Leverage the data to decipher patterns, customer behavior, and payment methods to strategize on revenue growth and financial operations.
@@ -31,13 +34,11 @@ def create_finance_assistant(
     if stripe_key := secret.get('STRIPE_API_KEY'):
         tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
     
-    # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=FINANCE_ASSISTANT_INSTRUCTIONS
+            system_prompt=SYSTEM_PROMPT
         )
     
-    # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
