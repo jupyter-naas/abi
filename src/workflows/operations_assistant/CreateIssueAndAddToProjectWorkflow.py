@@ -52,24 +52,10 @@ class CreateIssueAndAddToProjectWorkflow(Workflow):
     __configuration: CreateIssueAndAddToProjectWorkflowConfiguration
     
     def __init__(self, configuration: CreateIssueAndAddToProjectWorkflowConfiguration):
+        super().__init__(configuration)
         self.__configuration = configuration
         self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
         self.__github_graphql_integration = GithubGraphqlIntegration(self.__configuration.github_graphql_integration_config)
-
-    def as_tools(self) -> list[StructuredTool]:
-        """Returns a list of LangChain tools for this workflow."""
-        return [StructuredTool(
-            name="create_github_issue",
-            description="Creates a GitHub issue and optionally adds it to a project with status and priority settings",
-            func=lambda **kwargs: self.run(CreateIssueAndAddToProjectParameters(**kwargs)),
-            args_schema=CreateIssueAndAddToProjectParameters
-        )]
-
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this workflow to the given router."""
-        @router.post("/create_issue_and_add_to_project")
-        def create_issue_and_add_to_project(parameters: CreateIssueAndAddToProjectParameters):
-            return self.run(parameters)
 
     def run(self, parameters: CreateIssueAndAddToProjectParameters) -> str:
         # Create an issue
@@ -103,3 +89,18 @@ class CreateIssueAndAddToProjectWorkflow(Workflow):
             logger.debug("No project ID provided, skipping project data")
         
         return f"Issue '{parameters.issue_title}' created and added to project: {issue}."
+    
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow."""
+        return [StructuredTool(
+            name="create_github_issue",
+            description="Creates a GitHub issue and optionally adds it to a project with status and priority settings",
+            func=lambda **kwargs: self.run(CreateIssueAndAddToProjectParameters(**kwargs)),
+            args_schema=CreateIssueAndAddToProjectParameters
+        )]
+
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router."""
+        @router.post("/create_issue_and_add_to_project")
+        def create_issue_and_add_to_project(parameters: CreateIssueAndAddToProjectParameters):
+            return self.run(parameters)

@@ -5,7 +5,9 @@ from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.workflows.sales_assistant.CreateHubSpotContactWorkflow import CreateHubSpotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
 
-SALES_ASSISTANT_INSTRUCTIONS = """
+DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"
+SYSTEM_PROMPT = """
 You are a Sales Assistant.
 Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
 
@@ -36,19 +38,16 @@ def create_sales_assistant(
         
         tools += HubSpotIntegration.as_tools(hubspot_integration_config)
         
-        # Add CreateContactWorkflow tool
         create_hubspot_contact_workflow = CreateHubSpotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
             hubspot_integration_config=hubspot_integration_config
         ))
         tools += create_hubspot_contact_workflow.as_tools()
     
-    # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SALES_ASSISTANT_INSTRUCTIONS
+            system_prompt=SYSTEM_PROMPT
         )
     
-    # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     

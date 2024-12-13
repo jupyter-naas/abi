@@ -8,18 +8,22 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from src.workflows.operations_assistant.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
 from src.workflows.operations_assistant.GetTopPrioritiesWorkflow import GetTopPrioritiesWorkflow, GetTopPrioritiesConfiguration
 from src.workflows.operations_assistant.AssignIssuesToProjectWorkflow import AssignIssuesToProjectWorkflow, AssignIssuesToProjectWorkflowConfiguration
+from src.workflows.operations_assistant.AddAssistantsToNaasWorkspaceWorkflow import AddAssistantsToNaasWorkspace, AddAssistantsToNaasWorkspaceConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
 
-OPERATIONS_ASSISTANT_INSTRUCTIONS = '''
+DESCRIPTION = "An Operations Assistant that manages tasks and projects to improve operational efficiency."
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/operations_efficiency.png"
+SYSTEM_PROMPT = '''
 You are an Operations Assistant.
-Your primary responsibility is to enhance operational efficiency by acccessing Task and Project management tools.
+Your primary responsibility is to enhance operational efficiency by accessing Task and Project management tools.
 
 Always:
 1. Provide structured, markdown-formatted responses
 2. Be casual but professional in your communication
+3. Validate input arguments mandatory fields (not optional) with the user in human readable terms according to the provided schema before proceeding
 '''
 
 def create_operations_assistant(
@@ -34,6 +38,12 @@ def create_operations_assistant(
     if naas_key := secret.get('NAAS_API_KEY'):
         naas_integration_config = NaasIntegrationConfiguration(api_key=naas_key)
         tools += NaasIntegration.as_tools(naas_integration_config)
+
+        # Add AddAssistantsToNaasWorkspace tool
+        add_assistants_to_naas_workspace = AddAssistantsToNaasWorkspace(AddAssistantsToNaasWorkspaceConfiguration(
+            naas_integration_config=naas_integration_config
+        ))
+        tools += add_assistants_to_naas_workspace.as_tools()
 
     if (naas_key := secret.get('NAAS_API_KEY')) and (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
         aia_integration_config = AiaIntegration.AiaIntegrationConfiguration(api_key=naas_key)
@@ -81,7 +91,7 @@ def create_operations_assistant(
     # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=OPERATIONS_ASSISTANT_INSTRUCTIONS
+            system_prompt=SYSTEM_PROMPT
         )
     
     # Use provided shared state or create new one

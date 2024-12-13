@@ -6,7 +6,9 @@ from src.integrations.ReplicateIntegration import ReplicateIntegrationConfigurat
 from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
 from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 
-CONTENT_ASSISTANT_INSTRUCTIONS = """
+DESCRIPTION = "A Content Assistant that helps optimize content strategy and audience engagement."
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/content_creation.png"
+SYSTEM_PROMPT = """
 You are a Content Assistant with access to valuable data and insights about content strategy.
 Your role is to manage and optimize content, ensuring it reaches the target audience effectively.
 
@@ -43,7 +45,6 @@ def create_content_assistant(
         
         tools += LinkedinIntegration.as_tools(linkedin_integration_config)
 
-        # Add LinkedinPostsWorkflow tool
         linkedin_posts_workflow = LinkedinPostsWorkflow(LinkedinPostsWorkflowConfiguration(
             linkedin_integration_config=linkedin_integration_config
         ))
@@ -52,13 +53,11 @@ def create_content_assistant(
     if replicate_key := secret.get('REPLICATE_API_KEY'):
         tools += ReplicateIntegration.as_tools(ReplicateIntegrationConfiguration(api_key=replicate_key))
 
-    # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=CONTENT_ASSISTANT_INSTRUCTIONS
+            system_prompt=SYSTEM_PROMPT
         )
     
-    # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
