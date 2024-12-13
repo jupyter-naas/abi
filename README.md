@@ -16,10 +16,10 @@
     - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
     - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
 - [Build New Components](#build-new-components)
-  - [Creating a new Integration](#creating-a-new-integration)
-  - [Create New Pipeline](#create-new-pipeline)
-  - [Create New Workflow](#create-new-workflow)
-  - [Create New Assistant (Single Agent)](#create-new-assistant-single-agent)
+  - [Create Integration](#create-integration)
+  - [Create Pipeline](#create-pipeline)
+  - [Create Workflow](#create-workflow)
+  - [Create Assistant (Single Agent)](#create-assistant-single-agent)
 - [Standard Operating Procedure](#standard-operating-procedure)
   - [Start with user intent](#start-with-user-intent)
   - [Map Business Problem to Ontology](#map-business-problem-to-ontology)
@@ -139,7 +139,7 @@ make abi-add dep=<library-name>
 
 ## Build New Components
 
-### Creating a new Integration
+### Create Integration
 
 To create a new integration, follow these steps:
 
@@ -162,7 +162,7 @@ To create a new integration, follow these steps:
 
 For more detailed examples, check the existing integrations in the `src/integrations/` directory.
 
-### Create New Pipeline
+### Create Pipeline
 
 Pipelines in ABI are used to process and transform data. Here's how to create a new pipeline:
 
@@ -183,7 +183,7 @@ Pipelines in ABI are used to process and transform data. Here's how to create a 
 
 For examples, see existing pipelines in the `src/data/pipelines/` directory.
 
-### Create New Workflow
+### Create Workflow
 
 To create a new workflow in ABI, follow these steps:
 
@@ -211,7 +211,7 @@ To create a new workflow in ABI, follow these steps:
 
 For examples, see existing workflows in the `src/workflows/` directory.
 
-### Create New Assistant (Single Agent)
+### Create Assistant (Single Agent)
 
 To create a new assistant, follow these steps:
 
@@ -286,7 +286,7 @@ Once you have your ontological concepts, build your solution in three steps:
 NB: Each component (Integration, Pipeline, Workflow) can be used as both an AI assistant tool and a REST API endpoint.
 
 ### Setup Assistant
-1. [Create or use an existing assistant](#create-new-assistant-single-agent) in `src/assistants`.
+1. [Create or use an existing assistant](#create-assistant-single-agent) in `src/assistants`.
 2. Setup the workflow that answer to the user intent as a tool in the assistant. We recommend to put the user intent as description of your workflow so the assistant can understand it better.
 3. You can also add your pipelines and integrations function as tools if you want to trigger them from the assistant.
 
