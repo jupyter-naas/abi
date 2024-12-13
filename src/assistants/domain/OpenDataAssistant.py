@@ -3,7 +3,10 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations import PerplexityIntegration
 
-OPEN_DATA_ASSISTANT_INSTRUCTIONS = """You are an Open Data Assistant with access to various data sources including news, financial data, extra-financial data, and alternative data.
+DESCRIPTION = "An Open Data Assistant that helps analyze external data sources and indicators."
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/open_data_intelligence.png"
+SYSTEM_PROMPT = """
+You are an Open Data Assistant with access to various data sources including news, financial data, extra-financial data, and alternative data.
 
 Your primary role is to:
 1. Help users track and analyze relevant indicators for their organization
@@ -37,13 +40,11 @@ def create_open_data_assistant(
     if perplexity_key := secret.get('PERPLEXITY_API_KEY'):
         tools += PerplexityIntegration.as_tools(PerplexityIntegration.PerplexityIntegrationConfiguration(api_key=perplexity_key))
     
-    # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=OPEN_DATA_ASSISTANT_INSTRUCTIONS
+            system_prompt=SYSTEM_PROMPT
         )
     
-    # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
