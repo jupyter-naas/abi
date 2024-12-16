@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 import requests
 import json
 import os
-import datetime
-import time
+from abi import logger
+import jwt
 
 
 @dataclass
@@ -56,8 +56,69 @@ class NaasIntegration(Integration):
             return response.json()
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"Naas API request failed: {str(e)}")
+        
+    def get_user_id_from_jwt(self, jwt_token):
+        try:
+            decoded = jwt.decode(jwt_token, algorithms=["HS256"], options={"verify_signature": False})
+            user_id = decoded.get("sub")
+            logger.debug(f"User ID from JWT: {user_id}")
+            return user_id
+        except Exception as e:
+            logger.error(f"Error decoding JWT: {str(e)}")
+            return None
 
-    # Workspace methods
+    def create_workspace(self, name: str, is_personal: bool = False, **kwargs) -> Dict:
+        """Create a new workspace.
+        
+        Args:
+            name (str): Name of the workspace
+            is_personal (bool, optional): Whether this is a personal workspace. Defaults to True.
+            **kwargs: Optional workspace customization parameters including:
+                - fav_icon (str): Favicon URL
+                - large_logo (str): Large logo URL
+                - small_logo (str): Small logo URL
+                - primary_color (str): Primary color hex code
+                - secondary_color (str): Secondary color hex code
+                - tertiary_color (str): Tertiary color hex code
+                - text_primary_color (str): Primary text color hex code
+                - text_secondary_color (str): Secondary text color hex code
+        
+        Returns:
+            Dict: Response from the API containing the created workspace details
+        """
+        payload = {
+            "user_id": self.get_user_id_from_jwt(self.__configuration.api_key),  # API expects this field but uses the authenticated user
+            "workspace": {
+                "name": name,
+                "is_personal": is_personal,
+                "fav_icon": kwargs.get("fav_icon", ""),
+                "large_logo": kwargs.get("large_logo", ""),
+                "small_logo": kwargs.get("small_logo", ""),
+                "primary_color": kwargs.get("primary_color", "#48DD82"),
+                "secondary_color": kwargs.get("secondary_color", "#181a1c"), 
+                "tertiary_color": kwargs.get("tertiary_color", "#3c3f40"),
+                "text_primary_color": kwargs.get("text_primary_color", "#fff"),
+                "text_secondary_color": kwargs.get("text_secondary_color", "#747677")
+            }
+        }
+        logger.debug(f"Payload: {payload}")
+        return self._make_request("POST", "/workspace", payload)
+
+    def get_workspace(self, workspace_id: str) -> Dict:
+        """Get workspace details by ID.
+        
+        Args:
+            workspace_id (str): ID of the workspace to retrieve
+        
+        Returns:
+            Dict: Response from the API containing the workspace details
+        """
+        payload = {
+            "user_id": "",  # API expects this field but uses the authenticated user
+            "workspace_id": workspace_id
+        }
+        return self._make_request("GET", f"/workspace/{workspace_id}", payload)
+    
     def get_workspaces(self) -> Dict:
         """Get all workspaces."""
         return self._make_request("GET", "/workspace/")
@@ -69,10 +130,61 @@ class NaasIntegration(Integration):
             if workspace.get("is_personal"):
                 return workspace.get("id")
         return None
+    
+    def update_workspace(self, workspace_id: str, **kwargs) -> Dict:
+        """Update an existing workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace to update
+            **kwargs: Optional workspace customization parameters including:
+                - name (str): New name for the workspace
+                - fav_icon (str): Favicon URL
+                - large_logo (str): Large logo URL
+                - small_logo (str): Small logo URL
+                - primary_color (str): Primary color hex code
+                - secondary_color (str): Secondary color hex code
+                - tertiary_color (str): Tertiary color hex code
+                - text_primary_color (str): Primary text color hex code
+                - text_secondary_color (str): Secondary text color hex code
+        """
+        workspace = {
+            "workspace_id": workspace_id,
+            "workspace": {
+                "name": kwargs.get("name", ""),
+                "fav_icon": kwargs.get("fav_icon", ""),
+                "large_logo": kwargs.get("large_logo", ""),
+                "small_logo": kwargs.get("small_logo", ""),
+                "primary_color": kwargs.get("primary_color", ""),
+                "secondary_color": kwargs.get("secondary_color", ""),
+                "tertiary_color": kwargs.get("tertiary_color", ""),
+                "text_primary_color": kwargs.get("text_primary_color", ""),
+                "text_secondary_color": kwargs.get("text_secondary_color", "")
+            }
+        }
+        return self._make_request("PUT", f"/workspace/{workspace_id}", workspace)
+    
+    def delete_workspace(self, workspace_id: str) -> Dict:
+        """Delete a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace to delete
+        
+        Returns:
+            Dict: Response from the API containing the deletion status
+        """
+        payload = {
+            "user_id": self.get_user_id_from_jwt(self.__configuration.api_key),  # API expects this field but uses the authenticated user
+            "workspace_id": workspace_id
+        }
+        return self._make_request("DELETE", f"/workspace/{workspace_id}", payload)
 
-    # Plugin methods
     def create_plugin(self, workspace_id: str, data: Dict) -> Dict:
-        """Create a new plugin."""
+        """Create a new plugin.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            data (Dict): Plugin configuration data
+        """
         payload = {
             "workspace_id": workspace_id,
             "payload": json.dumps(data)
@@ -80,7 +192,12 @@ class NaasIntegration(Integration):
         return self._make_request("POST", f"/workspace/{workspace_id}/plugin", payload)
 
     def get_plugin(self, workspace_id: str, plugin_id: str = None) -> Dict:
-        """Get plugin details by ID or list all plugins."""
+        """Get plugin details by ID or list all plugins.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            plugin_id (str): Plugin ID
+        """
         endpoint = f"/workspace/{workspace_id}/plugin/{plugin_id}" if plugin_id else f"/workspace/{workspace_id}/plugin"
         return self._make_request("GET", endpoint)
 
@@ -89,7 +206,13 @@ class NaasIntegration(Integration):
         return self._make_request("GET", f"/workspace/{workspace_id}/plugin")
 
     def update_plugin(self, workspace_id: str, plugin_id: str, data: Dict) -> Dict:
-        """Update an existing plugin."""
+        """Update an existing plugin.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            plugin_id (str): Plugin ID
+            data (Dict): Updated plugin configuration data
+        """
         payload = {
             "workspace_id": workspace_id,
             "plugin_id": plugin_id,
@@ -100,12 +223,24 @@ class NaasIntegration(Integration):
         return self._make_request("PUT", f"/workspace/{workspace_id}/plugin/{plugin_id}", payload)
 
     def delete_plugin(self, workspace_id: str, plugin_id: str) -> Dict:
-        """Delete a plugin."""
+        """Delete a plugin.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            plugin_id (str): Plugin ID
+        """
         return self._make_request("DELETE", f"/workspace/{workspace_id}/plugin/{plugin_id}")
 
     # Ontology methods
     def create_ontology(self, workspace_id: str, label: str, ontology: str, level: str) -> Dict:
-        """Create a new ontology."""
+        """Create a new ontology.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            label (str): Label for the ontology
+            ontology (str): Ontology source/content
+            level (str): Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP
+        """
         payload = {"ontology": {
             "label": label,
             "source": ontology,
@@ -115,7 +250,12 @@ class NaasIntegration(Integration):
         return self._make_request("POST", "/ontology/", payload)
 
     def get_ontology(self, workspace_id: str, ontology_id: str = "") -> Dict:
-        """Get ontology by ID."""
+        """Get ontology by ID.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            ontology_id (str): Ontology ID
+        """
         params = {
             "workspace_id": workspace_id
         }
@@ -124,7 +264,11 @@ class NaasIntegration(Integration):
         return self._make_request("GET", f"/ontology/{ontology_id}", params=params)
 
     def get_ontologies(self, workspace_id: str) -> Dict:
-        """List all ontologies."""
+        """List all ontologies.
+        
+        Args:
+            workspace_id (str): Workspace ID
+        """
         params = {
             "workspace_id": workspace_id,
             "page_size": 100,
@@ -132,20 +276,48 @@ class NaasIntegration(Integration):
         }
         return self._make_request("GET", "/ontology/", params=params)
 
-    def update_ontology(self, workspace_id: str, ontology_id: str, ontology_source: str = None, level: str = None) -> Dict:
-        """Update an existing ontology."""
+    def update_ontology(
+            self,
+            workspace_id: str,
+            ontology_id: str,
+            download_url: str = None,
+            source: str = None,
+            level: str = None,
+            description: str = None,
+            logo_url: str = None,
+        ) -> Dict:
+        """Update an existing ontology.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            ontology_id (str): Ontology ID
+            download_url (str): Download URL
+            source (str): Source
+            level (str): Level
+            description (str): Description
+            logo_url (str): Logo URL
+        """
         field_masks = []
 
         ontology = {}
         ontology["id"] = ontology_id
         ontology['workspace_id'] = workspace_id
 
-        if ontology_source:
-            ontology["source"] = ontology_source
+        if download_url:
+            ontology["download_url"] = download_url
+            field_masks.append("download_url")
+        if source:
+            ontology["source"] = source
             field_masks.append("source")
         if level:
             ontology["level"] = level
             field_masks.append("level")
+        if description:
+            ontology["description"] = description
+            field_masks.append("description")
+        if logo_url:
+            ontology["logo_url"] = logo_url
+            field_masks.append("logo_url")
 
         ontology["field_mask"] = {"paths": field_masks}
 
@@ -154,14 +326,128 @@ class NaasIntegration(Integration):
         return self._make_request("PATCH", f"/ontology/{ontology_id}", payload)
 
     def delete_ontology(self, workspace_id: str, ontology_id: str) -> Dict:
-        """Delete an ontology."""
+        """Delete an ontology.
+        
+        Args:
+            workspace_id (str): Workspace ID
+            ontology_id (str): Ontology ID
+        """
         params = {"workspace_id": workspace_id}
         return self._make_request("DELETE", f"/ontology/{ontology_id}", params=params)
+
+    def get_workspace_users(self, workspace_id: str) -> Dict:
+        """List all users in a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+        
+        Returns:
+            Dict: Response containing list of workspace users
+        """
+        return self._make_request("GET", f"/workspace/{workspace_id}/user")
+
+    def invite_workspace_user(self, workspace_id: str, role: str = "member", email: str = None, user_id: str = None) -> Dict:
+        """Invite a user to a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            role (str): Role to assign to the user - one of: "member", "admin", "owner"
+            email (str, optional): Email of the user to invite. Required if user_id not provided.
+            user_id (str, optional): User ID if known. Required if email not provided.
+        
+        Returns:
+            Dict: Response containing the created workspace user details
+            
+        Raises:
+            ValueError: If neither email nor user_id is provided
+        """
+        if not email and not user_id:
+            raise ValueError("Either email or user_id must be provided")
+            
+        payload = {
+            "workspace_id": workspace_id,
+            "role": role
+        }
+        
+        if email:
+            payload["email"] = email
+        if user_id:
+            payload["user_id"] = user_id
+            
+        return self._make_request("POST", f"/workspace/{workspace_id}/user/", payload)
+
+    def get_workspace_user(self, workspace_id: str, user_id: str) -> Dict:
+        """Get details of a specific user in a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            user_id (str): ID of the user
+        
+        Returns:
+            Dict: Response containing the workspace user details
+        """
+        payload = {
+            "user_id": user_id,
+            "workspace_id": workspace_id
+        }
+        return self._make_request("GET", f"/workspace/{workspace_id}/user/{user_id}", payload)
+
+    def update_workspace_user(self, workspace_id: str, user_id: str, role: str = None, status: str = None) -> Dict:
+        """Update a user's role or status in a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            user_id (str): ID of the user
+            role (str, optional): New role for the user
+            status (str, optional): New status for the user
+        
+        Returns:
+            Dict: Response containing the updated workspace user details
+        """
+        workspace_user = {}
+        if role is not None:
+            workspace_user["role"] = role
+        if status is not None:
+            workspace_user["status"] = status
+        
+        payload = {
+            "user_id": user_id,
+            "workspace_id": workspace_id,
+            "workspace_user": workspace_user
+        }
+        return self._make_request("PUT", f"/workspace/{workspace_id}/user/{user_id}", payload)
+
+    def delete_workspace_user(self, workspace_id: str, user_id: str) -> Dict:
+        """Remove a user from a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            user_id (str): ID of the user to remove
+        
+        Returns:
+            Dict: Response containing the deletion status
+        """
+        payload = {
+            "user_id": user_id,
+            "workspace_id": workspace_id
+        }
+        return self._make_request("DELETE", f"/workspace/{workspace_id}/user/{user_id}", payload)
 
 def as_tools(configuration: NaasIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     
     integration = NaasIntegration(configuration)
+
+    class CreateWorkspaceSchema(BaseModel):
+        name: str = Field(..., description="Name of the workspace")
+        fav_icon: Optional[str] = Field("", description="Favicon URL")
+        large_logo: Optional[str] = Field("", description="Large logo URL")
+        small_logo: Optional[str] = Field("", description="Small logo URL")
+        primary_color: Optional[str] = Field("", description="Primary color hex code")
+        secondary_color: Optional[str] = Field("", description="Secondary color hex code")
+        tertiary_color: Optional[str] = Field("", description="Tertiary color hex code")
+        text_primary_color: Optional[str] = Field("", description="Primary text color hex code")
+        text_secondary_color: Optional[str] = Field("", description="Secondary text color hex code")
 
     class GetWorkspacesSchema(BaseModel):
         pass
@@ -169,6 +455,24 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     class GetPersonalWorkspaceSchema(BaseModel):
         pass
 
+    class GetWorkspaceSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace to retrieve")
+
+    class UpdateWorkspaceSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace to update")
+        name: Optional[str] = Field(None, description="New name for the workspace")
+        fav_icon: Optional[str] = Field(None, description="Favicon URL")
+        large_logo: Optional[str] = Field(None, description="Large logo URL")
+        small_logo: Optional[str] = Field(None, description="Small logo URL")
+        primary_color: Optional[str] = Field(None, description="Primary color hex code")
+        secondary_color: Optional[str] = Field(None, description="Secondary color hex code")
+        tertiary_color: Optional[str] = Field(None, description="Tertiary color hex code")
+        text_primary_color: Optional[str] = Field(None, description="Primary text color hex code")
+        text_secondary_color: Optional[str] = Field(None, description="Secondary text color hex code")
+        
+    class DeleteWorkspaceSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace to delete")
+        
     class CreatePluginSchema(BaseModel):
         workspace_id: str = Field(..., description="Workspace ID to create a plugin in")
         data: Dict = Field(..., description="Plugin configuration data")
@@ -205,10 +509,52 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     class UpdateOntologySchema(BaseModel):
         workspace_id: str = Field(..., description="Workspace ID to update an ontology in")
         ontology_id: str = Field(..., description="ID of the ontology to update")
-        ontology_source: Optional[str] = Field(None, description="Updated ontology source")
+        download_url: Optional[str] = Field(None, description="Updated ontology download URL")
+        source: Optional[str] = Field(None, description="Updated ontology source")
         level: Optional[str] = Field(None, description="Updated ontology level")
+        description: Optional[str] = Field(None, description="Updated ontology description")
+        logo_url: Optional[str] = Field(None, description="Updated ontology logo URL")
+
+    class DeleteOntologySchema(BaseModel):
+        workspace_id: str = Field(..., description="Workspace ID to delete an ontology from")
+        ontology_id: str = Field(..., description="ID of the ontology to delete")
+
+    class GetWorkspaceUsersSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace to list users from")
+
+    class InviteWorkspaceUserSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        email: str = Field(..., description="Email of the user to invite")
+        role: str = Field("member", description="Role to assign to the user - one of: 'member', 'admin', 'owner'")
+        user_id: Optional[str] = Field("", description="User ID if known")
+
+    class GetWorkspaceUserSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        user_id: str = Field(..., description="ID of the user")
+
+    class UpdateWorkspaceUserSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        user_id: str = Field(..., description="ID of the user")
+        role: Optional[str] = Field(None, description="New role for the user")
+        status: Optional[str] = Field(None, description="New status for the user")
+
+    class DeleteWorkspaceUserSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        user_id: str = Field(..., description="ID of the user to remove")
 
     return [
+        StructuredTool(
+            name="create_naas_workspace",
+            description="Create a new workspace on naas.ai platform",
+            func=lambda **kwargs: integration.create_workspace(**kwargs),
+            args_schema=CreateWorkspaceSchema
+        ),
+        StructuredTool(
+            name="get_naas_workspace",
+            description="Get details of a specific workspace from naas.ai platform",
+            func=lambda workspace_id: integration.get_workspace(workspace_id),
+            args_schema=GetWorkspaceSchema
+        ),
         StructuredTool(
             name="get_naas_workspaces",
             description="Get all workspaces from naas.ai platform",
@@ -220,6 +566,18 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             description="Get personal workspace ID from naas.ai platform",
             func=lambda: integration.get_personal_workspace(),
             args_schema=GetPersonalWorkspaceSchema
+        ),
+        StructuredTool(
+            name="update_naas_workspace",
+            description="Update an existing workspace on naas.ai platform",
+            func=lambda **kwargs: integration.update_workspace(**kwargs),
+            args_schema=UpdateWorkspaceSchema
+        ),
+        StructuredTool(
+            name="delete_naas_workspace",
+            description="Delete an existing workspace from naas.ai platform",
+            func=lambda workspace_id: integration.delete_workspace(workspace_id),
+            args_schema=DeleteWorkspaceSchema
         ),
         StructuredTool(
             name="create_naas_assistant",
@@ -246,6 +604,12 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             args_schema=UpdatePluginSchema
         ),
         StructuredTool(
+            name="delete_naas_assistant",
+            description="Delete an existing plugin or assistant from workspace",
+            func=lambda workspace_id, plugin_id: integration.delete_plugin(workspace_id, plugin_id),
+            args_schema=DeletePluginSchema
+        ),
+        StructuredTool(
             name="create_naas_ontology",
             description="Create a new ontology from workspace",
             func=lambda workspace_id, label, ontology, level: integration.create_ontology(workspace_id, label, ontology, level),
@@ -266,7 +630,43 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="update_naas_ontology",
             description="Update an existing ontology from workspace",
-            func=lambda workspace_id, ontology_id, ontology_source, level: integration.update_ontology(workspace_id, ontology_id, ontology_source, level),
+            func=lambda workspace_id, ontology_id, download_url, source, level, description, logo_url: integration.update_ontology(workspace_id, ontology_id, download_url, source, level, description, logo_url),
             args_schema=UpdateOntologySchema
+        ),
+        StructuredTool(
+            name="delete_naas_ontology",
+            description="Delete an existing ontology from workspace",
+            func=lambda workspace_id, ontology_id: integration.delete_ontology(workspace_id, ontology_id),
+            args_schema=DeleteOntologySchema
+        ),
+        StructuredTool(
+            name="get_naas_workspace_users",
+            description="List all users in a workspace",
+            func=lambda workspace_id: integration.get_workspace_users(workspace_id),
+            args_schema=GetWorkspaceUsersSchema
+        ),
+        StructuredTool(
+            name="invite_naas_workspace_user",
+            description="Invite a user to a workspace",
+            func=lambda **kwargs: integration.invite_workspace_user(**kwargs),
+            args_schema=InviteWorkspaceUserSchema
+        ),
+        StructuredTool(
+            name="get_naas_workspace_user",
+            description="Get details of a specific user in a workspace",
+            func=lambda workspace_id, user_id: integration.get_workspace_user(workspace_id, user_id),
+            args_schema=GetWorkspaceUserSchema
+        ),
+        StructuredTool(
+            name="update_naas_workspace_user",
+            description="Update a user's role or status in a workspace",
+            func=lambda **kwargs: integration.update_workspace_user(**kwargs),
+            args_schema=UpdateWorkspaceUserSchema
+        ),
+        StructuredTool(
+            name="delete_naas_workspace_user",
+            description="Remove a user from a workspace",
+            func=lambda workspace_id, user_id: integration.delete_workspace_user(workspace_id, user_id),
+            args_schema=DeleteWorkspaceUserSchema
         )
     ]
