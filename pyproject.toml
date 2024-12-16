@@ -35,6 +35,7 @@ chat-sales-agent = "src.apps.terminal_agent.main:run_sales_agent"
 chat-integration-agent = "src.apps.terminal_agent.main:run_integration_agent"
 chat-support-agent = "src.apps.terminal_agent.main:run_support_agent"
 chat-supervisor-agent = "src.apps.terminal_agent.main:run_supervisor_agent"
+chat-onedrive-agent = "src.apps.terminal_agent.main:run_onedrive_agent"
 abi = "src.cli:main"
 api = "src.api:api"
 
