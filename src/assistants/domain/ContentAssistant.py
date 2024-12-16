@@ -62,8 +62,10 @@ def create_content_assistant(
         agent_shared_state = AgentSharedState()
     
     return Agent(
-        model, 
-        tools, 
+        name="content_assistant",
+        description="Use for content analysis and optimization",
+        chat_model=model, 
+        tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()

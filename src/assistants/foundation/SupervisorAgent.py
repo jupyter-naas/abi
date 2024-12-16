@@ -87,13 +87,21 @@ def create_supervisor_agent():
     finance_assistant = create_finance_assistant(AgentSharedState(thread_id=6), agent_configuration)
     support_assistant = create_support_assistant(AgentSharedState(thread_id=7), agent_configuration)
 
-    tools = [
-        open_data_assistant.as_tool(name="open_data_assistant", description="Use for open data analysis"),
-        content_assistant.as_tool(name="content_assistant", description="Use for content analysis and optimization"),
-        growth_assistant.as_tool(name="growth_assistant", description="Use for growth and marketing analysis"),
-        sales_assistant.as_tool(name="sales_assistant", description="Use for sales and marketing analysis"),
-        operations_assistant.as_tool(name="operations_assistant", description="Use for operations and marketing analysis"),
-        finance_assistant.as_tool(name="finance_assistant", description="Use for financial analysis and insights"),
-        support_assistant.as_tool(name="support_assistant", description="Use to get any feedbacks/bugs or needs from user.")
-    ]
-    return Agent(model, tools, state=AgentSharedState(thread_id=8), configuration=agent_configuration, memory=MemorySaver())
+    tools = [] + \
+        open_data_assistant.as_tools() + \
+        content_assistant.as_tools() + \
+        growth_assistant.as_tools() + \
+        sales_assistant.as_tools() + \
+        operations_assistant.as_tools() + \
+        finance_assistant.as_tools() + \
+        support_assistant.as_tools()
+
+    return Agent(
+        name="supervisor_agent",
+        description="Use to supervise the other assistants",
+        chat_model=model,
+        tools=tools,
+        state=AgentSharedState(thread_id=8),
+        configuration=agent_configuration,
+        memory=MemorySaver()
+    )
