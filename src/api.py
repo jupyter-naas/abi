@@ -41,9 +41,8 @@ github_issues_pipeline = GithubIssuesPipeline(
 
 github_user_details_pipeline = GithubUserDetailsPipeline(
     configuration=GithubUserDetailsPipelineConfiguration(
-        github_integration=GithubIntegration(
-            GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
-        )
+        github_integration_config=GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN")),
+        ontology_store=ontology_store
     )
 )
 
