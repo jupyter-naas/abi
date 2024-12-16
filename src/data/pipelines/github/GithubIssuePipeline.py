@@ -48,7 +48,7 @@ class GithubIssuePipeline(Pipeline):
 
     def run(self, parameters: GithubIssuePipelineParameters) -> Graph:
         # Init graph
-        graph = ABIGraph()
+        graph = self.__configuration.ontology_store.get(self.__configuration.ontology_store_name)
 
         # Get issue data from GithubIntegration
         # GitHub Issue API Response Schema:
@@ -262,7 +262,7 @@ class GithubIssuePipeline(Pipeline):
             )
             graph.add((task_completion, ABI.hasAssignee, github_assignee))
         
-        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
+        self.__configuration.ontology_store.store(self.__configuration.ontology_store_name, graph)
         
         return graph
     

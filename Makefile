@@ -54,6 +54,9 @@ chat-supervisor-agent: .venv
 chat-onedrive-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-onedrive-agent'
 
+chat-naas-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-naas-agent'
+
 .DEFAULT_GOAL := chat-integration-agent
 
-.PHONY: test chat-supervisor-agent chat-support-agent chat-integration-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent chat-onedrive-agent api sh lock add abi-add
+.PHONY: test chat-supervisor-agent chat-support-agent chat-integration-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent chat-onedrive-agent chat-naas-agent api sh lock add abi-add
