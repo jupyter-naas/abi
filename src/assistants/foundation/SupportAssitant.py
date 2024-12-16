@@ -60,8 +60,10 @@ def create_support_assistant(
         agent_shared_state = AgentSharedState()
     
     return Agent(
-        model, 
-        tools, 
+        name="support_assistant", 
+        description="Use to get any feedbacks/bugs or needs from user.",
+        chat_model=model, 
+        tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
