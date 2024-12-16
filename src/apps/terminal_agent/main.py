@@ -9,6 +9,7 @@ from src.assistants.domain.SalesAssistant import create_sales_assistant
 from src.assistants.foundation.IntegrationAssistant import create_integration_agent
 from src.assistants.foundation.SupportAssitant import create_support_assistant
 from src.assistants.SupervisorAgent import create_supervisor_agent
+from src.assistants.custom.OneDriveAssistant import create_onedrive_agent
 
 def on_tool_response(message: str):
     try:
@@ -91,3 +92,8 @@ def run_supervisor_agent():
     agent = create_supervisor_agent()
     run_agent(agent)
     
+def run_onedrive_agent():
+    agent = create_onedrive_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
