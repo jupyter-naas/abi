@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any
+from typing import Callable, Literal, Any, AsyncGenerator
 
 # LangChain Core imports for base components
 from langchain_core.language_models import BaseChatModel
@@ -17,8 +17,16 @@ from langgraph.prebuilt import ToolNode
 # Pydantic imports for schema validation
 from pydantic import BaseModel, Field
 
+from abi.utils.Expose import Expose
+
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
+
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from typing import Generator
+from abi.utils.Logger import logger
+from sse_starlette.sse import EventSourceResponse
 
 class AgentSharedState:
     __thread_id: int
@@ -39,7 +47,7 @@ class AgentConfiguration:
     on_tool_response: Callable[[AnyMessage], None] = field(default_factory=lambda: lambda _: None)
     system_prompt: str = field(default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'")
 
-class Agent:
+class Agent(Expose):
     
     """An Agent class that orchestrates interactions between a language model and tools.
 
@@ -48,6 +56,8 @@ class Agent:
     and handling tool usage in a structured way.
 
     Attributes:
+        __name (str): The name of the agent
+        __description (str): The description of the agent
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
@@ -67,6 +77,9 @@ class Agent:
     2. Conditionally route to either tools or end based on agent output
     3. Route back to agent after tool usage
     """
+    __name: str
+    __description: str
+    
     __chat_model: BaseChatModel
     __tools: list[Tool]
     __chekpointer: BaseCheckpointSaver
@@ -79,7 +92,7 @@ class Agent:
     __on_tool_usage: Callable[[AnyMessage], None]
     __on_tool_response: Callable[[AnyMessage], None]
 
-    def __init__(self, chat_model: BaseChatModel, tools: list[Tool], memory: BaseCheckpointSaver = MemorySaver(), state: AgentSharedState = AgentSharedState(), configuration: AgentConfiguration = AgentConfiguration()):
+    def __init__(self, name: str, description: str, chat_model: BaseChatModel, tools: list[Tool], memory: BaseCheckpointSaver = MemorySaver(), state: AgentSharedState = AgentSharedState(), configuration: AgentConfiguration = AgentConfiguration()):
         """Initialize a new Agent instance.
         
         Args:
@@ -89,6 +102,8 @@ class Agent:
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 Defaults to an in-memory saver.
         """
+        self.__name = name
+        self.__description = description
         self.__tools = tools
         self.__chat_model = chat_model.bind_tools(self.__tools)
         self.__checkpointer = memory
@@ -267,13 +282,91 @@ class Agent:
         
         return response
     
-    def as_tool(self, name: str, description: str) -> StructuredTool:
+    def duplicate(self) -> 'Agent':
+        """Create a new instance of the agent with the same configuration.
+        
+        This method creates a deep copy of the agent with the same configuration
+        but with its own independent state. This is useful when you need to run
+        multiple instances of the same agent concurrently.
+        
+        Returns:
+            Agent: A new Agent instance with the same configuration
+        """
+        return Agent(
+            name=self.__name,
+            description=self.__description,
+            chat_model=self.__chat_model,
+            tools=self.__tools,
+            # memory=self.__checkpointer.__class__(),  # Create new memory instance
+            memory=self.__checkpointer,
+            # state=AgentSharedState(),  # Create new state instance
+            state=self.__state,
+            configuration=self.__configuration
+        )
+    
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this agent to the given router."""
+        
+        class CompletionQuery(BaseModel):
+            prompt: str = Field(..., description="The prompt to send to the agent")
+        
+        @router.post("/completion")
+        def completion(query: CompletionQuery):
+            return self.invoke(query.prompt)
+            
+        @router.post("/stream-completion")
+        async def stream_completion(query: CompletionQuery):
+            return EventSourceResponse(
+                self.stream_invoke(query.prompt),
+                media_type='text/event-stream'
+            )
+
+    async def stream_invoke(self, prompt: str):
+        """Process a user prompt through the agent and yield responses as they come.
+        
+        Args:
+            prompt (str): The user's text prompt to process
+            
+        Yields:
+            dict: Event data formatted for SSE
+        """
+        # def stream_on_tool_usage(message: AnyMessage):
+        #     logger.debug(f"Tool usage: {message}")
+        #     return {"event": "tool_usage", "data": str(message)}
+        
+        # def stream_on_tool_response(message: AnyMessage):
+        #     logger.debug(f"Tool response: {message}")
+        #     return {"event": "tool_response", "data": str(message)}
+        
+        # self.__on_tool_usage = stream_on_tool_usage
+        # self.__on_tool_response = stream_on_tool_response
+        
+        final_state = self.__app.invoke(
+            {"messages": [SystemMessage(content=self.__configuration.system_prompt), HumanMessage(content=prompt)]},
+            config={"configurable": {"thread_id": self.__state.thread_id}}
+        )
+        
+        response = final_state["messages"][-1].content
+        logger.debug(f"Response: {response}")
+
+        for line in response.splitlines():
+            yield {
+                "event": "message",
+                "data": line
+            }
+            
+        yield {
+            "event": "done",
+            "data": "[DONE]"
+        }
+
+    def as_tools(self) -> list[StructuredTool]:
         class AgentToolSchema(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
         
-        return StructuredTool(
-            name=name,
-            description=description,
+        return [StructuredTool(
+            name=self.__name,
+            description=self.__description,
             func=self.__tool_function,
             args_schema=AgentToolSchema
-        )
+        )]

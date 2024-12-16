@@ -1,6 +1,10 @@
 .venv:
 	@ docker compose run abi poetry install
 
+install:
+	@ docker compose run abi poetry install
+	@ docker compose run abi poetry update abi
+
 abi-add: .venv
 	@ docker compose run abi bash -c 'cd lib && poetry add $(dep) && poetry lock --no-update'
 
