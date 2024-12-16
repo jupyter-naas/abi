@@ -35,9 +35,11 @@ def create_custom_assistant(
         agent_shared_state = AgentSharedState()
     
     return Agent(
-        model, 
-        tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
+        name="custom_assistant",
+        description="Use for custom tasks",
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
         memory=MemorySaver()
     ) 

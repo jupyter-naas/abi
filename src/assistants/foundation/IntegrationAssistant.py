@@ -56,6 +56,12 @@ def create_integration_agent():
     agent_configuration = AgentConfiguration(
         system_prompt=INTEGRATION_ASSISTANT_INSTRUCTIONS
     )       
-    return Agent(model, tools, configuration=agent_configuration)
+    return Agent(
+        name="integration_assistant",
+        description="Use for integration with external APIs",
+        chat_model=model,
+        tools=tools,
+        configuration=agent_configuration
+    )
 
 
