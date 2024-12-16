@@ -26,6 +26,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from typing import Generator
 from abi.utils.Logger import logger
+from sse_starlette.sse import EventSourceResponse
 
 class AgentSharedState:
     __thread_id: int
@@ -281,6 +282,28 @@ class Agent(Expose):
         
         return response
     
+    def duplicate(self) -> 'Agent':
+        """Create a new instance of the agent with the same configuration.
+        
+        This method creates a deep copy of the agent with the same configuration
+        but with its own independent state. This is useful when you need to run
+        multiple instances of the same agent concurrently.
+        
+        Returns:
+            Agent: A new Agent instance with the same configuration
+        """
+        return Agent(
+            name=self.__name,
+            description=self.__description,
+            chat_model=self.__chat_model,
+            tools=self.__tools,
+            # memory=self.__checkpointer.__class__(),  # Create new memory instance
+            memory=self.__checkpointer,
+            # state=AgentSharedState(),  # Create new state instance
+            state=self.__state,
+            configuration=self.__configuration
+        )
+    
     def as_api(self, router: APIRouter) -> None:
         """Adds API endpoints for this agent to the given router."""
         
@@ -293,7 +316,7 @@ class Agent(Expose):
             
         @router.post("/stream-completion")
         async def stream_completion(query: CompletionQuery):
-            return StreamingResponse(
+            return EventSourceResponse(
                 self.stream_invoke(query.prompt),
                 media_type='text/event-stream'
             )
@@ -305,24 +328,18 @@ class Agent(Expose):
             prompt (str): The user's text prompt to process
             
         Yields:
-            str: Chunks of the model's response text
+            dict: Event data formatted for SSE
         """
+        # def stream_on_tool_usage(message: AnyMessage):
+        #     logger.debug(f"Tool usage: {message}")
+        #     return {"event": "tool_usage", "data": str(message)}
         
-        def stream_on_tool_usage(message: AnyMessage):
-            logger.debug(f"Tool usage: {message}")
-            yield f"data: message\n\n"
-            #yield message
+        # def stream_on_tool_response(message: AnyMessage):
+        #     logger.debug(f"Tool response: {message}")
+        #     return {"event": "tool_response", "data": str(message)}
         
-        def stream_on_tool_response(message: AnyMessage):
-            logger.debug(f"Tool response: {message}")
-            yield f"data: message\n\n"
-            #yield message
-        
-        # self.on_tool_usage(stream_on_tool_usage)
-        # self.on_tool_response(stream_on_tool_response)
-        
-        self.__on_tool_usage = stream_on_tool_usage
-        self.__on_tool_response = stream_on_tool_response
+        # self.__on_tool_usage = stream_on_tool_usage
+        # self.__on_tool_response = stream_on_tool_response
         
         final_state = self.__app.invoke(
             {"messages": [SystemMessage(content=self.__configuration.system_prompt), HumanMessage(content=prompt)]},
@@ -333,17 +350,15 @@ class Agent(Expose):
         logger.debug(f"Response: {response}")
 
         for line in response.splitlines():
-            payload = f'data: {line}'
-            # Remove all \n at the end of the line
-            payload = payload.rstrip('\n')
+            yield {
+                "event": "message",
+                "data": line
+            }
             
-            # Make sure the payload is ending by only two \n
-            if not payload.endswith('\n\n'):
-                payload += '\n\n'
-            
-            yield payload
-            
-        yield 'data: [DONE]\n\n'
+        yield {
+            "event": "done",
+            "data": "[DONE]"
+        }
 
     def as_tools(self) -> list[StructuredTool]:
         class AgentToolSchema(BaseModel):
