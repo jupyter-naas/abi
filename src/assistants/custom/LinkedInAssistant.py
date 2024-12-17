@@ -25,14 +25,14 @@ def create_linkedin_agent():
         system_prompt=SYSTEM_PROMPT
     )
     model = ChatOpenAI(
-        model="gpt-4",
+        model="gpt-4o",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('li_at') and secret.get('JSESSIONID'):    
+    if secret.get('li_at') and secret.get('jsessionid'):    
         linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=secret.get('li_at'), jsessionid=secret.get('jsessionid'))
         tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
@@ -42,7 +42,7 @@ def create_linkedin_agent():
     
     return Agent(
         name="linkedin_assistant",
-        description="Use to manage LinkedIn posts, comments and reactions",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools, 
         state=AgentSharedState(thread_id=1), 
