@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Union, BinaryIO
 import boto3
 from botocore.exceptions import ClientError
 
+LOGO_URL = "https://logo.clearbit.com/amazonaws.com"
+
 @dataclass
 class AWSS3IntegrationConfiguration(IntegrationConfiguration):
     """Configuration for AWS S3 integration.

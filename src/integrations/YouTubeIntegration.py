@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+LOGO_URL = "https://logo.clearbit.com/youtube.com"
+
 @dataclass
 class YouTubeIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for YouTube integration.

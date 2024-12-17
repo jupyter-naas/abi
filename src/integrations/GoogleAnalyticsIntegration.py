@@ -15,6 +15,7 @@ from google.analytics.data_v1beta.types import (
     OrderBy
 )
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
 @dataclass
 class GoogleAnalyticsIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Google Analytics integration.
