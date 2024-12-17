@@ -4,7 +4,8 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 from contextlib import contextmanager
-import json
+
+LOGO_URL = "https://logo.clearbit.com/postgresql.org"
 
 @dataclass
 class PostgresIntegrationConfiguration(IntegrationConfiguration):

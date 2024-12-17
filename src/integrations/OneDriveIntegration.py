@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 import requests
 import json
 
-
+LOGO_URL = "https://logo.clearbit.com/microsoft.com"
 @dataclass
 class OneDriveIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for OneDrive integration.

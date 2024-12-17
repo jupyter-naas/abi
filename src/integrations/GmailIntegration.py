@@ -10,6 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 
+LOGO_URL = "https://logo.clearbit.com/gmail.com"
 @dataclass
 class GmailIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Gmail integration.

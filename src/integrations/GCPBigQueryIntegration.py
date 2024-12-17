@@ -5,6 +5,8 @@ from google.oauth2 import service_account
 from google.cloud import bigquery
 from google.api_core import retry
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GCPBigQueryIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GCP BigQuery integration.

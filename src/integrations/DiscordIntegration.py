@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/discord.com"
+
 @dataclass
 class DiscordIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Discord integration.

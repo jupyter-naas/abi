@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Any, Union, BinaryIO
 from google.oauth2 import service_account
 from google.cloud import storage
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GCPStorageIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GCP Storage integration.

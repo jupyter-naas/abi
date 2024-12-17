@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, Any, Optional
 
+LOGO_URL = "https://logo.clearbit.com/github.com"
+
 @dataclass
 class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Github GraphQL integration.

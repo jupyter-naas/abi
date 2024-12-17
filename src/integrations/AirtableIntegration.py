@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/airtable.com"
+
 @dataclass
 class AirtableIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Airtable integration.

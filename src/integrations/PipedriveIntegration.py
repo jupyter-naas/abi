@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/pipedrive.com"
+
 @dataclass
 class PipedriveIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Pipedrive integration.

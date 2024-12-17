@@ -11,6 +11,8 @@ from lib.abi.integration.integration import Integration, IntegrationConnectionEr
 # Load environment variables
 load_dotenv()
 
+LOGO_URL = "https://logo.clearbit.com/perplexity.ai"
+
 @dataclass
 class PerplexityIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Perplexity integration.

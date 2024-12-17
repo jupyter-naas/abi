@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Union
 from supabase import create_client, Client
 
+LOGO_URL = "https://logo.clearbit.com/supabase.com"
+
 @dataclass
 class SupabaseIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Supabase integration.

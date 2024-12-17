@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, List, Optional, Any
 
+LOGO_URL = "https://logo.clearbit.com/notion.so"
 @dataclass
 class NotionIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Notion integration.

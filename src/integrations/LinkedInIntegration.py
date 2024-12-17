@@ -8,6 +8,8 @@ import pandas as pd
 import time
 from abi import logger
 
+LOGO_URL = "https://logo.clearbit.com/linkedin.com"
+
 @dataclass
 class LinkedinIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for LinkedIn integration.

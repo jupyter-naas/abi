@@ -6,6 +6,8 @@ from datetime import datetime
 import pandas as pd
 import pytz
 
+LOGO_URL = "https://logo.clearbit.com/hubspot.com"
+
 @dataclass
 class HubSpotIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for HubSpot integration.
