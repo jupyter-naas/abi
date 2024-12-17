@@ -246,7 +246,7 @@ For examples, see existing workflows in the `src/workflows/` directory.
 To create a new assistant, follow these steps:
 
 #### Create Assistant File
-Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/CustomAssistant.py`.
+Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/__TemplateAssistant__.py`.
 
 #### Add Integrations, Workflows and Pipelines as tools
 - Import necessary integrations, pipelines and workflows
