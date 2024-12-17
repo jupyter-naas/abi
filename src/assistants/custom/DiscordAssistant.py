@@ -37,16 +37,15 @@ def create_discord_agent():
         tools += DiscordIntegration.as_tools(discord_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
-        name="support_assistant", 
-        description="Use to get any feedbacks/bugs or needs from user."
-    )
-    tools.append(support_assistant)
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)    
+    tools += support_assistant.as_tools()
     
     return Agent(
-        model,
-        tools, 
+        name="discord_assistant",
+        description="Use to manage Discord channels, messages and more",
+        chat_model=model,
+        tools=tools, 
         state=AgentSharedState(thread_id=1), 
         configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        memory=MemorySaver()    
+    )

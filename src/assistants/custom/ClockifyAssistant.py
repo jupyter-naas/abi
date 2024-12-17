@@ -37,11 +37,8 @@ def create_clockify_agent():
         tools += ClockifyIntegration.as_tools(clockify_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
-        name="support_assistant", 
-        description="Use to get any feedbacks/bugs or needs from user."
-    )
-    tools.append(support_assistant)
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_assistant.as_tools()
     
     return Agent(
         name="clockify_assistant",

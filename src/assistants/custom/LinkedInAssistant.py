@@ -37,15 +37,14 @@ def create_linkedin_agent():
         tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
-        name="support_assistant", 
-        description="Use to get any feedbacks/bugs or needs from user."
-    )
-    tools.append(support_assistant)
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_assistant.as_tools()
     
     return Agent(
-        model,
-        tools, 
+        name="linkedin_assistant",
+        description="Use to manage LinkedIn posts, comments and reactions",
+        chat_model=model,
+        tools=tools, 
         state=AgentSharedState(thread_id=1), 
         configuration=agent_configuration, 
         memory=MemorySaver()
