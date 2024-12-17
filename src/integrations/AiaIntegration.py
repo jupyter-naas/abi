@@ -1,11 +1,11 @@
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
-
 from src import secret
 import requests
+
+LOGO_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_AIA.png"
 
 @dataclass
 class AiaIntegrationConfiguration(IntegrationConfiguration):

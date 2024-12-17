@@ -8,7 +8,7 @@ import os
 from abi import logger
 import jwt
 
-
+LOGO_URL = "https://logo.clearbit.com/naas.ai"
 @dataclass
 class NaasIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Naas integration.

@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import requests
 from datetime import datetime
 
+LOGO_URL = "https://logo.clearbit.com/qonto.com"
+
 @dataclass
 class QontoIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Qonto integration.

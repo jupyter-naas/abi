@@ -4,8 +4,9 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
+
+LOGO_URL = "https://logo.clearbit.com/stripe.com"
 
 @dataclass
 class StripeIntegrationConfiguration(IntegrationConfiguration):

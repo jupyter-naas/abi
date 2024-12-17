@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import requests
 from datetime import datetime
 
+LOGO_URL = "https://logo.clearbit.com/pennylane.tech"
+
 @dataclass
 class PennylaneIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Pennylane integration.

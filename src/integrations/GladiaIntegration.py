@@ -2,7 +2,8 @@ from lib.abi.integration.integration import Integration, IntegrationConfiguratio
 from dataclasses import dataclass
 from typing import Dict, List, Optional, BinaryIO
 import requests
-import json
+
+LOGO_URL = "https://logo.clearbit.com/gladia.io"
 
 @dataclass
 class GladiaIntegrationConfiguration(IntegrationConfiguration):

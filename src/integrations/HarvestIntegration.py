@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 import requests
 from datetime import datetime
 
+LOGO_URL = "https://logo.clearbit.com/harvestapp.com"
 @dataclass
 class HarvestIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Harvest integration.

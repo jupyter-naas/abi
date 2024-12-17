@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/slack.com"
+
 @dataclass
 class SlackIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Slack integration.

@@ -6,6 +6,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime, timezone
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GoogleCalendarIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Google Calendar integration.
