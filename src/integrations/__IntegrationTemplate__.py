@@ -1,5 +1,7 @@
 from lib.abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
+import requests
+from typing import Dict
 
 @dataclass
 class YourIntegrationConfiguration(IntegrationConfiguration):
@@ -36,3 +38,45 @@ class YourIntegration(Integration):
         super().__init__(configuration)
         self.__configuration = configuration
 
+    def _make_request(self, endpoint: str, method: str = "GET", params: Dict = None, json: Dict = None) -> Dict:
+        """Make HTTP request to YourService's API endpoint.
+        
+        Args:
+            endpoint (str): The API endpoint to request.
+            method (str): HTTP method to use (default: "GET").
+            params (Dict): Query parameters for the request.
+            json (Dict): JSON body for the request.
+        
+        Returns:
+            Dict: Response data from the API.
+        """
+        url = f"{self.__configuration.base_url}/{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {self.__configuration.api_key}",
+            "Content-Type": "application/json"
+        }
+        response = requests.request(method, url, headers=headers, params=params, json=json)
+        return response.json()
+    
+    def function_name(self, parameter: str) -> str:
+        """Function description."""
+        return self._make_request(f"/{parameter}")
+    
+def as_tools(configuration: YourIntegrationConfiguration):
+    """Convert Airtable integration into LangChain tools."""
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field
+    
+    integration = YourIntegration(configuration)
+
+    class YourToolSchema(BaseModel):
+        parameter: str = Field(..., description="Description of parameter")
+
+    return [
+        StructuredTool(
+        name="your_tool",
+            description="Description of the tool",
+            func=integration.function_name,
+            args_schema=YourToolSchema
+        )
+    ]
