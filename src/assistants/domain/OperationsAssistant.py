@@ -1,10 +1,12 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config
-from src.integrations import AiaIntegration, NaasIntegration
+from src.integrations import AiaIntegration
+from src.integrations.AiaIntegration import AiaIntegrationConfiguration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.integrations.AlgoliaIntegration import AlgoliaIntegrationConfiguration
 from src.workflows.operations_assistant.CreateIssueAndAddToProjectWorkflow import CreateIssueAndAddToProjectWorkflow, CreateIssueAndAddToProjectWorkflowConfiguration
 from src.workflows.operations_assistant.GetTopPrioritiesWorkflow import GetTopPrioritiesWorkflow, GetTopPrioritiesConfiguration
 from src.workflows.operations_assistant.AssignIssuesToProjectWorkflow import AssignIssuesToProjectWorkflow, AssignIssuesToProjectWorkflowConfiguration
@@ -13,6 +15,7 @@ from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__Second
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
+from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndexWorkflow, UpdateAlgoliaIndexConfiguration
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "An Operations Assistant that manages tasks and projects to improve operational efficiency."
@@ -43,7 +46,7 @@ def create_operations_assistant(
         tools += add_assistants_to_naas_workspace.as_tools()
 
     if (naas_key := secret.get('NAAS_API_KEY')) and (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        aia_integration_config = AiaIntegration.AiaIntegrationConfiguration(api_key=naas_key)
+        aia_integration_config = AiaIntegrationConfiguration(api_key=naas_key)
         tools += AiaIntegration.as_tools(aia_integration_config)
 
     if github_access_token := secret.get('GITHUB_ACCESS_TOKEN'):
@@ -84,6 +87,14 @@ def create_operations_assistant(
         ontology_store=ontology_store
     ))
     tools += get_top_priorities_workflow.as_tools()
+
+    # Add UpdateAlgoliaIndexWorkflow tool
+    if secret.get('ALGOLIA_APPLICATION_ID') and secret.get('ALGOLIA_API_KEY'):
+        algolia_integration_config = AlgoliaIntegrationConfiguration(app_id=secret.get("ALGOLIA_APPLICATION_ID"), api_key=secret.get("ALGOLIA_API_KEY"))
+        update_algolia_index_workflow = UpdateAlgoliaIndexWorkflow(UpdateAlgoliaIndexConfiguration(
+            algolia_integration_config=algolia_integration_config
+        ))
+        tools += update_algolia_index_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:
