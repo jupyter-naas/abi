@@ -2,23 +2,23 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import NaasIntegration
-from src.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.integrations import LinkedInIntegration
+from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
 from src.assistants.foundation.SupportAssitant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
-DESCRIPTION = "A Naas Assistant with access to Naas Integration tools."
-AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+DESCRIPTION = "A LinkedIn Assistant with access to LinkedIn Integration tools."
+AVATAR_URL = "https://content.linkedin.com/content/dam/me/business/en-us/amp/brand-site/v2/bg/LI-Bug.svg.original.svg"
 SYSTEM_PROMPT = f"""
-You are a Naas Assistant with access to NaasIntegration tools.
+You are a LinkedIn Assistant with access to LinkedIn Integration tools.
 If you don't have access to any tool, ask the user to set their access token in .env file.
-Always be clear and professional in your communication while helping users interact with Naas services.
+Always be clear and professional in your communication while helping users interact with LinkedIn services.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 
 {RESPONSIBILITIES_PROMPT}
 """
 
-def create_naas_agent():
+def create_linkedin_agent():
     agent_configuration = AgentConfiguration(
         on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
         on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
@@ -32,20 +32,20 @@ def create_naas_agent():
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('NAAS_API_KEY'):    
-        naas_integration_config = NaasIntegrationConfiguration(api_key=secret.get('NAAS_API_KEY'))
-        tools += NaasIntegration.as_tools(naas_integration_config)
+    if secret.get('li_at') and secret.get('jsessionid'):    
+        linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=secret.get('li_at'), jsessionid=secret.get('jsessionid'))
+        tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
     # Add support assistant
     support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
     tools += support_assistant.as_tools()
     
     return Agent(
-        name="naas_assistant",
-        description="Use to manage Naas workspace, plugins and ontologies",
+        name="linkedin_assistant",
+        description=DESCRIPTION,
         chat_model=model,
-        tools=tools,
-        state=AgentSharedState(thread_id=1),
-        configuration=agent_configuration,
+        tools=tools, 
+        state=AgentSharedState(thread_id=1), 
+        configuration=agent_configuration, 
         memory=MemorySaver()
-    )
+    ) 

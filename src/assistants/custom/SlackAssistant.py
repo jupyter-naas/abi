@@ -2,50 +2,51 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import NaasIntegration
-from src.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.integrations import SlackIntegration
+from src.integrations.SlackIntegration import SlackIntegrationConfiguration
 from src.assistants.foundation.SupportAssitant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
-DESCRIPTION = "A Naas Assistant with access to Naas Integration tools."
-AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
+DESCRIPTION = "A Slack Assistant with access to Slack Integration tools."
+AVATAR_URL = "https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png"
 SYSTEM_PROMPT = f"""
-You are a Naas Assistant with access to NaasIntegration tools.
+You are a Slack Assistant with access to Slack Integration tools.
 If you don't have access to any tool, ask the user to set their access token in .env file.
-Always be clear and professional in your communication while helping users interact with Naas services.
+Always be clear and professional in your communication while helping users interact with Slack services.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 
 {RESPONSIBILITIES_PROMPT}
 """
 
-def create_naas_agent():
+def create_slack_agent():
     agent_configuration = AgentConfiguration(
         on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
         on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
         system_prompt=SYSTEM_PROMPT
     )
     model = ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-4",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('NAAS_API_KEY'):    
-        naas_integration_config = NaasIntegrationConfiguration(api_key=secret.get('NAAS_API_KEY'))
-        tools += NaasIntegration.as_tools(naas_integration_config)
+    if secret.get('SLACK_BOT_TOKEN'):    
+        slack_integration_config = SlackIntegrationConfiguration(token=secret.get('SLACK_TOKEN'))
+        tools += SlackIntegration.as_tools(slack_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
+        name="support_assistant", 
+        description="Use to get any feedbacks/bugs or needs from user."
+    )
+    tools.append(support_assistant)
     
     return Agent(
-        name="naas_assistant",
-        description="Use to manage Naas workspace, plugins and ontologies",
-        chat_model=model,
-        tools=tools,
-        state=AgentSharedState(thread_id=1),
-        configuration=agent_configuration,
+        model,
+        tools, 
+        state=AgentSharedState(thread_id=1), 
+        configuration=agent_configuration, 
         memory=MemorySaver()
-    )
+    ) 

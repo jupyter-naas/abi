@@ -132,7 +132,7 @@ class AddAssistantsToNaasWorkspace(Workflow):
         
         return [StructuredTool(
             name="publish_assistants_to_naas_workspace",
-            description="Publish all assistants to a given Naas workspace",
+            description="Publish domain assistants (OpenDataAssistant, ContentAssistant, GrowthAssistant, SalesAssistant, OperationsAssistant, FinanceAssistant) to a given Naas workspace",
             func=lambda **kwargs: self.run(AddAssistantsToNaasWorkspaceParameters(**kwargs)),
             args_schema=AddAssistantsToNaasWorkspaceParameters
         )]
