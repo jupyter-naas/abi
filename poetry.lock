@@ -143,6 +143,25 @@ files = [
 frozenlist = ">=1.1.0"
 
 [[package]]
+name = "algoliasearch"
+version = "4.11.1"
+description = "A fully-featured and blazing-fast Python API client to interact with Algolia."
+optional = false
+python-versions = ">=3.8.1"
+files = [
+    {file = "algoliasearch-4.11.1-py3-none-any.whl", hash = "sha256:9fc217c2b5cc9c663e08df5ed51a88fef00db84556e66d47894dcfa9be504713"},
+    {file = "algoliasearch-4.11.1.tar.gz", hash = "sha256:34973ca80529ad4c84df2d0b94170e7d1d159f04de1b0894e82887841f0deed9"},
+]
+
+[package.dependencies]
+aiohttp = ">=3.10.11"
+async-timeout = ">=4.0.3"
+pydantic = ">=2"
+python-dateutil = ">=2.8.2"
+requests = ">=2.32.3"
+urllib3 = ">=1.25.3"
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 description = "Reusable constraint types to use with typing.Annotated"
@@ -3823,4 +3842,4 @@ repair = ["scipy (>=1.6.3)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "118bc3854aefa705c4214520af6f669331bbce6e1a231b058a7f2dc62667f90a"
+content-hash = "13a710bb7d0b310b4e9bd9b7f91a84ce30207bd6cc011754597aa7b0bf990bb5"

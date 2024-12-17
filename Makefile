@@ -51,6 +51,9 @@ chat-sales-agent: .venv
 chat-airtable-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-airtable-agent'
 
+chat-algolia-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-algolia-agent'
+
 chat-aws-s3-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-aws-s3-agent'
 
