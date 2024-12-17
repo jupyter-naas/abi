@@ -2,8 +2,8 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import HubspotIntegration
-from src.integrations.HubspotIntegration import HubspotIntegrationConfiguration
+from src.integrations import HubSpotIntegration
+from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.assistants.foundation.SupportAssitant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
@@ -33,8 +33,8 @@ def create_hubspot_agent():
     
     # Add integration based on available credentials
     if secret.get('HUBSPOT_ACCESS_TOKEN'):    
-        hubspot_integration_config = HubspotIntegrationConfiguration(api_key=secret.get('HUBSPOT_API_KEY'))
-        tools += HubspotIntegration.as_tools(hubspot_integration_config)
+        hubspot_integration_config = HubSpotIntegrationConfiguration(api_key=secret.get('HUBSPOT_API_KEY'))
+        tools += HubSpotIntegration.as_tools(hubspot_integration_config)
 
     # Add support assistant
     support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
