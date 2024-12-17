@@ -24,6 +24,12 @@ sh: .venv
 api: .venv
 	@ docker compose run -p 9879:9879 abi poetry run api
 
+chat-supervisor-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-supervisor-agent'
+
+chat-support-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-support-agent'
+
 chat-content-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-content-agent'
 
@@ -42,21 +48,91 @@ chat-operations-agent: .venv
 chat-sales-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-sales-agent'
 
-chat-integration-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run chat-integration-agent'
+chat-airtable-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-airtable-agent'
 
-chat-support-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run chat-support-agent'
+chat-aws-s3-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-aws-s3-agent'
 
-chat-supervisor-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run chat-supervisor-agent'
+chat-clockify-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-clockify-agent'
 
-chat-onedrive-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run chat-onedrive-agent'
+chat-discord-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-discord-agent'
+
+chat-github-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-github-agent'
+
+chat-gladia-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-gladia-agent'
+
+chat-gmail-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-gmail-agent'
+
+chat-google-analytics-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-google-analytics-agent'
+
+chat-google-calendar-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-google-calendar-agent'
+
+chat-google-drive-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-google-drive-agent'
+
+chat-google-sheets-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-google-sheets-agent'
+
+chat-harvest-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-harvest-agent'
+
+chat-hubspot-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-hubspot-agent'
+
+chat-linkedin-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-linkedin-agent'
 
 chat-naas-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-naas-agent'
 
-.DEFAULT_GOAL := chat-integration-agent
+chat-news-api-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-news-api-agent'
 
-.PHONY: test chat-supervisor-agent chat-support-agent chat-integration-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent chat-onedrive-agent chat-naas-agent api sh lock add abi-add
+chat-notion-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-notion-agent'
+
+chat-onedrive-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-onedrive-agent'
+
+chat-pennylane-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-pennylane-agent'
+
+chat-pipedrive-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-pipedrive-agent'
+
+chat-postgres-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-postgres-agent'
+
+chat-qonto-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-qonto-agent'
+
+chat-serper-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-serper-agent'
+
+chat-slack-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-slack-agent'
+
+chat-stripe-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-stripe-agent'
+
+chat-supabase-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-supabase-agent'
+
+chat-yahoo-finance-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-yahoo-finance-agent'
+
+chat-youtube-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-youtube-agent'
+
+
+.DEFAULT_GOAL := chat-supervisor-agent
+
+.PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
