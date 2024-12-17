@@ -9,6 +9,7 @@ from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
 from src.assistants.domain.OperationsAssistant import create_operations_assistant
 from src.assistants.domain.SalesAssistant import create_sales_assistant
 from src.assistants.custom.AWSS3Assistant import create_aws_s3_agent
+from src.assistants.custom.AlgoliaAssistant import create_algolia_agent
 from src.assistants.custom.AirtableAssistant import create_airtable_agent
 from src.assistants.custom.ClockifyAssistant import create_clockify_agent
 from src.assistants.custom.DiscordAssistant import create_discord_agent
@@ -114,6 +115,12 @@ def run_finance_agent():
 
 def run_airtable_agent():
     agent = create_airtable_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_algolia_agent():
+    agent = create_algolia_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
