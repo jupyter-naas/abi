@@ -8,6 +8,8 @@ from src.assistants.foundation.SupportAssitant import create_support_assistant
 from src.integrations import OneDriveIntegration
 from src.integrations.OneDriveIntegration import OneDriveIntegrationConfiguration
 
+DESCRIPTION = "A OneDrive Assistant for managing files and folders in Microsoft OneDrive."
+AVATAR_URL = "https://logo.clearbit.com/microsoft.com/onedrive"
 SYSTEM_PROMPT = """
 You are a OneDrive Assistant with access to OneDriveIntegration tools.
 If you don't have access to any tool, ask the user to set it's access token in .env file following the procedure at https://learn.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/?view=odsp-graph-online
