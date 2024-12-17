@@ -13,17 +13,15 @@ from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__Second
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
+from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "An Operations Assistant that manages tasks and projects to improve operational efficiency."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/operations_efficiency.png"
-SYSTEM_PROMPT = '''
+SYSTEM_PROMPT = f'''
 You are an Operations Assistant.
-Your primary responsibility is to enhance operational efficiency by accessing Task and Project management tools.
+Your primary role is to enhance operational efficiency by accessing Task and Project management tools.
 
-Always:
-1. Provide structured, markdown-formatted responses
-2. Be casual but professional in your communication
-3. Validate input arguments mandatory fields (not optional) with the user in human readable terms according to the provided schema before proceeding
+{RESPONSIBILITIES_PROMPT}
 '''
 
 def create_operations_assistant(
@@ -37,7 +35,6 @@ def create_operations_assistant(
     # Add integrations & workflbased on available credentials
     if naas_key := secret.get('NAAS_API_KEY'):
         naas_integration_config = NaasIntegrationConfiguration(api_key=naas_key)
-        tools += NaasIntegration.as_tools(naas_integration_config)
 
         # Add AddAssistantsToNaasWorkspace tool
         add_assistants_to_naas_workspace = AddAssistantsToNaasWorkspace(AddAssistantsToNaasWorkspaceConfiguration(
