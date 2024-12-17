@@ -27,6 +27,9 @@ psycopg2-binary = "^2.9.10"
 supabase = "^2.10.0"
 yfinance = "^0.2.50"
 algoliasearch = "^4.11.1"
+google-cloud-bigquery = "^3.27.0"
+google-cloud-functions = "^1.19.0"
+google-cloud-storage = "^2.19.0"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
