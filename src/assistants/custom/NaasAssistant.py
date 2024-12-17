@@ -5,21 +5,16 @@ from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_
 from src.integrations import NaasIntegration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.assistants.foundation.SupportAssitant import create_support_assistant
-
+from src.assistants.custom.__responsabilities_prompt__ import RESPONSIBILITIES_PROMPT
 DESCRIPTION = "A Naas Assistant with access to Naas Integration tools."
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 You are a Naas Assistant with access to NaasIntegration tools.
 If you don't have access to any tool, ask the user to set their access token in .env file.
-
-Your responsibilities:
-1. Understand user requests and match them to appropriate NaasIntegration tools
-2. Before executing any tool, you MUST validate all required input arguments with the user in clear, human-readable terms
-3. If no suitable tool exists for the request:
-   - Ask if the user would like to create a new tool
-   - Direct them to the support agent for tool creation
-
 Always be clear and professional in your communication while helping users interact with Naas services.
+Always provide all the context (tool response, draft, etc.) to the user in your final response.
+
+{RESPONSIBILITIES_PROMPT}
 """
 
 def create_naas_agent():
@@ -41,16 +36,15 @@ def create_naas_agent():
         tools += NaasIntegration.as_tools(naas_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
-        name="support_assistant", 
-        description="Use to get any feedbacks/bugs or needs from user."
-    )
-    tools.append(support_assistant)
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_assistant.as_tools()
     
     return Agent(
-        model,
-        tools, 
-        state=AgentSharedState(thread_id=1), 
-        configuration=agent_configuration, 
+        name="naas_assistant",
+        description="Use to manage Naas workspace, plugins and ontologies",
+        chat_model=model,
+        tools=tools,
+        state=AgentSharedState(thread_id=1),
+        configuration=agent_configuration,
         memory=MemorySaver()
     )
