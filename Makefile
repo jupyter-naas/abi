@@ -24,6 +24,13 @@ sh: .venv
 api: .venv
 	@ docker compose run -p 9879:9879 abi poetry run api
 
+
+# Docker
+build: build.linux.x86_64
+
+build.linux.x86_64:
+	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+
 chat-supervisor-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-supervisor-agent'
 
