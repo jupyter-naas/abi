@@ -135,6 +135,11 @@ chat-yahoo-finance-agent: .venv
 chat-youtube-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-youtube-agent'
 
+chat-zerobounce-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-zerobounce-agent'
+
+chat-sendgrid-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-sendgrid-agent'
 
 .DEFAULT_GOAL := chat-supervisor-agent
 

@@ -77,6 +77,8 @@ chat-stripe-agent = "src.apps.terminal_agent.main:run_stripe_agent"
 chat-supabase-agent = "src.apps.terminal_agent.main:run_supabase_agent"
 chat-yahoo-finance-agent = "src.apps.terminal_agent.main:run_yahoo_finance_agent"
 chat-youtube-agent = "src.apps.terminal_agent.main:run_youtube_agent"
+chat-zerobounce-agent = "src.apps.terminal_agent.main:run_zerobounce_agent"
+chat-sendgrid-agent = "src.apps.terminal_agent.main:run_sendgrid_agent"
 
 abi = "src.cli:main"
 api = "src.api:api"
