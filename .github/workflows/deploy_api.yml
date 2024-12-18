@@ -59,7 +59,7 @@ jobs:
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
 
-          docker build . -t $URI:$TIMESTAMP -f spaces/Dockerfile.linkedin
+          docker tag ghcr.io/${{ github.repository }}/abi:latest $URI:$TIMESTAMP
 
           naas-python registry docker-login -n abi-api
 
