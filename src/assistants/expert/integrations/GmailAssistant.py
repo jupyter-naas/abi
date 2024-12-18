@@ -32,10 +32,12 @@ def create_gmail_agent():
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('GMAIL_API_KEY'):    
+    email = secret.get('GMAIL_EMAIL')
+    app_password = secret.get('GMAIL_APP_PASSWORD')
+    if email and app_password:    
         integration_config = GmailIntegrationConfiguration(
-            api_key=secret.get('GMAIL_API_KEY'),
-            credentials_path=secret.get('GMAIL_CREDENTIALS_PATH', 'credentials.json')
+            email=email,
+            app_password=app_password
         )
         tools += GmailIntegration.as_tools(integration_config)
 
