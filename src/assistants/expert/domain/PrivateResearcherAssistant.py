@@ -1,6 +1,9 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
+from src.integrations import NewsAPIIntegration, PerplexityIntegration
+from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 
 NAME = "Private Researcher"
 SLUG = "private-researcher"
@@ -56,6 +59,14 @@ def create_private_researcher_assistant(
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
+
+    news_api_key = secret.get('NEWS_API_KEY')
+    if news_api_key:
+        tools += NewsAPIIntegration.as_tools(NewsAPIIntegrationConfiguration(api_key=news_api_key))
+
+    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    if perplexity_api_key:
+        tools += PerplexityIntegration.as_tools(PerplexityIntegrationConfiguration(api_key=perplexity_api_key))
 
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(

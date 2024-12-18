@@ -1,6 +1,11 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
+from src.integrations import LinkedInIntegration, YouTubeIntegration, NewsAPIIntegration, PerplexityIntegration
+from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
+from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
+from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 
 NAME = "OSINT Investigator Assistant"
 SLUG = "osint-investigator-assistant"
@@ -59,7 +64,24 @@ def create_osint_investigator_assistant(
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
-    
+
+    li_at = secret.get('li_at')
+    jsessionid = secret.get('jsessionid')
+    if li_at and jsessionid:
+        tools += LinkedInIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+
+    youtube_key = secret.get('YOUTUBE_API_KEY')
+    if youtube_key:
+        tools += YouTubeIntegration.as_tools(YouTubeIntegrationConfiguration(api_key=youtube_key))
+
+    news_api_key = secret.get('NEWS_API_KEY')
+    if news_api_key:
+        tools += NewsAPIIntegration.as_tools(NewsAPIIntegrationConfiguration(api_key=news_api_key))
+
+    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    if perplexity_api_key:
+        tools += PerplexityIntegration.as_tools(PerplexityIntegrationConfiguration(api_key=perplexity_api_key))
+
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
             system_prompt=SYSTEM_PROMPT

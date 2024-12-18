@@ -1,8 +1,11 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
+from src.integrations import NewsAPIIntegration, PerplexityIntegration
+from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 
-NAME = "1.3. Regulatory Analyst"
+NAME = "Regulatory Analyst"
 SLUG = "regulatory-analyst"
 DESCRIPTION = "Track regulatory changes that impact the business."
 MODEL = "gpt-4-1106-preview"
@@ -50,6 +53,14 @@ def create_regulatory_analyst_assistant(
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
+
+    news_api_key = secret.get('NEWS_API_KEY')
+    if news_api_key:
+        tools += NewsAPIIntegration.as_tools(NewsAPIIntegrationConfiguration(api_key=news_api_key))
+
+    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    if perplexity_api_key:
+        tools += PerplexityIntegration.as_tools(PerplexityIntegrationConfiguration(api_key=perplexity_api_key))
 
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
