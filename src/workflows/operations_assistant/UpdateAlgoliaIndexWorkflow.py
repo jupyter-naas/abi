@@ -184,8 +184,11 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                         integration_class = getattr(module, class_name)
                         doc = inspect.getdoc(integration_class) or ""
                         logo_url = getattr(module, "LOGO_URL", "")
+                        
+                        # Add main integration record
+                        integration_id = hashlib.sha256(file.stem.encode()).hexdigest()
                         results.append({
-                            "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
+                            "objectID": integration_id,
                             "type": "integration",
                             "title": (file.stem.replace("Integration", " ")) + "Integration",
                             "category": "tool",
@@ -194,6 +197,39 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                             "source_url": f"https://github.com/abi/src/integrations/{file.name}",
                             "ranking": 1
                         })
+                        
+                        # Get tools if as_tools function exists
+                        if hasattr(module, "as_tools"):
+                            try:
+                                # Create dummy configuration to get tools
+                                config_class = getattr(module, f"{file.stem}Configuration")
+                                dummy_config = config_class(**{
+                                    field.name: "dummy" if field.type == str else 0 
+                                    for field in config_class.__dataclass_fields__.values()
+                                })
+                                
+                                tool_list = module.as_tools(dummy_config)
+                                for tool in tool_list:
+                                    # Create a unique ID for each function
+                                    function_id = hashlib.sha256(f"{file.stem}_{tool.name}".encode()).hexdigest()
+                                    
+                                    # Add function record
+                                    results.append({
+                                        "objectID": function_id,
+                                        "type": "integration",
+                                        "title": (tool.name).replace("_", " ").capitalize(),
+                                        "category": "function",
+                                        "description": tool.description,
+                                        "image_url": logo_url,
+                                        "source_url": f"https://github.com/abi/src/integrations/{file.name}",
+                                        "ranking": 2,
+                                        "parent_integration": integration_id,
+                                        "parent_integration_name": file.stem,
+                                        "args_schema": str(tool.args if hasattr(tool, 'args') else 
+                                                        tool.args_schema.__fields__ if hasattr(tool, 'args_schema') else {})
+                                    })
+                            except Exception as e:
+                                logger.warning(f"Could not get tools for {file.stem}: {e}")
                 except ImportError as e:
                     logger.error(f"Error importing integration {file.stem}: {e}")
         
