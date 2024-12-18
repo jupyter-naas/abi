@@ -19,7 +19,7 @@ class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):
 class GithubGraphqlIntegration(Integration):
     """Github GraphQL API integration class.
     
-    This class provides methods to interact with Github's GraphQL API endpoints.
+    This integration provides methods to interact with Github's GraphQL API endpoints.
     """
 
     __configuration: GithubGraphqlIntegrationConfiguration
@@ -33,18 +33,6 @@ class GithubGraphqlIntegration(Integration):
             "Authorization": f"Bearer {self.__configuration.access_token}",
             "Content-Type": "application/json"
         }
-        
-        # Test connection
-        try:
-            self.execute_query("""
-                query { 
-                    viewer { 
-                        login 
-                    } 
-                }
-            """)
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to Github GraphQL API: {str(e)}")
 
     def execute_query(self, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
         """Execute a GraphQL query against Github's API.

@@ -32,12 +32,11 @@ class GoogleDriveIntegrationConfiguration(IntegrationConfiguration):
 class GoogleDriveIntegration(Integration):
     """Google Drive API integration client using service account.
     
-    This class provides methods to interact with Google Drive's API endpoints
+    This integration provides methods to interact with Google Drive's API endpoints
     for file and folder operations.
     """
 
     __configuration: GoogleDriveIntegrationConfiguration
-    __service: any  # Drive API service
 
     def __init__(self, configuration: GoogleDriveIntegrationConfiguration):
         """Initialize Drive client with service account credentials."""

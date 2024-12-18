@@ -17,6 +17,10 @@ class GithubIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.github.com"
 
 class GithubIntegration(Integration):
+    """Github API integration client.
+    
+    This integration provides methods to interact with Github's API endpoints.
+    """
 
     __configuration: GithubIntegrationConfiguration
 

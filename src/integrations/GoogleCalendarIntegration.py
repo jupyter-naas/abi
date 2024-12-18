@@ -28,12 +28,11 @@ class GoogleCalendarIntegrationConfiguration(IntegrationConfiguration):
 class GoogleCalendarIntegration(Integration):
     """Google Calendar API integration client using service account.
     
-    This class provides methods to interact with Google Calendar's API endpoints
+    This integration provides methods to interact with Google Calendar's API endpoints
     for calendar and event operations.
     """
 
     __configuration: GoogleCalendarIntegrationConfiguration
-    __service: any  # Calendar API service
 
     def __init__(self, configuration: GoogleCalendarIntegrationConfiguration):
         """Initialize Calendar client with service account credentials."""

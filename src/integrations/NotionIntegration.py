@@ -19,7 +19,10 @@ class NotionIntegrationConfiguration(IntegrationConfiguration):
 
 
 class NotionIntegration(Integration):
-    """Notion API integration client."""
+    """Notion API integration client.
+    
+    This integration provides methods to interact with Notion's API endpoints.
+    """
 
     __configuration: NotionIntegrationConfiguration
 

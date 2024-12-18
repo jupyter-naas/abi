@@ -18,22 +18,10 @@ class AlgoliaIntegrationConfiguration(IntegrationConfiguration):
     api_key: str
 
 class AlgoliaIntegration(Integration):
-    """AlgoliaIntegration class for interacting with Algolia Search API.
+    """Algolia integration client.
     
-    This class provides methods to interact with Algolia's API endpoints.
+    This integration provides methods to interact with Algolia's API endpoints.
     It handles authentication and request management for indexing and searching.
-    
-    Attributes:
-        __configuration (AlgoliaIntegrationConfiguration): Configuration instance
-            containing necessary credentials and settings.
-        __client: Algolia SearchClient instance
-    
-    Example:
-        >>> config = AlgoliaIntegrationConfiguration(
-        ...     app_id="YOUR_APP_ID",
-        ...     api_key="YOUR_ADMIN_API_KEY"
-        ... )
-        >>> integration = AlgoliaIntegration(config)
     """
 
     __configuration: AlgoliaIntegrationConfiguration

@@ -29,10 +29,12 @@ class GoogleAnalyticsIntegrationConfiguration(IntegrationConfiguration):
     property_id: str
 
 class GoogleAnalyticsIntegration(Integration):
-    """Google Analytics Data API (GA4) integration client using service account."""
+    """Google Analytics Data API (GA4) integration client using service account.
+    
+    This integration provides methods to interact with Google Analytics' API endpoints.
+    """
 
     __configuration: GoogleAnalyticsIntegrationConfiguration
-    __client: BetaAnalyticsDataClient
 
     def __init__(self, configuration: GoogleAnalyticsIntegrationConfiguration):
         """Initialize Analytics client with service account credentials."""

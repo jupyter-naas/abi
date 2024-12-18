@@ -20,7 +20,7 @@ class NewsAPIIntegrationConfiguration(IntegrationConfiguration):
 class NewsAPIIntegration(Integration):
     """NewsAPI integration client.
     
-    This class provides methods to interact with NewsAPI endpoints
+    This integration provides methods to interact with NewsAPI endpoints
     for retrieving news articles and headlines.
     """
 

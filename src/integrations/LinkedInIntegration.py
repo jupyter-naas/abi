@@ -26,7 +26,10 @@ class LinkedinIntegrationConfiguration(IntegrationConfiguration):
     custom_api_url: str = "https://3hz1hdpnlf.execute-api.eu-west-1.amazonaws.com/prod"
 
 class LinkedinIntegration(Integration):
-    """LinkedIn API integration client."""
+    """LinkedIn API integration client.
+    
+    This integration provides methods to interact with LinkedIn's API endpoints. Using the custom API maintained by the team.
+    """
 
     __configuration: LinkedinIntegrationConfiguration
 

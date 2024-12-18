@@ -21,10 +21,12 @@ class GCPFunctionsIntegrationConfiguration(IntegrationConfiguration):
     location: str
 
 class GCPFunctionsIntegration(Integration):
-    """GCP Cloud Functions API integration client using service account."""
+    """GCP Cloud Functions API integration client using service account.
+    
+    This integration provides methods to interact with GCP Cloud Functions' API endpoints.
+    """
 
     __configuration: GCPFunctionsIntegrationConfiguration
-    __client: functions_v1.CloudFunctionsServiceClient
 
     def __init__(self, configuration: GCPFunctionsIntegrationConfiguration):
         """Initialize Cloud Functions client with service account credentials."""

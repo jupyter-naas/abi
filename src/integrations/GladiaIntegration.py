@@ -19,7 +19,7 @@ class GladiaIntegrationConfiguration(IntegrationConfiguration):
 class GladiaIntegration(Integration):
     """Gladia API integration client.
     
-    This class provides methods to interact with Gladia's API endpoints
+    This integration provides methods to interact with Gladia's API endpoints
     for audio transcription and text-to-speech services.
     """
 

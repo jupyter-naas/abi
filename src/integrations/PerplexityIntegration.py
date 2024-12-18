@@ -25,6 +25,11 @@ class PerplexityIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.perplexity.ai"
 
 class PerplexityIntegration(Integration):
+    """Perplexity API integration client.
+    
+    This integration provides methods to interact with Perplexity's API endpoints.
+    """
+
     __configuration: PerplexityIntegrationConfiguration
 
     def __init__(self, configuration: PerplexityIntegrationConfiguration):

@@ -20,6 +20,14 @@ class StripeIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.stripe.com/v1"
 
 class StripeIntegration(Integration):
+    """Stripe API integration client.
+    
+    This integration provides methods to interact with Stripe's API endpoints.
+    It handles authentication and request management.
+    """
+
+    __configuration: StripeIntegrationConfiguration
+
     def __init__(self, configuration: StripeIntegrationConfiguration):
         """Initialize Stripe client with API key."""
         super().__init__(configuration)
