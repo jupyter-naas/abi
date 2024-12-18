@@ -19,7 +19,7 @@ class SerperIntegrationConfiguration(IntegrationConfiguration):
 class SerperIntegration(Integration):
     """Serper.dev API integration client.
     
-    This class provides methods to interact with Serper's API endpoints
+    This integration provides methods to interact with Serper's API endpoints
     for Google search results.
     """
 

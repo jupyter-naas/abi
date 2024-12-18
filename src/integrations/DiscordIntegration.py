@@ -19,7 +19,7 @@ class DiscordIntegrationConfiguration(IntegrationConfiguration):
 class DiscordIntegration(Integration):
     """Discord API integration client.
     
-    This class provides methods to interact with Discord's API endpoints.
+    This integration provides methods to interact with Discord's API endpoints.
     It handles authentication and request management.
     """
 

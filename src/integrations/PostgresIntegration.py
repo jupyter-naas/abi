@@ -27,7 +27,10 @@ class PostgresIntegrationConfiguration(IntegrationConfiguration):
     sslmode: str = 'require'
 
 class PostgresIntegration(Integration):
-    """PostgreSQL integration client."""
+    """PostgreSQL integration client.
+    
+    This integration provides methods to interact with PostgreSQL's API endpoints.
+    """
 
     __configuration: PostgresIntegrationConfiguration
 

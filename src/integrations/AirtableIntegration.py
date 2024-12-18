@@ -21,7 +21,7 @@ class AirtableIntegrationConfiguration(IntegrationConfiguration):
 class AirtableIntegration(Integration):
     """Airtable API integration client.
     
-    This class provides methods to interact with Airtable's API endpoints
+    This integration provides methods to interact with Airtable's API endpoints
     for database operations.
     """
 

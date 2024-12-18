@@ -20,6 +20,11 @@ class ReplicateIntegrationConfiguration(IntegrationConfiguration):
     api_key: str
 
 class ReplicateIntegration(Integration):
+    """Replicate API integration client.
+    
+    This integration provides methods to interact with Replicate's API endpoints.
+    """
+
     __configuration: ReplicateIntegrationConfiguration
 
     def __init__(self, configuration: ReplicateIntegrationConfiguration):

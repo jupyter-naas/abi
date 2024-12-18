@@ -23,6 +23,18 @@ class NaasIntegrationConfiguration(IntegrationConfiguration):
 
 
 class NaasIntegration(Integration):
+    """Naas integration class for interacting with Naas API.
+    
+    This class provides methods to interact with Naas's API endpoints.
+    It handles authentication and request management.
+    
+    Attributes:
+        __configuration (NaasIntegrationConfiguration): Configuration instance
+            containing necessary credentials and settings.
+    """
+
+    __configuration: NaasIntegrationConfiguration
+
     def __init__(self, configuration: NaasIntegrationConfiguration):
         """Initialize Naas client with API key."""
         super().__init__(configuration)
@@ -34,12 +46,6 @@ class NaasIntegration(Integration):
         }
         
         self.base_url = self.__configuration.base_url
-        
-        # Test connection
-        try:
-            self.get_workspaces()
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to Naas: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
         """Make HTTP request to Naas API."""

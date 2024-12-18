@@ -18,24 +18,26 @@ class GCPStorageIntegrationConfiguration(IntegrationConfiguration):
     project_id: str
 
 class GCPStorageIntegration(Integration):
-    """GCP Cloud Storage API integration client using service account."""
+    """GCP Cloud Storage API integration client using service account.
+    
+    This integration provides methods to interact with GCP Cloud Storage's API endpoints.
+    """
 
     __configuration: GCPStorageIntegrationConfiguration
-    __client: storage.Client
+    
 
     def __init__(self, configuration: GCPStorageIntegrationConfiguration):
         """Initialize Storage client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
-        
+
         # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
+        self.__credentials = service_account.Credentials.from_service_account_file(
             self.__configuration.service_account_path
         )
         
-        # Initialize client
         self.__client = storage.Client(
-            credentials=credentials,
+            credentials=self.__credentials,
             project=self.__configuration.project_id
         )
 

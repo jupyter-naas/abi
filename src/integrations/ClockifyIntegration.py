@@ -20,7 +20,7 @@ class ClockifyIntegrationConfiguration(IntegrationConfiguration):
 class ClockifyIntegration(Integration):
     """Clockify API integration client.
     
-    This class provides methods to interact with Clockify's API endpoints.
+    This integration provides methods to interact with Clockify's API endpoints.
     It handles authentication and request management.
     """
 

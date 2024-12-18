@@ -18,7 +18,7 @@ class YahooFinanceIntegrationConfiguration(IntegrationConfiguration):
 class YahooFinanceIntegration(Integration):
     """Yahoo Finance API integration client.
     
-    This class provides methods to interact with Yahoo Finance
+    This integration provides methods to interact with Yahoo Finance
     to retrieve financial data and information.
     """
 
