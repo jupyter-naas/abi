@@ -2,7 +2,7 @@ FROM python:3.9
 
 WORKDIR /app
 
-COPY assets lib services src config.yaml Makefile .
+COPY assets lib src config.yaml Makefile .
 
 RUN pip install poetry
 RUN poetry install
