@@ -41,14 +41,18 @@ class GoogleAnalyticsIntegration(Integration):
         super().__init__(configuration)
         self.__configuration = configuration
         
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path,
-            scopes=['https://www.googleapis.com/auth/analytics.readonly']
-        )
+        try:
+            # Load service account credentials
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path,
+                scopes=['https://www.googleapis.com/auth/analytics.readonly']
+            )
         
-        # Initialize client
-        self.__client = BetaAnalyticsDataClient(credentials=credentials)
+            # Initialize client
+            self.__client = BetaAnalyticsDataClient(credentials=credentials)
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Analytics API client: {str(e)}")
 
     def run_report(self,
                   metrics: List[str],
