@@ -1,0 +1,68 @@
+name: ABI API
+
+on:
+  workflow_run:
+    workflows:
+      - "Build ABI Container"
+    types: 
+      - completed
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Install naas-python
+        run: |
+          pip install naas-python
+          pip install --upgrade pydantic==2.7.4
+      
+      - name: Create Naas Container registry
+        run: |
+          naas-python registry create --name abi-api || echo "Registry already exists"
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+
+      - name: Push latest abi container
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          NAAS_TOKENS: ${{ secrets.NAAS_TOKENS }}
+          API_GITHUB_ACCESS_TOKEN: ${{ secrets.API_GITHUB_ACCESS_TOKEN }}
+          NAAS_API_KEY: ${{ secrets.NAAS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          REPLICATE_API_KEY: ${{ secrets.REPLICATE_API_KEY }}
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/abi:latest
+          export URI=`naas-python registry get -n abi-api | grep -v 'URI' | awk '{print $3}'`
+
+          # Generate timestamp to tag image
+          TIMESTAMP=$(date +%s)
+
+          docker build . -t $URI:$TIMESTAMP -f spaces/Dockerfile.linkedin
+
+          naas-python registry docker-login -n abi-api
+
+          docker push $URI:$TIMESTAMP
+
+          naas-python space create --name=abi-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env {\"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\"PERPLEXITY_API_KEY\":\"$PERPLEXITY_API_KEY\",\"REPLICATE_API_KEY\":\"$REPLICATE_API_KEY\",\"NAAS_API_KEY\":\"$NAAS_API_KEY\",\"GITHUB_ACCESS_TOKEN\":\"$GITHUB_ACCESS_TOKEN\"} || naas-python space update --name=abi-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env {\"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\"PERPLEXITY_API_KEY\":\"$PERPLEXITY_API_KEY\",\"REPLICATE_API_KEY\":\"$REPLICATE_API_KEY\",\"NAAS_API_KEY\":\"$NAAS_API_KEY\",\"GITHUB_ACCESS_TOKEN\":\"$GITHUB_ACCESS_TOKEN\"}
