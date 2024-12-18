@@ -30,16 +30,20 @@ class GCPStorageIntegration(Integration):
         """Initialize Storage client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
-
-        # Load service account credentials
-        self.__credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path
-        )
+        try:
+            # Load service account credentials
+            self.__credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path
+            )
         
-        self.__client = storage.Client(
-            credentials=self.__credentials,
-            project=self.__configuration.project_id
-        )
+            # Initialize client
+            self.__client = storage.Client(
+                credentials=self.__credentials,
+                project=self.__configuration.project_id
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Storage API client: {str(e)}")
 
     def list_buckets(self) -> List[Dict]:
         """List storage buckets in the project.

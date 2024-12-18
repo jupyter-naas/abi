@@ -38,18 +38,22 @@ class GoogleCalendarIntegration(Integration):
         """Initialize Calendar client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
+            
+        try:
+            # Load service account credentials
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path,
+                scopes=self.__configuration.scopes
+            )
         
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path,
-            scopes=self.__configuration.scopes
-        )
-        
-        # Create delegated credentials for impersonation
-        delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
-        
-        # Build the service
-        self.__service = build('calendar', 'v3', credentials=delegated_credentials)
+            # Create delegated credentials for impersonation
+            delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
+            
+            # Build the service
+            self.__service = build('calendar', 'v3', credentials=delegated_credentials)
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Calendar API client: {str(e)}")
 
     def list_events(self,
                    calendar_id: str = 'primary',
