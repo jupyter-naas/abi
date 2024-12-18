@@ -16,7 +16,6 @@ class SupabaseIntegrationConfiguration(IntegrationConfiguration):
     """
     url: str
     key: str
-    timeout: int = 60
 
 class SupabaseIntegration(Integration):
     """Supabase integration client.
@@ -32,11 +31,14 @@ class SupabaseIntegration(Integration):
         super().__init__(configuration)
         self.__configuration = configuration
         
-        self.__client = create_client(
-            self.__configuration.url,
-            self.__configuration.key,
-            options={'timeout': self.__configuration.timeout}
-        )
+        try:
+            self.__client: Client = create_client(
+                self.__configuration.url,
+                self.__configuration.key
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Supabase client: {str(e)}")
 
     def select(self,
                table: str,

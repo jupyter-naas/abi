@@ -37,18 +37,22 @@ class GoogleSheetsIntegration(Integration):
         """Initialize Sheets client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
-        
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path,
-            scopes=self.__configuration.scopes
-        )
-        
-        # Create delegated credentials for impersonation
-        delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
-        
-        # Build the service
-        self.__service = build('sheets', 'v4', credentials=delegated_credentials)
+
+        try:
+            # Load service account credentials
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path,
+                scopes=self.__configuration.scopes
+            )
+
+            # Create delegated credentials for impersonation
+            delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
+            
+            # Build the service
+            self.__service = build('sheets', 'v4', credentials=delegated_credentials)
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Sheets API client: {str(e)}")
 
     def get_values(self,
                   spreadsheet_id: str,

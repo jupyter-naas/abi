@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from abi import logger
 
 LOGO_URL = "https://logo.clearbit.com/youtube.com"
 
@@ -34,12 +35,18 @@ class YouTubeIntegration(Integration):
         """Initialize YouTube client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__youtube = build(
-            'youtube', 
-            self.__configuration.api_version, 
-            developerKey=self.__configuration.api_key
-        )
-
+        try:
+            self.__youtube = build(
+                developerKey=self.__configuration.api_key,
+                version=self.__configuration.api_version,
+                serviceName='youtube',
+                cache_discovery=False,
+                static_discovery=False
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize YouTube API client: {str(e)}")
+        
     def search_videos(self, 
                      query: str, 
                      max_results: int = 10, 
