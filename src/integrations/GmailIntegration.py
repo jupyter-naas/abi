@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 import email
+import base64
 
 LOGO_URL = "https://logo.clearbit.com/gmail.com"
 GMAIL_SMTP_SERVER = "smtp.gmail.com"
@@ -291,4 +292,4 @@ def as_tools(configuration: GmailIntegrationConfiguration):
             ),
             args_schema=SendMessageSchema
         )
-    ] 
+    ]
