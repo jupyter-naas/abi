@@ -8,4 +8,4 @@ RUN pip install poetry
 RUN poetry install
 
 
-CMD ["poetry", "run", "api"]
+CMD ["poetry", "run", "api" ]
