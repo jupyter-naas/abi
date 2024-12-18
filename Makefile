@@ -25,11 +25,24 @@ api: .venv
 	@ docker compose run -p 9879:9879 abi poetry run api
 
 
-# Docker
+# Docker Build Commands
+# -------------------
+# These commands are used to build the Docker image for the ABI project
+
+# Default build target that triggers the Linux x86_64 build
 build: build.linux.x86_64
 
+# Builds a Docker image for Linux x86_64 architecture
+# Usage: make build.linux.x86_64
+# 
+# Parameters:
+#   - Image name: abi
+#   - Dockerfile: Dockerfile.linux.x86_64
+#   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
 build.linux.x86_64:
 	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+
+# -------------------------------------------------------------------------------------------------
 
 chat-supervisor-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-supervisor-agent'
