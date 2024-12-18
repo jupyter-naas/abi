@@ -25,12 +25,11 @@ class GmailIntegrationConfiguration(IntegrationConfiguration):
 class GmailIntegration(Integration):
     """Gmail API integration client.
     
-    This class provides methods to interact with Gmail's API endpoints
+    This integration provides methods to interact with Gmail's API endpoints
     for email operations.
     """
 
     __configuration: GmailIntegrationConfiguration
-    __service: any  # Gmail API service
 
     def __init__(self, configuration: GmailIntegrationConfiguration):
         """Initialize Gmail client with credentials."""

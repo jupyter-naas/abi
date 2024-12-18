@@ -27,12 +27,11 @@ class GoogleSheetsIntegrationConfiguration(IntegrationConfiguration):
 class GoogleSheetsIntegration(Integration):
     """Google Sheets API integration client using service account.
     
-    This class provides methods to interact with Google Sheets' API endpoints
+    This integration provides methods to interact with Google Sheets' API endpoints
     for spreadsheet operations.
     """
 
     __configuration: GoogleSheetsIntegrationConfiguration
-    __service: any  # Sheets API service
 
     def __init__(self, configuration: GoogleSheetsIntegrationConfiguration):
         """Initialize Sheets client with service account credentials."""

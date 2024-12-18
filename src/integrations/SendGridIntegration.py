@@ -21,7 +21,7 @@ class SendGridIntegrationConfiguration(IntegrationConfiguration):
 class SendGridIntegration(Integration):
     """SendGrid API integration client.
     
-    This class provides methods to interact with SendGrid's API endpoints
+    This integration provides methods to interact with SendGrid's API endpoints
     for managing contacts, lists, and unsubscribes.
     """
 

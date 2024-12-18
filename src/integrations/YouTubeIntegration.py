@@ -20,11 +20,15 @@ class YouTubeIntegrationConfiguration(IntegrationConfiguration):
 class YouTubeIntegration(Integration):
     """YouTube API integration client.
     
-    This class provides methods to interact with YouTube's Data API endpoints.
+    This integration provides methods to interact with YouTube's Data API endpoints.
+    It handles authentication and request management.
+    
+    Attributes:
+        __configuration (YouTubeIntegrationConfiguration): Configuration instance
+            containing necessary credentials and settings.
     """
 
     __configuration: YouTubeIntegrationConfiguration
-    __youtube: any  # YouTube API client
 
     def __init__(self, configuration: YouTubeIntegrationConfiguration):
         """Initialize YouTube client with API key."""

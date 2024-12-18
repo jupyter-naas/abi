@@ -19,7 +19,11 @@ class AiaIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://naas-abi-space.default.nebari.dev.naas.ai"  # Replace with actual base URL
 
 class AiaIntegration(Integration):
+    """AIA integration client.
     
+    This integration provides methods to interact with AIA's API endpoints.
+    """
+
     __configuration: AiaIntegrationConfiguration
     
     def __init__(self, configuration: AiaIntegrationConfiguration):

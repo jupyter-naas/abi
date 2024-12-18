@@ -20,6 +20,11 @@ class HubSpotIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.hubapi.com"
 
 class HubSpotIntegration(Integration):
+    """HubSpot API integration client.
+    
+    This integration provides methods to interact with HubSpot's API endpoints.
+    """
+
     __configuration: HubSpotIntegrationConfiguration
 
     def __init__(self, configuration: HubSpotIntegrationConfiguration):
@@ -32,12 +37,6 @@ class HubSpotIntegration(Integration):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        
-        # Test connection
-        try:
-            self._make_request("GET", "/crm/v3/objects/contacts")
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to HubSpot: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
         """Make HTTP request to HubSpot API."""

@@ -19,10 +19,13 @@ class SupabaseIntegrationConfiguration(IntegrationConfiguration):
     timeout: int = 60
 
 class SupabaseIntegration(Integration):
-    """Supabase integration client."""
+    """Supabase integration client.
+    
+    This integration provides methods to interact with Supabase's API endpoints.
+    It handles authentication and request management.
+    """
 
     __configuration: SupabaseIntegrationConfiguration
-    __client: Client
 
     def __init__(self, configuration: SupabaseIntegrationConfiguration):
         """Initialize Supabase client."""

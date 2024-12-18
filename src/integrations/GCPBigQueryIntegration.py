@@ -21,10 +21,12 @@ class GCPBigQueryIntegrationConfiguration(IntegrationConfiguration):
     location: str
 
 class GCPBigQueryIntegration(Integration):
-    """GCP BigQuery API integration client using service account."""
+    """GCP BigQuery API integration client using service account.
+    
+    This integration provides methods to interact with GCP BigQuery's API endpoints.
+    """
 
     __configuration: GCPBigQueryIntegrationConfiguration
-    __client: bigquery.Client
 
     def __init__(self, configuration: GCPBigQueryIntegrationConfiguration):
         """Initialize BigQuery client with service account credentials."""

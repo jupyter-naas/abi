@@ -27,7 +27,7 @@ class SlackIntegrationConfiguration(IntegrationConfiguration):
 class SlackIntegration(Integration):
     """Slack API integration client.
     
-    This class provides methods to interact with Slack's API endpoints.
+    This integration provides methods to interact with Slack's API endpoints.
     It handles authentication and request management.
     """
 

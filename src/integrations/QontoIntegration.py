@@ -22,7 +22,7 @@ class QontoIntegrationConfiguration(IntegrationConfiguration):
 class QontoIntegration(Integration):
     """Qonto API integration client.
     
-    This class provides methods to interact with Qonto's API endpoints
+    This integration provides methods to interact with Qonto's API endpoints
     for banking and financial operations.
     """
 
