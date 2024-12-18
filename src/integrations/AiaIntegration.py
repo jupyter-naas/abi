@@ -1,11 +1,11 @@
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
-
 from src import secret
 import requests
+
+LOGO_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_AIA.png"
 
 @dataclass
 class AiaIntegrationConfiguration(IntegrationConfiguration):
@@ -19,7 +19,11 @@ class AiaIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://naas-abi-space.default.nebari.dev.naas.ai"  # Replace with actual base URL
 
 class AiaIntegration(Integration):
+    """AIA integration client.
     
+    This integration provides methods to interact with AIA's API endpoints.
+    """
+
     __configuration: AiaIntegrationConfiguration
     
     def __init__(self, configuration: AiaIntegrationConfiguration):

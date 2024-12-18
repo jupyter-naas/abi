@@ -2,7 +2,8 @@ from lib.abi.integration.integration import Integration, IntegrationConfiguratio
 from dataclasses import dataclass
 from typing import Dict, List, Optional, BinaryIO
 import requests
-import json
+
+LOGO_URL = "https://logo.clearbit.com/gladia.io"
 
 @dataclass
 class GladiaIntegrationConfiguration(IntegrationConfiguration):
@@ -18,7 +19,7 @@ class GladiaIntegrationConfiguration(IntegrationConfiguration):
 class GladiaIntegration(Integration):
     """Gladia API integration client.
     
-    This class provides methods to interact with Gladia's API endpoints
+    This integration provides methods to interact with Gladia's API endpoints
     for audio transcription and text-to-speech services.
     """
 

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/pipedrive.com"
+
 @dataclass
 class PipedriveIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Pipedrive integration.
@@ -17,7 +19,7 @@ class PipedriveIntegrationConfiguration(IntegrationConfiguration):
 class PipedriveIntegration(Integration):
     """Pipedrive API integration client.
     
-    This class provides methods to interact with Pipedrive's API endpoints
+    This integration provides methods to interact with Pipedrive's API endpoints
     for CRM and sales pipeline management.
     """
 

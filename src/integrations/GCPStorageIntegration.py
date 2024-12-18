@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Any, Union, BinaryIO
 from google.oauth2 import service_account
 from google.cloud import storage
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GCPStorageIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GCP Storage integration.
@@ -16,26 +18,32 @@ class GCPStorageIntegrationConfiguration(IntegrationConfiguration):
     project_id: str
 
 class GCPStorageIntegration(Integration):
-    """GCP Cloud Storage API integration client using service account."""
+    """GCP Cloud Storage API integration client using service account.
+    
+    This integration provides methods to interact with GCP Cloud Storage's API endpoints.
+    """
 
     __configuration: GCPStorageIntegrationConfiguration
-    __client: storage.Client
+    
 
     def __init__(self, configuration: GCPStorageIntegrationConfiguration):
         """Initialize Storage client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
+        try:
+            # Load service account credentials
+            self.__credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path
+            )
         
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path
-        )
-        
-        # Initialize client
-        self.__client = storage.Client(
-            credentials=credentials,
-            project=self.__configuration.project_id
-        )
+            # Initialize client
+            self.__client = storage.Client(
+                credentials=self.__credentials,
+                project=self.__configuration.project_id
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Storage API client: {str(e)}")
 
     def list_buckets(self) -> List[Dict]:
         """List storage buckets in the project.

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/discord.com"
+
 @dataclass
 class DiscordIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Discord integration.
@@ -17,7 +19,7 @@ class DiscordIntegrationConfiguration(IntegrationConfiguration):
 class DiscordIntegration(Integration):
     """Discord API integration client.
     
-    This class provides methods to interact with Discord's API endpoints.
+    This integration provides methods to interact with Discord's API endpoints.
     It handles authentication and request management.
     """
 

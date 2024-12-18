@@ -62,153 +62,153 @@ abi:hasVersion a owl:DatatypeProperty ;
     rdfs:domain abi:Offering ;
     rdfs:range xsd:string .
 
-off:CustomerSegment rdfs:subClassOf cco:HumanGroup ;
+abi:CustomerSegment rdfs:subClassOf cco:HumanGroup ;
     rdfs:label "Customer Segment"@en .
 
-off:GeographicRegion rdfs:subClassOf cco:GeopoliticalRegion ;
+abi:GeographicRegion rdfs:subClassOf cco:GeopoliticalRegion ;
     rdfs:label "Geographic Region"@en .
 
-off:Industry rdfs:subClassOf cco:OrganizationType ;
+abi:Industry rdfs:subClassOf cco:OrganizationType ;
     rdfs:label "Industry"@en .
 
 # 4. Value Proposition
-off:ValueProposition rdfs:subClassOf cco:Proposition ;
+abi:ValueProposition rdfs:subClassOf cco:Proposition ;
     rdfs:label "Value Proposition"@en .
 
-off:KeyBenefit rdfs:subClassOf cco:Quality ;
+abi:KeyBenefit rdfs:subClassOf cco:Quality ;
     rdfs:label "Key Benefit"@en .
 
-off:UniqueSelllingPoint rdfs:subClassOf cco:Quality ;
+abi:UniqueSelllingPoint rdfs:subClassOf cco:Quality ;
     rdfs:label "Unique Selling Point"@en .
 
-off:ProblemSolved rdfs:subClassOf cco:Process ;
+abi:ProblemSolved rdfs:subClassOf cco:Process ;
     rdfs:label "Problem Solved"@en .
 
 # 5. Delivery Method
-off:DeliveryMethod rdfs:subClassOf cco:Process ;
+abi:DeliveryMethod rdfs:subClassOf cco:Process ;
     rdfs:label "Delivery Method"@en .
 
-off:PhysicalDelivery rdfs:subClassOf cco:MaterialEntity ;
+abi:PhysicalDelivery rdfs:subClassOf cco:MaterialEntity ;
     rdfs:label "Physical Delivery"@en .
 
-off:DigitalDelivery rdfs:subClassOf cco:InformationContentEntity ;
+abi:DigitalDelivery rdfs:subClassOf cco:InformationContentEntity ;
     rdfs:label "Digital Delivery"@en .
 
-off:InPersonDelivery rdfs:subClassOf cco:Process ;
+abi:InPersonDelivery rdfs:subClassOf cco:Process ;
     rdfs:label "In-Person Delivery"@en .
 
-off:RemoteDelivery rdfs:subClassOf cco:Process ;
+abi:RemoteDelivery rdfs:subClassOf cco:Process ;
     rdfs:label "Remote Delivery"@en .
 
 # 6. Lifecycle
-off:Lifecycle rdfs:subClassOf bfo:Process ;
+abi:Lifecycle rdfs:subClassOf bfo:Process ;
     rdfs:label "Lifecycle"@en .
 
-off:ProcessStage rdfs:subClassOf cco:ProcessStage ;
+abi:ProcessStage rdfs:subClassOf cco:ProcessStage ;
     rdfs:label "Process Stage"@en .
 
 # 7. Related Entities
-off:RelatedEntity rdfs:subClassOf cco:Organization ;
+abi:RelatedEntity rdfs:subClassOf cco:Organization ;
     rdfs:label "Related Entity"@en .
 
-off:Manufacturer rdfs:subClassOf cco:Organization ;
+abi:Manufacturer rdfs:subClassOf cco:Organization ;
     rdfs:label "Manufacturer"@en .
 
-off:Supplier rdfs:subClassOf cco:Organization ;
+abi:Supplier rdfs:subClassOf cco:Organization ;
     rdfs:label "Supplier"@en .
 
-off:Distributor rdfs:subClassOf cco:Organization ;
+abi:Distributor rdfs:subClassOf cco:Organization ;
     rdfs:label "Distributor"@en .
 
-off:Competitor rdfs:subClassOf cco:Organization ;
+abi:Competitor rdfs:subClassOf cco:Organization ;
     rdfs:label "Competitor"@en .
 
 # 8. Performance Metrics
-off:PerformanceMetric rdfs:subClassOf cco:MeasurementInformationContentEntity ;
+abi:PerformanceMetric rdfs:subClassOf cco:MeasurementInformationContentEntity ;
     rdfs:label "Performance Metric"@en .
 
-off:SalesVolume rdfs:subClassOf cco:MeasurementValue ;
+abi:SalesVolume rdfs:subClassOf cco:MeasurementValue ;
     rdfs:label "Sales Volume"@en .
 
-off:Revenue rdfs:subClassOf cco:MonetaryValue ;
+abi:Revenue rdfs:subClassOf cco:MonetaryValue ;
     rdfs:label "Revenue"@en .
 
-off:CustomerSatisfactionScore rdfs:subClassOf cco:MeasurementValue ;
+abi:CustomerSatisfactionScore rdfs:subClassOf cco:MeasurementValue ;
     rdfs:label "Customer Satisfaction Score"@en .
 
-off:MarketShare rdfs:subClassOf cco:Ratio ;
+abi:MarketShare rdfs:subClassOf cco:Ratio ;
     rdfs:label "Market Share"@en .
 
 # 9. Legal and Compliance
-off:LegalDocument rdfs:subClassOf cco:DocumentAct ;
+abi:LegalDocument rdfs:subClassOf cco:DocumentAct ;
     rdfs:label "Legal Document"@en .
 
-off:Certification rdfs:subClassOf cco:DocumentAct ;
+abi:Certification rdfs:subClassOf cco:DocumentAct ;
     rdfs:label "Certification"@en .
 
-off:Patent rdfs:subClassOf cco:DocumentAct ;
+abi:Patent rdfs:subClassOf cco:DocumentAct ;
     rdfs:label "Patent"@en .
 
-off:RegulatoryApproval rdfs:subClassOf cco:DocumentAct ;
+abi:RegulatoryApproval rdfs:subClassOf cco:DocumentAct ;
     rdfs:label "Regulatory Approval"@en .
 
 # 10. Sustainability Aspects
-off:SustainabilityAspect rdfs:subClassOf cco:Quality ;
+abi:SustainabilityAspect rdfs:subClassOf cco:Quality ;
     rdfs:label "Sustainability Aspect"@en .
 
-off:EnvironmentalImpact rdfs:subClassOf cco:Quality ;
+abi:EnvironmentalImpact rdfs:subClassOf cco:Quality ;
     rdfs:label "Environmental Impact"@en .
 
-off:EthicalSourcing rdfs:subClassOf cco:Process ;
+abi:EthicalSourcing rdfs:subClassOf cco:Process ;
     rdfs:label "Ethical Sourcing"@en .
 
-off:Recyclability rdfs:subClassOf cco:Quality ;
+abi:Recyclability rdfs:subClassOf cco:Quality ;
     rdfs:label "Recyclability"@en .
 
 # Object Properties
-off:hasTargetMarket rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:TargetMarket .
+abi:hasTargetMarket rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:TargetMarket .
 
-off:hasDeliveryMethod rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:DeliveryMethod .
+abi:hasDeliveryMethod rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:DeliveryMethod .
 
-off:hasValueProposition rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:ValueProposition .
+abi:hasValueProposition rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:ValueProposition .
 
-off:hasManufacturer rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:Manufacturer .
+abi:hasManufacturer rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:Manufacturer .
 
-off:hasSupplier rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:Supplier .
+abi:hasSupplier rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:Supplier .
 
-off:hasDistributor rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:Distributor .
+abi:hasDistributor rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:Distributor .
 
-off:hasCompetitor rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:Competitor .
+abi:hasCompetitor rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:Competitor .
 
-off:hasPerformanceMetric rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:PerformanceMetric .
+abi:hasPerformanceMetric rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:PerformanceMetric .
 
-off:hasLegalDocument rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:LegalDocument .
+abi:hasLegalDocument rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:LegalDocument .
 
-off:hasSustainabilityAspect rdf:type owl:ObjectProperty ;
-    rdfs:domain off:Offering ;
-    rdfs:range off:SustainabilityAspect .
+abi:hasSustainabilityAspect rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:SustainabilityAspect .
 
 # Data Properties
 abi:launchDate rdf:type owl:DatatypeProperty ;
-    rdfs:domain off:Offering ;
+    rdfs:domain abi:Offering ;
     rdfs:range xsd:dateTime .
 
 abi:hasEndOfLifeDate a owl:DatatypeProperty ;

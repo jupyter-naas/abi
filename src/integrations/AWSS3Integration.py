@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Union, BinaryIO
 import boto3
 from botocore.exceptions import ClientError
 
+LOGO_URL = "https://logo.clearbit.com/amazonaws.com"
+
 @dataclass
 class AWSS3IntegrationConfiguration(IntegrationConfiguration):
     """Configuration for AWS S3 integration.
@@ -18,10 +20,12 @@ class AWSS3IntegrationConfiguration(IntegrationConfiguration):
     region_name: str
 
 class AWSS3Integration(Integration):
-    """AWS S3 integration client."""
+    """AWS S3 integration client.
+    
+    This integration provides methods to interact with AWS S3's API endpoints.
+    """
 
     __configuration: AWSS3IntegrationConfiguration
-    __client: boto3.client
 
     def __init__(self, configuration: AWSS3IntegrationConfiguration):
         """Initialize S3 client with AWS credentials."""
