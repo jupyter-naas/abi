@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 import requests
 import json
 
-
+LOGO_URL = "https://logo.clearbit.com/microsoft.com"
 @dataclass
 class OneDriveIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for OneDrive integration.
@@ -21,13 +21,10 @@ class OneDriveIntegrationConfiguration(IntegrationConfiguration):
 class OneDriveIntegration(Integration):
     """OneDrive integration class for interacting with Microsoft OneDrive.
     
-    This class provides methods to interact with OneDrive's API endpoints.
-    It handles authentication and request management.
-    
-    Attributes:
-        __configuration (OneDriveIntegrationConfiguration): Configuration instance
-            containing necessary credentials and settings.
+    This integration provides methods to interact with OneDrive's API endpoints.
     """
+
+    __configuration: OneDriveIntegrationConfiguration
 
     def __init__(self, configuration: OneDriveIntegrationConfiguration):
         """Initialize OneDrive client with access token."""
@@ -40,12 +37,6 @@ class OneDriveIntegration(Integration):
         }
         
         self.base_url = self.__configuration.base_url
-        
-        # Test connection
-        try:
-            self.list_files()
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to OneDrive: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
         """Make HTTP request to Microsoft Graph API."""

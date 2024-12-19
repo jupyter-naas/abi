@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import requests
 from datetime import datetime
 
+LOGO_URL = "https://logo.clearbit.com/newsapi.org"
+
 @dataclass
 class NewsAPIIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for NewsAPI integration.
@@ -18,7 +20,7 @@ class NewsAPIIntegrationConfiguration(IntegrationConfiguration):
 class NewsAPIIntegration(Integration):
     """NewsAPI integration client.
     
-    This class provides methods to interact with NewsAPI endpoints
+    This integration provides methods to interact with NewsAPI endpoints
     for retrieving news articles and headlines.
     """
 

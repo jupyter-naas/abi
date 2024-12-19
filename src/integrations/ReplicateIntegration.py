@@ -4,10 +4,11 @@ from pathlib import Path
 import replicate
 import requests
 import os
-
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
+
+LOGO_URL = "https://logo.clearbit.com/replicate.com"
 
 @dataclass
 class ReplicateIntegrationConfiguration(IntegrationConfiguration):
@@ -19,6 +20,11 @@ class ReplicateIntegrationConfiguration(IntegrationConfiguration):
     api_key: str
 
 class ReplicateIntegration(Integration):
+    """Replicate API integration client.
+    
+    This integration provides methods to interact with Replicate's API endpoints.
+    """
+
     __configuration: ReplicateIntegrationConfiguration
 
     def __init__(self, configuration: ReplicateIntegrationConfiguration):

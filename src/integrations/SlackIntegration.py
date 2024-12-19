@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/slack.com"
+
 @dataclass
 class SlackIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Slack integration.
@@ -25,7 +27,7 @@ class SlackIntegrationConfiguration(IntegrationConfiguration):
 class SlackIntegration(Integration):
     """Slack API integration client.
     
-    This class provides methods to interact with Slack's API endpoints.
+    This integration provides methods to interact with Slack's API endpoints.
     It handles authentication and request management.
     """
 

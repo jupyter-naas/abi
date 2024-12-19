@@ -5,6 +5,8 @@ from google.oauth2 import service_account
 from google.cloud import bigquery
 from google.api_core import retry
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GCPBigQueryIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GCP BigQuery integration.
@@ -19,27 +21,32 @@ class GCPBigQueryIntegrationConfiguration(IntegrationConfiguration):
     location: str
 
 class GCPBigQueryIntegration(Integration):
-    """GCP BigQuery API integration client using service account."""
+    """GCP BigQuery API integration client using service account.
+    
+    This integration provides methods to interact with GCP BigQuery's API endpoints.
+    """
 
     __configuration: GCPBigQueryIntegrationConfiguration
-    __client: bigquery.Client
 
     def __init__(self, configuration: GCPBigQueryIntegrationConfiguration):
         """Initialize BigQuery client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
+        try:
+            # Load service account credentials
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path
+            )
         
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path
-        )
-        
-        # Initialize client
-        self.__client = bigquery.Client(
-            credentials=credentials,
-            project=self.__configuration.project_id,
-            location=self.__configuration.location
-        )
+            # Initialize client
+            self.__client = bigquery.Client(
+                credentials=credentials,
+                project=self.__configuration.project_id,
+                location=self.__configuration.location
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize BigQuery API client: {str(e)}")
 
     def run_query(self, 
                  query: str,
@@ -257,7 +264,7 @@ def as_tools(configuration: GCPBigQueryIntegrationConfiguration):
     class CreateTableSchema(BaseModel):
         dataset_id: str = Field(..., description="Dataset ID")
         table_id: str = Field(..., description="Table ID")
-        schema: List[Dict[str, str]] = Field(..., description="Table schema")
+        table_schema: List[Dict[str, str]] = Field(..., description="Table schema")
         description: Optional[str] = Field(None, description="Table description")
         partition_field: Optional[str] = Field(None, description="Field to partition by")
         cluster_fields: Optional[List[str]] = Field(None, description="Fields to cluster by")
@@ -266,7 +273,7 @@ def as_tools(configuration: GCPBigQueryIntegrationConfiguration):
         dataset_id: str = Field(..., description="Dataset ID")
         table_id: str = Field(..., description="Table ID")
         json_rows: List[Dict] = Field(..., description="Data to load")
-        schema: Optional[List[Dict[str, str]]] = Field(None, description="Table schema if creating new table")
+        table_schema: Optional[List[Dict[str, str]]] = Field(None, description="Table schema if creating new table")
     
     return [
         StructuredTool(
@@ -285,16 +292,16 @@ def as_tools(configuration: GCPBigQueryIntegrationConfiguration):
         StructuredTool(
             name="create_bigquery_table",
             description="Create a BigQuery table",
-            func=lambda dataset_id, table_id, schema, description, partition_field, cluster_fields:
-                integration.create_table(dataset_id, table_id, schema, description,
+            func=lambda dataset_id, table_id, table_schema, description, partition_field, cluster_fields:
+                integration.create_table(dataset_id, table_id, table_schema, description,
                                       partition_field, cluster_fields),
             args_schema=CreateTableSchema
         ),
         StructuredTool(
             name="load_bigquery_table",
             description="Load data into a BigQuery table from JSON",
-            func=lambda dataset_id, table_id, json_rows, schema:
-                integration.load_table_from_json(dataset_id, table_id, json_rows, schema),
+            func=lambda dataset_id, table_id, json_rows, table_schema:
+                integration.load_table_from_json(dataset_id, table_id, json_rows, table_schema),
             args_schema=LoadTableSchema
         )
     ] 

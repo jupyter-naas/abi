@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import yfinance as yf
 from datetime import datetime, timedelta
 
+LOGO_URL = "https://logo.clearbit.com/yahoo.com"
+
 @dataclass
 class YahooFinanceIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Yahoo Finance integration.
@@ -16,7 +18,7 @@ class YahooFinanceIntegrationConfiguration(IntegrationConfiguration):
 class YahooFinanceIntegration(Integration):
     """Yahoo Finance API integration client.
     
-    This class provides methods to interact with Yahoo Finance
+    This integration provides methods to interact with Yahoo Finance
     to retrieve financial data and information.
     """
 

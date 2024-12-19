@@ -8,34 +8,37 @@ from src.assistants.domain.GrowthAssistant import create_growth_assistant
 from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
 from src.assistants.domain.OperationsAssistant import create_operations_assistant
 from src.assistants.domain.SalesAssistant import create_sales_assistant
-from src.assistants.custom.AWSS3Assistant import create_aws_s3_agent
-from src.assistants.custom.AirtableAssistant import create_airtable_agent
-from src.assistants.custom.ClockifyAssistant import create_clockify_agent
-from src.assistants.custom.DiscordAssistant import create_discord_agent
-from src.assistants.custom.GithubAssistant import create_github_agent
-from src.assistants.custom.GladiaAssistant import create_gladia_agent
-from src.assistants.custom.GmailAssistant import create_gmail_agent
-from src.assistants.custom.GoogleAnalyticsAssistant import create_google_analytics_agent
-from src.assistants.custom.GoogleCalendarAssistant import create_google_calendar_agent
-from src.assistants.custom.GoogleDriveAssistant import create_google_drive_agent
-from src.assistants.custom.GoogleSheetsAssistant import create_google_sheets_agent
-from src.assistants.custom.HarvestAssistant import create_harvest_agent
-from src.assistants.custom.HubspotAssistant import create_hubspot_agent
-from src.assistants.custom.LinkedInAssistant import create_linkedin_agent
-from src.assistants.custom.NaasAssistant import create_naas_agent
-from src.assistants.custom.NewsAPIAssistant import create_news_api_agent
-from src.assistants.custom.NotionAssistant import create_notion_agent
-from src.assistants.custom.OneDriveAssistant import create_onedrive_agent
-from src.assistants.custom.PennylaneAssistant import create_pennylane_agent
-from src.assistants.custom.PipedriveAssistant import create_pipedrive_agent
-from src.assistants.custom.PostgresAssistant import create_postgres_agent
-from src.assistants.custom.QontoAssistant import create_qonto_agent
-from src.assistants.custom.SerperAssistant import create_serper_agent
-from src.assistants.custom.SlackAssistant import create_slack_agent
-from src.assistants.custom.StripeAssistant import create_stripe_agent
-from src.assistants.custom.SupabaseAssistant import create_supabase_agent
-from src.assistants.custom.YahooFinanceAssistant import create_yahoo_finance_agent
-from src.assistants.custom.YouTubeAssistant import create_youtube_agent
+from src.assistants.expert.integrations.AWSS3Assistant import create_aws_s3_agent
+from src.assistants.expert.integrations.AlgoliaAssistant import create_algolia_agent
+from src.assistants.expert.integrations.AirtableAssistant import create_airtable_agent
+from src.assistants.expert.integrations.ClockifyAssistant import create_clockify_agent
+from src.assistants.expert.integrations.DiscordAssistant import create_discord_agent
+from src.assistants.expert.integrations.GithubAssistant import create_github_agent
+from src.assistants.expert.integrations.GladiaAssistant import create_gladia_agent
+from src.assistants.expert.integrations.GmailAssistant import create_gmail_agent
+from src.assistants.expert.integrations.GoogleAnalyticsAssistant import create_google_analytics_agent
+from src.assistants.expert.integrations.GoogleCalendarAssistant import create_google_calendar_agent
+from src.assistants.expert.integrations.GoogleDriveAssistant import create_google_drive_agent
+from src.assistants.expert.integrations.GoogleSheetsAssistant import create_google_sheets_agent
+from src.assistants.expert.integrations.HarvestAssistant import create_harvest_agent
+from src.assistants.expert.integrations.HubspotAssistant import create_hubspot_agent
+from src.assistants.expert.integrations.LinkedInAssistant import create_linkedin_agent
+from src.assistants.expert.integrations.NaasAssistant import create_naas_agent
+from src.assistants.expert.integrations.NewsAPIAssistant import create_news_api_agent
+from src.assistants.expert.integrations.NotionAssistant import create_notion_agent
+from src.assistants.expert.integrations.OneDriveAssistant import create_onedrive_agent
+from src.assistants.expert.integrations.PennylaneAssistant import create_pennylane_agent
+from src.assistants.expert.integrations.PipedriveAssistant import create_pipedrive_agent
+from src.assistants.expert.integrations.PostgresAssistant import create_postgres_agent
+from src.assistants.expert.integrations.QontoAssistant import create_qonto_agent
+from src.assistants.expert.integrations.SendGridAssistant import create_sendgrid_agent
+from src.assistants.expert.integrations.SerperAssistant import create_serper_agent
+from src.assistants.expert.integrations.SlackAssistant import create_slack_agent
+from src.assistants.expert.integrations.StripeAssistant import create_stripe_agent
+from src.assistants.expert.integrations.SupabaseAssistant import create_supabase_agent
+from src.assistants.expert.integrations.YahooFinanceAssistant import create_yahoo_finance_agent
+from src.assistants.expert.integrations.YouTubeAssistant import create_youtube_agent
+from src.assistants.expert.integrations.ZeroBounceAssistant import create_zerobounce_agent
 
 def on_tool_response(message: str):
     try:
@@ -114,6 +117,12 @@ def run_finance_agent():
 
 def run_airtable_agent():
     agent = create_airtable_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_algolia_agent():
+    agent = create_algolia_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
@@ -244,6 +253,12 @@ def run_qonto_agent():
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
 
+def run_sendgrid_agent():
+    agent = create_sendgrid_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
 def run_serper_agent():
     agent = create_serper_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
@@ -276,6 +291,12 @@ def run_yahoo_finance_agent():
 
 def run_youtube_agent():
     agent = create_youtube_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_zerobounce_agent():
+    agent = create_zerobounce_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)

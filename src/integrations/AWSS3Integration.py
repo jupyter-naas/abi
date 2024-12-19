@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Union, BinaryIO
 import boto3
 from botocore.exceptions import ClientError
+import os
+
+LOGO_URL = "https://logo.clearbit.com/amazonaws.com"
 
 @dataclass
 class AWSS3IntegrationConfiguration(IntegrationConfiguration):
@@ -11,17 +14,21 @@ class AWSS3IntegrationConfiguration(IntegrationConfiguration):
     Attributes:
         aws_access_key_id (str): AWS access key ID
         aws_secret_access_key (str): AWS secret access key
+        session_token (str): AWS session token
         region_name (str): AWS region name
     """
     aws_access_key_id: str
     aws_secret_access_key: str
+    session_token: str
     region_name: str
 
 class AWSS3Integration(Integration):
-    """AWS S3 integration client."""
+    """AWS S3 integration client.
+    
+    This integration provides methods to interact with AWS S3's API endpoints.
+    """
 
     __configuration: AWSS3IntegrationConfiguration
-    __client: boto3.client
 
     def __init__(self, configuration: AWSS3IntegrationConfiguration):
         """Initialize S3 client with AWS credentials."""
@@ -32,6 +39,7 @@ class AWSS3Integration(Integration):
             's3',
             aws_access_key_id=self.__configuration.aws_access_key_id,
             aws_secret_access_key=self.__configuration.aws_secret_access_key,
+            aws_session_token=self.__configuration.session_token,
             region_name=self.__configuration.region_name
         )
 
@@ -53,10 +61,12 @@ class AWSS3Integration(Integration):
         except ClientError as e:
             raise IntegrationConnectionError(f"S3 operation failed: {str(e)}")
 
-    def list_objects(self,
-                    bucket: str,
-                    prefix: Optional[str] = None,
-                    max_keys: int = 1000) -> List[Dict]:
+    def list_objects(
+        self,
+        bucket: str,
+        prefix: Optional[str] = None,
+        max_keys: int = 1000
+    ) -> List[Dict]:
         """List objects in an S3 bucket.
         
         Args:
@@ -71,41 +81,53 @@ class AWSS3Integration(Integration):
             IntegrationConnectionError: If the operation fails
         """
         try:
-            params = {
-                'Bucket': bucket,
-                'MaxKeys': max_keys
-            }
-            if prefix:
-                params['Prefix'] = prefix
-
-            response = self.__client.list_objects_v2(**params)
-            
             objects = []
-            if 'Contents' in response:
-                for obj in response['Contents']:
-                    objects.append({
-                        'key': obj['Key'],
-                        'size': obj['Size'],
-                        'last_modified': obj['LastModified'].isoformat(),
-                        'etag': obj['ETag'].strip('"'),
-                        'storage_class': obj['StorageClass']
-                    })
+            is_truncated = True
+            continuation_token = None
+
+            while is_truncated:
+                params = {
+                    'Bucket': bucket,
+                    'MaxKeys': max_keys
+                }
+                if prefix:
+                    params['Prefix'] = prefix
+                if continuation_token:
+                    params['ContinuationToken'] = continuation_token
+
+                response = self.__client.list_objects_v2(**params)
+                
+                if 'Contents' in response:
+                    for obj in response['Contents']:
+                        objects.append({
+                            'key': obj['Key'],
+                            'size': obj['Size'],
+                            'last_modified': obj['LastModified'].isoformat(),
+                            'etag': obj['ETag'].strip('"'),
+                            'storage_class': obj['StorageClass']
+                        })
+
+                is_truncated = response.get('IsTruncated', False)
+                continuation_token = response.get('NextContinuationToken')
+
             return objects
         except ClientError as e:
             raise IntegrationConnectionError(f"S3 operation failed: {str(e)}")
 
-    def upload_file(self,
-                   bucket: str,
-                   key: str,
-                   file: Union[str, BinaryIO],
-                   content_type: Optional[str] = None) -> Dict:
+    def upload_file(
+        self,
+        source_path: str,
+        bucket: str,
+        prefix: str,
+        destination_path: str,
+    ) -> Dict:
         """Upload a file to S3.
         
         Args:
+            source_path (str): Source file path
             bucket (str): Bucket name
-            key (str): Object key
-            file (Union[str, BinaryIO]): File path or file-like object
-            content_type (str, optional): Content type of the file
+            prefix (str): Prefix to add to the key
+            destination_path (str): Destination file path or key
             
         Returns:
             Dict: Upload result
@@ -113,38 +135,24 @@ class AWSS3Integration(Integration):
         Raises:
             IntegrationConnectionError: If the operation fails
         """
+        key = os.path.join(prefix, destination_path)
         try:
-            extra_args = {}
-            if content_type:
-                extra_args['ContentType'] = content_type
-
-            if isinstance(file, str):
-                self.__client.upload_file(file, bucket, key, ExtraArgs=extra_args)
-            else:
-                self.__client.upload_fileobj(file, bucket, key, ExtraArgs=extra_args)
-
-            response = self.__client.head_object(Bucket=bucket, Key=key)
-            return {
-                'bucket': bucket,
-                'key': key,
-                'size': response['ContentLength'],
-                'etag': response['ETag'].strip('"'),
-                'last_modified': response['LastModified'].isoformat(),
-                'content_type': response.get('ContentType')
-            }
+            self.__client.upload_file(source_path, bucket, key)
         except ClientError as e:
             raise IntegrationConnectionError(f"S3 operation failed: {str(e)}")
 
-    def download_file(self,
-                     bucket: str,
-                     key: str,
-                     file: Union[str, BinaryIO]) -> Dict:
+    def download_file(
+        self,
+        bucket: str,
+        key: str,
+        local_path: str
+    ) -> Dict:
         """Download a file from S3.
         
         Args:
             bucket (str): Bucket name
             key (str): Object key
-            file (Union[str, BinaryIO]): Destination file path or file-like object
+            local_path (str): Destination file path
             
         Returns:
             Dict: Object information
@@ -153,20 +161,7 @@ class AWSS3Integration(Integration):
             IntegrationConnectionError: If the operation fails
         """
         try:
-            if isinstance(file, str):
-                self.__client.download_file(bucket, key, file)
-            else:
-                self.__client.download_fileobj(bucket, key, file)
-
-            response = self.__client.head_object(Bucket=bucket, Key=key)
-            return {
-                'bucket': bucket,
-                'key': key,
-                'size': response['ContentLength'],
-                'etag': response['ETag'].strip('"'),
-                'last_modified': response['LastModified'].isoformat(),
-                'content_type': response.get('ContentType')
-            }
+            self.__client.download_file(bucket, key, local_path)
         except ClientError as e:
             raise IntegrationConnectionError(f"S3 operation failed: {str(e)}")
 
@@ -235,15 +230,15 @@ def as_tools(configuration: AWSS3IntegrationConfiguration):
         max_keys: int = Field(default=1000, description="Maximum number of keys to return")
 
     class UploadFileSchema(BaseModel):
+        source_path: str = Field(..., description="Source file path")
         bucket: str = Field(..., description="Bucket name")
-        key: str = Field(..., description="Object key")
-        file: str = Field(..., description="File path")
-        content_type: Optional[str] = Field(None, description="Content type of the file")
+        prefix: str = Field(..., description="Prefix to add to the key")
+        destination_path: str = Field(..., description="Destination file path or key")
 
     class DownloadFileSchema(BaseModel):
         bucket: str = Field(..., description="Bucket name")
         key: str = Field(..., description="Object key")
-        file: str = Field(..., description="Destination file path")
+        local_path: str = Field(..., description="Destination file path")
 
     class ObjectSchema(BaseModel):
         bucket: str = Field(..., description="Bucket name")
@@ -271,14 +266,14 @@ def as_tools(configuration: AWSS3IntegrationConfiguration):
         StructuredTool(
             name="upload_to_s3",
             description="Upload a file to S3",
-            func=lambda bucket, key, file, content_type:
-                integration.upload_file(bucket, key, file, content_type),
+            func=lambda source_path, bucket, prefix, destination_path:
+                integration.upload_file(source_path, bucket, prefix, destination_path),
             args_schema=UploadFileSchema
         ),
         StructuredTool(
             name="download_from_s3",
             description="Download a file from S3",
-            func=lambda bucket, key, file: integration.download_file(bucket, key, file),
+            func=lambda bucket, key, local_path: integration.download_file(bucket, key, local_path),
             args_schema=DownloadFileSchema
         ),
         StructuredTool(

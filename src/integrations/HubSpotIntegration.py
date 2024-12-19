@@ -6,6 +6,8 @@ from datetime import datetime
 import pandas as pd
 import pytz
 
+LOGO_URL = "https://logo.clearbit.com/hubspot.com"
+
 @dataclass
 class HubSpotIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for HubSpot integration.
@@ -18,6 +20,11 @@ class HubSpotIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.hubapi.com"
 
 class HubSpotIntegration(Integration):
+    """HubSpot API integration client.
+    
+    This integration provides methods to interact with HubSpot's API endpoints.
+    """
+
     __configuration: HubSpotIntegrationConfiguration
 
     def __init__(self, configuration: HubSpotIntegrationConfiguration):
@@ -30,12 +37,6 @@ class HubSpotIntegration(Integration):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        
-        # Test connection
-        try:
-            self._make_request("GET", "/crm/v3/objects/contacts")
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to HubSpot: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
         """Make HTTP request to HubSpot API."""
@@ -392,6 +393,29 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         properties: Optional[List[str]] = Field(None, description="Optional list of properties to include in results")
         limit: Optional[int] = Field(100, description="Maximum number of results to return")
 
+    class GetContactsSchema(BaseModel):
+        properties: Optional[List[str]] = Field(None, description="Optional list of contact properties to include")
+
+    class GetDealsSchema(BaseModel):
+        properties: Optional[List[str]] = Field(None, description="Optional list of deal properties to include")
+
+    class GetCompaniesSchema(BaseModel):
+        properties: Optional[List[str]] = Field(None, description="Optional list of company properties to include")
+
+    class GetPipelineStagesSchema(BaseModel):
+        pipeline: Optional[str] = Field(None, description="Optional pipeline name to filter by")
+        pipeline_id: Optional[str] = Field(None, description="Optional pipeline ID to filter by")
+
+    class ListPropertiesSchema(BaseModel):
+        object_type: str = Field(..., description="Type of object to get properties for (contacts, companies, deals)")
+
+    class GetAssociationsSchema(BaseModel):
+        from_object_type: str = Field(..., description="Type of the source objects (contacts, companies, deals, etc.)")
+        object_ids: List[str] = Field(..., description="List of source object IDs to get associations for")
+        to_object_type: str = Field(..., description="Type of the target objects to get associations for")
+        after: Optional[str] = Field(None, description="Optional cursor for pagination")
+        limit: Optional[int] = Field(100, description="Maximum number of results to return")
+
     return [
         StructuredTool(
             name="get_hubspot_contact",
@@ -418,5 +442,41 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
             description="Search for objects in HubSpot using the Search API.",
             func=integration.search_objects,
             args_schema=SearchObjectsSchema
+        ),
+        StructuredTool(
+            name="get_hubspot_contacts",
+            description="Get all contacts from HubSpot with optional property filtering.",
+            func=integration.get_contacts,
+            args_schema=GetContactsSchema
+        ),
+        StructuredTool(
+            name="get_hubspot_deals",
+            description="Get all deals from HubSpot with optional property filtering.",
+            func=integration.get_deals,
+            args_schema=GetDealsSchema
+        ),
+        StructuredTool(
+            name="get_hubspot_companies",
+            description="Get all companies from HubSpot with optional property filtering.",
+            func=integration.get_companies,
+            args_schema=GetCompaniesSchema
+        ),
+        StructuredTool(
+            name="get_hubspot_pipeline_stages",
+            description="Get all pipeline stages or stages for a specific pipeline.",
+            func=integration.get_pipeline_stages,
+            args_schema=GetPipelineStagesSchema
+        ),
+        StructuredTool(
+            name="list_hubspot_properties",
+            description="List properties of a specified HubSpot object type.",
+            func=integration.list_properties,
+            args_schema=ListPropertiesSchema
+        ),
+        StructuredTool(
+            name="get_hubspot_associations",
+            description="Get associations between objects in HubSpot.",
+            func=integration.get_associations,
+            args_schema=GetAssociationsSchema
         )
     ]

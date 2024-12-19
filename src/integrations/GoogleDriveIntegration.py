@@ -7,6 +7,8 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 import io
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GoogleDriveIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Google Drive integration.
@@ -30,29 +32,32 @@ class GoogleDriveIntegrationConfiguration(IntegrationConfiguration):
 class GoogleDriveIntegration(Integration):
     """Google Drive API integration client using service account.
     
-    This class provides methods to interact with Google Drive's API endpoints
+    This integration provides methods to interact with Google Drive's API endpoints
     for file and folder operations.
     """
 
     __configuration: GoogleDriveIntegrationConfiguration
-    __service: any  # Drive API service
 
     def __init__(self, configuration: GoogleDriveIntegrationConfiguration):
         """Initialize Drive client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
         
+        try:
         # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path,
-            scopes=self.__configuration.scopes
-        )
-        
-        # Create delegated credentials for impersonation
-        delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
-        
-        # Build the service
-        self.__service = build('drive', 'v3', credentials=delegated_credentials)
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path,
+                scopes=self.__configuration.scopes
+            )
+            
+            # Create delegated credentials for impersonation
+            delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
+            
+            # Build the service
+            self.__service = build('drive', 'v3', credentials=delegated_credentials)
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Drive API client: {str(e)}")
 
     def list_files(self, 
                   query: Optional[str] = None,

@@ -1,46 +1,69 @@
 from lib.abi.integration.integration import Integration, IntegrationConfiguration, IntegrationConnectionError
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-import base64
+import imaplib
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+import email
+import base64
+
+LOGO_URL = "https://logo.clearbit.com/gmail.com"
+GMAIL_SMTP_SERVER = "smtp.gmail.com"
+GMAIL_IMAP_SERVER = "imap.gmail.com"
 
 @dataclass
 class GmailIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Gmail integration.
     
     Attributes:
-        credentials (Credentials): Google OAuth2 credentials
-        user_id (str): User's email address. Defaults to "me"
+        email (str): Gmail email address
+        app_password (str): Gmail app password
     """
-    credentials: Credentials
-    user_id: str = "me"
+    email: str
+    app_password: str
 
 class GmailIntegration(Integration):
-    """Gmail API integration client.
+    """Gmail IMAP/SMTP integration client.
     
-    This class provides methods to interact with Gmail's API endpoints
-    for email operations.
+    This integration provides methods to interact with Gmail using IMAP for reading
+    and SMTP for sending emails.
     """
 
     __configuration: GmailIntegrationConfiguration
-    __service: any  # Gmail API service
 
     def __init__(self, configuration: GmailIntegrationConfiguration):
-        """Initialize Gmail client with credentials."""
+        """Initialize Gmail client with app password."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__service = build('gmail', 'v1', credentials=self.__configuration.credentials)
+        self.__imap = None
+        self.__smtp = None
+
+    def __connect_imap(self):
+        """Establish IMAP connection."""
+        if not self.__imap:
+            try:
+                self.__imap = imaplib.IMAP4_SSL(GMAIL_IMAP_SERVER)
+                self.__imap.login(self.__configuration.email, self.__configuration.app_password)
+            except Exception as e:
+                raise IntegrationConnectionError(f"IMAP connection failed: {str(e)}")
+
+    def __connect_smtp(self):
+        """Establish SMTP connection."""
+        if not self.__smtp:
+            try:
+                self.__smtp = smtplib.SMTP(GMAIL_SMTP_SERVER, 587)
+                self.__smtp.starttls()
+                self.__smtp.login(self.__configuration.email, self.__configuration.app_password)
+            except Exception as e:
+                raise IntegrationConnectionError(f"SMTP connection failed: {str(e)}")
 
     def list_messages(self, 
                      query: Optional[str] = None, 
                      max_results: int = 10) -> List[Dict]:
-        """List email messages.
+        """List email messages using IMAP.
         
         Args:
             query (str, optional): Gmail search query
@@ -48,29 +71,36 @@ class GmailIntegration(Integration):
             
         Returns:
             List[Dict]: List of messages
-            
-        Raises:
-            IntegrationConnectionError: If the request fails
         """
         try:
-            results = self.__service.users().messages().list(
-                userId=self.__configuration.user_id,
-                q=query,
-                maxResults=max_results
-            ).execute()
+            self.__connect_imap()
+            self.__imap.select('INBOX')
+            
+            search_criteria = 'ALL' if not query else f'SUBJECT "{query}"'
+            _, message_numbers = self.__imap.search(None, search_criteria)
             
             messages = []
-            for msg in results.get('messages', []):
-                message = self.__service.users().messages().get(
-                    userId=self.__configuration.user_id,
-                    id=msg['id'],
-                    format='full'
-                ).execute()
-                messages.append(message)
+            for num in message_numbers[0].split()[-max_results:]:
+                _, msg_data = self.__imap.fetch(num, '(RFC822)')
+                email_body = msg_data[0][1]
+                message = email.message_from_bytes(email_body)
                 
+                messages.append({
+                    'id': num.decode(),
+                    'payload': {
+                        'headers': [
+                            {'name': k, 'value': v} 
+                            for k, v in message.items()
+                        ],
+                        'body': {
+                            'data': message.get_payload()
+                        }
+                    }
+                })
+            
             return messages
-        except HttpError as e:
-            raise IntegrationConnectionError(f"Gmail API request failed: {str(e)}")
+        except Exception as e:
+            raise IntegrationConnectionError(f"IMAP operation failed: {str(e)}")
 
     def get_message(self, message_id: str) -> Dict:
         """Get a specific email message.
@@ -85,13 +115,27 @@ class GmailIntegration(Integration):
             IntegrationConnectionError: If the request fails
         """
         try:
-            return self.__service.users().messages().get(
-                userId=self.__configuration.user_id,
-                id=message_id,
-                format='full'
-            ).execute()
-        except HttpError as e:
-            raise IntegrationConnectionError(f"Gmail API request failed: {str(e)}")
+            self.__connect_imap()
+            self.__imap.select('INBOX')
+            
+            _, msg_data = self.__imap.fetch(message_id, '(RFC822)')
+            email_body = msg_data[0][1]
+            message = email.message_from_bytes(email_body)
+            
+            return {
+                'id': message_id,
+                'payload': {
+                    'headers': [
+                        {'name': k, 'value': v} 
+                        for k, v in message.items()
+                    ],
+                    'body': {
+                        'data': message.get_payload()
+                    }
+                }
+            }
+        except Exception as e:
+            raise IntegrationConnectionError(f"IMAP operation failed: {str(e)}")
 
     def send_message(self,
                     to: Union[str, List[str]],
@@ -101,25 +145,12 @@ class GmailIntegration(Integration):
                     cc: Optional[Union[str, List[str]]] = None,
                     bcc: Optional[Union[str, List[str]]] = None,
                     attachments: Optional[List[Dict]] = None) -> Dict:
-        """Send an email message.
-        
-        Args:
-            to (Union[str, List[str]]): Recipient email(s)
-            subject (str): Email subject
-            body (str): Plain text body
-            html (str, optional): HTML body
-            cc (Union[str, List[str]], optional): CC recipient(s)
-            bcc (Union[str, List[str]], optional): BCC recipient(s)
-            attachments (List[Dict], optional): List of attachments with 'filename' and 'content'
-            
-        Returns:
-            Dict: Sent message data
-            
-        Raises:
-            IntegrationConnectionError: If the request fails
-        """
+        """Send an email message using SMTP."""
         try:
+            self.__connect_smtp()
+            
             message = MIMEMultipart('alternative')
+            message['From'] = self.__configuration.email
             message['To'] = isinstance(to, list) and ', '.join(to) or to
             message['Subject'] = subject
             
@@ -143,16 +174,10 @@ class GmailIntegration(Integration):
                     )
                     message.attach(part)
                     
-            raw_message = base64.urlsafe_b64encode(
-                message.as_bytes()
-            ).decode('utf-8')
-            
-            return self.__service.users().messages().send(
-                userId=self.__configuration.user_id,
-                body={'raw': raw_message}
-            ).execute()
-        except HttpError as e:
-            raise IntegrationConnectionError(f"Gmail API request failed: {str(e)}")
+            self.__smtp.send_message(message)
+            return {'status': 'sent'}
+        except Exception as e:
+            raise IntegrationConnectionError(f"SMTP operation failed: {str(e)}")
 
     def create_draft(self,
                     to: Union[str, List[str]],
@@ -180,6 +205,8 @@ class GmailIntegration(Integration):
             IntegrationConnectionError: If the request fails
         """
         try:
+            self.__connect_imap()
+            
             message = MIMEMultipart('alternative')
             message['To'] = isinstance(to, list) and ', '.join(to) or to
             message['Subject'] = subject
@@ -208,12 +235,10 @@ class GmailIntegration(Integration):
                 message.as_bytes()
             ).decode('utf-8')
             
-            return self.__service.users().drafts().create(
-                userId=self.__configuration.user_id,
-                body={'message': {'raw': raw_message}}
-            ).execute()
-        except HttpError as e:
-            raise IntegrationConnectionError(f"Gmail API request failed: {str(e)}")
+            self.__imap.append('INBOX', '', '', raw_message)
+            return {'status': 'draft created'}
+        except Exception as e:
+            raise IntegrationConnectionError(f"IMAP operation failed: {str(e)}")
 
 def as_tools(configuration: GmailIntegrationConfiguration):
     """Convert Gmail integration into LangChain tools."""
@@ -267,4 +292,4 @@ def as_tools(configuration: GmailIntegrationConfiguration):
             ),
             args_schema=SendMessageSchema
         )
-    ] 
+    ]

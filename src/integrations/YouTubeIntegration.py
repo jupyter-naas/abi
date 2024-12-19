@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from abi import logger
+
+LOGO_URL = "https://logo.clearbit.com/youtube.com"
 
 @dataclass
 class YouTubeIntegrationConfiguration(IntegrationConfiguration):
@@ -18,22 +21,32 @@ class YouTubeIntegrationConfiguration(IntegrationConfiguration):
 class YouTubeIntegration(Integration):
     """YouTube API integration client.
     
-    This class provides methods to interact with YouTube's Data API endpoints.
+    This integration provides methods to interact with YouTube's Data API endpoints.
+    It handles authentication and request management.
+    
+    Attributes:
+        __configuration (YouTubeIntegrationConfiguration): Configuration instance
+            containing necessary credentials and settings.
     """
 
     __configuration: YouTubeIntegrationConfiguration
-    __youtube: any  # YouTube API client
 
     def __init__(self, configuration: YouTubeIntegrationConfiguration):
         """Initialize YouTube client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__youtube = build(
-            'youtube', 
-            self.__configuration.api_version, 
-            developerKey=self.__configuration.api_key
-        )
-
+        try:
+            self.__youtube = build(
+                developerKey=self.__configuration.api_key,
+                version=self.__configuration.api_version,
+                serviceName='youtube',
+                cache_discovery=False,
+                static_discovery=False
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize YouTube API client: {str(e)}")
+        
     def search_videos(self, 
                      query: str, 
                      max_results: int = 10, 
