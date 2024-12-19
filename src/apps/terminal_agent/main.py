@@ -31,12 +31,14 @@ from src.assistants.expert.integrations.PennylaneAssistant import create_pennyla
 from src.assistants.expert.integrations.PipedriveAssistant import create_pipedrive_agent
 from src.assistants.expert.integrations.PostgresAssistant import create_postgres_agent
 from src.assistants.expert.integrations.QontoAssistant import create_qonto_agent
+from src.assistants.expert.integrations.SendGridAssistant import create_sendgrid_agent
 from src.assistants.expert.integrations.SerperAssistant import create_serper_agent
 from src.assistants.expert.integrations.SlackAssistant import create_slack_agent
 from src.assistants.expert.integrations.StripeAssistant import create_stripe_agent
 from src.assistants.expert.integrations.SupabaseAssistant import create_supabase_agent
 from src.assistants.expert.integrations.YahooFinanceAssistant import create_yahoo_finance_agent
 from src.assistants.expert.integrations.YouTubeAssistant import create_youtube_agent
+from src.assistants.expert.integrations.ZeroBounceAssistant import create_zerobounce_agent
 
 def on_tool_response(message: str):
     try:
@@ -251,6 +253,12 @@ def run_qonto_agent():
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
 
+def run_sendgrid_agent():
+    agent = create_sendgrid_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
 def run_serper_agent():
     agent = create_serper_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
@@ -283,6 +291,12 @@ def run_yahoo_finance_agent():
 
 def run_youtube_agent():
     agent = create_youtube_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_zerobounce_agent():
+    agent = create_zerobounce_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
