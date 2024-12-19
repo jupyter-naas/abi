@@ -2,10 +2,15 @@ FROM python:3.9
 
 WORKDIR /app
 
-COPY assets lib src config.yaml Makefile .
+ADD ./assets/ /app/assets
+ADD ./lib/ /app/lib
+ADD ./src/ /app/src
+ADD ./config.yaml /app/config.yaml
+ADD ./Makefile /app/Makefile
+ADD ./poetry.lock /app/poetry.lock
+ADD ./pyproject.toml /app/pyproject.toml
 
 RUN pip install poetry
 RUN poetry install
-
 
 CMD ["poetry", "run", "api" ]
