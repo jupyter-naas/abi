@@ -8,6 +8,7 @@ import os
 from abi import logger
 import jwt
 
+LOGO_URL = "https://logo.clearbit.com/naas.ai"
 
 @dataclass
 class NaasIntegrationConfiguration(IntegrationConfiguration):
@@ -22,6 +23,18 @@ class NaasIntegrationConfiguration(IntegrationConfiguration):
 
 
 class NaasIntegration(Integration):
+    """Naas integration class for interacting with Naas API.
+    
+    This class provides methods to interact with Naas's API endpoints.
+    It handles authentication and request management.
+    
+    Attributes:
+        __configuration (NaasIntegrationConfiguration): Configuration instance
+            containing necessary credentials and settings.
+    """
+
+    __configuration: NaasIntegrationConfiguration
+
     def __init__(self, configuration: NaasIntegrationConfiguration):
         """Initialize Naas client with API key."""
         super().__init__(configuration)
@@ -33,12 +46,6 @@ class NaasIntegration(Integration):
         }
         
         self.base_url = self.__configuration.base_url
-        
-        # Test connection
-        try:
-            self.get_workspaces()
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to Naas: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
         """Make HTTP request to Naas API."""
@@ -433,6 +440,170 @@ class NaasIntegration(Integration):
         }
         return self._make_request("DELETE", f"/workspace/{workspace_id}/user/{user_id}", payload)
 
+    def get_secret(self, secret_id: str) -> Dict:
+        """Get a specific secret from a workspace.
+        
+        Args:
+            secret_id (str): ID of the secret
+        
+        Returns:
+            Dict: Response containing the secret details
+        """
+        return self._make_request("GET", f"/secret/{secret_id}")
+
+    def list_secrets(self) -> Dict:
+        """List all secrets in a workspace.
+    
+        Returns:
+            Dict: Response containing list of secrets
+        """
+        payload = {
+            "page_size": 100,
+            "page_number": 0
+        }
+        return self._make_request("GET", f"/secret/", payload).get("secrets", [])
+    
+    def list_secrets_names(self) -> Dict:
+        secrets = self.list_secrets()
+        return [secret.get("name") for secret in secrets]
+
+    def create_secret(self, name: str, value: str) -> Dict:
+        """Create a new secret in a workspace.
+        
+        Args:
+            name (str): Name of the secret
+            value (str): Value of the secret
+        
+        Returns:
+            Dict: Response containing the created secret details
+        """
+        payload = {
+            "secret": {
+                "name": name,
+                "value": value
+            }
+        }
+        return self._make_request("POST", f"/secret/", payload)
+
+    def update_secret(self, secret_id: str, value: str) -> Dict:
+        """Update an existing secret in a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            secret_id (str): ID of the secret to update
+            value (str): New value for the secret
+        
+        Returns:
+            Dict: Response containing the updated secret details
+        """
+        payload = {
+            "secret": {
+                "value": value
+            }
+        }
+        return self._make_request("PUT", f"/secret/{secret_id}", payload)
+
+    def delete_secret(self, secret_id: str) -> Dict:
+        """Delete a secret from a workspace.
+        
+        Args:
+            secret_id (str): ID of the secret to delete
+        
+        Returns:
+            Dict: Response containing the deletion status
+        """
+        return self._make_request("DELETE", f"/secret/{secret_id}")
+
+    def list_workspace_storage(self, workspace_id: str) -> Dict:
+        """List all storage in a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            
+        Returns:
+            Dict: Response containing list of storage
+        """
+        return self._make_request("GET", f"/workspace/{workspace_id}/storage/")
+    
+    def list_workspace_storage_objects(self, workspace_id: str, storage_name: str, prefix: str) -> Dict:
+        """List objects and subdirectories in a workspace storage location.
+        
+        Args:
+            workspace_id (str): ID of the workspace containing the storage
+            storage_name (str): Name of the storage to list objects from
+            prefix (str): Directory prefix to list objects under
+            
+        Returns:
+            Dict: Response containing list of objects or error details
+            
+        Raises:
+            IntegrationConnectionError: If API request fails
+        """
+        params = {"prefix": prefix}
+        return self._make_request(
+            "GET", 
+            f"/workspace/{workspace_id}/storage/{storage_name}/",
+            params=params
+        )
+
+    def create_workspace_storage(self, workspace_id: str, storage_name: str) -> Dict:
+        """Create a new storage in a workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            storage_name (str): Name of the storage
+            
+        Returns:
+            Dict: Response containing the created storage details
+        """
+        payload = {"storage": {"name": storage_name}}
+        return self._make_request("POST", f"/workspace/{workspace_id}/storage/", payload)
+
+    def create_workspace_storage_credentials(self, workspace_id: str, storage_name: str) -> Dict:
+        """Create credentials for workspace storage.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            storage_name (str): Name of the storage
+            
+        Returns:
+            Dict: Response containing the storage credentials
+        """
+        payload = {
+            "name": storage_name,
+            "workspace_id": workspace_id
+        }
+        return self._make_request("POST", f"/workspace/{workspace_id}/storage/credentials/", payload)
+
+    def get_storage_credentials(self, workspace_id: str = None, storage_name: str = None) -> tuple[Dict, str]:
+        """Get or create storage credentials.
+        
+        Args:
+            workspace_id (str, optional): ID of the workspace. If not provided, uses personal workspace
+            storage_name (str, optional): Name of the storage
+            
+        Returns:
+            tuple[Dict, str]: Tuple containing (credentials, workspace_id)
+        """
+
+        # List storage
+        result = self.list_workspace_storage(workspace_id)
+        storages = result.get("storage", [])
+        storage_exist = False
+        for storage in storages:
+            if storage.get("name") == storage_name:
+                storage_exist = True
+                break
+                
+        # Create storage if it doesn't exist
+        if not storage_exist:
+            new_storage = self.create_workspace_storage(workspace_id, storage_name)
+            logger.info(f"Created storage {storage_name} in workspace {workspace_id}")
+            
+        # Get storage credentials
+        credentials = self.create_workspace_storage_credentials(workspace_id, storage_name)
+        return credentials
+
 def as_tools(configuration: NaasIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     
@@ -541,6 +712,43 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     class DeleteWorkspaceUserSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace")
         user_id: str = Field(..., description="ID of the user to remove")
+
+    class ListSecretsSchema(BaseModel):
+        pass
+
+    class CreateSecretSchema(BaseModel):
+        name: str = Field(..., description="Name of the secret")
+        value: str = Field(..., description="Value of the secret")
+
+    class GetSecretSchema(BaseModel):
+        secret_id: str = Field(..., description="ID of the secret")
+
+    class UpdateSecretSchema(BaseModel):
+        secret_id: str = Field(..., description="ID of the secret")
+        value: str = Field(..., description="New value for the secret")
+
+    class DeleteSecretSchema(BaseModel):
+        secret_id: str = Field(..., description="ID of the secret to delete")
+
+    class ListWorkspaceStorageSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+
+    class ListWorkspaceStorageObjectsSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        storage_name: str = Field(..., description="Name of the storage")
+        prefix: str = Field(..., description="Prefix to list objects under") 
+
+    class CreateWorkspaceStorageSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        storage_name: str = Field(..., description="Name of the storage")
+
+    class CreateWorkspaceStorageCredentialsSchema(BaseModel):
+        workspace_id: str = Field(..., description="ID of the workspace")
+        storage_name: str = Field(..., description="Name of the storage")
+
+    class GetStorageCredentialsSchema(BaseModel):
+        workspace_id: Optional[str] = Field(None, description="Optional ID of the workspace. If not provided, uses personal workspace")
+        storage_name: str = Field(..., description="Name of the storage")
 
     return [
         StructuredTool(
@@ -668,5 +876,71 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             description="Remove a user from a workspace",
             func=lambda workspace_id, user_id: integration.delete_workspace_user(workspace_id, user_id),
             args_schema=DeleteWorkspaceUserSchema
-        )
+        ),
+        StructuredTool(
+            name="list_naas_secrets",
+            description="List all secrets in a workspace",
+            func=lambda: integration.list_secrets(),
+            args_schema=ListSecretsSchema
+        ),
+        StructuredTool(
+            name="list_secrets_names",
+            description="List all secrets names.",
+            func=lambda: integration.list_secrets_names(),
+            args_schema=ListSecretsSchema
+        ),
+        StructuredTool(
+            name="create_naas_secret",
+            description="Create a new secret.",
+            func=lambda name, value: integration.create_secret(name, value),
+            args_schema=CreateSecretSchema
+        ),
+        StructuredTool(
+            name="get_naas_secret",
+            description="Get a specific secret.",
+            func=lambda secret_id: integration.get_secret(secret_id),
+            args_schema=GetSecretSchema
+        ),
+        StructuredTool(
+            name="update_naas_secret",
+            description="Update an existing secret.",
+            func=lambda secret_id, value: integration.update_secret(secret_id, value),
+            args_schema=UpdateSecretSchema
+        ),
+        StructuredTool(
+            name="delete_naas_secret",
+            description="Delete a secret.",
+            func=lambda secret_id: integration.delete_secret(secret_id),
+            args_schema=DeleteSecretSchema
+        ),
+        StructuredTool(
+            name="list_naas_workspace_storage",
+            description="List all storage in a workspace",
+            func=lambda workspace_id: integration.list_workspace_storage(workspace_id),
+            args_schema=ListWorkspaceStorageSchema
+        ),
+        StructuredTool(
+            name="list_naas_workspace_storage_objects",
+            description="List all objects and subdirectories in a workspace storage location",
+            func=lambda workspace_id, storage_name, prefix: integration.list_workspace_storage_objects(workspace_id, storage_name, prefix),
+            args_schema=ListWorkspaceStorageObjectsSchema
+        ),
+        StructuredTool(
+            name="create_naas_workspace_storage",
+            description="Create a new storage in a workspace",
+            func=lambda workspace_id, storage_name: integration.create_workspace_storage(workspace_id, storage_name),
+            args_schema=CreateWorkspaceStorageSchema
+        ),
+        StructuredTool(
+            name="create_naas_workspace_storage_credentials",
+            description="Create credentials for workspace storage",
+            func=lambda workspace_id, storage_name: integration.create_workspace_storage_credentials(workspace_id, storage_name),
+            args_schema=CreateWorkspaceStorageCredentialsSchema
+        ),
+        StructuredTool(
+            name="get_naas_storage_credentials",
+            description="Get or create storage credentials",
+            func=lambda **kwargs: integration.get_storage_credentials(**kwargs),
+            args_schema=GetStorageCredentialsSchema
+        ),
     ]

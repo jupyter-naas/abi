@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Union
 from supabase import create_client, Client
 
+LOGO_URL = "https://logo.clearbit.com/supabase.com"
+
 @dataclass
 class SupabaseIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Supabase integration.
@@ -14,24 +16,29 @@ class SupabaseIntegrationConfiguration(IntegrationConfiguration):
     """
     url: str
     key: str
-    timeout: int = 60
 
 class SupabaseIntegration(Integration):
-    """Supabase integration client."""
+    """Supabase integration client.
+    
+    This integration provides methods to interact with Supabase's API endpoints.
+    It handles authentication and request management.
+    """
 
     __configuration: SupabaseIntegrationConfiguration
-    __client: Client
 
     def __init__(self, configuration: SupabaseIntegrationConfiguration):
         """Initialize Supabase client."""
         super().__init__(configuration)
         self.__configuration = configuration
         
-        self.__client = create_client(
-            self.__configuration.url,
-            self.__configuration.key,
-            options={'timeout': self.__configuration.timeout}
-        )
+        try:
+            self.__client: Client = create_client(
+                self.__configuration.url,
+                self.__configuration.key
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Supabase client: {str(e)}")
 
     def select(self,
                table: str,

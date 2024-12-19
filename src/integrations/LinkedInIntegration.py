@@ -8,6 +8,8 @@ import pandas as pd
 import time
 from abi import logger
 
+LOGO_URL = "https://logo.clearbit.com/linkedin.com"
+
 @dataclass
 class LinkedinIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for LinkedIn integration.
@@ -24,7 +26,10 @@ class LinkedinIntegrationConfiguration(IntegrationConfiguration):
     custom_api_url: str = "https://3hz1hdpnlf.execute-api.eu-west-1.amazonaws.com/prod"
 
 class LinkedinIntegration(Integration):
-    """LinkedIn API integration client."""
+    """LinkedIn API integration client.
+    
+    This integration provides methods to interact with LinkedIn's API endpoints. Using the custom API maintained by the team.
+    """
 
     __configuration: LinkedinIntegrationConfiguration
 
@@ -532,6 +537,21 @@ def as_tools(configuration: LinkedinIntegrationConfiguration):
         post_url: str = Field(..., description="LinkedIn post URL")
         limit: int = Field(default=1, description="Maximum number of reactions to retrieve. Use -1 for no limit.")
 
+    class GetProfilePostsSchema(BaseModel):
+        profile_url: str = Field(..., description="LinkedIn profile URL")
+        count: int = Field(default=1, description="Number of posts per request (max 100)")
+        limit: int = Field(default=10, description="Total number of posts to return. Use -1 for unlimited.")
+        until: Optional[Dict] = Field(default=None, description="Condition to stop fetching posts")
+        pagination_token: Optional[str] = Field(default=None, description="Token for pagination")
+
+    class GetOrganizationPostsSchema(BaseModel):
+        organization_url: str = Field(..., description="LinkedIn organization URL")
+        count: int = Field(default=100, description="Number of posts per request (max 100)")
+        limit: int = Field(default=-1, description="Total number of posts to return. Use -1 for unlimited.")
+
+    class GetPostStatsSchema(BaseModel):
+        post_url: str = Field(..., description="LinkedIn post URL")
+
     return [
         StructuredTool(
             name="get_linkedin_profile_view",
@@ -580,5 +600,25 @@ def as_tools(configuration: LinkedinIntegrationConfiguration):
             description="Get LinkedIn profiles who reacted on a LinkedIn post", 
             func=lambda post_url, limit: integration.get_post_reactions(post_url, limit=limit),
             args_schema=GetPostReactionsSchema
+        ),
+        StructuredTool(
+            name="get_linkedin_profile_posts",
+            description="Get posts feed for a LinkedIn profile",
+            func=lambda profile_url, count=1, limit=10, until=None, pagination_token=None: 
+                integration.get_profile_posts(profile_url, count=count, limit=limit, until=until, pagination_token=pagination_token),
+            args_schema=GetProfilePostsSchema
+        ),
+        StructuredTool(
+            name="get_linkedin_organization_posts",
+            description="Get posts feed for a LinkedIn organization/company",
+            func=lambda organization_url, count=100, limit=-1: 
+                integration.get_organization_posts(organization_url, count=count, limit=limit),
+            args_schema=GetOrganizationPostsSchema
+        ),
+        StructuredTool(
+            name="get_linkedin_post_stats",
+            description="Get statistics for a LinkedIn post",
+            func=lambda post_url: integration.get_post_stats(post_url),
+            args_schema=GetPostStatsSchema
         ),
     ]

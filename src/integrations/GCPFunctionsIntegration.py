@@ -6,6 +6,7 @@ from google.cloud import functions_v1
 from google.cloud.functions_v1 import CloudFunction
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
 @dataclass
 class GCPFunctionsIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GCP Cloud Functions integration.
@@ -20,25 +21,31 @@ class GCPFunctionsIntegrationConfiguration(IntegrationConfiguration):
     location: str
 
 class GCPFunctionsIntegration(Integration):
-    """GCP Cloud Functions API integration client using service account."""
+    """GCP Cloud Functions API integration client using service account.
+    
+    This integration provides methods to interact with GCP Cloud Functions' API endpoints.
+    """
 
     __configuration: GCPFunctionsIntegrationConfiguration
-    __client: functions_v1.CloudFunctionsServiceClient
 
     def __init__(self, configuration: GCPFunctionsIntegrationConfiguration):
         """Initialize Cloud Functions client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
         
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path
-        )
+        try:
+            # Load service account credentials
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path
+            )
         
-        # Initialize client
-        self.__client = functions_v1.CloudFunctionsServiceClient(
-            credentials=credentials
-        )
+            # Initialize client
+            self.__client = functions_v1.CloudFunctionsServiceClient(
+                credentials=credentials
+            )
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Cloud Functions API client: {str(e)}")
 
     def __format_function_data(self, function: CloudFunction) -> Dict:
         """Format function data for response.

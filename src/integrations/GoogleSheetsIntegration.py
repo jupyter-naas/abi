@@ -5,6 +5,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+LOGO_URL = "https://logo.clearbit.com/google.com"
+
 @dataclass
 class GoogleSheetsIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Google Sheets integration.
@@ -25,29 +27,32 @@ class GoogleSheetsIntegrationConfiguration(IntegrationConfiguration):
 class GoogleSheetsIntegration(Integration):
     """Google Sheets API integration client using service account.
     
-    This class provides methods to interact with Google Sheets' API endpoints
+    This integration provides methods to interact with Google Sheets' API endpoints
     for spreadsheet operations.
     """
 
     __configuration: GoogleSheetsIntegrationConfiguration
-    __service: any  # Sheets API service
 
     def __init__(self, configuration: GoogleSheetsIntegrationConfiguration):
         """Initialize Sheets client with service account credentials."""
         super().__init__(configuration)
         self.__configuration = configuration
-        
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            self.__configuration.service_account_path,
-            scopes=self.__configuration.scopes
-        )
-        
-        # Create delegated credentials for impersonation
-        delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
-        
-        # Build the service
-        self.__service = build('sheets', 'v4', credentials=delegated_credentials)
+
+        try:
+            # Load service account credentials
+            credentials = service_account.Credentials.from_service_account_file(
+                self.__configuration.service_account_path,
+                scopes=self.__configuration.scopes
+            )
+
+            # Create delegated credentials for impersonation
+            delegated_credentials = credentials.with_subject(self.__configuration.subject_email)
+            
+            # Build the service
+            self.__service = build('sheets', 'v4', credentials=delegated_credentials)
+        except Exception as e:
+            pass
+            # logger.debug(f"Failed to initialize Sheets API client: {str(e)}")
 
     def get_values(self,
                   spreadsheet_id: str,

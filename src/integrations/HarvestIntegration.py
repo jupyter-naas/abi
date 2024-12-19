@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 import requests
 from datetime import datetime
 
+LOGO_URL = "https://logo.clearbit.com/harvestapp.com"
 @dataclass
 class HarvestIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Harvest integration.
@@ -20,7 +21,7 @@ class HarvestIntegrationConfiguration(IntegrationConfiguration):
 class HarvestIntegration(Integration):
     """Harvest API integration client.
     
-    This class provides methods to interact with Harvest's API endpoints
+    This integration provides methods to interact with Harvest's API endpoints
     for time tracking and project management.
     """
 
