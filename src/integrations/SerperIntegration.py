@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
+LOGO_URL = "https://logo.clearbit.com/serper.dev"
+
 @dataclass
 class SerperIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Serper.dev integration.
@@ -17,7 +19,7 @@ class SerperIntegrationConfiguration(IntegrationConfiguration):
 class SerperIntegration(Integration):
     """Serper.dev API integration client.
     
-    This class provides methods to interact with Serper's API endpoints
+    This integration provides methods to interact with Serper's API endpoints
     for Google search results.
     """
 
