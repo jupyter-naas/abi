@@ -736,7 +736,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     class ListWorkspaceStorageObjectsSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace")
         storage_name: str = Field(..., description="Name of the storage")
-        prefix: Optional[str] = Field(None, description="Prefix to list objects under") 
+        prefix: str = Field(..., description="Prefix to list objects under") 
 
     class CreateWorkspaceStorageSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace")
