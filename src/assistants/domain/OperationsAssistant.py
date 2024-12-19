@@ -1,7 +1,7 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config
-from src.integrations import AiaIntegration
+from src.integrations import AiaIntegration, NaasIntegration
 from src.integrations.AiaIntegration import AiaIntegrationConfiguration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
@@ -16,6 +16,8 @@ from abi.services.ontology_store.OntologyStoreService import OntologyStoreServic
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
 from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndexWorkflow, UpdateAlgoliaIndexConfiguration
+from src.workflows.operations_assistant.NaasStorageWorkflows import NaasStorageWorkflows, NaasStorageWorkflowsConfiguration
+from src.workflows.operations_assistant.NaasWorkspaceWorkflows import NaasWorkspaceWorkflows, NaasWorkspaceWorkflowsConfiguration
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "An Operations Assistant that manages tasks and projects to improve operational efficiency."
@@ -43,11 +45,23 @@ def create_operations_assistant(
     if naas_key := secret.get('NAAS_API_KEY'):
         naas_integration_config = NaasIntegrationConfiguration(api_key=naas_key)
 
+        # Add NaasWorkspaceWorkflow tool
+        naas_workspace_workflows = NaasWorkspaceWorkflows(NaasWorkspaceWorkflowsConfiguration(
+            naas_integration_config=naas_integration_config
+        ))
+        tools += naas_workspace_workflows.as_tools()
+
         # Add AddAssistantsToNaasWorkspace tool
         add_assistants_to_naas_workspace = AddAssistantsToNaasWorkspace(AddAssistantsToNaasWorkspaceConfiguration(
             naas_integration_config=naas_integration_config
         ))
         tools += add_assistants_to_naas_workspace.as_tools()
+
+        # Add NaasStorageWorkflows tool
+        naas_storage_workflows = NaasStorageWorkflows(NaasStorageWorkflowsConfiguration(
+            naas_integration_config=naas_integration_config
+        ))
+        tools += naas_storage_workflows.as_tools()
 
     if (naas_key := secret.get('NAAS_API_KEY')) and (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
         aia_integration_config = AiaIntegrationConfiguration(api_key=naas_key)
