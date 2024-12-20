@@ -382,3 +382,39 @@ class Agent(Expose):
             func=self.__tool_function,
             args_schema=AgentToolSchema
         )]
+
+    @property
+    def tools(self) -> list[Tool]:
+        """Get the list of tools available to the agent.
+        
+        Returns:
+            list[Tool]: List of tools configured for this agent
+        """
+        return self.__tools
+    
+    @property
+    def name(self) -> str:
+        """Get the name of the agent.
+        
+        Returns:
+            str: The agent's name
+        """
+        return self.__name
+    
+    @property
+    def description(self) -> str:
+        """Get the description of the agent.
+        
+        Returns:
+            str: The agent's description
+        """
+        return self.__description
+        
+    @property
+    def chat_model(self) -> BaseChatModel:
+        """Get the chat model used by the agent.
+        
+        Returns:
+            BaseChatModel: The agent's chat model
+        """
+        return self.__chat_model
