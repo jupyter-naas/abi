@@ -57,11 +57,11 @@ class GithubGraphqlIntegration(Integration):
             result = response.json()
             
             if "errors" in result:
-                raise IntegrationConnectionError(f"GraphQL query failed: {result['errors']}")
+                return IntegrationConnectionError(f"GraphQL query failed: {result['errors']}")
             
             return result
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Github GraphQL API request failed: {str(e)}")
+            return IntegrationConnectionError(f"Github GraphQL API request failed: {str(e)}")
 
     def get_project_node_id(self, organization: str, number: int) -> str:
         """Get the node ID of an organization project.
