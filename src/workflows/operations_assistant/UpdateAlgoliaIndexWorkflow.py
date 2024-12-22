@@ -70,6 +70,26 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                     module = importlib.import_module(import_path)
                     title = (file.stem.replace("Assistant", " ")) + "Assistant"
                     slug = title.lower().replace(" ", "-").replace("_", "-")
+                    
+                    # # Get available tools
+                    # tools = []
+                    # # Find create_*_agent function dynamically
+                    # create_agent_funcs = [f for f in dir(module) if f.startswith("create_") and f.endswith("_agent")]
+                    # for create_func in create_agent_funcs:
+                    #     try:
+                    #         agent = getattr(module, create_func)()
+                    #         if hasattr(agent, "tools"):
+                    #             tools = [
+                    #                 {
+                    #                     "name": tool.name,
+                    #                     "description": tool.description
+                    #                 }
+                    #                 for tool in agent.tools
+                    #             ]
+                    #             break  # Use first successful agent creation
+                    #     except Exception as e:
+                    #         logger.warning(f"Could not get tools for {file.stem} using {create_func}: {e}")
+                    
                     results.append({
                         "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
                         "type": "assistant", 
@@ -78,12 +98,13 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                         "description": getattr(module, "DESCRIPTION", ""),
                         "image_url": getattr(module, "AVATAR_URL", ""),
                         "source_title": subfolder.capitalize(),
-                        "source_url": f"https://github.com/abi/src/assistants/{relative_path}",
+                        "source_url": f"https://github.com/jupyter-naas/abi/src/assistants/{relative_path}",
                         "ranking": ranking,
                         "slug": getattr(module, "SLUG", slug),
                         "model": getattr(module, "MODEL", "gpt-4o-mini"), 
                         "temperature": getattr(module, "TEMPERATURE", 0),
                         "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
+                        # "tools": "\n".join([f"- {tool['name']}: {tool['description']}" for tool in tools])  # Add tools with descriptions
                     })
                 except ImportError as e:
                     logger.error(f"Error importing assistant {file.stem}: {e}")
@@ -121,9 +142,9 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                             "title": " ".join(re.findall('[A-Z][^A-Z]*', file.stem.replace("Workflow", ""))).strip() + " Workflow",
                             "description": doc,
                             "image_url": "",
-                            "source_title": file.parent.name,
-                            "source_url": f"https://github.com/abi/src/workflows/{relative_path}",
-                            "ranking": 1
+                            "source_title": (file.parent.name).replace("_", " ").capitalize(),
+                            "source_url": f"https://github.com/jupyter-naas/abi/src/workflows/{relative_path}",
+                            "ranking": 2
                         })
                 except ImportError as e:
                     logger.error(f"Error importing workflow {file.stem}: {e}")
@@ -162,8 +183,8 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                             "description": doc,
                             "image_url": "",
                             "source_title": relative_path.parts[0] if len(relative_path.parts) > 1 else file.stem.replace("Pipeline", ""),
-                            "source_url": f"https://github.com/abi/src/data/pipelines/{relative_path}",
-                            "ranking": 1
+                            "source_url": f"https://github.com/jupyter-naas/abi/src/data/pipelines/{relative_path}",
+                            "ranking": 2
                         })
                 except ImportError as e:
                     logger.error(f"Error importing pipeline {file.stem}: {e}")
@@ -200,8 +221,8 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                         "description": description,
                         "image_url": image,
                         "source_title": owner.capitalize(),
-                        "source_url": f"https://github.com/abi/src/models/naas/{file.name}",
-                        "ranking": 1,
+                        "source_url": f"https://github.com/jupyter-naas/abi/src/models/naas/{file.name}",
+                        "ranking": 2,
                         "context_window": context_window
                     })
                 except ImportError as e:
@@ -241,7 +262,7 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                             "description": doc,
                             "image_url": logo_url,
                             "source_title": source_title,
-                            "source_url": f"https://github.com/abi/src/integrations/{file.name}",
+                            "source_url": f"https://github.com/jupyter-naas/abi/src/integrations/{file.name}",
                             "ranking": 1,
                             # "args_schema": "\n".join([
                             #     f"{field.name}: {field.metadata.get('description', '')}"
@@ -273,7 +294,7 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                                         "description": tool.description,
                                         "image_url": logo_url,
                                         "source_title": source_title,
-                                        "source_url": f"https://github.com/abi/src/integrations/{file.name}",
+                                        "source_url": f"https://github.com/jupyter-naas/abi/src/integrations/{file.name}",
                                         "ranking": 2,
                                         "args_schema": "\n".join([
                                             f"-{name}: {field.description}\n"
@@ -354,10 +375,10 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                     "type": "ontology",
                     "category": "ontology",
                     "title": ontology_title,
-                    "description": next(g.objects(None, DC.description), ""),
+                    "description": next(g.objects(None, DC.description), "No description provided."),
                     "image_url": image_url,
                     "source_title": source_title,
-                    "source_url": next(g.objects(None, OWL.versionIRI), f"https://github.com/abi/src/ontologies/{file.name}"),
+                    "source_url": next(g.objects(None, OWL.versionIRI), f"https://github.com/jupyter-naas/abi/src/ontologies/{file.name}"),
                     "ranking": ranking,
                     "comment": next(g.objects(None, RDFS.comment), ""),
                     "contributors": ", ".join(g.objects(None, DC11.contributor)),
@@ -380,13 +401,13 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                                 "objectID": hashlib.sha256(str(s).encode()).hexdigest(),
                                 "type": "ontology",
                                 "category": "class",
-                                "title": next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]).capitalize(),
-                                "description": next(g.objects(s, SKOS.definition), ''),
+                                "title": "Class: " + next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]).capitalize(),
+                                "description": next(g.objects(s, SKOS.definition), "No definition provided."),
                                 "image_url": image_url,
                                 "source_title": ontology_title,
                                 "source_url": str(s),
-                                "ranking": ranking,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/abi/src/ontologies/{file.name}"),
+                                "ranking": ranking+1,
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/src/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ''),
                                 "subClassOf": subclass_of,
@@ -469,13 +490,13 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                                 "objectID": hashlib.sha256(str(s).encode()).hexdigest(),
                                 "type": "ontology",
                                 "category": "object_property",
-                                "title": next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]),
-                                "description": next(g.objects(s, SKOS.definition), ''),
+                                "title": "Object Property: " + next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]),
+                                "description": next(g.objects(s, SKOS.definition), "No definition provided."),
                                 "image_url": image_url,
                                 "source_title": ontology_title,
                                 "source_url": str(s),
-                                "ranking": ranking,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/abi/src/ontologies/{file.name}"),
+                                "ranking": ranking+1,
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/src/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ''),
                                 "domain": domain_objs,
@@ -503,13 +524,13 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                                 "objectID": hashlib.sha256(str(s).encode()).hexdigest(),
                                 "type": "ontology",
                                 "category": "data_property",
-                                "title": next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]).capitalize(),
-                                "description": next(g.objects(s, SKOS.definition), ""),
+                                "title": "Data Property: " + next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]).capitalize(),
+                                "description": next(g.objects(s, SKOS.definition), "No definition provided."),
                                 "image_url": image_url,
                                 "source_title": ontology_title,
                                 "source_url": str(s),
-                                "ranking": ranking,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/abi/src/ontologies/{file.name}"),
+                                "ranking": ranking+1,
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/src/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ""),
                                 "range": range_val,
@@ -529,13 +550,13 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                                 "objectID": hashlib.sha256(str(s).encode()).hexdigest(),
                                 "type": "ontology",
                                 "category": "annotation_property",
-                                "title": next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]).capitalize(),
-                                "description": next(g.objects(s, SKOS.definition), ""),
+                                "title": "Annotation Property: " + next(g.objects(s, RDFS.label), str(s).split("/")[-1].split("#")[-1]).capitalize(),
+                                "description": next(g.objects(s, SKOS.definition), "No definition provided."),
                                 "image_url": image_url,
                                 "source_title": ontology_title,
                                 "source_url": str(s),
-                                "ranking": ranking,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/abi/src/ontologies/{file.name}"),
+                                "ranking": ranking+1,
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/src/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ""),
                             })
