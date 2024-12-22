@@ -4,7 +4,7 @@ from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.assistants.foundation.SupportAssitant import create_support_assistant
+from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A HubSpot Assistant with access to HubSpot Integration tools."

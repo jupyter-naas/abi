@@ -45,7 +45,7 @@ def create_supervisor_agent():
     from src.assistants.domain.SalesAssistant import create_sales_assistant
     from src.assistants.domain.OperationsAssistant import create_operations_assistant
     from src.assistants.domain.FinanceAssistant import create_finance_assistant 
-    from src.assistants.foundation.SupportAssitant import create_support_assistant
+    from src.assistants.foundation.SupportAssistant import create_support_assistant
 
     # Create assistant instances
     assistants = [
