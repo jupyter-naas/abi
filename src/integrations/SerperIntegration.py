@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
 
-LOGO_URL = "https://logo.clearbit.com/serper.dev"
+LOGO_URL = "https://res.cloudinary.com/apideck/image/upload/v1679535605/icons/serper-dev.png"
 
 @dataclass
 class SerperIntegrationConfiguration(IntegrationConfiguration):
