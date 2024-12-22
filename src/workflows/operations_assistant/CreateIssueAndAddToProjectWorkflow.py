@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
-from src import secret
+from src import config
 from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -29,7 +29,7 @@ class CreateIssueAndAddToProjectParameters(WorkflowParameters):
         repo_name: Repository name in format owner/repo
         issue_title: Title of the issue
         issue_body: Body content of the issue
-        project_id: Project number (from GitHub project URL)
+        project_id: Project number (from GitHub project URL). Optional if configured in config.github_project_id
         assignees: List of assignees
         labels: List of labels
         status_field_id: Field ID for status column
@@ -40,7 +40,7 @@ class CreateIssueAndAddToProjectParameters(WorkflowParameters):
     repo_name: str = Field(..., description="Repository name in format owner/repo")
     issue_title: str = Field(..., description="Title of the issue")
     issue_body: str = Field(..., description="Body content of the issue")
-    project_id: int = Field(0, description="Project number from GitHub project URL")
+    project_id: Optional[int] = Field(0, description="Project number from GitHub project URL (optional if configured globally)")
     assignees: Optional[List[str]] = Field(default_factory=list, description="List of GitHub usernames to assign")
     labels: Optional[List[str]] = Field(default_factory=list, description="List of labels to add")
     status_field_id: Optional[str] = Field(None, description="Field ID for status column")
@@ -66,11 +66,11 @@ class CreateIssueAndAddToProjectWorkflow(Workflow):
             assignees=parameters.assignees,
             labels=parameters.labels
         )
-        
         # Get project node id
-        if parameters.project_id != 0:
+        if parameters.project_id != 0 or config.github_project_id:
             organization = parameters.repo_name.split("/")[0]
-            project_data : dict = self.__github_graphql_integration.get_project_node_id(organization, parameters.project_id)
+            project_id = parameters.project_id if parameters.project_id != 0 else config.github_project_id
+            project_data : dict = self.__github_graphql_integration.get_project_node_id(organization, project_id)
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
             logger.debug(f"Project node ID: {project_node_id}")
 
