@@ -30,6 +30,10 @@ algoliasearch = "^4.11.1"
 google-cloud-bigquery = "^3.27.0"
 google-cloud-functions = "^1.19.0"
 google-cloud-storage = "^2.19.0"
+plotly = "^5.24.1"
+rich = "^13.9.4"
+pillow = "^11.0.0"
+kaleido = "0.2.1"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
@@ -40,14 +44,19 @@ rich = "^13.9.4"
 pytest = "^8.3.4"
 
 [tool.poetry.scripts]
+# Foundation agents
 chat-supervisor-agent = "src.apps.terminal_agent.main:run_supervisor_agent"
 chat-support-agent = "src.apps.terminal_agent.main:run_support_agent"
+
+# Domain agents
 chat-content-agent = "src.apps.terminal_agent.main:run_content_agent"
 chat-finance-agent = "src.apps.terminal_agent.main:run_finance_agent"
 chat-growth-agent = "src.apps.terminal_agent.main:run_growth_agent"
 chat-opendata-agent = "src.apps.terminal_agent.main:run_opendata_agent"
 chat-operations-agent = "src.apps.terminal_agent.main:run_operations_agent"
 chat-sales-agent = "src.apps.terminal_agent.main:run_sales_agent"
+
+# Integration agents
 chat-airtable-agent = "src.apps.terminal_agent.main:run_airtable_agent"
 chat-algolia-agent = "src.apps.terminal_agent.main:run_algolia_agent"
 chat-aws-s3-agent = "src.apps.terminal_agent.main:run_aws_s3_agent"
@@ -79,6 +88,9 @@ chat-yahoo-finance-agent = "src.apps.terminal_agent.main:run_yahoo_finance_agent
 chat-youtube-agent = "src.apps.terminal_agent.main:run_youtube_agent"
 chat-zerobounce-agent = "src.apps.terminal_agent.main:run_zerobounce_agent"
 chat-sendgrid-agent = "src.apps.terminal_agent.main:run_sendgrid_agent"
+
+# Analytics agents
+chat-plotly-agent = "src.apps.terminal_agent.main:run_plotly_agent"
 
 abi = "src.cli:main"
 api = "src.api:api"

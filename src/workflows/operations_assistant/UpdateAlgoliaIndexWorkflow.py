@@ -248,9 +248,6 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                         doc = inspect.getdoc(integration_class) or ""
                         logo_url = getattr(module, "LOGO_URL", "")
                         source_title = file.stem.replace("Integration", "")
-                        
-                        # Get configuration class first
-                        config_class = getattr(module, f"{file.stem}Configuration", None)
 
                         # Add main integration record
                         integration_id = hashlib.sha256(file.stem.encode()).hexdigest()
@@ -305,6 +302,91 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
                                 logger.warning(f"Could not get tools for {file.stem}: {e}")
                 except ImportError as e:
                     logger.error(f"Error importing integration {file.stem}: {e}")
+        
+        return results
+    
+    def __scan_analytics(self) -> List[Dict[str, str]]:
+        """Scan analytics directory and collect metadata."""
+        results = []
+        analytics_dir = Path("src/analytics")
+        
+        # Recursively scan all .py files in analytics directory and subdirectories
+        for file in analytics_dir.rglob("*.py"):
+            # Skip template files
+            if "__AnalyticTemplate__" in str(file):
+                continue
+                
+            # Only process files ending with Analytics
+            if file.stem.endswith("Analytics"):
+                logger.info(f"Processing analytic {file}")
+                try:
+                    # Build import path based on file location
+                    import_path = "src.analytics"
+                    relative_path = file.relative_to(analytics_dir)
+                    
+                    # Add subdirectories to import path if file is nested
+                    if len(relative_path.parts) > 1:
+                        import_path += "." + ".".join(relative_path.parts[:-1])
+                    import_path += f".{file.stem}"
+                    module = importlib.import_module(import_path)
+                    
+                    # Get analytic class
+                    class_name = file.stem
+                    if hasattr(module, class_name):
+                        analytic_class = getattr(module, class_name)
+                        doc = inspect.getdoc(analytic_class) or ""
+                        logo_url = getattr(module, "LOGO_URL", "")
+                        source_title = file.stem.replace("Analytics", "")
+
+                        # Add main analytic record
+                        analytic_id = hashlib.sha256(file.stem.encode()).hexdigest()
+                        results.append({
+                            "objectID": analytic_id,
+                            "type": "analytic",
+                            "title": (file.stem.replace("Analytics", " ")),
+                            "category": "tool",
+                            "description": doc,
+                            "image_url": logo_url,
+                            "source_title": source_title,
+                            "source_url": f"https://github.com/jupyter-naas/abi/src/analytics/{relative_path}",
+                            "ranking": 1
+                        })
+                        
+                        # Get tools if as_tools function exists
+                        if hasattr(module, "as_tools"):
+                            try:
+                                # Create dummy configuration to get tools
+                                config_class = getattr(module, f"{file.stem}Configuration")
+                                dummy_config = config_class(**{
+                                    field.name: "dummy" if field.type == str else 0
+                                    for field in config_class.__dataclass_fields__.values()
+                                })
+                                
+                                tool_list = module.as_tools(dummy_config)
+                                for tool in tool_list:
+                                    # Create unique ID for each function
+                                    function_id = hashlib.sha256(f"{file.stem}_{tool.name}".encode()).hexdigest()
+                                    
+                                    # Add function record
+                                    results.append({
+                                        "objectID": function_id,
+                                        "type": "analytic",
+                                        "title": (tool.name).replace("_", " ").capitalize(),
+                                        "category": "function",
+                                        "description": tool.description,
+                                        "image_url": logo_url,
+                                        "source_title": source_title,
+                                        "source_url": f"https://github.com/jupyter-naas/abi/src/analytics/{relative_path}",
+                                        "ranking": 2,
+                                        "args_schema": "\n".join([
+                                            f"-{name}: {field.description}\n"
+                                            for name, field in (tool.args_schema.__fields__.items() if hasattr(tool, 'args_schema') else [])
+                                        ]) if hasattr(tool, 'args_schema') else str(tool.args if hasattr(tool, 'args') else {})
+                                    })
+                            except Exception as e:
+                                logger.warning(f"Could not get tools for {file.stem}: {e}")
+                except ImportError as e:
+                    logger.error(f"Error importing analytic {file.stem}: {e}")
         
         return results
 
@@ -587,6 +669,10 @@ class UpdateAlgoliaIndexWorkflow(Workflow):
         integrations = self.__scan_integrations()
         logger.info(f"Found {len(integrations)} integrations")
         all_records.extend(integrations)
+
+        analytics = self.__scan_analytics()
+        logger.info(f"Found {len(analytics)} analytics")
+        all_records.extend(analytics)
 
         workflows = self.__scan_workflows()
         logger.info(f"Found {len(workflows)} workflows")
