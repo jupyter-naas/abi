@@ -4,6 +4,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 from rich.box import ROUNDED
+from PIL import Image
 import os
 import platform
 
@@ -70,3 +71,49 @@ def get_user_input():
     except KeyboardInterrupt:
         console.print("\n[bold red]Abi:[/bold red] Conversation ended by user.")
         return 'exit'
+
+def print_image(image_path: str):
+    """Display an image in the terminal."""
+    try:
+        console.print()  # Add some spacing
+        
+        # Display the file path and viewing instructions
+        message = (
+            f"[yellow]Image saved at: {image_path}[/yellow]\n\n"
+            "[dim]To view the image:[/dim]\n"
+            f"[cyan]• Local system: Open {image_path} with your image viewer[/cyan]\n"
+            "[cyan]• Remote/SSH: Download the file to your local machine to view[/cyan]"
+        )
+        
+        console.print(Panel(
+            message,
+            border_style="yellow",
+            box=ROUNDED,
+            expand=False,
+            title="Graph Output",
+            title_align="left"
+        ))
+        
+        # Only try to show the image if we're in a GUI environment
+        if os.environ.get('DISPLAY') and platform.system() != "Windows":
+            try:
+                img = Image.open(image_path)
+                img.show()
+            except Exception:
+                pass  # Silently fail if we can't display the image
+        elif platform.system() == "Windows":
+            try:
+                os.startfile(image_path)  # Windows-specific file opening
+            except Exception:
+                pass
+                
+        console.print()  # Add some spacing after
+    except Exception as e:
+        console.print(Panel(
+            f"[yellow]Unable to process image. File saved at: {image_path}[/yellow]\nError: {str(e)}",
+            border_style="yellow",
+            box=ROUNDED,
+            expand=False,
+            title="Graph Output",
+            title_align="left"
+        ))
