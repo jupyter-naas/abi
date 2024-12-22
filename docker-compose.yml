@@ -4,8 +4,9 @@ services:
     build: .
     ports:
       - 9879:9879
+      - 8501:8501
     volumes:
       - .:/app
     environment:
       - PYTHONPATH=/app
-    command: ["poetry", "run", "chat-single-assistant"]
+    command: ["poetry", "run"]
