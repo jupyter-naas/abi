@@ -32,7 +32,7 @@ class AgentSharedState:
     __thread_id: int
 
     def __init__(self, thread_id: int = 1):
-        self.__thread_id = 1
+        self.__thread_id = thread_id
         
     @property
     def thread_id(self) -> int:
