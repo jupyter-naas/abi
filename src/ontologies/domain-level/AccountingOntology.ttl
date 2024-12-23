@@ -26,16 +26,14 @@ abi:GeneralLedgerEntry a owl:Class ;
 
 abi:Account a owl:Class ;
     rdfs:label "Account"@en ;
-    skos:definition "An accounting account in the chart of accounts" .
+    skos:definition "An accounting account in the chart of accounts." .
+
+abi:Invoice a owl:Class ;
+    rdfs:label "Invoice"@en ;
+    skos:definition "An invoice is a financial document that records a transaction between a buyer and a seller" .
 
 abi:AccountType a owl:Class ;
     rdfs:label "Account Type"@en .
-
-abi:AssetAccount a abi:AccountType .
-abi:LiabilityAccount a abi:AccountType .
-abi:EquityAccount a abi:AccountType .
-abi:RevenueAccount a abi:AccountType .
-abi:ExpenseAccount a abi:AccountType .
 
 #################################################################
 #    Object Properties
@@ -53,18 +51,20 @@ abi:hasAccount a owl:ObjectProperty ;
 #    Data Properties
 #################################################################
 
-abi:hasDebitAmount a owl:DatatypeProperty ;
+abi:debitAmount a owl:DatatypeProperty ;
     rdfs:domain abi:GeneralLedgerEntry ;
     rdfs:range xsd:decimal .
 
-abi:hasCreditAmount a owl:DatatypeProperty ;
+abi:creditAmount a owl:DatatypeProperty ;
     rdfs:domain abi:GeneralLedgerEntry ;
     rdfs:range xsd:decimal .
 
-abi:hasPostingDate a owl:DatatypeProperty ;
-    rdfs:domain abi:GeneralLedgerEntry ;
-    rdfs:range xsd:dateTime .
+#################################################################
+#    Individuals
+#################################################################
 
-abi:hasJournalReference a owl:DatatypeProperty ;
-    rdfs:domain abi:GeneralLedgerEntry ;
-    rdfs:range xsd:string .
+abi:AssetAccount a abi:AccountType .
+abi:LiabilityAccount a abi:AccountType .
+abi:EquityAccount a abi:AccountType .
+abi:RevenueAccount a abi:AccountType .
+abi:ExpenseAccount a abi:AccountType .
