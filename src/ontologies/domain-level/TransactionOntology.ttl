@@ -19,12 +19,18 @@
 
 #################################################################
 #    Classes
-#################################################################
+#################################################################   
 
 abi:Transaction a owl:Class ;
     rdfs:label "Transaction"@en ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
-    skos:definition "A financial transaction with associated metadata"@en .
+    skos:definition "A financial transaction with associated metadata"@en ;
+    skos:example """A transaction is a financial transaction with associated metadata"""@en .
+
+abi:TransactionStatus a owl:Class ;
+    rdfs:label "Transaction Status"@en ;
+    skos:definition "The status of a transaction"@en ;
+    skos:example "The status of a transaction is pending, completed, or failed"@en .
 
 #################################################################
 #    Object Properties
@@ -38,30 +44,42 @@ abi:hasContract a owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Contract .
 
+abi:hasSender a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Contact .
+
+abi:hasRecipient a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Contact .
+
+abi:hasOrganization a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Organization .
+
+abi:hasCurrency a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Currency .
+
+abi:hasStatus a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:TransactionStatus .
+
+abi:hasCategory a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:TransactionCategory .
+
+abi:hasPaymentMethod a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:PaymentMethod .
+
+abi:hasInvoice a owl:ObjectProperty ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:Invoice .
+
 #################################################################
 #    Data Properties
 #################################################################
 
-abi:hasTransactionID a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string .
-
-abi:hasAmount a owl:DatatypeProperty ;
+abi:amount a owl:DatatypeProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range xsd:decimal .
-
-abi:hasCurrency a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string .
-
-abi:hasTransactionDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:dateTime .
-
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string .
-
-abi:hasStatus a owl:DatatypeProperty ;
-    rdfs:domain abi:Transaction ;
-    rdfs:range xsd:string . 
