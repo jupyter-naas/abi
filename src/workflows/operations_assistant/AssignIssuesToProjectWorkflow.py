@@ -43,6 +43,7 @@ class AssignIssuesToProjectWorkflowParameters(WorkflowParameters):
     priority_option_id: Optional[str] = Field(None, description="The option ID for priority value to set")
 
 class AssignIssuesToProjectWorkflow(Workflow):
+    """Workflow for assigning GitHub issues to a project."""
     __configuration: AssignIssuesToProjectWorkflowConfiguration
     
     def __init__(self, configuration: AssignIssuesToProjectWorkflowConfiguration):
