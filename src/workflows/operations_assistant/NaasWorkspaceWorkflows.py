@@ -31,7 +31,7 @@ class GetPersonalWorkspaceParameters(WorkflowParameters):
     pass
 
 class NaasWorkspaceWorkflows(Workflow):
-    """Workflow for listing all Naas workspaces with their IDs and names."""
+    """Workflows for listing all Naas workspaces with their IDs and names and getting the personal workspace."""
     
     __configuration: NaasWorkspaceWorkflowsConfiguration
     

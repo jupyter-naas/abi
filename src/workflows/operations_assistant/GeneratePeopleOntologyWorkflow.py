@@ -28,6 +28,7 @@ class GeneratePeopleOntologyWorkflowParameters(WorkflowParameters):
     workspace_id: str = Field(..., description="The ID (UUID) of the naas workspace")
 
 class GeneratePeopleOntologyWorkflow(Workflow):
+    """Workflow for generating a people ontology from AIA ontologies."""
     __configuration: GeneratePeopleOntologyWorkflowConfiguration
     
     def __init__(self, configuration: GeneratePeopleOntologyWorkflowConfiguration):

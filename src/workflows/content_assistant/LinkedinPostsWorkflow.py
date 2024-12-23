@@ -35,6 +35,7 @@ class LinkedinPostsWorkflowParameters(WorkflowParameters):
     timezone: Optional[str] = Field(default="Europe/Paris", description="Timezone to use for date calculations")
 
 class LinkedinPostsWorkflow(Workflow):
+    """Workflow for fetching LinkedIn posts from a profile or organization."""
     __configuration: LinkedinPostsWorkflowConfiguration
     
     def __init__(self, configuration: LinkedinPostsWorkflowConfiguration):

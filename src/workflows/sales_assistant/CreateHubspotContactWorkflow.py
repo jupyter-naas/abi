@@ -7,7 +7,6 @@ from typing import Dict, Optional
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 
-
 @dataclass
 class CreateHubSpotContactWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for CreateHubSpotContactWorkflow.
@@ -51,7 +50,8 @@ class CreateHubSpotContactWorkflowParameters(WorkflowParameters):
         if self.linkedinbio: properties["linkedinbio"] = self.linkedinbio
         return properties
 
-class CreateHubSpotContactWorkflow(Workflow):
+class CreateHubspotContactWorkflow(Workflow):
+    """Create a new contact in HubSpot with the given properties."""
     __configuration: CreateHubSpotContactWorkflowConfiguration
     
     def __init__(self, configuration: CreateHubSpotContactWorkflowConfiguration):
