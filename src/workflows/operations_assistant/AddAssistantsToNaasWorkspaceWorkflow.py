@@ -32,6 +32,7 @@ class AddAssistantsToNaasWorkspaceParameters(BaseModel):
     workspace_id: str = Field(..., description="The workspace ID where the plugin will be created. Must comes from user input.")
 
 class AddAssistantsToNaasWorkspace(Workflow):
+    """Workflow for adding assistants to a Naas workspace."""
     __configuration: AddAssistantsToNaasWorkspaceConfiguration
     
     def __init__(self, configuration: AddAssistantsToNaasWorkspaceConfiguration):
