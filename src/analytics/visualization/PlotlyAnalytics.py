@@ -748,7 +748,6 @@ class PlotlyAnalytics(Integration):
         )])
         
         fig.update_layout(self._generate_layout(title))
-        fig.update_traces(showlegend=False)
         
         return self._save_graph(fig, title)
 
@@ -933,79 +932,79 @@ def as_tools(configuration: PlotlyAnalyticsConfiguration):
     return [
         StructuredTool(
             name="create_barline_chart",
-            description="Create a combined bar and line chart visualization",
+            description="Create a combined bar and line chart visualization. Perfect for comparing revenue (bars) against profit margins (line) over time. This dual-axis visualization helps identify correlations between different business metrics.",
             func=lambda **kwargs: analytics.create_barline_chart(**kwargs),
             args_schema=BarLineChartSchema
         ),
         StructuredTool(
             name="create_bubble_chart",
-            description="Create a bubble chart visualization",
+            description="Create a bubble chart visualization. Ideal for portfolio analysis where three dimensions (e.g., market size, growth rate, and current revenue) need to be visualized simultaneously. Commonly used in strategic planning and market analysis.",
             func=lambda **kwargs: analytics.create_bubble_chart(**kwargs),
             args_schema=BubbleChartSchema
         ),
         StructuredTool(
             name="create_candlestick_chart",
-            description="Create a candlestick chart visualization",
+            description="Create a candlestick chart visualization. Essential for financial analysis and stock trading, showing opening, closing, high, and low values over time. Helps identify market trends and potential trading opportunities.",
             func=lambda **kwargs: analytics.create_candlestick_chart(**kwargs),
             args_schema=CandlestickChartSchema
         ),
         StructuredTool(
             name="create_heatmap",
-            description="Create a heatmap visualization",
+            description="Create a heatmap visualization. Excellent for identifying patterns in large datasets such as customer behavior across different times and locations. Widely used in retail analytics and customer engagement analysis.",
             func=lambda **kwargs: analytics.create_heatmap(**kwargs),
             args_schema=HeatmapSchema
         ),
         StructuredTool(
             name="create_treemap",
-            description="Create a treemap visualization",
+            description="Create a treemap visualization. Perfect for hierarchical data representation such as market segmentation or budget allocation. Helps stakeholders quickly understand proportional relationships and nested categories.",
             func=lambda **kwargs: analytics.create_treemap(**kwargs),
             args_schema=TreemapSchema
         ),
         StructuredTool(
             name="create_mapchart",
-            description="Create a map visualization with markers",
+            description="Create a map visualization with markers. Essential for geographical business analysis such as store performance by location or market penetration analysis. Helps identify regional trends and opportunities.",
             func=lambda **kwargs: analytics.create_mapchart(**kwargs),
             args_schema=MapChartSchema
         ),
         StructuredTool(
             name="create_piechart",
-            description="Create a pie chart visualization",
+            description="Create a pie chart visualization. Ideal for showing market share distribution or budget allocation across departments. Provides an immediate visual understanding of proportional relationships.",
             func=lambda **kwargs: analytics.create_piechart(**kwargs),
             args_schema=PieChartSchema
         ),
         StructuredTool(
             name="create_waterfall_chart",
-            description="Create a waterfall chart visualization",
+            description="Create a waterfall chart visualization. Perfect for explaining cumulative effect of sequential business events like revenue build-up or cost breakdown analysis. Commonly used in financial planning and variance analysis.",
             func=lambda **kwargs: analytics.create_waterfall_chart(**kwargs),
             args_schema=WaterfallChartSchema
         ),
         StructuredTool(
             name="create_gantt_chart",
-            description="Create a Gantt chart visualization",
+            description="Create a Gantt chart visualization. Essential for project management and timeline visualization across teams and departments. Helps track progress and dependencies in complex business projects.",
             func=lambda **kwargs: analytics.create_gantt_chart(**kwargs),
             args_schema=GanttChartSchema
         ),
         StructuredTool(
             name="create_horizontal_barchart",
-            description="Create a horizontal bar chart visualization",
+            description="Create a horizontal bar chart visualization. Excellent for comparing values across different categories, especially with long category names. Commonly used for survey results and performance comparisons.",
             func=lambda **kwargs: analytics.create_horizontal_barchart(**kwargs),
             args_schema=BarChartSchema
         ),
         StructuredTool(
             name="create_vertical_barchart",
-            description="Create a vertical bar chart visualization",
+            description="Create a vertical bar chart visualization. Perfect for showing trends over time or comparing values across categories. Widely used in sales analysis and performance tracking.",
             func=lambda **kwargs: analytics.create_vertical_barchart(**kwargs),
             args_schema=BarChartSchema
         ),
         StructuredTool(
             name="create_leaderboard",
-            description="Create a leaderboard visualization",
+            description="Create a leaderboard visualization. Ideal for sales team performance rankings or product performance comparisons. Drives competitive behavior and highlights top performers in an organization.",
             func=lambda **kwargs: analytics.create_leaderboard(**kwargs),
             args_schema=LeaderboardSchema
         ),
         StructuredTool(
             name="create_linechart",
-            description="Create a line chart visualization",
+            description="Create a line chart visualization. Essential for tracking trends over time such as sales growth or market performance. Perfect for showing continuous data and identifying patterns in business metrics.",
             func=lambda **kwargs: analytics.create_linechart(**kwargs),
             args_schema=LineChartSchema
         )
