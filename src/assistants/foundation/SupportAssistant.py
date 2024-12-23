@@ -5,6 +5,7 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.workflows.support_assistant import FeatureRequestWorkflow, ReportBugWorkflow, IssueListWorkflow
 
+DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
 SUPPORT_ASSISTANT_INSTRUCTIONS = """
 You are a support assistant focusing creating GitHub Issues to request new features or report bugs.
 1. Identify if the user intent is a "feature_request" or "bug_report".
@@ -61,7 +62,7 @@ def create_support_assistant(
     
     return Agent(
         name="support_assistant", 
-        description="Use to get any feedbacks/bugs or needs from user.",
+        description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
         state=agent_shared_state, 
