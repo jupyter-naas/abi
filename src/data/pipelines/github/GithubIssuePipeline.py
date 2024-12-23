@@ -38,6 +38,7 @@ class GithubIssuePipelineParameters(PipelineParameters):
 
 
 class GithubIssuePipeline(Pipeline):
+    """Pipeline for adding a GitHub issue to the ontology."""
     __configuration: GithubIssuePipelineConfiguration
     
     def __init__(self, configuration: GithubIssuePipelineConfiguration):
