@@ -35,6 +35,7 @@ class GithubUserDetailsPipelineParameters(PipelineParameters):
 
 
 class GithubUserDetailsPipeline(Pipeline):
+    """Pipeline for adding a GitHub user to the ontology."""
     __configuration: GithubUserDetailsPipelineConfiguration
     
     def __init__(self, configuration: GithubUserDetailsPipelineConfiguration):
