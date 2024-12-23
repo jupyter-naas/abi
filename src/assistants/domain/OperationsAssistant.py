@@ -15,7 +15,7 @@ from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__Second
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
-from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndexWorkflow, UpdateAlgoliaIndexConfiguration
+from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration
 from src.workflows.operations_assistant.NaasStorageWorkflows import NaasStorageWorkflows, NaasStorageWorkflowsConfiguration
 from src.workflows.operations_assistant.NaasWorkspaceWorkflows import NaasWorkspaceWorkflows, NaasWorkspaceWorkflowsConfiguration
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
@@ -112,7 +112,7 @@ def create_operations_assistant(
     # Add UpdateAlgoliaIndexWorkflow tool
     if secret.get('ALGOLIA_APPLICATION_ID') and secret.get('ALGOLIA_API_KEY'):
         algolia_integration_config = AlgoliaIntegrationConfiguration(app_id=secret.get("ALGOLIA_APPLICATION_ID"), api_key=secret.get("ALGOLIA_API_KEY"))
-        update_algolia_index_workflow = UpdateAlgoliaIndexWorkflow(UpdateAlgoliaIndexConfiguration(
+        update_algolia_index_workflow = UpdateAlgoliaIndex(UpdateAlgoliaIndexConfiguration(
             algolia_integration_config=algolia_integration_config
         ))
         tools += update_algolia_index_workflow.as_tools()
