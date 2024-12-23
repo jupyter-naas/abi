@@ -2,7 +2,7 @@ from src.apps.terminal_agent.terminal_style import clear_screen, print_welcome_m
 from abi.services.agent.Agent import Agent
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAgent import create_supervisor_agent
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
 # Domain assistants
 from src.assistants.domain.ContentAssistant import create_content_assistant
 from src.assistants.domain.FinanceAssistant import create_finance_assistant
@@ -44,6 +44,7 @@ from src.assistants.expert.integrations.YouTubeAssistant import create_youtube_a
 from src.assistants.expert.integrations.ZeroBounceAssistant import create_zerobounce_agent
 # Expert analytics assistants
 from src.assistants.expert.analytics.PlotlyAssistant import create_plotly_agent
+from src.assistants.expert.analytics.MatplotlibAssistant import create_matplotlib_agent
 
 def on_tool_response(message: str):
     try:
@@ -315,6 +316,12 @@ def run_zerobounce_agent():
 
 def run_plotly_agent():
     agent = create_plotly_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_matplotlib_agent():
+    agent = create_matplotlib_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)

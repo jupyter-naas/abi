@@ -34,6 +34,9 @@ plotly = "^5.24.1"
 rich = "^13.9.4"
 pillow = "^11.0.0"
 kaleido = "0.2.1"
+matplotlib = "^3.7.1"
+seaborn = "^0.13.2"
+gitpython = "^3.1.43"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
@@ -91,7 +94,7 @@ chat-sendgrid-agent = "src.apps.terminal_agent.main:run_sendgrid_agent"
 
 # Analytics agents
 chat-plotly-agent = "src.apps.terminal_agent.main:run_plotly_agent"
-
+chat-matplotlib-agent = "src.apps.terminal_agent.main:run_matplotlib_agent"
 abi = "src.cli:main"
 api = "src.api:api"
 
