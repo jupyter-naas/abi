@@ -47,6 +47,7 @@ class GithubIssuesPipelineParameters(PipelineParameters):
 
 
 class GithubIssuesPipeline(Pipeline):
+    """Pipeline for adding multiple GitHub issues to the ontology."""
     def __init__(self, configuration: GithubIssuesPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration

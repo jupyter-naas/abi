@@ -31,6 +31,7 @@ class IssueListWorkflowParameters(WorkflowParameters):
     limit: int = Field(-1, description="Maximum number of issues to return (-1 for all issues)")
 
 class IssueListWorkflow(Workflow):
+    """Workflow for listing GitHub issues from a repository."""
     __configuration: IssueListWorkflowConfiguration
     
     def __init__(self, configuration: IssueListWorkflowConfiguration):

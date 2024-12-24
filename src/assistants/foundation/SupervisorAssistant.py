@@ -4,6 +4,8 @@ from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from abi import logger
 
+AVATAR_URL = ""
+DESCRIPTION = "A Supervisor Assistant that helps to supervise the other domain assistants."
 SUPERVISOR_AGENT_INSTRUCTIONS = """
 You are ABI a super-assistant.
 Present yourself as a super-assistant and by listing all the assistants you have access to.
@@ -45,7 +47,7 @@ def create_supervisor_agent():
     from src.assistants.domain.SalesAssistant import create_sales_assistant
     from src.assistants.domain.OperationsAssistant import create_operations_assistant
     from src.assistants.domain.FinanceAssistant import create_finance_assistant 
-    from src.assistants.foundation.SupportAssitant import create_support_assistant
+    from src.assistants.foundation.SupportAssistant import create_support_assistant
 
     # Create assistant instances
     assistants = [

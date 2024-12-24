@@ -1,13 +1,16 @@
-from src.apps.terminal_agent.terminal_style import clear_screen, print_welcome_message, print_divider, get_user_input, print_tool_usage, print_assistant_response, print_tool_response
+from src.apps.terminal_agent.terminal_style import clear_screen, print_welcome_message, print_divider, get_user_input, print_tool_usage, print_assistant_response, print_tool_response, print_image
 from abi.services.agent.Agent import Agent
-from src.assistants.foundation.SupportAssitant import create_support_assistant
-from src.assistants.foundation.SupervisorAgent import create_supervisor_agent
+# Foundation assistants
+from src.assistants.foundation.SupportAssistant import create_support_assistant
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
+# Domain assistants
 from src.assistants.domain.ContentAssistant import create_content_assistant
 from src.assistants.domain.FinanceAssistant import create_finance_assistant
 from src.assistants.domain.GrowthAssistant import create_growth_assistant
 from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
 from src.assistants.domain.OperationsAssistant import create_operations_assistant
 from src.assistants.domain.SalesAssistant import create_sales_assistant
+# Expert integrations assistants
 from src.assistants.expert.integrations.AWSS3Assistant import create_aws_s3_agent
 from src.assistants.expert.integrations.AlgoliaAssistant import create_algolia_agent
 from src.assistants.expert.integrations.AirtableAssistant import create_airtable_agent
@@ -39,10 +42,20 @@ from src.assistants.expert.integrations.SupabaseAssistant import create_supabase
 from src.assistants.expert.integrations.YahooFinanceAssistant import create_yahoo_finance_agent
 from src.assistants.expert.integrations.YouTubeAssistant import create_youtube_agent
 from src.assistants.expert.integrations.ZeroBounceAssistant import create_zerobounce_agent
+# Expert analytics assistants
+from src.assistants.expert.analytics.PlotlyAssistant import create_plotly_agent
+from src.assistants.expert.analytics.MatplotlibAssistant import create_matplotlib_agent
 
 def on_tool_response(message: str):
     try:
         print_tool_response(f'\n{message}')
+        # Check if the message contains a path to an image file
+        if isinstance(message.content, str):
+            # Look for image file paths in the message
+            words = message.content.split(" ")
+            for word in words:
+                if any(word.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif']):
+                    print_image(word)
     except Exception as e:
         print(e)
 
@@ -297,6 +310,18 @@ def run_youtube_agent():
 
 def run_zerobounce_agent():
     agent = create_zerobounce_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_plotly_agent():
+    agent = create_plotly_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_matplotlib_agent():
+    agent = create_matplotlib_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)

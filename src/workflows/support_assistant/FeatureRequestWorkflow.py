@@ -32,6 +32,7 @@ class FeatureRequestWorkflowParameters(WorkflowParameters):
     issue_body: str = Field(..., description="Body content of the feature request")
 
 class FeatureRequestWorkflow(Workflow):
+    """Workflow for creating a new feature GitHub issue and adding it to project."""
     __configuration: FeatureRequestWorkflowConfiguration
     
     def __init__(self, configuration: FeatureRequestWorkflowConfiguration):

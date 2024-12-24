@@ -42,26 +42,8 @@ abi:hasRelatedPosts a owl:ObjectProperty ;
 #    Data Properties
 #################################################################
 
-abi:hasName a owl:DatatypeProperty ;
-    rdfs:domain abi:Project ;
-    rdfs:range xsd:string .
-
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:domain abi:Project ;
-    rdfs:range xsd:string .
-
-abi:hasStartDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Project ;
+abi:startDate a owl:DatatypeProperty ;
     rdfs:range xsd:dateTime .
 
-abi:hasEndDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Project ;
+abi:endDate a owl:DatatypeProperty ;
     rdfs:range xsd:dateTime .
-
-abi:hasStatus a owl:DatatypeProperty ;
-    rdfs:domain abi:Project ;
-    rdfs:range xsd:string .
-
-abi:hasPriority a owl:DatatypeProperty ;
-    rdfs:domain abi:Project ;
-    rdfs:range xsd:string .
