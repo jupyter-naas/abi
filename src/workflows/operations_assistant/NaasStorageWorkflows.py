@@ -121,7 +121,7 @@ class ListFilesInCurrentDirectoryParameters(WorkflowParameters):
     pass
 
 class NaasStorageWorkflows(Workflow):
-    """Workflow for listing files in a Naas storage location."""
+    """Workflow for managing files in a Naas storage location."""
     __configuration: NaasStorageWorkflowsConfiguration
     
     def __init__(self, configuration: NaasStorageWorkflowsConfiguration):

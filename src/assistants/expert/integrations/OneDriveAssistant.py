@@ -2,9 +2,7 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import GithubIntegration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.assistants.foundation.SupportAssitant import create_support_assistant
+from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.integrations import OneDriveIntegration
 from src.integrations.OneDriveIntegration import OneDriveIntegrationConfiguration
 

@@ -4,11 +4,11 @@ from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import AlgoliaIntegration
 from src.integrations.AlgoliaIntegration import AlgoliaIntegrationConfiguration
-from src.assistants.foundation.SupportAssitant import create_support_assistant
+from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "An assistant that helps you interact with Algolia search services, including searching indexes and managing records."
-AVATAR_URL = "https://res.cloudinary.com/crunchbase-production/image/upload/c_lpad,h_256,w_256,f_auto,q_auto:eco,dpr_1/v1397187054/a498c6a8002d90d41f36341ae0989cb9.png"
+AVATAR_URL = "https://logo.clearbit.com/algolia.com"
 SYSTEM_PROMPT = f"""
 You are Algolia Assistant with access to Algolia search and indexing capabilities.
 You can help users search through their Algolia indexes and add new records to them.

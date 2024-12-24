@@ -49,6 +49,7 @@ class CreateIssueAndAddToProjectParameters(WorkflowParameters):
     priority_option_id: Optional[str] = Field(None, description="Option ID for priority value")
 
 class CreateIssueAndAddToProjectWorkflow(Workflow):
+    """Workflow for creating GitHub issues and adding them to projects."""
     __configuration: CreateIssueAndAddToProjectWorkflowConfiguration
     
     def __init__(self, configuration: CreateIssueAndAddToProjectWorkflowConfiguration):
