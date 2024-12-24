@@ -35,6 +35,7 @@ class GetTopPrioritiesParameters(WorkflowParameters):
 
 
 class GetTopPrioritiesWorkflow(Workflow):
+    """Workflow for getting top priorities from the ontology."""
     __configuration: GetTopPrioritiesConfiguration
     
     def __init__(self, configuration: GetTopPrioritiesConfiguration):

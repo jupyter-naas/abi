@@ -32,6 +32,7 @@ class LinkedinPostsInteractionsWorkflowParameters(WorkflowParameters):
     limit: Optional[int] = Field(default=100, description="Optional. Maximum number of reactions and comments to retrieve. Defaults to 100.")
 
 class LinkedinPostsInteractionsWorkflow(Workflow):
+    """Workflow for fetching LinkedIn posts interactions (reactions and comments) from linkedin posts URLs."""
     __configuration: LinkedinPostsInteractionsWorkflowConfiguration
     
     def __init__(self, configuration: LinkedinPostsInteractionsWorkflowConfiguration):

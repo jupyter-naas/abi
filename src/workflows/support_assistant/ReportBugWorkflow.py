@@ -34,6 +34,7 @@ class ReportBugWorkflowParameters(WorkflowParameters):
     issue_body: str = Field(..., description="The description of the bug, including steps to reproduce")
 
 class ReportBugWorkflow(Workflow):
+    """Workflow for creating a new bug GitHub issue and adding it to project."""
     __configuration: ReportBugWorkflowConfiguration
     
     def __init__(self, configuration: ReportBugWorkflowConfiguration):
