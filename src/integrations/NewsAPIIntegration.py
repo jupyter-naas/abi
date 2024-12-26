@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 import requests
 from datetime import datetime
 
-LOGO_URL = "https://logo.clearbit.com/newsapi.org"
+LOGO_URL = "https://logo.clearbit.com/newsapi.org?background=white"
 
 @dataclass
 class NewsAPIIntegrationConfiguration(IntegrationConfiguration):
