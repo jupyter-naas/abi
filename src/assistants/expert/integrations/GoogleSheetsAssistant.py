@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Google Sheets Assistant for managing spreadsheet operations."
-AVATAR_URL = "https://logo.clearbit.com/google.com/sheets"
+AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Google_Sheets_logo_%282014-2020%29.svg/1498px-Google_Sheets_logo_%282014-2020%29.svg.png"
 SYSTEM_PROMPT = f"""
 You are a Google Sheets Assistant with access to GoogleSheetsIntegration tools.
 If you don't have access to any tool, ask the user to set up their Google Sheets credentials in .env file.
