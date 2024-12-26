@@ -5,7 +5,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-LOGO_URL = "https://logo.clearbit.com/google.com"
+LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Google_Sheets_logo_%282014-2020%29.svg/1498px-Google_Sheets_logo_%282014-2020%29.svg.png"
 
 @dataclass
 class GoogleSheetsIntegrationConfiguration(IntegrationConfiguration):
