@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, Any, Optional
 
-LOGO_URL = "https://logo.clearbit.com/github.com"
+LOGO_URL = "https://logo.clearbit.com/github.com?background=white"
 
 @dataclass
 class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):

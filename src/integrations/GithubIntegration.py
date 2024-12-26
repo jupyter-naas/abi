@@ -4,7 +4,8 @@ import requests
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
-LOGO_URL = "https://logo.clearbit.com/github.com"
+LOGO_URL = "https://logo.clearbit.com/github.com?background=white"
+
 @dataclass
 class GithubIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Github integration.
