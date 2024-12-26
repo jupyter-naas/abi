@@ -91,6 +91,7 @@ chat-yahoo-finance-agent = "src.apps.terminal_agent.main:run_yahoo_finance_agent
 chat-youtube-agent = "src.apps.terminal_agent.main:run_youtube_agent"
 chat-zerobounce-agent = "src.apps.terminal_agent.main:run_zerobounce_agent"
 chat-sendgrid-agent = "src.apps.terminal_agent.main:run_sendgrid_agent"
+chat-mercury-agent = "src.apps.terminal_agent.main:run_mercury_agent"
 
 # Analytics agents
 chat-plotly-agent = "src.apps.terminal_agent.main:run_plotly_agent"
