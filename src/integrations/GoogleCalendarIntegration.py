@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime, timezone
 
-LOGO_URL = "https://logo.clearbit.com/google.com"
+LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5968/5968499.png"
 
 @dataclass
 class GoogleCalendarIntegrationConfiguration(IntegrationConfiguration):

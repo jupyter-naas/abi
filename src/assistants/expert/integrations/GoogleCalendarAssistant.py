@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Google Calendar Assistant for managing calendar events and schedules."
-AVATAR_URL = "https://logo.clearbit.com/calendar.google.com"
+AVATAR_URL = "https://cdn-icons-png.flaticon.com/512/5968/5968499.png"
 SYSTEM_PROMPT = f"""
 You are a Google Calendar Assistant with access to GoogleCalendarIntegration tools.
 If you don't have access to any tool, ask the user to set up their Google Calendar credentials in .env file.

@@ -10,7 +10,7 @@ from email import encoders
 import email
 import base64
 
-LOGO_URL = "https://logo.clearbit.com/gmail.com"
+LOGO_URL = "https://static.dezeen.com/uploads/2020/10/gmail-google-logo-rebrand-workspace-design_dezeen_2364_sq.jpg"
 GMAIL_SMTP_SERVER = "smtp.gmail.com"
 GMAIL_IMAP_SERVER = "imap.gmail.com"
 

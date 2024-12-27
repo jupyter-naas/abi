@@ -15,7 +15,7 @@ from google.analytics.data_v1beta.types import (
     OrderBy
 )
 
-LOGO_URL = "https://logo.clearbit.com/google.com"
+LOGO_URL = "https://logos-world.net/wp-content/uploads/2021/02/Google-Analytics-Logo.png"
 
 @dataclass
 class GoogleAnalyticsIntegrationConfiguration(IntegrationConfiguration):

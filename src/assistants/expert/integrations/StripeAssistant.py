@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Stripe Assistant with access to Stripe Integration tools."
-AVATAR_URL = "https://stripe.com/img/v3/home/social.png"
+AVATAR_URL = "https://logo.clearbit.com/stripe.com"
 SYSTEM_PROMPT = f"""
 You are a Stripe Assistant with access to Stripe Integration tools.
 If you don't have access to any tool, ask the user to set their API key in .env file.
