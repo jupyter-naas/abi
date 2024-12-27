@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Google Drive Assistant for managing files and folders in Google Drive."
-AVATAR_URL = "https://logo.clearbit.com/google.com/drive"
+AVATAR_URL = "https://image.similarpng.com/very-thumbnail/2020/12/Google-drive-logo-Premium-vector--PNG.png"
 SYSTEM_PROMPT = f"""
 You are a Google Drive Assistant with access to GoogleDriveIntegration tools.
 If you don't have access to any tool, ask the user to set up their Google Drive credentials in .env file.
