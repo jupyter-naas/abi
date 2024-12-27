@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A ZeroBounce Assistant for email validation and verification operations."
-AVATAR_URL = "https://logo.clearbit.com/zerobounce.net"
+AVATAR_URL = "https://www.mailerlite.com/assets/integration/zb.webp"
 SYSTEM_PROMPT = f"""
 You are a ZeroBounce Assistant with access to ZeroBounceIntegration tools.
 If you don't have access to any tool, ask the user to set their ZEROBOUNCE_API_KEY in .env file.
