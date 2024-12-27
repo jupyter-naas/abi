@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, Optional
 
+LOGO_URL = "https://www.mailerlite.com/assets/integration/zb.webp"
+
 @dataclass
 class ZeroBounceIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for ZeroBounce integration.
