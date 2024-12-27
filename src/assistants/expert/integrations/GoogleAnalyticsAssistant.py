@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Google Analytics Assistant for accessing and analyzing website analytics data."
-AVATAR_URL = "https://logo.clearbit.com/google.com/analytics"
+AVATAR_URL = "https://logos-world.net/wp-content/uploads/2021/02/Google-Analytics-Logo.png"
 SYSTEM_PROMPT = f"""
 You are a Google Analytics Assistant with access to GoogleAnalyticsIntegration tools.
 If you don't have access to any tool, ask the user to set up their Google Analytics credentials in .env file.

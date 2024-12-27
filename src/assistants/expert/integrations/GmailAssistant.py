@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Gmail Assistant for managing email operations."
-AVATAR_URL = "https://logo.clearbit.com/gmail.com"
+AVATAR_URL = "https://static.dezeen.com/uploads/2020/10/gmail-google-logo-rebrand-workspace-design_dezeen_2364_sq.jpg"
 SYSTEM_PROMPT = f"""
 You are a Gmail Assistant with access to GmailIntegration tools.
 If you don't have access to any tool, ask the user to set their GMAIL_API_KEY and necessary OAuth credentials in .env file.
