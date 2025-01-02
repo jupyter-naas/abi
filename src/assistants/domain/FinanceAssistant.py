@@ -1,7 +1,12 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations import StripeIntegration
+from src.integrations import AgicapIntegration, PennylaneIntegration, MercuryIntegration, QontoIntegration, StripeIntegration
+from src.integrations.AgicapIntegration import AgicapIntegrationConfiguration
+from src.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
+from src.integrations.MercuryIntegration import MercuryIntegrationConfiguration
+from src.integrations.StripeIntegration import StripeIntegrationConfiguration
+from src.integrations.QontoIntegration import QontoIntegrationConfiguration
 
 DESCRIPTION = "A Financial Assistant that analyzes transactions and provides financial insights."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/finance_management.png"
@@ -30,9 +35,41 @@ def create_finance_assistant(
     ) -> Agent:
     model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
     tools = []
+
+    if secret.get('AGICAP_USERNAME') and secret.get('AGICAP_PASSWORD') and secret.get('AGICAP_BEARER_TOKEN') and secret.get('AGICAP_CLIENT_ID') and secret.get('AGICAP_CLIENT_SECRET') and secret.get('AGICAP_API_TOKEN'):    
+        integration_config = AgicapIntegrationConfiguration(
+            username=secret.get('AGICAP_USERNAME'),
+            password=secret.get('AGICAP_PASSWORD'),
+            bearer_token=secret.get('AGICAP_BEARER_TOKEN'),
+            client_id=secret.get('AGICAP_CLIENT_ID'),
+            client_secret=secret.get('AGICAP_CLIENT_SECRET'),
+            api_token=secret.get('AGICAP_API_TOKEN')
+        )
+        tools += AgicapIntegration.as_tools(integration_config)
+
+    if pennylane_key := secret.get('PENNYLANE_API_KEY'):
+        integration_config = PennylaneIntegrationConfiguration(
+            api_key=pennylane_key
+        )
+        tools += PennylaneIntegration.as_tools(integration_config)
+
+    if mercure_key := secret.get('MERCURY_API_KEY'):
+        integration_config = MercuryIntegrationConfiguration(
+            api_key=mercure_key
+        )
+        tools += MercuryIntegration.as_tools(integration_config)
     
+    if qonto_key := secret.get('QONTO_API_KEY'):
+        integration_config = QontoIntegrationConfiguration(
+            api_key=qonto_key
+        )
+        tools += QontoIntegration.as_tools(integration_config)
+
     if stripe_key := secret.get('STRIPE_API_KEY'):
-        tools += StripeIntegration.as_tools(StripeIntegration.StripeIntegrationConfiguration(api_key=stripe_key))
+        integration_config = StripeIntegrationConfiguration(
+            api_key=stripe_key
+        )
+        tools += StripeIntegration.as_tools(integration_config)
     
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -44,7 +81,7 @@ def create_finance_assistant(
     
     return Agent(
         name="finance_assistant", 
-        description="Use for financial analysis and insights",
+        description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
         state=agent_shared_state, 
