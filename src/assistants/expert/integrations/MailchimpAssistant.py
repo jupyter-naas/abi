@@ -2,8 +2,8 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import MailchimpIntegration
-from src.integrations.MailchimpIntegration import MailchimpIntegrationConfiguration
+from src.integrations import MailchimpMarketingIntegration
+from src.integrations.MailchimpMarketingIntegration import MailchimpMarketingIntegrationConfiguration
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
@@ -32,11 +32,11 @@ def create_mailchimp_agent():
     tools = []
     
     if secret.get('MAILCHIMP_API_KEY') and secret.get('MAILCHIMP_SERVER_PREFIX'):    
-        integration_config = MailchimpIntegrationConfiguration(
+        integration_config = MailchimpMarketingIntegrationConfiguration(
             api_key=secret.get('MAILCHIMP_API_KEY'),
             server_prefix=secret.get('MAILCHIMP_SERVER_PREFIX')
         )
-        tools += MailchimpIntegration.as_tools(integration_config)
+        tools += MailchimpMarketingIntegration.as_tools(integration_config)
 
     support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
     tools += support_assistant.as_tools()
