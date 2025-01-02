@@ -1729,7 +1729,7 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
         StructuredTool(
             name="get_whatsapp_configuration",
             description="Get WhatsApp configuration.",
-            func=integration.get_whatsapp_configuration,
+            func=integration.get_whatsapp_config,
             args_schema=GetWhatsappConfigurationSchema
         ),
         StructuredTool(
