@@ -116,7 +116,9 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
    # Or start a specific custom agent:
    make chat-airtable-agent     # Airtable agent
+   make chat-agicap-agent       # Agicap agent
    make chat-aws-s3-agent       # AWS S3 agent
+   make chat-brevo-agent        # Brevo agent
    make chat-clockify-agent     # Clockify agent
    make chat-discord-agent      # Discord agent
    make chat-github-agent       # Github agent
@@ -129,6 +131,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
    make chat-harvest-agent       # Harvest agent
    make chat-hubspot-agent       # Hubspot agent
    make chat-linkedin-agent      # LinkedIn agent
+   make chat-mercury-agent       # Mercury agent
    make chat-naas-agent         # Naas agent
    make chat-news-api-agent     # News API agent
    make chat-notion-agent       # Notion agent
@@ -137,12 +140,14 @@ ABI Framework is open-source and available for non-production use under the [AGP
    make chat-pipedrive-agent    # Pipedrive agent
    make chat-postgres-agent     # Postgres agent
    make chat-qonto-agent        # Qonto agent
+   make chat-sendgrid-agent     # Sendgrid agent
    make chat-serper-agent       # Serper agent
    make chat-slack-agent        # Slack agent
    make chat-stripe-agent       # Stripe agent
    make chat-supabase-agent     # Supabase agent
    make chat-yahoo-finance-agent # Yahoo Finance agent
    make chat-youtube-agent      # YouTube agent
+   make chat-zerobounce-agent   # Zerobounce agent
    ```
 
    You will only have a access to tools registered in .env file.

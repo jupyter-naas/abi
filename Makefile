@@ -173,6 +173,9 @@ chat-mercury-agent: .venv
 chat-agicap-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-agicap-agent'
 
+chat-brevo-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-brevo-agent'
+
 .DEFAULT_GOAL := chat-supervisor-agent
 
 .PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
