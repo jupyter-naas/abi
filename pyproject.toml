@@ -94,6 +94,7 @@ chat-zerobounce-agent = "src.apps.terminal_agent.main:run_zerobounce_agent"
 chat-sendgrid-agent = "src.apps.terminal_agent.main:run_sendgrid_agent"
 chat-mercury-agent = "src.apps.terminal_agent.main:run_mercury_agent"
 chat-agicap-agent = "src.apps.terminal_agent.main:run_agicap_agent"
+chat-brevo-agent = "src.apps.terminal_agent.main:run_brevo_agent"
 
 # Analytics agents
 chat-plotly-agent = "src.apps.terminal_agent.main:run_plotly_agent"
