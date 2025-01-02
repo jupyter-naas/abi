@@ -53,15 +53,16 @@ def create_finance_assistant(
         )
         tools += PennylaneIntegration.as_tools(integration_config)
 
-    if mercure_key := secret.get('MERCURY_API_KEY'):
+    if mercure_key := secret.get('MERCURY_API_TOKEN'):
         integration_config = MercuryIntegrationConfiguration(
             api_key=mercure_key
         )
         tools += MercuryIntegration.as_tools(integration_config)
     
-    if qonto_key := secret.get('QONTO_API_KEY'):
+    if secret.get('QONTO_SECRET_KEY') and secret.get('QONTO_ORGANIZATION_SLUG'):
         integration_config = QontoIntegrationConfiguration(
-            api_key=qonto_key
+            secret_key=secret.get('QONTO_SECRET_KEY'),
+            organization_slug=secret.get('QONTO_ORGANIZATION_SLUG')
         )
         tools += QontoIntegration.as_tools(integration_config)
 

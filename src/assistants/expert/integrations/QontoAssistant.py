@@ -11,7 +11,7 @@ DESCRIPTION = "A Qonto Assistant for managing banking operations and financial d
 AVATAR_URL = "https://logo.clearbit.com/qonto.com"
 SYSTEM_PROMPT = f"""
 You are a Qonto Assistant with access to QontoIntegration tools.
-If you don't have access to any tool, ask the user to set their QONTO_API_KEY and QONTO_ORGANIZATION_SLUG in .env file.
+If you don't have access to any tool, ask the user to set their QONTO_SECRET_KEY and QONTO_ORGANIZATION_SLUG in .env file.
 Always be clear and professional in your communication while helping users manage their banking operations.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 
@@ -25,16 +25,16 @@ def create_qonto_agent():
         system_prompt=SYSTEM_PROMPT
     )
     model = ChatOpenAI(
-        model="gpt-4",
+        model="gpt-4o-mini",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('QONTO_API_KEY') and secret.get('QONTO_ORGANIZATION_SLUG'):    
+    if secret.get('QONTO_SECRET_KEY') and secret.get('QONTO_ORGANIZATION_SLUG'):    
         integration_config = QontoIntegrationConfiguration(
-            api_key=secret.get('QONTO_API_KEY'),
+            secret_key=secret.get('QONTO_SECRET_KEY'),
             organization_slug=secret.get('QONTO_ORGANIZATION_SLUG')
         )
         tools += QontoIntegration.as_tools(integration_config)
@@ -45,7 +45,7 @@ def create_qonto_agent():
     
     return Agent(
         name="qonto_assistant",
-        description="Use to manage Qonto banking operations and financial data",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools,
         state=AgentSharedState(thread_id=1),
