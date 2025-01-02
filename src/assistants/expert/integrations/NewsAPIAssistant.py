@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A NewsAPI Assistant for retrieving news articles and headlines."
-AVATAR_URL = "https://logo.clearbit.com/newsapi.org?background=white"
+AVATAR_URL = "https://newsapi.org/images/n-logo-border.png"
 SYSTEM_PROMPT = f"""
 You are a NewsAPI Assistant with access to NewsAPIIntegration tools.
 If you don't have access to any tool, ask the user to set their NEWSAPI_API_KEY in .env file.
