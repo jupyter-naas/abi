@@ -15,6 +15,7 @@ from src.assistants.expert.integrations.AWSS3Assistant import create_aws_s3_agen
 from src.assistants.expert.integrations.AgicapAssistant import create_agicap_agent
 from src.assistants.expert.integrations.AlgoliaAssistant import create_algolia_agent
 from src.assistants.expert.integrations.AirtableAssistant import create_airtable_agent
+from src.assistants.expert.integrations.BrevoAssistant import create_brevo_agent
 from src.assistants.expert.integrations.ClockifyAssistant import create_clockify_agent
 from src.assistants.expert.integrations.DiscordAssistant import create_discord_agent
 from src.assistants.expert.integrations.GithubAssistant import create_github_agent
@@ -150,6 +151,12 @@ def run_aws_s3_agent():
 
 def run_agicap_agent():
     agent = create_agicap_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_brevo_agent():
+    agent = create_brevo_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
