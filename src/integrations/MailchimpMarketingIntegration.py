@@ -836,6 +836,9 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         list_id: str = Field(..., description="The unique id for the list")
         name: Optional[str] = Field(None, description="Tag name to search for")
 
+    class AudienceSchema(BaseModel):
+        audience_id: str = Field(..., description="The unique id for the audience")
+
     # Create tools list
     tools = [
         StructuredTool(
@@ -865,13 +868,14 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         StructuredTool(
             name="list_audiences",
             description="Get information about all lists in the account",
-            func=lambda: integration.list_audiences()
+            func=lambda: integration.list_audiences(),
+            args_schema=AudienceSchema
         ),
         StructuredTool(
             name="get_audience_info",
-            description="Get information about a specific list",
+            description="Get information about a specific audience",
             func=lambda **kwargs: integration.get_audience_info(**kwargs),
-            args_schema=ListSchema
+            args_schema=AudienceSchema
         ),
         StructuredTool(
             name="get_member_info",
