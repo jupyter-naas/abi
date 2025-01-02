@@ -28,6 +28,7 @@ from src.assistants.expert.integrations.GoogleSheetsAssistant import create_goog
 from src.assistants.expert.integrations.HarvestAssistant import create_harvest_agent
 from src.assistants.expert.integrations.HubspotAssistant import create_hubspot_agent
 from src.assistants.expert.integrations.LinkedInAssistant import create_linkedin_agent
+from src.assistants.expert.integrations.MailchimpAssistant import create_mailchimp_agent
 from src.assistants.expert.integrations.MercuryAssistant import create_mercury_agent
 from src.assistants.expert.integrations.NaasAssistant import create_naas_agent
 from src.assistants.expert.integrations.NewsAPIAssistant import create_news_api_agent
@@ -229,6 +230,12 @@ def run_hubspot_agent():
 
 def run_linkedin_agent():
     agent = create_linkedin_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_mailchimp_agent():
+    agent = create_mailchimp_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
