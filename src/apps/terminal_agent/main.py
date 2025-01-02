@@ -43,6 +43,8 @@ from src.assistants.expert.integrations.SerperAssistant import create_serper_age
 from src.assistants.expert.integrations.SlackAssistant import create_slack_agent
 from src.assistants.expert.integrations.StripeAssistant import create_stripe_agent
 from src.assistants.expert.integrations.SupabaseAssistant import create_supabase_agent
+from src.assistants.expert.integrations.WhatsappAssistant import create_whatsapp_agent
+from src.assistants.expert.integrations.InstagramAssistant import create_instagram_agent
 from src.assistants.expert.integrations.YahooFinanceAssistant import create_yahoo_finance_agent
 from src.assistants.expert.integrations.YouTubeAssistant import create_youtube_agent
 from src.assistants.expert.integrations.ZeroBounceAssistant import create_zerobounce_agent
@@ -228,6 +230,12 @@ def run_hubspot_agent():
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
 
+def run_instagram_agent():
+    agent = create_instagram_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
 def run_linkedin_agent():
     agent = create_linkedin_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
@@ -320,6 +328,12 @@ def run_stripe_agent():
 
 def run_supabase_agent():
     agent = create_supabase_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_whatsapp_agent():
+    agent = create_whatsapp_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
