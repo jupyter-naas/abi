@@ -1400,18 +1400,16 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
     integration = BrevoIntegration(configuration)
     
     class GetAllContactsSchema(BaseModel):
-        limit: int = Field(25, description="Maximum number of contacts to return")
+        limit: int = Field(100, description="Maximum number of contacts to return per page")
     
     class GetContactSchema(BaseModel):
-        contact_id: str = Field(..., description="ID of the contact to get")
+        identifier: str = Field(..., description="Contact identifier (email, ID, phone etc.)")
+        identifier_type: str = Field(None, description="Type of identifier (email_id, phone_id, etc.)")
 
     class CreateContactSchema(BaseModel):
-        first_name: str = Field(..., description="First name of the contact")
-        last_name: str = Field(..., description="Last name of the contact")
         email: str = Field(..., description="Email address of the contact")
-        phone: str = Field(..., description="Phone number of the contact")
-        company: str = Field(..., description="Company name of the contact")
-        title: str = Field(..., description="Title of the contact")
+        attributes: dict = Field(None, description="Additional contact attributes")
+        list_ids: list[int] = Field(None, description="List IDs to add contact to")
 
     class UpdateContactSchema(BaseModel):
         contact_id: str = Field(..., description="ID of the contact to update")
@@ -1608,20 +1606,20 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
     return [
         StructuredTool(
             name="get_all_contacts",
-            description="Get all contacts.",
+            description="Get all contacts from Brevo.",
             func=lambda limit: integration.get_all_contacts(limit=limit),
             args_schema=GetAllContactsSchema
         ),
         StructuredTool(
             name="get_contact",
-            description="Get a contact.",
-            func=lambda contact_id: integration.get_contact(contact_id),
+            description="Get details for a specific contact.",
+            func=lambda identifier, identifier_type: integration.get_contact(identifier, identifier_type),
             args_schema=GetContactSchema
         ),
         StructuredTool(
             name="create_contact",
-            description="Create a new contact.",
-            func=lambda data: integration.create_contact(data),
+            description="Create or update a contact.",
+            func=lambda email, attributes, list_ids: integration.create_contact(email, attributes, list_ids),
             args_schema=CreateContactSchema
         ),
         StructuredTool(
@@ -1681,13 +1679,13 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
         StructuredTool(
             name="add_contact_to_list",
             description="Add a contact to a list.",
-            func=lambda list_id, contact_id: integration.add_contact_to_list(list_id, contact_id),
+            func=lambda list_id, contact_id: integration.add_contacts_to_list(list_id, contact_id),
             args_schema=AddContactToListSchema
         ),
         StructuredTool(
             name="remove_contact_from_list",
             description="Remove a contact from a list.",
-            func=lambda list_id, contact_id: integration.remove_contact_from_list(list_id, contact_id),
+            func=lambda list_id, contact_id: integration.remove_contacts_from_list(list_id, contact_id),
             args_schema=RemoveContactFromListSchema
         ),
         StructuredTool(
@@ -1711,7 +1709,7 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
         StructuredTool(
             name="get_sms_campaign_report",
             description="Get report for an SMS campaign.",
-            func=lambda campaign_id: integration.get_sms_campaign_report(campaign_id),
+            func=lambda campaign_id: integration.get_sms_campaign(campaign_id),
             args_schema=GetSmsCampaignReportSchema
         ),
         StructuredTool(
@@ -1723,7 +1721,7 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
         StructuredTool(
             name="get_whatsapp_campaign_report",
             description="Get report for a WhatsApp campaign.",
-            func=lambda campaign_id: integration.get_whatsapp_campaign_report(campaign_id),
+            func=lambda campaign_id: integration.get_whatsapp_campaign(campaign_id),
             args_schema=GetWhatsappCampaignReportSchema
         ),
         StructuredTool(
@@ -1765,37 +1763,37 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
         StructuredTool(
             name="get_user_activity_logs",
             description="Get user activity logs.",
-            func=lambda start_date, end_date, limit, offset: integration.get_user_activity_logs(start_date, end_date, limit, offset),
+            func=lambda start_date, end_date, limit, offset: integration.get_organization_activities(start_date, end_date, limit, offset),
             args_schema=GetUserActivityLogsSchema
         ),
         StructuredTool(
             name="get_users",
-            description="Get all users.",
-            func=integration.get_users,
+            description="Get all users in the organization.",
+            func=integration.get_organization_users,
             args_schema=GetUsersSchema
         ),
         StructuredTool(
             name="check_user",
             description="Check if a user exists.",
-            func=lambda email: integration.check_user(email),
+            func=lambda email: integration.get_user_permissions(email),
             args_schema=CheckUserSchema
         ),
         StructuredTool(
             name="revoke_user",
             description="Revoke a user.",
-            func=lambda email: integration.revoke_user(email),
+            func=lambda email: integration.revoke_user_invitation(email),
             args_schema=RevokeUserSchema
         ),
         StructuredTool(
             name="resend_cancel_user_invite",
             description="Resend or cancel a user invite.",
-            func=lambda email, action: integration.resend_cancel_user_invite(email, action),
+            func=lambda email, action: integration.resend_user_invitation(email) if action == "resend" else integration.cancel_user_invitation(email),
             args_schema=ResendCancelUserInviteSchema
         ),
         StructuredTool(
             name="send_user_invite",
             description="Send a user invite.",
-            func=lambda email: integration.send_user_invite(email),
+            func=lambda email: integration.resend_user_invitation(email),
             args_schema=SendUserInviteSchema
         ),
         StructuredTool(
@@ -1807,7 +1805,7 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
         StructuredTool(
             name="get_all_companies",
             description="Get all companies.",
-            func=lambda limit: integration.get_all_companies(limit=limit),
+            func=lambda limit: integration.get_companies(limit=limit),
             args_schema=GetAllCompaniesSchema
         ),
         StructuredTool(
@@ -1815,24 +1813,6 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
             description="Get a company.",
             func=lambda company_id: integration.get_company(company_id),
             args_schema=GetCompanySchema
-        ),
-        StructuredTool(
-            name="create_company",
-            description="Create a new company.",
-            func=lambda name, domain, address, city, state, zip, country: integration.create_company(name, domain, address, city, state, zip, country),
-            args_schema=CreateCompanySchema
-        ),
-        StructuredTool(
-            name="update_company",
-            description="Update an existing company.",
-            func=lambda company_id, data: integration.update_company(company_id, data),
-            args_schema=UpdateCompanySchema
-        ),
-        StructuredTool(
-            name="delete_company",
-            description="Delete a company.",
-            func=lambda company_id: integration.delete_company(company_id),
-            args_schema=DeleteCompanySchema
         ),
         StructuredTool(
             name="get_all_pipelines",
@@ -1857,24 +1837,6 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
             description="Get a deal.",
             func=lambda deal_id: integration.get_deal(deal_id),
             args_schema=GetDealSchema
-        ),
-        StructuredTool(
-            name="create_deal",
-            description="Create a new deal.",
-            func=lambda deal_name, pipeline_id, company_id, contact_ids, deal_stage, deal_amount, deal_currency, deal_close_date: integration.create_deal(deal_name, pipeline_id, company_id, contact_ids, deal_stage, deal_amount, deal_currency, deal_close_date),
-            args_schema=CreateDealSchema
-        ),
-        StructuredTool(
-            name="update_deal",
-            description="Update an existing deal.",
-            func=lambda deal_id, data: integration.update_deal(deal_id, data),
-            args_schema=UpdateDealSchema
-        ),
-        StructuredTool(
-            name="delete_deal",
-            description="Delete a deal.",
-            func=lambda deal_id: integration.delete_deal(deal_id),
-            args_schema=DeleteDealSchema
         ),
         StructuredTool(
             name="get_all_tasks",
