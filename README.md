@@ -6,31 +6,42 @@
 
 ## Table of Content
 
-- [Overview](#overview)
-  - [Key Features](#key-features)
-  - [License](#license)
-- [Setup Project](#setup-project)
-  - [Sneak peek 👀](#sneak-peek-)
-  - [Getting Started](#getting-started)
-  - [Managing Dependencies](#managing-dependencies)
-    - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
-    - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
-- [Build New Components](#build-new-components)
-  - [Create Integration](#create-integration)
-  - [Create Pipeline](#create-pipeline)
-  - [Create Workflow](#create-workflow)
-  - [Create Assistant (Single Agent)](#create-assistant-single-agent)
-- [Standard Operating Procedure](#standard-operating-procedure)
-  - [Start with user intent](#start-with-user-intent)
-  - [Map Business Problem to Ontology](#map-business-problem-to-ontology)
-  - [Build Components](#build-components)
-  - [Setup Assistant](#setup-assistant)
-  - [Validate your solution](#validate-your-solution)
-  - [Deploy to production](#deploy-to-production)
-- [Learn more](#learn-more)
-- [Cursor users](#cursor-users)
-- [Contributing](#contributing)
-- [Support](#support)
+- [ABI](#abi)
+  - [Table of Content](#table-of-content)
+  - [Overview](#overview)
+    - [Key Features](#key-features)
+    - [License](#license)
+  - [Setup Project](#setup-project)
+    - [Sneak peek 👀](#sneak-peek-)
+    - [Getting Started](#getting-started)
+    - [Managing Dependencies](#managing-dependencies)
+      - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
+      - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
+  - [Build New Components](#build-new-components)
+    - [Create Integration](#create-integration)
+    - [Create Pipeline](#create-pipeline)
+    - [Create Workflow](#create-workflow)
+    - [Create Assistant (Single Agent)](#create-assistant-single-agent)
+      - [Create Assistant File](#create-assistant-file)
+      - [Add Integrations, Workflows and Pipelines as tools](#add-integrations-workflows-and-pipelines-as-tools)
+      - [Chat with Assistant in Terminal](#chat-with-assistant-in-terminal)
+  - [Standard Operating Procedure](#standard-operating-procedure)
+    - [Start with user intent](#start-with-user-intent)
+    - [Map Business Problem to Ontology](#map-business-problem-to-ontology)
+    - [Build Components](#build-components)
+    - [Setup Assistant](#setup-assistant)
+    - [Validate your solution](#validate-your-solution)
+    - [Deploy to production](#deploy-to-production)
+    - [Learn more](#learn-more)
+  - [Deploying the API](#deploying-the-api)
+    - [Prerequisites](#prerequisites)
+    - [Setup GitHub Repository Secrets](#setup-github-repository-secrets)
+    - [Customize Deployment Configuration](#customize-deployment-configuration)
+    - [Deployment Process](#deployment-process)
+    - [Monitoring Deployment](#monitoring-deployment)
+  - [Cursor users](#cursor-users)
+  - [Contributing](#contributing)
+  - [Support](#support)
 
 ## Overview
 
@@ -340,6 +351,51 @@ Merge your branch into main.
 
 - lib/abi: [lib/abi/README.md](lib/README.md)
 - src: [src/README.md](src/README.md)
+
+## Deploying the API
+
+### Prerequisites
+
+1. Create a GitHub Classic Personal Access Token:
+   - Go to GitHub Settings > Developer Settings > Personal Access Tokens > Tokens (classic)
+   - Generate a new token with the following permissions:
+     - `repo` (Full control of private repositories)
+     - `read:packages` and `write:packages` (For container registry access)
+     - `read:packages` and `write:packages` (For container registry access)
+   - Copy the token value
+
+2. Get required API keys:
+   - OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+   - NAAS Credentials JWT Token from your NAAS account
+
+### Setup GitHub Repository Secrets
+
+1. Navigate to your repository's Settings > Secrets and variables > Actions
+2. Add the following secrets:
+   - `ACCESS_TOKEN`: Your GitHub Classic Personal Access Token
+   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `NAAS_CREDENTIALS_JWT_TOKEN`: Your NAAS Credentials JWT Token
+
+### Customize Deployment Configuration
+
+1. Open `.github/workflows/deploy_api.yml`
+2. Update the space name to match your project:
+   ```yaml
+   naas-python space create --name=your-api-name # Replace 'abi-api' with your desired name
+   ```
+
+### Deployment Process
+
+The API deployment is automated through GitHub Actions and triggers when:
+1. A new container is built (via the "Build ABI Container" workflow)
+2. The deployment workflow creates/updates a NAAS space with the latest container image
+3. The API will be accessible through the NAAS platform once deployment is complete
+
+### Monitoring Deployment
+
+1. Go to your repository's Actions tab
+2. Look for the "ABI API" workflow
+3. Check the latest workflow run for deployment status and logs
 
 ## Cursor users
 
