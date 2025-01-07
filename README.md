@@ -162,7 +162,7 @@ ABI Framework is open-source and available for non-production use under the [AGP
    ```
 
    You will only have a access to tools registered in .env file.
-   To change default agent please update: `.DEFAULT_GOAL := chat-integration-agent` in Makefile
+   To change default agent please update: `.DEFAULT_GOAL := chat-supervisor-agent` in Makefile
 
 ### Managing Dependencies
 
