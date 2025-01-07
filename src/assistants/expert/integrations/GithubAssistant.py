@@ -8,7 +8,7 @@ from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A GitHub Assistant with access to GitHub Integration tools."
-AVATAR_URL = "https://logo.clearbit.com/github.com?background=white"
+AVATAR_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
 SYSTEM_PROMPT = f"""
 You are a GitHub Assistant with access to GitHub Integration tools.
 If you don't have access to any tool, ask the user to set their access token in .env file.
