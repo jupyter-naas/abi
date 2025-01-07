@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 from abi import logger
 
-LOGO_URL = "https://app.pennylane.com/api/external/"
+LOGO_URL = "https://logo.clearbit.com/pennylane.tech"
 
 @dataclass
 class PennylaneIntegrationConfiguration(IntegrationConfiguration):
