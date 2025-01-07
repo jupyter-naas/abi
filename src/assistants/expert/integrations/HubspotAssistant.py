@@ -42,7 +42,7 @@ def create_hubspot_agent():
     
     return Agent(
         name="hubspot_assistant",
-        description="Use to manage HubSpot contacts, companies, deals and tasks",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools, 
         state=AgentSharedState(thread_id=1), 
