@@ -25,6 +25,7 @@ from src.assistants.expert.integrations.GoogleAnalyticsAssistant import create_g
 from src.assistants.expert.integrations.GoogleCalendarAssistant import create_google_calendar_agent
 from src.assistants.expert.integrations.GoogleDriveAssistant import create_google_drive_agent
 from src.assistants.expert.integrations.GoogleSheetsAssistant import create_google_sheets_agent
+from src.assistants.expert.integrations.GlassdoorAssistant import create_glassdoor_agent
 from src.assistants.expert.integrations.HarvestAssistant import create_harvest_agent
 from src.assistants.expert.integrations.HubspotAssistant import create_hubspot_agent
 from src.assistants.expert.integrations.LinkedInAssistant import create_linkedin_agent
@@ -364,6 +365,12 @@ def run_plotly_agent():
 
 def run_matplotlib_agent():
     agent = create_matplotlib_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_glassdoor_agent():
+    agent = create_glassdoor_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
