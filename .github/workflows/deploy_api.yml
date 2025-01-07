@@ -39,31 +39,31 @@ jobs:
       
       - name: Create Naas Container registry
         run: |
-          naas-python registry create --name abi-api || echo "Registry already exists"
+          naas-python registry create --name abi-forvismazars-api || echo "Registry already exists"
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
 
       - name: Push latest abi container
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
-          NAAS_TOKENS: ${{ secrets.NAAS_TOKENS }}
-          API_GITHUB_ACCESS_TOKEN: ${{ secrets.API_GITHUB_ACCESS_TOKEN }}
-          NAAS_API_KEY: ${{ secrets.NAAS_API_KEY }}
+          # NAAS_TOKENS: ${{ secrets.NAAS_TOKENS }}
+          # API_GITHUB_ACCESS_TOKEN: ${{ secrets.API_GITHUB_ACCESS_TOKEN }}
+          # NAAS_API_KEY: ${{ secrets.NAAS_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
-          REPLICATE_API_KEY: ${{ secrets.REPLICATE_API_KEY }}
+          # PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          # REPLICATE_API_KEY: ${{ secrets.REPLICATE_API_KEY }}
         run: |
           docker pull ghcr.io/${{ github.repository }}/abi:latest
-          export URI=`naas-python registry get -n abi-api | grep -v 'URI' | awk '{print $3}'`
+          export URI=`naas-python registry get -n abi-forvismazars-api | grep -v 'URI' | awk '{print $3}'`
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
 
           docker tag ghcr.io/${{ github.repository }}/abi:latest $URI:$TIMESTAMP
 
-          naas-python registry docker-login -n abi-api
+          naas-python registry docker-login -n abi-forvismazars-api
 
           docker push $URI:$TIMESTAMP
 
-          naas-python space create --name=abi-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "{\"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\"PERPLEXITY_API_KEY\":\"$PERPLEXITY_API_KEY\",\"REPLICATE_API_KEY\":\"$REPLICATE_API_KEY\",\"NAAS_API_KEY\":\"$NAAS_API_KEY\",\"GITHUB_ACCESS_TOKEN\":\"$API_GITHUB_ACCESS_TOKEN\"}" || naas-python space update --name=abi-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "{\"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\"PERPLEXITY_API_KEY\":\"$PERPLEXITY_API_KEY\",\"REPLICATE_API_KEY\":\"$REPLICATE_API_KEY\",\"NAAS_API_KEY\":\"$NAAS_API_KEY\",\"GITHUB_ACCESS_TOKEN\":\"$API_GITHUB_ACCESS_TOKEN\"}"
-          #naas-python space create --name=abi-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi || naas-python space update --name=abi-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi
+          naas-python space create --name=abi-forvismazars-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "{\"OPENAI_API_KEY\":\"$OPENAI_API_KEY\"}" || naas-python space update --name=abi-forvismazars-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "{\"OPENAI_API_KEY\":\"$OPENAI_API_KEY\"}"
+          #naas-python space create --name=abi-forvismazars-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi || naas-python space update --name=abi-forvismazars-api --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi
