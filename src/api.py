@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter
-from src.assistants.foundation.SupervisorAgent import create_supervisor_agent
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
 from src.data.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
