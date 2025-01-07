@@ -1,0 +1,16 @@
+FROM python:3.9
+
+WORKDIR /app
+
+ADD ./assets/ /app/assets
+ADD ./lib/ /app/lib
+ADD ./src/ /app/src
+ADD ./config.yaml /app/config.yaml
+ADD ./Makefile /app/Makefile
+ADD ./poetry.lock /app/poetry.lock
+ADD ./pyproject.toml /app/pyproject.toml
+
+RUN pip install poetry
+RUN poetry install
+
+CMD ["poetry", "run", "api" ]

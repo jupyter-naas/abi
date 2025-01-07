@@ -32,6 +32,7 @@ class AddAssistantsToNaasWorkspaceParameters(BaseModel):
     workspace_id: str = Field(..., description="The workspace ID where the plugin will be created. Must comes from user input.")
 
 class AddAssistantsToNaasWorkspace(Workflow):
+    """Workflow for adding assistants to a Naas workspace."""
     __configuration: AddAssistantsToNaasWorkspaceConfiguration
     
     def __init__(self, configuration: AddAssistantsToNaasWorkspaceConfiguration):
@@ -132,7 +133,7 @@ class AddAssistantsToNaasWorkspace(Workflow):
         
         return [StructuredTool(
             name="publish_assistants_to_naas_workspace",
-            description="Publish all assistants to a given Naas workspace",
+            description="Publish domain assistants (OpenDataAssistant, ContentAssistant, GrowthAssistant, SalesAssistant, OperationsAssistant, FinanceAssistant) to a given Naas workspace",
             func=lambda **kwargs: self.run(AddAssistantsToNaasWorkspaceParameters(**kwargs)),
             args_schema=AddAssistantsToNaasWorkspaceParameters
         )]

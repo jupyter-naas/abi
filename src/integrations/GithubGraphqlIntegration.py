@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, Any, Optional
 
+LOGO_URL = "https://logo.clearbit.com/github.com?background=white"
+
 @dataclass
 class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Github GraphQL integration.
@@ -17,7 +19,7 @@ class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):
 class GithubGraphqlIntegration(Integration):
     """Github GraphQL API integration class.
     
-    This class provides methods to interact with Github's GraphQL API endpoints.
+    This integration provides methods to interact with Github's GraphQL API endpoints.
     """
 
     __configuration: GithubGraphqlIntegrationConfiguration
@@ -31,18 +33,6 @@ class GithubGraphqlIntegration(Integration):
             "Authorization": f"Bearer {self.__configuration.access_token}",
             "Content-Type": "application/json"
         }
-        
-        # Test connection
-        try:
-            self.execute_query("""
-                query { 
-                    viewer { 
-                        login 
-                    } 
-                }
-            """)
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to Github GraphQL API: {str(e)}")
 
     def execute_query(self, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
         """Execute a GraphQL query against Github's API.
@@ -67,11 +57,11 @@ class GithubGraphqlIntegration(Integration):
             result = response.json()
             
             if "errors" in result:
-                raise IntegrationConnectionError(f"GraphQL query failed: {result['errors']}")
+                return IntegrationConnectionError(f"GraphQL query failed: {result['errors']}")
             
             return result
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Github GraphQL API request failed: {str(e)}")
+            return IntegrationConnectionError(f"Github GraphQL API request failed: {str(e)}")
 
     def get_project_node_id(self, organization: str, number: int) -> str:
         """Get the node ID of an organization project.

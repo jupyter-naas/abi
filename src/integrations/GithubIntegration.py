@@ -4,6 +4,7 @@ import requests
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
+LOGO_URL = "https://logo.clearbit.com/github.com?background=white"
 
 @dataclass
 class GithubIntegrationConfiguration(IntegrationConfiguration):
@@ -17,6 +18,10 @@ class GithubIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.github.com"
 
 class GithubIntegration(Integration):
+    """Github API integration client.
+    
+    This integration provides methods to interact with Github's API endpoints.
+    """
 
     __configuration: GithubIntegrationConfiguration
 

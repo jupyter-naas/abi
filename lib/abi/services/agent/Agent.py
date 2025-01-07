@@ -32,7 +32,7 @@ class AgentSharedState:
     __thread_id: int
 
     def __init__(self, thread_id: int = 1):
-        self.__thread_id = 1
+        self.__thread_id = thread_id
         
     @property
     def thread_id(self) -> int:
@@ -115,7 +115,11 @@ class Agent(Expose):
         self.__on_tool_response = configuration.on_tool_response
         
         self.__setup_workflow()
-        
+
+    @property
+    def state(self) -> AgentSharedState:
+        return self.__state
+
     def __setup_workflow(self):
         """Set up the workflow graph for agent-tool interaction.
         
@@ -299,8 +303,8 @@ class Agent(Expose):
             tools=self.__tools,
             # memory=self.__checkpointer.__class__(),  # Create new memory instance
             memory=self.__checkpointer,
-            # state=AgentSharedState(),  # Create new state instance
-            state=self.__state,
+            state=AgentSharedState(),  # Create new state instance
+            #state=self.__state,
             configuration=self.__configuration
         )
     
@@ -309,19 +313,24 @@ class Agent(Expose):
         
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
+            thread_id: int = Field(..., description="The thread ID to use for the conversation")
         
         @router.post("/completion")
         def completion(query: CompletionQuery):
-            return self.invoke(query.prompt)
+            new_agent = self.duplicate()
+            new_agent.state.set_thread_id(query.thread_id)
+            return new_agent.invoke(query.prompt)
             
         @router.post("/stream-completion")
         async def stream_completion(query: CompletionQuery):
+            new_agent = self.duplicate()
+            new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
-                self.stream_invoke(query.prompt),
+                new_agent.stream_invoke(query.prompt),
                 media_type='text/event-stream'
             )
 
-    async def stream_invoke(self, prompt: str):
+    def stream_invoke(self, prompt: str):
         """Process a user prompt through the agent and yield responses as they come.
         
         Args:
@@ -330,31 +339,34 @@ class Agent(Expose):
         Yields:
             dict: Event data formatted for SSE
         """
-        # def stream_on_tool_usage(message: AnyMessage):
-        #     logger.debug(f"Tool usage: {message}")
-        #     return {"event": "tool_usage", "data": str(message)}
-        
-        # def stream_on_tool_response(message: AnyMessage):
-        #     logger.debug(f"Tool response: {message}")
-        #     return {"event": "tool_response", "data": str(message)}
-        
-        # self.__on_tool_usage = stream_on_tool_usage
-        # self.__on_tool_response = stream_on_tool_response
-        
         final_state = self.__app.invoke(
-            {"messages": [SystemMessage(content=self.__configuration.system_prompt), HumanMessage(content=prompt)]},
+            {"messages": [SystemMessage(content=self.__configuration.system_prompt), 
+                         HumanMessage(content=prompt)]},
             config={"configurable": {"thread_id": self.__state.thread_id}}
         )
         
         response = final_state["messages"][-1].content
         logger.debug(f"Response: {response}")
 
-        for line in response.splitlines():
+        # Use a buffer to handle text chunks
+        buffer = ""
+        for char in response:
+            buffer += char
+            if char in ['\n', '\r']:
+                if buffer.strip():  # Only send non-empty lines
+                    yield {
+                        "event": "message",
+                        "data": buffer.rstrip()
+                    }
+                buffer = ""
+        
+        # Don't forget remaining text
+        if buffer.strip():
             yield {
                 "event": "message",
-                "data": line
+                "data": buffer
             }
-            
+
         yield {
             "event": "done",
             "data": "[DONE]"
@@ -370,3 +382,39 @@ class Agent(Expose):
             func=self.__tool_function,
             args_schema=AgentToolSchema
         )]
+
+    @property
+    def tools(self) -> list[Tool]:
+        """Get the list of tools available to the agent.
+        
+        Returns:
+            list[Tool]: List of tools configured for this agent
+        """
+        return self.__tools
+    
+    @property
+    def name(self) -> str:
+        """Get the name of the agent.
+        
+        Returns:
+            str: The agent's name
+        """
+        return self.__name
+    
+    @property
+    def description(self) -> str:
+        """Get the description of the agent.
+        
+        Returns:
+            str: The agent's description
+        """
+        return self.__description
+        
+    @property
+    def chat_model(self) -> BaseChatModel:
+        """Get the chat model used by the agent.
+        
+        Returns:
+            BaseChatModel: The agent's chat model
+        """
+        return self.__chat_model

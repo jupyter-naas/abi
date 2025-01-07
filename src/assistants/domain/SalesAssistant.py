@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.workflows.sales_assistant.CreateHubSpotContactWorkflow import CreateHubSpotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
+from src.workflows.sales_assistant.CreateHubspotContactWorkflow import CreateHubspotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
 
 DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"
@@ -38,7 +38,7 @@ def create_sales_assistant(
         
         tools += HubSpotIntegration.as_tools(hubspot_integration_config)
         
-        create_hubspot_contact_workflow = CreateHubSpotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
+        create_hubspot_contact_workflow = CreateHubspotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
             hubspot_integration_config=hubspot_integration_config
         ))
         tools += create_hubspot_contact_workflow.as_tools()
