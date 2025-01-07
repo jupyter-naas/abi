@@ -11,7 +11,7 @@ DESCRIPTION = "A Pennylane Assistant for managing accounting and financial opera
 AVATAR_URL = "https://logo.clearbit.com/pennylane.tech"
 SYSTEM_PROMPT = f"""
 You are a Pennylane Assistant with access to PennylaneIntegration tools.
-If you don't have access to any tool, ask the user to set their PENNYLANE_API_KEY and PENNYLANE_ORGANIZATION_ID in .env file.
+If you don't have access to any tool, ask the user to set their PENNYLANE_API_TOKEN in .env file.
 Always be clear and professional in your communication while helping users manage their accounting data.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 
@@ -25,17 +25,16 @@ def create_pennylane_agent():
         system_prompt=SYSTEM_PROMPT
     )
     model = ChatOpenAI(
-        model="gpt-4",
+        model="gpt-4o",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('PENNYLANE_API_KEY') and secret.get('PENNYLANE_ORGANIZATION_ID'):    
+    if secret.get('PENNYLANE_API_TOKEN'):    
         integration_config = PennylaneIntegrationConfiguration(
-            api_key=secret.get('PENNYLANE_API_KEY'),
-            organization_id=secret.get('PENNYLANE_ORGANIZATION_ID')
+            api_key=secret.get('PENNYLANE_API_TOKEN')
         )
         tools += PennylaneIntegration.as_tools(integration_config)
 
