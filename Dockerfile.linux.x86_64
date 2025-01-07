@@ -9,6 +9,7 @@ ADD ./config.yaml /app/config.yaml
 ADD ./Makefile /app/Makefile
 ADD ./poetry.lock /app/poetry.lock
 ADD ./pyproject.toml /app/pyproject.toml
+ADD ./README.md /app/README.md
 
 RUN pip install poetry
 RUN poetry install
