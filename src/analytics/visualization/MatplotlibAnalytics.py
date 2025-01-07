@@ -4,9 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime, timedelta
 import random
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Union
 import seaborn as sns
 from abi import logger
+from wordcloud import WordCloud
 
 LOGO_URL = "https://logo.clearbit.com/matplotlib.org"
 
@@ -231,14 +232,14 @@ class MatplotlibAnalytics(Integration):
         return self.__save_figure(title)
 
     def create_stacked_bar(
-            self,
-            data: Optional[List[List]] = None,
-            categories: Optional[List] = None,
-            labels: Optional[List] = None,
-            title: str = "Stacked Bar Chart",
-            xlabel: str = "Categories",
-            ylabel: str = "Values"
-        ) -> str:
+        self,
+        data: Optional[List[List]] = None,
+        categories: Optional[List] = None,
+        labels: Optional[List] = None,
+        title: str = "Stacked Bar Chart",
+        xlabel: str = "Categories",
+        ylabel: str = "Values"
+    ) -> str:
         """Create a stacked bar chart visualization."""
         if data is None:
             data = [[random.randint(1, 20) for _ in range(4)] for _ in range(3)]
@@ -261,13 +262,13 @@ class MatplotlibAnalytics(Integration):
         return self.__save_figure(title)
 
     def create_violin_plot(
-            self,
-            data: Optional[List[List]] = None,
-            labels: Optional[List] = None,
-            title: str = "Violin Plot",
-            xlabel: str = "Categories",
-            ylabel: str = "Distribution"
-        ) -> str:
+        self,
+        data: Optional[List[List]] = None,
+        labels: Optional[List] = None,
+        title: str = "Violin Plot",
+        xlabel: str = "Categories",
+        ylabel: str = "Distribution"
+    ) -> str:
         """Create a violin plot visualization."""
         if data is None:
             data = [np.random.normal(loc=i, scale=1, size=100) for i in range(4)]
@@ -284,13 +285,13 @@ class MatplotlibAnalytics(Integration):
         return self.__save_figure(title)
 
     def create_area_chart(
-            self,
-            x_data: Optional[List] = None,
-            y_data: Optional[List] = None,
-            title: str = "Area Chart",
-            xlabel: str = "X Axis",
-            ylabel: str = "Y Axis"
-        ) -> str:
+        self,
+        x_data: Optional[List] = None,
+        y_data: Optional[List] = None,
+        title: str = "Area Chart",
+        xlabel: str = "X Axis",
+        ylabel: str = "Y Axis"
+    ) -> str:
         """Create an area chart visualization."""
         if x_data is None or y_data is None:
             x_data = list(range(10))
@@ -303,6 +304,70 @@ class MatplotlibAnalytics(Integration):
         plt.title(title)
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
+        
+        return self.__save_figure(title)
+
+    def create_wordcloud(
+        self,
+        text: Union[str, Dict[str, float], List[str]],
+        title: str = "Word Cloud",
+        width: int = 800,
+        height: int = 400,
+        background_color: str = "white",
+    ) -> str:
+        """Create a word cloud visualization.
+        
+        Args:
+            text (Union[str, Dict[str, float], List[str]]): Text to generate word cloud from,
+                dictionary of word frequencies, or list of words
+            title (str): Title for the visualization
+            width (int): Width of the word cloud image
+            height (int): Height of the word cloud image
+            background_color (str): Background color of the word cloud
+            
+        Returns:
+            str: Path to the saved word cloud image
+        """
+        if text is None:
+            # Generate sample text if none provided
+            words = ["Python", "Data_Analytics", "Data_Visualization", "Cloud_Computing", 
+                    "Machine_Learning", "AI", "Graph_Database", "Neural_Network", "Clean_Code"]
+            text = " ".join([word * random.randint(1, 5) for word in words])
+        elif isinstance(text, list):
+            # Group multi-word phrases with underscores and join with repetition for weighting
+            processed_words = []
+            for word in text:
+                # Replace spaces with underscores to keep phrases together
+                processed_word = word.replace(" ", "_")
+                processed_words.append(processed_word * random.randint(1, 5))
+            text = " ".join(processed_words)
+
+        self.__apply_style()
+        plt.figure()
+        
+        # Create word cloud with common parameters
+        wordcloud_params = {
+            "width": width,
+            "height": height,
+            "background_color": background_color,
+            "collocations": False,
+            "max_words": 200,
+            "max_font_size": 40,
+            "min_font_size": 10,
+            "prefer_horizontal": 0.9,
+            "scale": 2,
+            "relative_scaling": 0.5,
+            "stopwords": None,
+            "random_state": 42,
+            "font_path": None,
+            "max_font_size": None,
+        }
+        
+        # Generate word cloud based on input type
+        wordcloud = WordCloud(**wordcloud_params).generate(text)
+        # Display the word cloud
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
         
         return self.__save_figure(title)
 
@@ -358,6 +423,13 @@ def as_tools(configuration: MatplotlibAnalyticsConfiguration):
         title: str = Field(default="Violin Plot", description="Chart title")
         xlabel: str = Field(default="Categories", description="X-axis label")
         ylabel: str = Field(default="Distribution", description="Y-axis label")
+
+    class WordCloudSchema(BaseModel):
+        text: str = Field(default="Sample text", description="Text to generate word cloud from")
+        title: str = Field(default="Word Cloud", description="Chart title")
+        width: int = Field(default=800, description="Width of the word cloud image")
+        height: int = Field(default=400, description="Height of the word cloud image")
+        background_color: str = Field(default="white", description="Background color of the word cloud")
 
     analytics = MatplotlibAnalytics(configuration)
     
@@ -421,5 +493,11 @@ def as_tools(configuration: MatplotlibAnalyticsConfiguration):
             description="Create an area chart visualization. Shows cumulative totals over time.",
             func=lambda **kwargs: analytics.create_area_chart(**kwargs),
             args_schema=BasicChartSchema
+        ),
+        StructuredTool(
+            name="create_wordcloud",
+            description="Create a word cloud visualization. Ideal for showing word frequencies.",
+            func=lambda **kwargs: analytics.create_wordcloud(**kwargs),
+            args_schema=WordCloudSchema
         )
     ]
