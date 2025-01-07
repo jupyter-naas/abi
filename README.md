@@ -100,19 +100,54 @@ ABI Framework is open-source and available for non-production use under the [AGP
 
 4. **Create Docker Container & Start Chatting**
    ```bash
-   # Start default agent (chat-integration-agent)
+   # Start default agent (chat-supervisor-agent) which can access to all domain agents and tools
    make
 
-   # Or start a specific agent:
+   # Or start a specific foundation agent:
+   make chat-support-agent     # Support agent
+
+   # Or start a specific domain agent:
    make chat-content-agent      # Content agent
    make chat-finance-agent      # Finance agent  
    make chat-growth-agent       # Growth agent
    make chat-opendata-agent     # Open Data agent
    make chat-operations-agent   # Operations agent
    make chat-sales-agent        # Sales agent
-   make chat-integration-agent  # Integration agent
-   make chat-support-agent     # Support agent
-   make chat-supervisor-agent  # Supervisor agent
+
+   # Or start a specific custom agent:
+   make chat-airtable-agent     # Airtable agent
+   make chat-agicap-agent       # Agicap agent
+   make chat-aws-s3-agent       # AWS S3 agent
+   make chat-brevo-agent        # Brevo agent
+   make chat-clockify-agent     # Clockify agent
+   make chat-discord-agent      # Discord agent
+   make chat-github-agent       # Github agent
+   make chat-gladia-agent       # Gladia agent
+   make chat-gmail-agent        # Gmail agent
+   make chat-google-analytics-agent # Google Analytics agent
+   make chat-google-calendar-agent # Google Calendar agent
+   make chat-google-drive-agent # Google Drive agent
+   make chat-google-sheets-agent # Google Sheets agent
+   make chat-harvest-agent       # Harvest agent
+   make chat-hubspot-agent       # Hubspot agent
+   make chat-linkedin-agent      # LinkedIn agent
+   make chat-mercury-agent       # Mercury agent
+   make chat-naas-agent         # Naas agent
+   make chat-news-api-agent     # News API agent
+   make chat-notion-agent       # Notion agent
+   make chat-onedrive-agent     # OneDrive agent
+   make chat-pennylane-agent    # Pennylane agent
+   make chat-pipedrive-agent    # Pipedrive agent
+   make chat-postgres-agent     # Postgres agent
+   make chat-qonto-agent        # Qonto agent
+   make chat-sendgrid-agent     # Sendgrid agent
+   make chat-serper-agent       # Serper agent
+   make chat-slack-agent        # Slack agent
+   make chat-stripe-agent       # Stripe agent
+   make chat-supabase-agent     # Supabase agent
+   make chat-yahoo-finance-agent # Yahoo Finance agent
+   make chat-youtube-agent      # YouTube agent
+   make chat-zerobounce-agent   # Zerobounce agent
    ```
 
    You will only have a access to tools registered in .env file.
@@ -216,7 +251,7 @@ For examples, see existing workflows in the `src/workflows/` directory.
 To create a new assistant, follow these steps:
 
 #### Create Assistant File
-Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/CustomAssistant.py`.
+Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/__TemplateAssistant__.py`.
 
 #### Add Integrations, Workflows and Pipelines as tools
 - Import necessary integrations, pipelines and workflows

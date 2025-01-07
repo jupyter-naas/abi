@@ -49,28 +49,5 @@ abi:relatedToOrganization a owl:ObjectProperty ;
 #    Data Properties
 #################################################################
 
-abi:hasScenario a owl:DatatypeProperty ;
-    rdfs:label "has scenario"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:string .
 
-abi:hasCreatedDate a owl:DatatypeProperty ;
-    rdfs:label "has created date"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:dateTime .
-
-abi:hasDueDate a owl:DatatypeProperty ;
-    rdfs:label "has due date"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:dateTime .
-
-abi:hasTitle a owl:DatatypeProperty ;
-    rdfs:label "has title"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:string .
-
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:label "has description"@en ;
-    rdfs:domain abi:Activity ;
-    rdfs:range xsd:string .
   

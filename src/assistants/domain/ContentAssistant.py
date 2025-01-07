@@ -1,9 +1,9 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations import LinkedinIntegration, ReplicateIntegration
+from src.integrations import ReplicateIntegration
 from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
-from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
 from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 
 DESCRIPTION = "A Content Assistant that helps optimize content strategy and audience engagement."
@@ -42,8 +42,6 @@ def create_content_assistant(
     
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
         linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
-        
-        tools += LinkedinIntegration.as_tools(linkedin_integration_config)
 
         linkedin_posts_workflow = LinkedinPostsWorkflow(LinkedinPostsWorkflowConfiguration(
             linkedin_integration_config=linkedin_integration_config

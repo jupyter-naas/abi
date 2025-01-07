@@ -1,9 +1,7 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations import HubSpotIntegration, LinkedinIntegration
-from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
-from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
 from src.workflows.growth_assistant.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
 
 DESCRIPTION = "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."
@@ -39,15 +37,11 @@ def create_growth_assistant(
     tools = []
 
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
-        
+        linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
         linkedin_posts_interactions_workflow = LinkedinPostsInteractionsWorkflow(LinkedinPostsInteractionsWorkflowConfiguration(
-            linkedin_integration_config=LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+            linkedin_integration_config=linkedin_integration_config
         ))
         tools += linkedin_posts_interactions_workflow.as_tools()
-    
-    if hubspot_key := secret.get('HUBSPOT_API_KEY'):
-        tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(api_key=hubspot_key))
     
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
