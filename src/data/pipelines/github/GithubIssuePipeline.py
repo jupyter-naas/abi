@@ -275,7 +275,14 @@ class GithubIssuePipeline(Pipeline):
             args_schema=GithubIssuePipelineParameters
         )]
 
-    def as_api(self, router: APIRouter) -> None:
-        @router.post("/GithubIssuePipeline")
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "githubissue", 
+            name: str = "Github Issue to Ontology", 
+            description: str = "Get a Github Issue and add it to the ontology", 
+            tags: list[str] = []
+        ) -> None:
+        @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubIssuePipelineParameters):
             return self.run(parameters).serialize(format="turtle")
