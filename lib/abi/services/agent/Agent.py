@@ -308,20 +308,29 @@ class Agent(Expose):
             configuration=self.__configuration
         )
     
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this agent to the given router."""
+    def as_api(self, router: APIRouter, route_name: str, name: str, description: str = "", description_stream: str = "", tags: list[str] = []) -> None:
+        """Adds API endpoints for this agent to the given router.
+        
+        Args:
+            router (APIRouter): The router to add endpoints to
+            route_name (str): Optional prefix for route names. Defaults to ""
+            name (str): Optional name to add to the endpoints. Defaults to ""
+            description (str): Optional description to add to the endpoints. Defaults to ""
+            description_stream (str): Optional description to add to the stream endpoints. Defaults to ""
+            tags (list[str]): Optional list of tags to add to the endpoints. Defaults to []
+        """
         
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
             thread_id: int = Field(..., description="The thread ID to use for the conversation")
         
-        @router.post("/completion")
+        @router.post(f"/{route_name}/completion" if route_name else "/completion", name=f"{name} completion", description=description, tags=tags)
         def completion(query: CompletionQuery):
             new_agent = self.duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return new_agent.invoke(query.prompt)
             
-        @router.post("/stream-completion")
+        @router.post(f"/{route_name}/stream-completion" if route_name else "/stream-completion", name=f"{name} stream completion", description=description_stream, tags=tags) 
         async def stream_completion(query: CompletionQuery):
             new_agent = self.duplicate()
             new_agent.state.set_thread_id(query.thread_id)
