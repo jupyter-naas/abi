@@ -91,7 +91,7 @@ def create_supervisor_agent():
 
     return Agent(
         name="supervisor_agent",
-        description="Use to supervise the other assistants",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools,
         state=AgentSharedState(thread_id=8),
