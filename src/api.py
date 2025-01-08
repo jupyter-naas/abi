@@ -1,9 +1,11 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.openapi.utils import get_openapi
 from src import secret
 import subprocess
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
@@ -22,18 +24,42 @@ from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+
+TITLE = "ABI API"
+DESCRIPTION = "API for ABI, your Artifical Business Intelligence"
 
 # Init API
-app = FastAPI(title="ABI API")
+app = FastAPI(title=TITLE)
 
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
+
+def verify_token(
+    api_key: str = Header(None)
+):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key is missing",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if api_key == "abi":
+        return api_key
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 # Create Assistants API Router
 assistants_router = APIRouter(
     prefix="/assistants", 
     tags=["Assistants"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(verify_token)]  # Apply token verification
 )
 
 supervisor_agent = create_supervisor_agent()
@@ -113,6 +139,7 @@ pipelines_router = APIRouter(
     prefix="/pipelines", 
     tags=["Pipelines"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(verify_token)]  # Apply token verification
 )
 
 # Initialize services
@@ -167,8 +194,16 @@ def custom_openapi():
         routes=app.routes,
         tags=[
             {
-                "name": "Getting Started",
-                "description": "API endpoints for getting started with ABI (Artificial Business Intelligence). Includes routes for basic health checks, version information, and documentation on how to use the API to automate business processes, analyze data, and interact with AI assistants."
+                "name": "Overview",
+                "description": "The ABI (Artificial Business Intelligence) API allows users and applications to interact with ABI's capabilities for business process automation and intelligence. This document describes the current version of the ABI API, which provides access to assistants, pipelines, workflows, integrations, ontology management and analytics features."
+            },
+            {
+                "name": "Data Access",
+                "description": "Data access is currently configured using secrets (API keys, credentials) set up in the GitHub project settings. In an upcoming update, ABI will integrate with the Naas platform to securely access user-specific secrets and credentials."
+            },
+            {
+                "name": "Authentication",
+                "description": "Authentication uses dedicate API key in header parameter."
             },
             {
                 "name": "Assistants",
@@ -211,11 +246,55 @@ def root():
     <!DOCTYPE html>
     <html>
         <head>
-            <title>Your New Tab Name</title>
+            <title>ABI API</title>
             <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #000000;
+                    color: white;
+                }
+                .logo {
+                    width: 200px;
+                    margin-bottom: 20px;
+                }
+                h1 {
+                    font-size: 48px;
+                    margin-bottom: 40px;
+                }
+                .buttons {
+                    display: flex;
+                    gap: 20px;
+                }
+                a {
+                    padding: 12px 24px;
+                    font-size: 18px;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    text-decoration: none;
+                    color: white;
+                    background-color: #007bff;
+                    transition: background-color 0.2s;
+                }
+                a:hover {
+                    background-color: #0056b3;
+                }
+            </style>
         </head>
         <body>
-            <h1>Hello, World!</h1>
+            <img src="/static/logo.png" alt="Naas Logo" class="logo">
+            <h1>Welcome to ABI API!</h1>
+            <p>ABI API is a tool that allows you to interact with ABI's capabilities for business process automation and intelligence.</p>
+            <div class="buttons">
+                <a href="/redoc">Go to Documentation</a>
+            </div>
         </body>
     </html>
     """
