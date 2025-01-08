@@ -216,7 +216,7 @@ class GithubUserDetailsPipeline(Pipeline):
             router: APIRouter, 
             route_name: str = "githubuserdetails", 
             name: str = "Github User Details to Ontology", 
-            description: str = "Get Github User Details and add them to the ontology", 
+            description: str = "Fetches a GitHub user's details and maps them to the ontology as a GitHub user.", 
             tags: list[str] = []
         ) -> None:
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)

@@ -112,7 +112,7 @@ class GithubIssuesPipeline(Pipeline):
             router: APIRouter, 
             route_name: str = "githubissues", 
             name: str = "Github Issues from Repository to Ontology", 
-            description: str = "Get Github Issues from a repository and add them to the ontology", 
+            description: str = "Fetches multiple GitHub issues from a repository, extracts their metadata, and maps them to the ontology as task completions with temporal information and agent relationships.", 
             tags: list[str] = []
         ) -> None:
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
