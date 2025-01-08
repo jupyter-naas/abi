@@ -107,12 +107,14 @@ class GithubIssuesPipeline(Pipeline):
             args_schema=GithubIssuesPipelineParameters
         )]
 
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this pipeline to the given router.
-        
-        Args:
-            router (APIRouter): FastAPI router to add endpoints to
-        """
-        @router.post("/GithubIssuesPipeline")
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "githubissues", 
+            name: str = "Github Issues from Repository to Ontology", 
+            description: str = "Get Github Issues from a repository and add them to the ontology", 
+            tags: list[str] = []
+        ) -> None:
+        @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubIssuesPipelineParameters):
             return self.run(parameters).serialize(format="turtle")
