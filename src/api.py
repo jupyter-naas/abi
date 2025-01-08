@@ -1,4 +1,7 @@
 from fastapi import FastAPI, APIRouter
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.openapi.utils import get_openapi
 from src import secret
 import subprocess
 # Foundation assistants
@@ -20,44 +23,11 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 
-def get_git_tag():
-    try:
-        tag = subprocess.check_output(["git", "describe", "--tags"]).strip().decode()
-    except subprocess.CalledProcessError:
-        tag = "v0.0.1"
-    return tag
+# Init API
+app = FastAPI(title="ABI API")
 
-app = FastAPI(
-    title="ABI API",
-    description="API for ABI, your Artifical Business Intelligence",
-    version=get_git_tag(),
-    openapi_tags=[
-        {
-            "name": "Assistants",
-            "description": "API endpoints for interacting with ABI's assistant/agents."
-        },
-        {
-            "name": "Pipelines",
-            "description": "API endpoints for interacting with ABI's pipelines."
-        },
-        {
-            "name": "Workflows",
-            "description": "API endpoints for interacting with ABI's workflows."
-        },
-        {
-            "name": "Integrations",
-            "description": "API endpoints for interacting with ABI's integrations."
-        },
-        {
-            "name": "Ontology",
-            "description": "API endpoints for interacting with ABI's ontology."
-        },
-        {
-            "name": "Analytics",
-            "description": "API endpoints for interacting with ABI's analytics."
-        },
-    ]
-)
+# Mount the static directory
+app.mount("/static", StaticFiles(directory="assets"), name="static")
 
 # Create Assistants API Router
 assistants_router = APIRouter(
@@ -180,8 +150,75 @@ github_user_details_pipeline.as_api(pipelines_router)
 app.include_router(assistants_router)
 app.include_router(pipelines_router)
 
+def get_git_tag():
+    try:
+        tag = subprocess.check_output(["git", "describe", "--tags"]).strip().decode()
+    except subprocess.CalledProcessError:
+        tag = "v0.0.1"
+    return tag
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="ABI API",
+        description="API for ABI, your Artifical Business Intelligence",
+        version=get_git_tag(),
+        routes=app.routes,
+        tags=[
+            {
+                "name": "Getting Started",
+                "description": "API endpoints for getting started with ABI (Artificial Business Intelligence). Includes routes for basic health checks, version information, and documentation on how to use the API to automate business processes, analyze data, and interact with AI assistants."
+            },
+            {
+                "name": "Assistants",
+                "description": "API endpoints for interacting with ABI's assistant/agents."
+            },
+            {
+                "name": "Pipelines", 
+                "description": "API endpoints for interacting with ABI's pipelines."
+            },
+            {
+                "name": "Workflows",
+                "description": "API endpoints for interacting with ABI's workflows."
+            },
+            {
+                "name": "Integrations",
+                "description": "API endpoints for interacting with ABI's integrations."
+            },
+            {
+                "name": "Ontology",
+                "description": "API endpoints for interacting with ABI's ontology."
+            },
+            {
+                "name": "Analytics",
+                "description": "API endpoints for interacting with ABI's analytics."
+            },
+        ]
+    )
+    openapi_schema["info"]["x-logo"] = {
+        "url": "/static/logo.png",
+        "altText": "ABI Logo"
+    }
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return {"message": "Hello World"}
+    return """
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <title>Your New Tab Name</title>
+            <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+        </head>
+        <body>
+            <h1>Hello, World!</h1>
+        </body>
+    </html>
+    """
 
 def api():
     import uvicorn
