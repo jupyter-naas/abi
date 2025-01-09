@@ -2,8 +2,9 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import GithubIntegration
+from src.integrations import GithubIntegration, GithubGraphqlIntegration
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
@@ -25,24 +26,27 @@ def create_github_agent():
         system_prompt=SYSTEM_PROMPT
     )
     model = ChatOpenAI(
-        model="gpt-4",
+        model="gpt-4o",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('GITHUB_TOKEN'):    
-        github_integration_config = GithubIntegrationConfiguration(token=secret.get('GITHUB_TOKEN'))
+    if secret.get('GITHUB_ACCESS_TOKEN'):    
+        github_integration_config = GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
         tools += GithubIntegration.as_tools(github_integration_config)
 
+        github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
+        tools += GithubGraphqlIntegration.as_tools(github_graphql_integration_config)
+
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
+    support_assistant = create_support_assistant(AgentSharedState(thread_id=1), agent_configuration)
     tools += support_assistant.as_tools()
         
     return Agent(
         name="github_assistant",
-        description="Use to manage GitHub repositories, issues, pull requests and more",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools, 
         state=AgentSharedState(thread_id=1), 
