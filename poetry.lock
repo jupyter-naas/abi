@@ -1670,6 +1670,20 @@ files = [
 all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2)"]
 
 [[package]]
+name = "imapclient"
+version = "3.0.1"
+description = "Easy-to-use, Pythonic and complete IMAP client library"
+optional = false
+python-versions = ">=3.7.0"
+files = [
+    {file = "IMAPClient-3.0.1-py2.py3-none-any.whl", hash = "sha256:d77d77caa4123e0233b5cf2b9c54a078522e63270b88d3f48653a28637fd8828"},
+    {file = "IMAPClient-3.0.1.zip", hash = "sha256:78e6d62fbfbbe233e1f0e0e993160fd665eb1fd35973acddc61c15719b22bc02"},
+]
+
+[package.extras]
+doc = ["sphinx"]
+
+[[package]]
 name = "importlib-resources"
 version = "6.4.5"
 description = "Read resources from Python packages"
@@ -4719,4 +4733,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "91134e5fc17337f8ce35bcccec8eeebf72230e74a59e9596dbe222a25f47757b"
+content-hash = "a97828e55c3e43df044bdd372cac21fc61caeaf79726f41ccf2937dc70eaa208"
