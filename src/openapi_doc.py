@@ -184,7 +184,7 @@ Authentication uses a Bearer token that can be provided either in the Authorizat
 The token must match the ABI_API_KEY environment variable.
 Contact your administrator to get the token.
 
-**Code example:**
+**Code example with Authorization header:**
 
 ```python
 import requests
@@ -196,6 +196,17 @@ headers = {
 }
 
 response = requests.post(url, headers=headers)
+print(response.json())
+```
+
+**Code example with query parameter:**
+
+```python
+import requests
+
+url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
+
+response = requests.post(url)
 print(response.json())
 ```
         """
