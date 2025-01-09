@@ -1,4 +1,6 @@
-tags_metadata = [
+TITLE = "ABI API"
+DESCRIPTION = "API for ABI, your Artifical Business Intelligence"
+TAGS_METADATA = [
     {
         "name": "Overview",
         "description": """
@@ -264,7 +266,7 @@ API endpoints for interacting with ABI's analytics.
     },
 ]
 
-api_landing_html = """
+API_LANDING_HTML = """
 <!DOCTYPE html>
 <html>
     <head>
