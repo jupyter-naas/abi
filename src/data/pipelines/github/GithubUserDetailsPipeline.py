@@ -210,12 +210,15 @@ class GithubUserDetailsPipeline(Pipeline):
             args_schema=GithubUserDetailsPipelineParameters
         )]
 
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this pipeline to the given router.
-        
-        Args:
-            router (APIRouter): FastAPI router to add endpoints to
-        """
-        @router.post("/GithubUserDetailsPipeline")
+
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "githubuserdetails", 
+            name: str = "Github User Details to Ontology", 
+            description: str = "Fetches a GitHub user's details and maps them to the ontology as a GitHub user.", 
+            tags: list[str] = []
+        ) -> None:
+        @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubUserDetailsPipelineParameters):
             return self.run(parameters).serialize(format="turtle")
