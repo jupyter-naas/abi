@@ -38,6 +38,7 @@ matplotlib = "^3.7.1"
 seaborn = "^0.13.2"
 gitpython = "^3.1.43"
 openpyxl = "^3.1.5"
+python-multipart = "^0.0.20"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
