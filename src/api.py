@@ -245,7 +245,7 @@ def custom_openapi():
             },
             {
                 "name": "Authentication",
-                "description": "Authentication uses dedicate API key in header parameter."
+                "description": "Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>'). The token must match the ABI_API_KEY environment variable."
             },
             {
                 "name": "Assistants",
