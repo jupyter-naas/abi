@@ -26,9 +26,8 @@ from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-
-TITLE = "ABI API"
-DESCRIPTION = "API for ABI, your Artifical Business Intelligence"
+# Docs
+from src.openapi_doc import TITLE, DESCRIPTION, TAGS_METADATA, API_LANDING_HTML
 
 # Init API
 app = FastAPI(title=TITLE)
@@ -174,8 +173,6 @@ def get_git_tag():
         tag = "v0.0.1"
     return tag
 
-from src.openapi_doc import tags_metadata, api_landing_html
-
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -184,7 +181,7 @@ def custom_openapi():
         description=DESCRIPTION,
         version=get_git_tag(),
         routes=app.routes,
-        tags=tags_metadata
+        tags=TAGS_METADATA
     )
     openapi_schema["info"]["x-logo"] = {
         "url": "/static/logo.png",
@@ -197,7 +194,7 @@ app.openapi = custom_openapi
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return api_landing_html.replace("[TITLE]", TITLE)
+    return API_LANDING_HTML.replace("[TITLE]", TITLE)
 
 def api():
     import uvicorn
