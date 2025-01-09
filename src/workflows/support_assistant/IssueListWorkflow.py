@@ -40,7 +40,7 @@ class IssueListWorkflow(Workflow):
 
     def run(self, parameters: IssueListWorkflowParameters) -> List[str]:
         # Get issues using the GitHub integration
-        issues = self.__github_integration.get_issues(
+        issues = self.__github_integration.list_issues(
             repo_name=parameters.repo_name,
             state=parameters.state,
             limit=parameters.limit
