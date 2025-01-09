@@ -7,6 +7,7 @@ from src.integrations.PennylaneIntegration import PennylaneIntegrationConfigurat
 from src.integrations.MercuryIntegration import MercuryIntegrationConfiguration
 from src.integrations.StripeIntegration import StripeIntegrationConfiguration
 from src.integrations.QontoIntegration import QontoIntegrationConfiguration
+from fastapi import APIRouter
 
 DESCRIPTION = "A Financial Assistant that analyzes transactions and provides financial insights."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/finance_management.png"
@@ -80,7 +81,7 @@ def create_finance_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
-    return Agent(
+    return FinanceAssistant(
         name="finance_assistant", 
         description=DESCRIPTION,
         chat_model=model, 
@@ -89,3 +90,15 @@ def create_finance_assistant(
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
+
+class FinanceAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "finance", 
+            name: str = "Finance Assistant", 
+            description: str = "API endpoints to call the Finance assistant completion.", 
+            description_stream: str = "API endpoints to call the Finance assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)

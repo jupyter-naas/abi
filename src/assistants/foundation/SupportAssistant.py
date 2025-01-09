@@ -1,4 +1,5 @@
 from langchain_openai import ChatOpenAI
+from fastapi import APIRouter
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
@@ -60,7 +61,7 @@ def create_support_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
-    return Agent(
+    return SupportAssistant(
         name="support_assistant", 
         description=DESCRIPTION,
         chat_model=model, 
@@ -69,3 +70,15 @@ def create_support_assistant(
         configuration=agent_configuration, 
         memory=MemorySaver()
     )
+
+class SupportAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "support", 
+            name: str = "Support Assistant", 
+            description: str = "API endpoints to call the Support assistant completion.", 
+            description_stream: str = "API endpoints to call the Support assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)
