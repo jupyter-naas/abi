@@ -4,6 +4,7 @@ from src import secret
 from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.workflows.sales_assistant.CreateHubspotContactWorkflow import CreateHubspotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
+from fastapi import APIRouter
 
 DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"
@@ -51,12 +52,24 @@ def create_sales_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
-    return Agent(
+    return SalesAssistant(
         name="sales_assistant", 
-        description="Use for sales and marketing analysis",
+        description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
+
+class SalesAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "sales", 
+            name: str = "Sales Assistant", 
+            description: str = "API endpoints to call the Sales assistant completion.", 
+            description_stream: str = "API endpoints to call the Sales assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)

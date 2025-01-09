@@ -3,6 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from abi import logger
+from fastapi import APIRouter
 
 AVATAR_URL = ""
 DESCRIPTION = "A Supervisor Assistant that helps to supervise the other domain assistants."
@@ -89,7 +90,7 @@ def create_supervisor_agent():
     # Replace the {{ASSISTANTS}} placeholder in the system prompt with the assistants_info
     agent_configuration.system_prompt=SUPERVISOR_AGENT_INSTRUCTIONS.replace("{{ASSISTANTS}}", assistants_info_str)
 
-    return Agent(
+    return SupervisorAssistant(
         name="supervisor_agent",
         description=DESCRIPTION,
         chat_model=model,
@@ -98,3 +99,15 @@ def create_supervisor_agent():
         configuration=agent_configuration,
         memory=MemorySaver()
     )
+
+class SupervisorAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "supervisor", 
+            name: str = "Supervisor Assistant", 
+            description: str = "API endpoints to call the Supervisor assistant completion.", 
+            description_stream: str = "API endpoints to call the Supervisor assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)
