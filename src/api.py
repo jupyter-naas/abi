@@ -1,11 +1,12 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.openapi.utils import get_openapi
+from fastapi.security.oauth2 import OAuth2
+from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from fastapi.security.utils import get_authorization_scheme_param
 from src import secret
 import subprocess
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import jwt
 import os 
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
@@ -25,11 +26,6 @@ from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
-from fastapi.security import OAuth2PasswordBearer, OAuth2AuthorizationCodeBearer
-from fastapi.security.oauth2 import OAuth2
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
-from fastapi.security.utils import get_authorization_scheme_param
 
 TITLE = "ABI API"
 DESCRIPTION = "API for ABI, your Artifical Business Intelligence"
@@ -90,7 +86,7 @@ async def is_token_valid(token: str = Depends(oauth2_scheme)):
 
 
 @app.post("/token")
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], include_in_schema=False):
     if form_data.password != "abi":
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
@@ -132,13 +128,7 @@ open_data_agent.as_api(
 )
 
 content_agent = create_content_assistant()
-content_agent.as_api(
-    assistants_router,
-    route_name="content",
-    name="Content Assistant",
-    description="API endpoints to call the Content assistant completion.",
-    description_stream="API endpoints to call the Content assistant stream completion."
-)
+content_agent.as_api(assistants_router)
 
 growth_agent = create_growth_assistant()
 growth_agent.as_api(
@@ -245,7 +235,7 @@ def custom_openapi():
             },
             {
                 "name": "Authentication",
-                "description": "Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>'). The token must match the ABI_API_KEY environment variable."
+                "description": "Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>').\nThe token must match the ABI_API_KEY environment variable."
             },
             {
                 "name": "Assistants",
