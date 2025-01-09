@@ -6,6 +6,7 @@ from src import secret
 import subprocess
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
+import os 
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
@@ -25,6 +26,10 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from fastapi.security import OAuth2PasswordBearer, OAuth2AuthorizationCodeBearer
+from fastapi.security.oauth2 import OAuth2
+from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from fastapi.security.utils import get_authorization_scheme_param
 
 TITLE = "ABI API"
 DESCRIPTION = "API for ABI, your Artifical Business Intelligence"
@@ -35,31 +40,68 @@ app = FastAPI(title=TITLE)
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
 
-def verify_token(
-    api_key: str = Header(None)
-):
-    if not api_key:
+# Authentication
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Annotated
+
+# Custom OAuth2 class that accepts query parameter
+class OAuth2QueryBearer(OAuth2):
+    def __init__(
+        self,
+        tokenUrl: str,
+        scheme_name: str = None,
+        auto_error: bool = True,
+    ):
+        flows = OAuthFlowsModel(password={"tokenUrl": tokenUrl})
+        super().__init__(flows=flows, scheme_name=scheme_name, auto_error=auto_error)
+
+    async def __call__(self, token: str = None, authorization: str = Header(None)) -> str:
+        # Check header first
+        if authorization:
+            scheme, header_token = get_authorization_scheme_param(authorization)
+            if scheme.lower() == "bearer":
+                return header_token
+        
+        # Then check query parameter
+        if token:
+            return token
+            
+        # No token found in either place
+        if self.auto_error:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return None
+
+# Replace the existing oauth2_scheme with:
+oauth2_scheme = OAuth2QueryBearer(tokenUrl="token")
+
+# Update the token validation dependency
+async def is_token_valid(token: str = Depends(oauth2_scheme)):
+    if token != os.environ.get("ABI_API_KEY"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key is missing",
+            detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return True
 
-    if api_key == "abi":
-        return api_key
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+
+@app.post("/token")
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+    if form_data.password != "abi":
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    return {"access_token": "abi", "token_type": "bearer"}
 
 # Create Assistants API Router
 assistants_router = APIRouter(
     prefix="/assistants", 
     tags=["Assistants"],
     responses={404: {"description": "Not found"}},
-    dependencies=[Depends(verify_token)]  # Apply token verification
+    dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
 supervisor_agent = create_supervisor_agent()
@@ -139,7 +181,7 @@ pipelines_router = APIRouter(
     prefix="/pipelines", 
     tags=["Pipelines"],
     responses={404: {"description": "Not found"}},
-    dependencies=[Depends(verify_token)]  # Apply token verification
+    dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
 # Initialize services
