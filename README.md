@@ -405,7 +405,7 @@ Merge your branch into main.
 
 1. Navigate to your repository's Settings > Secrets and variables > Actions
 2. Add the following secrets:
-   - `GITHUB_ACCESS_TOKEN`: Your GitHub Classic Personal Access Token
+   - `ACCESS_TOKEN`: Your GitHub Classic Personal Access Token
    - `OPENAI_API_KEY`: Your OpenAI API key
    - `NAAS_CREDENTIALS_JWT_TOKEN`: Your NAAS Credentials JWT Token
    - `ABI_API_KEY`: Your key to access the API
