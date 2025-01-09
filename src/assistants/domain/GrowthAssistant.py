@@ -3,6 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
 from src.workflows.growth_assistant.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
+from fastapi import APIRouter
 
 DESCRIPTION = "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_marketing.png"
@@ -51,12 +52,24 @@ def create_growth_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
-    return Agent(
+    return GrowthAssistant(
         name="growth_assistant", 
-        description="Use for growth and marketing analysis",
+        description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
+
+class GrowthAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "growth", 
+            name: str = "Growth Assistant", 
+            description: str = "API endpoints to call the Growth assistant completion.", 
+            description_stream: str = "API endpoints to call the Growth assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)
