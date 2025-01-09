@@ -33,7 +33,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_ACCESS_TOKEN }}
+          password: ${{ secrets.ACCESS_TOKEN }}
       
       - name: Install naas-python
         run: |
@@ -50,7 +50,7 @@ jobs:
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_ACCESS_TOKEN }}
+          GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           REPLICATE_API_KEY: ${{ secrets.REPLICATE_API_KEY }}
