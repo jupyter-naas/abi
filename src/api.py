@@ -85,8 +85,8 @@ async def is_token_valid(token: str = Depends(oauth2_scheme)):
     return True
 
 
-@app.post("/token")
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], include_in_schema=False):
+@app.post("/token", include_in_schema=False)
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     if form_data.password != "abi":
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
@@ -101,70 +101,28 @@ assistants_router = APIRouter(
 )
 
 supervisor_agent = create_supervisor_agent()
-supervisor_agent.as_api(
-    assistants_router,
-    route_name="supervisor",
-    name="Supervisor Assistant",
-    description="API endpoints to call the Supervisor assistant completion.",
-    description_stream="API endpoints to call the Supervisor assistant stream completion."
-)
+supervisor_agent.as_api(assistants_router)
 
 support_agent = create_support_assistant()
-support_agent.as_api(
-    assistants_router,
-    route_name="support",
-    name="Support Assistant",
-    description="API endpoints to call the Support assistant completion.",
-    description_stream="API endpoints to call the Support assistant stream completion."
-)
+support_agent.as_api(assistants_router)
 
 open_data_agent = create_open_data_assistant()
-open_data_agent.as_api(
-    assistants_router,
-    route_name="open-data",
-    name="Open Data Assistant",
-    description="API endpoints to call the Open Data assistant completion.",
-    description_stream="API endpoints to call the Open Data assistant stream completion."
-)
+open_data_agent.as_api(assistants_router)
 
 content_agent = create_content_assistant()
 content_agent.as_api(assistants_router)
 
 growth_agent = create_growth_assistant()
-growth_agent.as_api(
-    assistants_router,
-    route_name="growth",
-    name="Growth Assistant",
-    description="API endpoints to call the Growth assistant completion.",
-    description_stream="API endpoints to call the Growth assistant stream completion."
-)
+growth_agent.as_api(assistants_router)
 
 sales_agent = create_sales_assistant()
-sales_agent.as_api(
-    assistants_router,
-    route_name="sales",
-    name="Sales Assistant",
-    description="API endpoints to call the Sales assistant completion.",
-    description_stream="API endpoints to call the Sales assistant stream completion."
-)
+sales_agent.as_api(assistants_router)
 
 operations_agent = create_operations_assistant()
-operations_agent.as_api(
-    assistants_router,
-    route_name="operations",
-    name="Operations Assistant",
-    description="API endpoints to call the Operations assistant completion.",
-    description_stream="API endpoints to call the Operations assistant stream completion."
-)
+operations_agent.as_api(assistants_router)
 
 finance_agent = create_finance_assistant()
-finance_agent.as_api(
-    assistants_router,
-    route_name="finance",
-    name="Finance Assistant",
-    description="API endpoints to call the Finance assistant completion.",
-    description_stream="API endpoints to call the Finance assistant stream completion."
-)
+finance_agent.as_api(assistants_router)
 
 # Create Pipelines API Router
 pipelines_router = APIRouter(
@@ -216,56 +174,21 @@ def get_git_tag():
         tag = "v0.0.1"
     return tag
 
+from src.openapi_doc import tags_metadata, api_landing_html
+
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     openapi_schema = get_openapi(
-        title="ABI API",
-        description="API for ABI, your Artifical Business Intelligence",
+        title=TITLE,
+        description=DESCRIPTION,
         version=get_git_tag(),
         routes=app.routes,
-        tags=[
-            {
-                "name": "Overview",
-                "description": "The ABI (Artificial Business Intelligence) API allows users and applications to interact with ABI's capabilities for business process automation and intelligence. This document describes the current version of the ABI API, which provides access to assistants, pipelines, workflows, integrations, ontology management and analytics features."
-            },
-            {
-                "name": "Data Access",
-                "description": "Data access is currently configured using secrets (API keys, credentials) set up in the GitHub project settings. In an upcoming update, ABI will integrate with the Naas platform to securely access user-specific secrets and credentials."
-            },
-            {
-                "name": "Authentication",
-                "description": "Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>').\nThe token must match the ABI_API_KEY environment variable."
-            },
-            {
-                "name": "Assistants",
-                "description": "API endpoints for interacting with ABI's assistant/agents."
-            },
-            {
-                "name": "Pipelines", 
-                "description": "API endpoints for interacting with ABI's pipelines."
-            },
-            {
-                "name": "Workflows",
-                "description": "API endpoints for interacting with ABI's workflows."
-            },
-            {
-                "name": "Integrations",
-                "description": "API endpoints for interacting with ABI's integrations."
-            },
-            {
-                "name": "Ontology",
-                "description": "API endpoints for interacting with ABI's ontology."
-            },
-            {
-                "name": "Analytics",
-                "description": "API endpoints for interacting with ABI's analytics."
-            },
-        ]
+        tags=tags_metadata
     )
     openapi_schema["info"]["x-logo"] = {
         "url": "/static/logo.png",
-        "altText": "ABI Logo"
+        "altText": "Logo"
     }
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -274,62 +197,7 @@ app.openapi = custom_openapi
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return """
-    <!DOCTYPE html>
-    <html>
-        <head>
-            <title>ABI API</title>
-            <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    height: 100vh;
-                    margin: 0;
-                    background-color: #000000;
-                    color: white;
-                }
-                .logo {
-                    width: 200px;
-                    margin-bottom: 20px;
-                }
-                h1 {
-                    font-size: 48px;
-                    margin-bottom: 40px;
-                }
-                .buttons {
-                    display: flex;
-                    gap: 20px;
-                }
-                a {
-                    padding: 12px 24px;
-                    font-size: 18px;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    text-decoration: none;
-                    color: white;
-                    background-color: #007bff;
-                    transition: background-color 0.2s;
-                }
-                a:hover {
-                    background-color: #0056b3;
-                }
-            </style>
-        </head>
-        <body>
-            <img src="/static/logo.png" alt="Naas Logo" class="logo">
-            <h1>Welcome to ABI API!</h1>
-            <p>ABI API is a tool that allows you to interact with ABI's capabilities for business process automation and intelligence.</p>
-            <div class="buttons">
-                <a href="/redoc">Go to Documentation</a>
-            </div>
-        </body>
-    </html>
-    """
+    return api_landing_html.replace("[TITLE]", TITLE)
 
 def api():
     import uvicorn
