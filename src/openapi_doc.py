@@ -26,7 +26,7 @@ Contact your administrator to get the token.
 ```python
 import requests
 
-url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion"
+url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion" # Replace <your-registry-name> with your registry name set in .github/workflows/deploy_api.yml
 
 headers = {
     "Authorization": f"Bearer {token}"
@@ -41,7 +41,7 @@ print(response.json())
 ```python
 import requests
 
-url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
+url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion?token=<token>" # Replace <your-registry-name> with your registry name set in .github/workflows/deploy_api.yml
 
 response = requests.post(url)
 print(response.json())
