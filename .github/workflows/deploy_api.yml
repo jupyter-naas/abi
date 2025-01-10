@@ -49,8 +49,8 @@ jobs:
       - name: Push latest abi container
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
-          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
         run: |
           docker pull ghcr.io/${{ github.repository }}/abi:latest
@@ -66,10 +66,11 @@ jobs:
           docker push $URI:$TIMESTAMP
           
           ENV_CONFIG="{\
-          "OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\
-          "NAAS_API_KEY\":\"$NAAS_CREDENTIALS_JWT_TOKEN\",\
-          "GITHUB_ACCESS_TOKEN\":\"$ACCESS_TOKEN\",\
-          "ABI_API_KEY\":\"$ABI_API_KEY\"}"
+          \"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\
+          \"NAAS_API_KEY\":\"$NAAS_CREDENTIALS_JWT_TOKEN\",\
+          \"GITHUB_ACCESS_TOKEN\":\"$ACCESS_TOKEN\",\
+          \"ABI_API_KEY\":\"$ABI_API_KEY\",\
+          }"
           
           naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
            || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
