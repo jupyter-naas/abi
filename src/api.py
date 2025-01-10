@@ -7,7 +7,11 @@ from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.security.utils import get_authorization_scheme_param
 from src import secret
 import subprocess
-import os 
+import os
+from abi import logger
+# Authentication
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Annotated
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
@@ -30,14 +34,15 @@ from abi.services.ontology_store.OntologyStoreService import OntologyStoreServic
 from src.openapi_doc import TITLE, DESCRIPTION, TAGS_METADATA, API_LANDING_HTML
 
 # Init API
-app = FastAPI(title=TITLE)
+app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
+# Set logo path
+logo_path = "assets/logo.png"
+if not os.path.exists(logo_path):
+    logo_path = "assets/logo_default.png"
+logo_name = os.path.basename(logo_path)
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
-
-# Authentication
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Annotated
 
 # Custom OAuth2 class that accepts query parameter
 class OAuth2QueryBearer(OAuth2):
@@ -93,9 +98,9 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
 
 # Create Assistants API Router
 assistants_router = APIRouter(
-    prefix="/assistants", 
+    prefix="/assistants",
     tags=["Assistants"],
-    responses={404: {"description": "Not found"}},
+    responses={401: {"description": "Unauthorized"}},
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
@@ -127,7 +132,7 @@ finance_agent.as_api(assistants_router)
 pipelines_router = APIRouter(
     prefix="/pipelines", 
     tags=["Pipelines"],
-    responses={404: {"description": "Not found"}},
+    responses={401: {"description": "Unauthorized"}},
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
@@ -184,7 +189,7 @@ def custom_openapi():
         tags=TAGS_METADATA
     )
     openapi_schema["info"]["x-logo"] = {
-        "url": "/static/logo.png",
+        "url": f"/static/{logo_name}",
         "altText": "Logo"
     }
     app.openapi_schema = openapi_schema
@@ -192,9 +197,19 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+
+@app.get("/docs", include_in_schema=False)
+def overridden_swagger():
+	return get_swagger_ui_html(openapi_url="/openapi.json", title=TITLE, swagger_favicon_url=f"/static/favicon.ico")
+
+@app.get("/redoc", include_in_schema=False)
+def overridden_redoc():
+	return get_redoc_html(openapi_url="/openapi.json", title=TITLE, redoc_favicon_url=f"/static/favicon.ico")
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
-    return API_LANDING_HTML.replace("[TITLE]", TITLE)
+    return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
 def api():
     import uvicorn
