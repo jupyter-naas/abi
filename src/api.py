@@ -5,6 +5,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.security.oauth2 import OAuth2
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.security.utils import get_authorization_scheme_param
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from src import secret
 import subprocess
 import os
@@ -41,6 +42,7 @@ logo_path = "assets/logo.png"
 if not os.path.exists(logo_path):
     logo_path = "assets/logo_default.png"
 logo_name = os.path.basename(logo_path)
+
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
 
@@ -196,8 +198,6 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
-
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 
 @app.get("/docs", include_in_schema=False)
 def overridden_swagger():
