@@ -15,6 +15,40 @@ This document describes the current version of the ABI API, which provides acces
         """
     },
     {
+        "name": "Authentication",
+        "description": """
+Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>'). 
+The token must match the ABI_API_KEY environment variable.
+Contact your administrator to get the token.
+
+*Authentication with Authorization header:*
+
+```python
+import requests
+
+url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion"
+
+headers = {
+    "Authorization": f"Bearer {token}"
+}
+
+response = requests.post(url, headers=headers)
+print(response.json())
+```
+
+*Authentication with query parameter:*
+
+```python
+import requests
+
+url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
+
+response = requests.post(url)
+print(response.json())
+```
+        """
+    },
+    {
         "name": "Connections",
         "description": """
 Connections are currently configured using Integration secrets (API keys, credentials) set up in the GitHub project settings. \n
@@ -178,40 +212,6 @@ Required:
         """
     },
     {
-        "name": "Authentication",
-        "description": """
-Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>'). 
-The token must match the ABI_API_KEY environment variable.
-Contact your administrator to get the token.
-
-**Code example with Authorization header:**
-
-```python
-import requests
-
-url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion"
-
-headers = {
-    "Authorization": f"Bearer {token}"
-}
-
-response = requests.post(url, headers=headers)
-print(response.json())
-```
-
-**Code example with query parameter:**
-
-```python
-import requests
-
-url = "https://abi-api.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
-
-response = requests.post(url)
-print(response.json())
-```
-        """
-    },
-    {
         "name": "Assistants",
         "description": """
 API endpoints for interacting with ABI's assistant/agents.
@@ -324,7 +324,7 @@ API_LANDING_HTML = """
         </style>
     </head>
     <body>
-        <img src="/static/logo.png" alt="Logo" class="logo">
+        <img src="/static/[LOGO_NAME]" alt="Logo" class="logo">
         <h1>Welcome to [TITLE]!</h1>
         <p>[TITLE] is a tool that allows you to interact with ABI's capabilities for business process automation and intelligence.</p>
         <div class="buttons">
