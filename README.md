@@ -4,10 +4,10 @@
 
 <img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
-## Table of Content
+## Table of Contents
 
 - [ABI](#abi)
-  - [Table of Content](#table-of-content)
+  - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
     - [Key Features](#key-features)
     - [License](#license)
@@ -17,6 +17,7 @@
     - [Managing Dependencies](#managing-dependencies)
       - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
       - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
+    - [Setup Git remote](#setup-git-remote)
   - [Build New Components](#build-new-components)
     - [Create Integration](#create-integration)
     - [Create Pipeline](#create-pipeline)
@@ -39,6 +40,7 @@
     - [Customize Deployment Configuration](#customize-deployment-configuration)
     - [Deployment Process](#deployment-process)
     - [Monitoring Deployment](#monitoring-deployment)
+    - [Customize API](#customize-api)
   - [Cursor users](#cursor-users)
   - [Contributing](#contributing)
   - [Support](#support)
@@ -465,5 +467,4 @@ More will be added as we add more components to the framework.
 3. Open a pull request to the main branch.
 
 ## Support
-For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2wjo50ks0-KhYxmgW6PZVe72Aj3tGi9Q) on Slack.
-
+For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2xmz8c3j8-OH3UAqvwsYkTR3BLRHGXeQ) on Slack.
