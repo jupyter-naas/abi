@@ -430,6 +430,28 @@ The API deployment is automated through GitHub Actions and triggers when:
 2. Look for the "ABI API" workflow
 3. Check the latest workflow run for deployment status and logs
 
+### Customize API
+
+To customize the API appearance and functionality:
+
+1. Add custom branding:
+   - Place `logo.png` and `favicon.ico` in the `assets` folder
+
+2. Update API documentation:
+   - Modify TITLE and DESCRIPTION in `src/openapi_docs.py`
+   - Customize documentation structure by editing `src/openapi_docs.py`
+
+3. Add new routes:
+   - Add route handlers in `src/api.py`
+   - Example: Adding a new assistant
+   - Import your assistant from `src/assistants/custom/YourAssistant.py`
+   - Add it to the `assistants_router` variable as follow:
+   ```python
+   from src.assistants.custom.YourAssistant import create_your_assistant
+   your_assistant = create_your_assistant()
+   your_assistant.as_api(assistants_router)
+   ```
+
 ## Cursor users
 
 For Cursor users there is the [.cursorrules](.cursorrules) file already configured to help you create new Integrations, Pipelines and Workflows.
