@@ -1,5 +1,16 @@
+import yaml
+
+def get_registry_name():
+    try:
+        with open('.github/workflows/deploy_api.yml', 'r') as file:
+            config = yaml.safe_load(file)
+            return config.get('env', {}).get('REGISTRY_NAME')
+    except:
+        return "abi-api" # Default fallback value
+
+REGISTRY_NAME = get_registry_name() # Variable to be used in Authentication section
 TITLE = "ABI API"
-DESCRIPTION = "API for ABI, your Artifical Business Intelligence"
+DESCRIPTION = "API for ABI, your Artifical Business Intelligence" 
 TAGS_METADATA = [
     {
         "name": "Overview",
@@ -16,7 +27,7 @@ This document describes the current version of the ABI API, which provides acces
     },
     {
         "name": "Authentication",
-        "description": """
+        f"description": f"""
 Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer <token>') or as a query parameter (e.g. '?token=<token>'). 
 The token must match the ABI_API_KEY environment variable.
 Contact your administrator to get the token.
@@ -26,11 +37,11 @@ Contact your administrator to get the token.
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion" # Replace <your-registry-name> with your registry name set in .github/workflows/deploy_api.yml
+url = "https://{REGISTRY_NAME}.default.space.naas.ai/assistants/supervisor/completion"
 
-headers = {
-    "Authorization": f"Bearer {token}"
-}
+headers = {{
+    "Authorization": f"Bearer {{token}}"
+}}
 
 response = requests.post(url, headers=headers)
 print(response.json())
@@ -41,7 +52,7 @@ print(response.json())
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion?token=<token>" # Replace <your-registry-name> with your registry name set in .github/workflows/deploy_api.yml
+url = "https://{REGISTRY_NAME}.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
 
 response = requests.post(url)
 print(response.json())
