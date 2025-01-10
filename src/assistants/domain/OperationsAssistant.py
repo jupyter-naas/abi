@@ -15,10 +15,10 @@ from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__Second
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
-from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration
 from src.workflows.operations_assistant.NaasStorageWorkflows import NaasStorageWorkflows, NaasStorageWorkflowsConfiguration
 from src.workflows.operations_assistant.NaasWorkspaceWorkflows import NaasWorkspaceWorkflows, NaasWorkspaceWorkflowsConfiguration
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from fastapi import APIRouter
 
 DESCRIPTION = "An Operations Assistant that manages tasks and projects to improve operational efficiency."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/operations_efficiency.png"
@@ -108,14 +108,6 @@ def create_operations_assistant(
         ontology_store=ontology_store
     ))
     tools += get_top_priorities_workflow.as_tools()
-
-    # Add UpdateAlgoliaIndexWorkflow tool
-    if secret.get('ALGOLIA_APPLICATION_ID') and secret.get('ALGOLIA_API_KEY'):
-        algolia_integration_config = AlgoliaIntegrationConfiguration(app_id=secret.get("ALGOLIA_APPLICATION_ID"), api_key=secret.get("ALGOLIA_API_KEY"))
-        update_algolia_index_workflow = UpdateAlgoliaIndex(UpdateAlgoliaIndexConfiguration(
-            algolia_integration_config=algolia_integration_config
-        ))
-        tools += update_algolia_index_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:
@@ -127,12 +119,24 @@ def create_operations_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
-    return Agent(
+    return OperationsAssistant(
         name="operations_assistant", 
-        description="Use for operations and marketing analysis",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
+
+class OperationsAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "operations", 
+            name: str = "Operations Assistant", 
+            description: str = "API endpoints to call the Operations assistant completion.", 
+            description_stream: str = "API endpoints to call the Operations assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)

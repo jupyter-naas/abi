@@ -5,6 +5,7 @@ from src.integrations import ReplicateIntegration
 from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
 from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
 from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
+from fastapi import APIRouter
 
 DESCRIPTION = "A Content Assistant that helps optimize content strategy and audience engagement."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/content_creation.png"
@@ -59,12 +60,24 @@ def create_content_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
-    return Agent(
+    return ContentAssistant(
         name="content_assistant",
-        description="Use for content analysis and optimization",
+        description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
-    ) 
+    )
+
+class ContentAssistant(Agent):
+    def as_api(
+            self, 
+            router: APIRouter, 
+            route_name: str = "content", 
+            name: str = "Content Assistant", 
+            description: str = "API endpoints to call the Content assistant completion.", 
+            description_stream: str = "API endpoints to call the Content assistant stream completion.",
+            tags: list[str] = []
+        ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)

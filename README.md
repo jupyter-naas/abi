@@ -4,10 +4,10 @@
 
 <img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
-## Table of Content
+## Table of Contents
 
 - [ABI](#abi)
-  - [Table of Content](#table-of-content)
+  - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
     - [Key Features](#key-features)
     - [License](#license)
@@ -17,6 +17,7 @@
     - [Managing Dependencies](#managing-dependencies)
       - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
       - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
+    - [Setup Git remote](#setup-git-remote)
   - [Build New Components](#build-new-components)
     - [Create Integration](#create-integration)
     - [Create Pipeline](#create-pipeline)
@@ -39,6 +40,7 @@
     - [Customize Deployment Configuration](#customize-deployment-configuration)
     - [Deployment Process](#deployment-process)
     - [Monitoring Deployment](#monitoring-deployment)
+    - [Customize API](#customize-api)
   - [Cursor users](#cursor-users)
   - [Contributing](#contributing)
   - [Support](#support)
@@ -408,27 +410,49 @@ Merge your branch into main.
    - `ACCESS_TOKEN`: Your GitHub Classic Personal Access Token
    - `OPENAI_API_KEY`: Your OpenAI API key
    - `NAAS_CREDENTIALS_JWT_TOKEN`: Your NAAS Credentials JWT Token
+   - `ABI_API_KEY`: Your key to access the API
 
 ### Customize Deployment Configuration
 
 1. Open `.github/workflows/deploy_api.yml`
-2. Update the space name to match your project:
-   ```yaml
-   naas-python space create --name=your-api-name # Replace 'abi-api' with your desired name
-   ```
+2. Update the registry name: REGISTRY_NAME
+3. Add your github secrets in the env section of the: 'Push latest abi container'.
+4. Pass the secrets to space environment in ENV_CONFIG.
 
 ### Deployment Process
 
 The API deployment is automated through GitHub Actions and triggers when:
 1. A new container is built (via the "Build ABI Container" workflow)
 2. The deployment workflow creates/updates a NAAS space with the latest container image
-3. The API will be accessible through the NAAS platform once deployment is complete
+3. The API will be accessible through the NAAS platform once deployment is complete as the following URL: https://<REGISTRY_NAME>.default.space.naas.ai/
 
 ### Monitoring Deployment
 
 1. Go to your repository's Actions tab
 2. Look for the "ABI API" workflow
 3. Check the latest workflow run for deployment status and logs
+
+### Customize API
+
+To customize the API appearance and functionality:
+
+1. Add custom branding:
+   - Place `logo.png` and `favicon.ico` in the `assets` folder
+
+2. Update API documentation:
+   - Modify TITLE and DESCRIPTION in `src/openapi_docs.py`
+   - Customize documentation structure by editing `src/openapi_docs.py`
+
+3. Add new routes:
+   - Add route handlers in `src/api.py`
+   - Example: Adding a new assistant
+   - Import your assistant from `src/assistants/custom/YourAssistant.py`
+   - Add it to the `assistants_router` variable as follow:
+   ```python
+   from src.assistants.custom.YourAssistant import create_your_assistant
+   your_assistant = create_your_assistant()
+   your_assistant.as_api(assistants_router)
+   ```
 
 ## Cursor users
 
@@ -443,5 +467,4 @@ More will be added as we add more components to the framework.
 3. Open a pull request to the main branch.
 
 ## Support
-For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2wjo50ks0-KhYxmgW6PZVe72Aj3tGi9Q) on Slack.
-
+For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2xmz8c3j8-OH3UAqvwsYkTR3BLRHGXeQ) on Slack.

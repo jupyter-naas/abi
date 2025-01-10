@@ -10,6 +10,7 @@ ADD ./Makefile /app/Makefile
 ADD ./poetry.lock /app/poetry.lock
 ADD ./pyproject.toml /app/pyproject.toml
 ADD ./README.md /app/README.md
+ADD ./.git /app/.git
 
 RUN pip install poetry
 RUN poetry install
