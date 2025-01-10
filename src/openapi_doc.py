@@ -1,5 +1,5 @@
 TITLE = "ABI Forvis Mazars API"
-DESCRIPTION = "API for ABI Forvis Mazars, your Artifical Business Intelligence"
+DESCRIPTION = "ABI API for Forvis Mazars, your Artifical Business Intelligence"
 TAGS_METADATA = [
     {
         "name": "Overview",
