@@ -16,18 +16,6 @@
                                     dc:title "Naas Application Ontology" .
 
 #################################################################
-#    Annotation properties
-#################################################################
-
-#################################################################
-#    Data properties
-#################################################################
-
-#################################################################
-#    Object Properties
-#################################################################
-
-#################################################################
 #    Classes
 #################################################################
 
@@ -41,4 +29,151 @@ abi:NaasUser a owl:Class ;
     rdfs:subClassOf abi:User ;
     rdfs:label "Naas User"@en ;
     skos:definition "An individual who uses Naas's platform to create and manage data workflows and automated processes."@en ;
-    skos:example "A data analyst creating automated reports using Naas notebooks."@en . 
+    skos:example "A data analyst creating automated reports using Naas notebooks."@en .
+
+abi:NaasWorkspace rdf:type owl:Class ;
+    rdfs:subClassOf BFO_0000030 ;
+    rdfs:label "Workspace"@en ;
+    skos:definition "A workspace that encompasses various components such as chats, workflows, data, analytics, assistants, ontologies."@en ;
+    skos:example "A NAAS workspace integrating multiple assistants and ontologies."@en .
+
+abi:NAASWorkspaceObject rdf:type owl:Class ;
+    rdfs:subClassOf BFO_0000024 ;
+    rdfs:label "NAAS Workspace Object"@en ;
+    skos:definition "An entity that can be a component of a NAAS workspace, including assistants, ontologies, chats, workflows, analytics, data, and integrations."@en ;
+    skos:example "A software module for data analytics or an AI assistant for service management in a NAAS workspace."@en .
+
+abi:Domain rdf:type owl:Class ;
+    rdfs:subClassOf BFO_0000030 ;
+    rdfs:label "Domain"@en ;
+    skos:definition "A specific area of expertise or focus for an assistant."@en ;
+    skos:example "Healthcare, Finance, Education."@en .
+
+abi:Ontology rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Ontology"@en ;
+    skos:definition "A structured framework used by an assistant to understand and organize information."@en ;
+    skos:example "FHIR for healthcare, FOAF for social networks."@en .
+
+abi:Assistant rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Assistant"@en ;
+    skos:definition "An entity that provides expertise or services in a specific domain."@en ;
+    skos:example "AIA, ABI, CAI"@en .
+
+abi:Chat rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Chat"@en ;
+    skos:definition "A communication interface for real-time text-based conversation within a NAAS workspace."@en ;
+    skos:example "A customer support chat interface."@en .
+
+abi:Workflow rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Workflow"@en ;
+    skos:definition "A series of automated steps or processes designed to achieve a specific goal within a NAAS workspace."@en ;
+    skos:example "An automated onboarding workflow for new users."@en .
+
+abi:Analytics rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Analytics"@en ;
+    skos:definition "Tools or processes used to analyze data and extract insights within a NAAS workspace."@en ;
+    skos:example "A dashboard for monitoring network performance metrics."@en .
+
+abi:Data rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Data"@en ;
+    skos:definition "Information processed or stored by a computer system within a NAAS workspace."@en ;
+    skos:example "User profile data or network configuration files."@en .
+
+abi:Integration rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Integration"@en ;
+    skos:definition "The process or system of linking together different computing systems and software applications within a NAAS workspace."@en ;
+    skos:example "Integration between a CRM system and a marketing platform."@en .
+
+abi:AIModel rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "AI Model"@en ;
+    skos:definition "An artificial intelligence model that is used to perform specific tasks within a NAAS workspace."@en ;
+    skos:example "A neural network model for image recognition or a language model for text processing."@en .
+
+abi:Temperature rdf:type owl:Class ;
+    rdfs:subClassOf abi:NAASWorkspaceObject ;
+    rdfs:label "Temperature"@en ;
+    skos:definition "A parameter used in AI models to control the randomness of predictions, affecting the creativity and diversity of the outputs."@en ;
+    skos:example "A temperature setting of 0.7 used in a language model to generate diverse yet coherent text."@en . 
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:attachedToDomain rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Domain ;
+    rdfs:label "attached to domain"@en ;
+    skos:definition "A relation between an assistant and its domain of expertise."@en .
+
+abi:usesOntology rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Ontology ;
+    rdfs:label "uses ontology"@en ;
+    skos:definition "A relation between an assistant and the ontology it uses."@en .
+
+abi:partOfWorkspace rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:NAASWorkspaceObject ;
+    rdfs:range abi:Workspace ;
+    rdfs:label "part of workspace"@en ;
+    skos:definition "A relation indicating that an assistant or ontology is part of a workspace."@en .
+
+abi:utilizesAIModel rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:AIModel ;
+    rdfs:label "utilizes AI model"@en ;
+    skos:definition "A relation between an assistant and the AI model it utilizes for performing tasks."@en .
+
+abi:appliesTemperature rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:AIModel ;
+    rdfs:range abi:Temperature ;
+    rdfs:label "applies temperature"@en ;
+    skos:definition "A relation between an AI model and the temperature parameter it applies."@en .
+
+abi:executesWorkflow rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Workflow ;
+    rdfs:label "executes workflow"@en ;
+    skos:definition "A relation between an assistant and a workflow it executes."@en .
+
+abi:processesData rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Data ;
+    rdfs:label "processes data"@en ;
+    skos:definition "A relation between an assistant and the data it processes."@en .
+
+abi:utilizesAnalytics rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Analytics ;
+    rdfs:label "utilizes analytics"@en ;
+    skos:definition "A relation between an assistant and the analytics it utilizes for decision making."@en .
+
+abi:integratesWith rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Integration ;
+    rdfs:label "integrates with"@en ;
+    skos:definition "A relation between an assistant and the integration systems it interacts with."@en .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+#################################################################
+#    Data properties
+#################################################################
