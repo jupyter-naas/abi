@@ -1,0 +1,89 @@
+name: Update Services
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+jobs:
+  check-commit-and-fork:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check commit message and fork status
+        id: check
+        run: |
+          # Check if repository is a fork
+          IS_FORK="${{ github.repository != github.repository_owner }}"
+          
+          # Get commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          
+          # Check if commit message starts with feat: or fix:
+          if [[ $COMMIT_MSG =~ ^(feat|fix): ]] && [ "$IS_FORK" = "false" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
+  update-services:
+    needs: check-commit-and-fork
+    if: needs.check-commit-and-fork.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Update ABI Ontology Graph
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          DEMO_WORKSPACE_ID: ${{ secrets.DEMO_WORKSPACE_ID }}
+        run: python UpdateABIOntology.py
+
+      - name: Update Algolia Index
+        env:
+          ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
+          ALGOLIA_API_KEY: ${{ secrets.ALGOLIA_API_KEY }}
+        run: |
+          python -c "
+          from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
+          from src.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
+          import asyncio
+          import os
+
+          # Create configurations
+          algolia_config = AlgoliaIntegrationConfiguration(
+              app_id=os.environ['ALGOLIA_APP_ID'],
+              api_key=os.environ['ALGOLIA_API_KEY']
+          )
+          workflow_config = UpdateAlgoliaIndexConfiguration(
+              algolia_integration_config=algolia_config
+          )
+
+          # Create and run workflow
+          workflow = UpdateAlgoliaIndex(workflow_config)
+          result = asyncio.run(workflow.run(UpdateAlgoliaIndexParameters(
+              index_name='workspace-search',
+              branch_name='main'
+          )))
+          print(f'Update complete: {result}')
+          "
