@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for business contacts."@en ;
     dc:license "" ;
-    dc:title "Contact Domain Ontology" .
+    dc:title "Contact Ontology" .
 
 #################################################################
 #    Classes
