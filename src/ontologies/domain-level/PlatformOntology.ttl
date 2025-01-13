@@ -35,9 +35,17 @@ abi:User a owl:Class ;
     skos:example "A user with access to a platform or service."@en .
 
 abi:EmailAddress a owl:Class ;
-    rdfs:subClassOf cco:ont00000649 ;
+    rdfs:subClassOf cco:ont00000649 ; # Non-Name Identifier
     rdfs:label "Email Address" ;
-    rdfs:comment "An Email Address is a Non-Name Identifier that consists of a string of characters formatted according to the syntax of an email, which includes a local part, an '@' symbol, and a domain part. It designates a communication endpoint for an agent." .
+    skos:definition "An Email Address is a Non-Name Identifier that consists of a string of characters formatted according to the syntax of an email, which includes a local part, an '@' symbol, and a domain part. It designates a communication endpoint for an agent." ;
+    skos:example "jeremy@naas.ai"@en .
+
+abi:DigitalWorkspace a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Digital Workspace" ;
+    skos:definition "A Digital Workspace is an Information Bearing Entity that provides an online environment for individuals or groups to perform tasks and collaborate on projects. It typically includes tools and resources necessary for communication, file sharing, and task management." ;
+    skos:example "A workspace for a data team to collaborate on projects."@en .
+    rdfs:comment "A Digital Workspace is fundamentally an Information Bearing Entity because it is a structured environment that supports the creation, manipulation, and sharing of information. It serves as a medium through which information processes are carried out in a digital format." ;
 
 #################################################################
 #    Object Properties
@@ -52,11 +60,25 @@ abi:usesEmail a owl:ObjectProperty ;
 
 abi:isEmailUsedBy a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000102 ;  # is carried by
-    rdfs:domain abi:EmailAddress ;         # range is email address
-    rdfs:range cco:Agent ;               # domain is agent
+    rdfs:domain abi:EmailAddress ;        # range is email address
+    rdfs:range cco:Agent ;                # domain is agent
     rdfs:label "is email used by" ;
     owl:inverseOf abi:usesEmail ;
     rdfs:comment "A subproperty that relates an email address to the agent who owns it." .
+
+abi:isOperatedOnPlatform a owl:ObjectProperty ;
+    rdfs:domain abi:DigitalWorkspace ;
+    rdfs:range abi:Platform ;
+    rdfs:label "is operated on platform" ;
+    rdfs:definition "Relates a Digital Workspace to the Platform on which it operates, indicating the technological or infrastructural basis that supports the digital environment." ;
+    rdfs:comment "This property captures the dependency of a Digital Workspace on a specific technological platform, which is crucial for its operation and functionality." .
+
+abi:isOperatedBy a owl:ObjectProperty ;
+    rdfs:domain abi:DigitalWorkspace ;
+    rdfs:range abi:User ;
+    rdfs:label "is operated by" ;
+    rdfs:definition "Relates a Digital Workspace to the User who operates it, indicating the agent responsible for managing the digital environment." ;
+    rdfs:comment "This property captures the dependency of a Digital Workspace on a specific agent, which is crucial for its operation and functionality." .
 
 #################################################################
 #    Data Properties
