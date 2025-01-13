@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for products and services offerings."@en ;
     dc:license "" ;
-    dc:title "Offering Domain Ontology" .
+    dc:title "Offering Ontology" .
 
 #################################################################
 #    Classes

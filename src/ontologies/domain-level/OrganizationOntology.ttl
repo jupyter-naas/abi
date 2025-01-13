@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for organizations and companies."@en ;
     dc:license "" ;
-    dc:title "Organization Domain Ontology" .
+    dc:title "Organization Ontology" .
 
 #################################################################
 #    Classes

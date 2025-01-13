@@ -14,7 +14,7 @@
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/TaskOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for tasks."@en ;
-    dc:title "Task Domain Ontology" .
+    dc:title "Task Ontology" .
 
 #################################################################
 #    Classes

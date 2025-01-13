@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for digital resources and assets."@en ;
     dc:license "" ;
-    dc:title "Resource Domain Ontology" .
+    dc:title "Resource Ontology" .
 
 #################################################################
 #    Classes
