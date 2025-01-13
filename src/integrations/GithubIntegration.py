@@ -692,6 +692,14 @@ class GithubIntegration(Integration):
         """
         return self._make_request("GET", f"/repos/{repo_name}/actions/secrets")
     
+    def get_repository_secret(
+        self,
+        repo_name: str,
+        secret_name: str,
+    ) -> Dict:
+        """Get a repository secret."""
+        return self._make_request("GET", f"/repos/{repo_name}/actions/secrets/{secret_name}")
+    
     def create_or_update_repository_secret(
         self,
         repo_name: str,
@@ -870,6 +878,10 @@ def as_tools(configuration: GithubIntegrationConfiguration):
     class ListRepositorySecretsSchema(BaseModel):
         repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
 
+    class GetRepositorySecretSchema(BaseModel):
+        repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
+        secret_name: str = Field(..., description="Name of the secret")
+
     class CreateOrUpdateRepositorySecretSchema(BaseModel):
         repo_name: str = Field(..., description="Full repository name in format 'owner/repo'")
         secret_name: str = Field(..., description="Name of the secret")
@@ -1017,6 +1029,12 @@ def as_tools(configuration: GithubIntegrationConfiguration):
             description="List all secrets available in a GitHub repository without revealing their encrypted values",
             func=lambda repo_name: integration.list_repository_secrets(repo_name),
             args_schema=ListRepositorySecretsSchema
+        ),
+        StructuredTool(
+            name="get_repository_secret",
+            description="Get a secret from a GitHub repository",
+            func=lambda repo_name, secret_name: integration.get_repository_secret(repo_name, secret_name),
+            args_schema=GetRepositorySecretSchema
         ),
         StructuredTool(
             name="create_or_update_repository_secret",
