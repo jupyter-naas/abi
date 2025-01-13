@@ -16,7 +16,7 @@ class AiaIntegrationConfiguration(IntegrationConfiguration):
         base_url (str): Base URL for AIA API
     """
     api_key: str
-    base_url: str = "https://naas-abi-space.default.nebari.dev.naas.ai"  # Replace with actual base URL
+    base_url: str = "https://naas-abi-space.default.space.naas.ai"  # Replace with actual base URL
 
 class AiaIntegration(Integration):
     """AIA integration client.
