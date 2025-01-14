@@ -415,16 +415,16 @@ Merge your branch into main.
 ### Customize Deployment Configuration
 
 1. Open `.github/workflows/deploy_api.yml`
-2. Update the registry name: REGISTRY_NAME
-3. Add your github secrets in the env section of the: 'Push latest abi container'.
-4. Pass the secrets to space environment in ENV_CONFIG.
+2. Update the registry name: `REGISTRY_NAME`
+3. Add your github secrets in the env section of the: "Push latest abi container".
+4. Pass the secrets to space environment in `ENV_CONFIG`.
 
 ### Deployment Process
 
 The API deployment is automated through GitHub Actions and triggers when:
 1. A new container is built (via the "Build ABI Container" workflow)
 2. The deployment workflow creates/updates a NAAS space with the latest container image
-3. The API will be accessible through the NAAS platform once deployment is complete as the following URL: https://<REGISTRY_NAME>.default.space.naas.ai/
+3. The API will be accessible through the NAAS platform once deployment is complete as the following URL: `https://<REGISTRY_NAME>.default.space.naas.ai/`
 
 ### Monitoring Deployment
 
