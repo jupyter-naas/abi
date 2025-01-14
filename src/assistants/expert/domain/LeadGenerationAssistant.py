@@ -3,7 +3,7 @@ from src import secret
 from langchain_openai import ChatOpenAI
 from src.integrations import HubSpotIntegration, LinkedInIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
 from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
 from src.integrations.GoogleAnalyticsIntegration import GoogleAnalyticsIntegrationConfiguration
@@ -69,7 +69,7 @@ def create_lead_generation_assistant(
     li_at = secret.get('li_at')
     jsessionid = secret.get('jsessionid')
     if li_at and jsessionid:
-        tools += LinkedInIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        tools += LinkedInIntegration.as_tools(LinkedInIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
 
     pipedrive_api_key = secret.get('PIPEDRIVE_API_KEY')
     if pipedrive_api_key:
