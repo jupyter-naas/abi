@@ -213,4 +213,5 @@ def root():
 
 def api():
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=9879)
+    # uvicorn.run(app, host="0.0.0.0", port=9879, reload=True)
+    uvicorn.run('src.api:app', host="0.0.0.0", port=9879, reload=True)
