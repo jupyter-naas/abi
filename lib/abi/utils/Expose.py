@@ -22,7 +22,7 @@ class Expose(ABC):
         raise NotImplementedError()
     
     @abstractmethod
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(self, router: APIRouter, route_name: str, name: str, description: str = "", description_stream: str = "", tags: list[str] = []) -> None:
         """Registers API routes for the class's functionality on the provided FastAPI router.
         
         This method should be implemented by concrete classes to expose their functionality

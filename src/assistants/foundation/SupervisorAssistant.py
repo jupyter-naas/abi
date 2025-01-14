@@ -61,11 +61,7 @@ def create_supervisor_agent():
         create_support_assistant(AgentSharedState(thread_id=7), agent_configuration)
     ]
 
-    # Collect all tools from assistants
-    tools = []
-    for assistant in assistants:
-        tools.extend(assistant.as_tools())
-
+    # TODO: Consider moving this piece inside the Agent.py class directly ?
     # Get tools info from each assistant
     assistants_info = []
     for assistant in assistants[:-1]:  # Exclude support assistant
@@ -94,7 +90,8 @@ def create_supervisor_agent():
         name="supervisor_agent",
         description=DESCRIPTION,
         chat_model=model,
-        tools=tools,
+        tools=[], # We don't need tools because we will load agents as tools.
+        agents=assistants, # Agents will be loaded as tools.
         state=AgentSharedState(thread_id=8),
         configuration=agent_configuration,
         memory=MemorySaver()
