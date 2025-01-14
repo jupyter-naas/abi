@@ -239,20 +239,32 @@ class NaasIntegration(Integration):
         return self._make_request("DELETE", f"/workspace/{workspace_id}/plugin/{plugin_id}")
 
     # Ontology methods
-    def create_ontology(self, workspace_id: str, label: str, ontology: str, level: str) -> Dict:
+    def create_ontology(
+        self,
+        workspace_id: str,
+        label: str,
+        source: str,
+        level: str,
+        description: str = None,
+        logo_url: str = None
+    ) -> Dict:
         """Create a new ontology.
         
         Args:
             workspace_id (str): Workspace ID
             label (str): Label for the ontology
-            ontology (str): Ontology source/content
+            source (str): Ontology source/content
             level (str): Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP
+            description (str, optional): Description of the ontology
+            logo_url (str, optional): Logo URL for the ontology
         """
         payload = {"ontology": {
             "label": label,
-            "source": ontology,
+            "source": source,
             "workspace_id": workspace_id,
-            "level": level
+            "level": level,
+            "description": description,
+            "logo_url": logo_url
         }}
         return self._make_request("POST", "/ontology/", payload)
 
@@ -667,8 +679,10 @@ def as_tools(configuration: NaasIntegrationConfiguration):
     class CreateOntologySchema(BaseModel): 
         workspace_id: str = Field(..., description="Workspace ID to create an ontology in")
         label: str = Field(..., description="Label for the ontology")
-        ontology: str = Field(..., description="Ontology source/content")
+        source: str = Field(..., description="Ontology source/content")
         level: str = Field(..., description="Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP")
+        description: Optional[str] = Field(None, description="Description of the ontology")
+        logo_url: Optional[str] = Field(None, description="Logo URL for the ontology")
 
     class GetOntologySchema(BaseModel):
         workspace_id: str = Field(..., description="Workspace ID to get an ontology from")
@@ -820,7 +834,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="create_naas_ontology",
             description="Create a new ontology from workspace",
-            func=lambda workspace_id, label, ontology, level: integration.create_ontology(workspace_id, label, ontology, level),
+            func=lambda workspace_id, label, source, level, description, logo_url: integration.create_ontology(workspace_id, label, source, level, description, logo_url),
             args_schema=CreateOntologySchema
         ),
         StructuredTool(
