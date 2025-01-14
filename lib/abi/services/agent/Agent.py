@@ -28,6 +28,8 @@ from typing import Generator
 from abi.utils.Logger import logger
 from sse_starlette.sse import EventSourceResponse
 
+from queue import Queue, Empty
+
 class AgentSharedState:
     __thread_id: int
 
@@ -40,6 +42,20 @@ class AgentSharedState:
     
     def set_thread_id(self, thread_id: int):
         self.__thread_id = thread_id
+@dataclass
+class Event:
+    payload: Any
+
+@dataclass
+class ToolUsageEvent(Event):
+    pass
+@dataclass
+class ToolResponseEvent(Event):
+    pass
+
+@dataclass
+class FinalStateEvent(Event):
+    pass
 
 @dataclass
 class AgentConfiguration:
@@ -82,6 +98,11 @@ class Agent(Expose):
     
     __chat_model: BaseChatModel
     __tools: list[Tool]
+    
+    # An agent can have other agents.
+    # He will be responsible to load them as tools.
+    __agents : list['Agent'] = []
+    
     __chekpointer: BaseCheckpointSaver
     __state: AgentSharedState
     
@@ -91,8 +112,11 @@ class Agent(Expose):
     
     __on_tool_usage: Callable[[AnyMessage], None]
     __on_tool_response: Callable[[AnyMessage], None]
+    
+    # Avent queue used to stream tool usage and responses.
+    __event_queue: Queue
 
-    def __init__(self, name: str, description: str, chat_model: BaseChatModel, tools: list[Tool], memory: BaseCheckpointSaver = MemorySaver(), state: AgentSharedState = AgentSharedState(), configuration: AgentConfiguration = AgentConfiguration()):
+    def __init__(self, name: str, description: str, chat_model: BaseChatModel, tools: list[Tool], agents: list['Agent'] = [], memory: BaseCheckpointSaver = MemorySaver(), state: AgentSharedState = AgentSharedState(), configuration: AgentConfiguration = AgentConfiguration(), event_queue: Queue = None):
         """Initialize a new Agent instance.
         
         Args:
@@ -104,7 +128,18 @@ class Agent(Expose):
         """
         self.__name = name
         self.__description = description
-        self.__tools = tools
+        
+        # We store the provided tools in __structured_tools because we will need to know which ones are provided by the user and which one are agents.
+        # This is needed when we duplicate the agent.
+        self.__structured_tools = tools
+        self.__agents = agents
+        self.__tools = self.__structured_tools
+
+        # Adding agents as tools.
+        for agent in self.__agents:
+            self.__tools.extend(agent.as_tools())
+        
+        
         self.__chat_model = chat_model.bind_tools(self.__tools)
         self.__checkpointer = memory
         self.__state = state
@@ -114,7 +149,21 @@ class Agent(Expose):
         self.__on_tool_usage = configuration.on_tool_usage
         self.__on_tool_response = configuration.on_tool_response
         
+        # Initialize the event queue.
+        if event_queue is None:
+            self.__event_queue = Queue()
+        else:
+            self.__event_queue = event_queue
+        
         self.__setup_workflow()
+        
+    @property
+    def event_queue(self) -> Queue:
+        return self.__event_queue
+
+    @event_queue.setter
+    def event_queue(self, queue: Queue) -> None:
+        self.__event_queue = queue
 
     @property
     def state(self) -> AgentSharedState:
@@ -191,6 +240,7 @@ class Agent(Expose):
         last_message = messages[-1]
         # If the LLM makes a tool call, then we route to the "tools" node
         if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+            self.__event_queue.put(ToolUsageEvent(payload=last_message))
             self.__on_tool_usage(last_message)
             return "tools"
         return END
@@ -212,6 +262,7 @@ class Agent(Expose):
         messages = state['messages']
         last_message = messages[-1]
         if hasattr(last_message, 'tool_call_id'):
+            self.__event_queue.put(ToolResponseEvent(payload=last_message))
             self.__on_tool_response(last_message)
         response = self.__chat_model.invoke(messages)
         # We return a list, because this will get added to the existing list
@@ -286,7 +337,7 @@ class Agent(Expose):
         
         return response
     
-    def duplicate(self) -> 'Agent':
+    def duplicate(self, queue: Queue = None) -> 'Agent':
         """Create a new instance of the agent with the same configuration.
         
         This method creates a deep copy of the agent with the same configuration
@@ -296,17 +347,34 @@ class Agent(Expose):
         Returns:
             Agent: A new Agent instance with the same configuration
         """
-        return Agent(
+        # Initialize the tools list with the original list of tools.
+        tools = [tool for tool in self.__structured_tools]
+        
+        if queue is None:
+            queue = Queue()
+            
+        # We duplicated each agent and added them as tools.
+        # This will be recursively done for each sub agents.
+        agents = []
+        for agent in self.__agents:
+            duplicated_agent = agent.duplicate(queue)
+            agents.append(duplicated_agent)
+        
+        new_agent = Agent(
             name=self.__name,
             description=self.__description,
             chat_model=self.__chat_model,
-            tools=self.__tools,
+            tools=tools,
+            agents=agents,
             # memory=self.__checkpointer.__class__(),  # Create new memory instance
             memory=self.__checkpointer,
             state=AgentSharedState(),  # Create new state instance
             #state=self.__state,
-            configuration=self.__configuration
+            configuration=self.__configuration,
+            event_queue=queue
         )
+        
+        return new_agent
     
     def as_api(self, router: APIRouter, route_name: str, name: str, description: str = "", description_stream: str = "", tags: list[str] = []) -> None:
         """Adds API endpoints for this agent to the given router.
@@ -348,11 +416,43 @@ class Agent(Expose):
         Yields:
             dict: Event data formatted for SSE
         """
-        final_state = self.__app.invoke(
-            {"messages": [SystemMessage(content=self.__configuration.system_prompt), 
-                         HumanMessage(content=prompt)]},
-            config={"configurable": {"thread_id": self.__state.thread_id}}
-        )
+        
+        # Start a thread to run the invoke and put results in queue
+        def run_invoke():
+            final_state = self.__app.invoke(
+                {"messages": [SystemMessage(content=self.__configuration.system_prompt), 
+                             HumanMessage(content=prompt)]},
+                config={"configurable": {"thread_id": self.__state.thread_id}}
+            )
+            self.__event_queue.put(FinalStateEvent(payload=final_state))
+        
+        from threading import Thread
+        thread = Thread(target=run_invoke)
+        thread.start()
+        
+        final_state = None
+        while True:
+            try:
+                message = self.__event_queue.get(timeout=0.05)
+                if isinstance(message, ToolUsageEvent):
+                    yield {
+                        "event": "tool_usage",
+                        "data": message.payload.tool_calls[0]['name']
+                    }
+                elif isinstance(message, ToolResponseEvent):
+                    yield {
+                        "event": "tool_response",
+                        "data": message.payload.content
+                    }
+                elif isinstance(message, FinalStateEvent):
+                    final_state = message.payload
+                    break
+                
+                if not thread.is_alive() and self.__event_queue.empty() and final_state is None:
+                    # We have a problem.
+                    raise Exception("Agent thread has died and no final state event was received.")
+            except Empty:
+                pass
         
         response = final_state["messages"][-1].content
         logger.debug(f"Response: {response}")
