@@ -156,14 +156,6 @@ class Agent(Expose):
             self.__event_queue = event_queue
         
         self.__setup_workflow()
-        
-    @property
-    def event_queue(self) -> Queue:
-        return self.__event_queue
-
-    @event_queue.setter
-    def event_queue(self, queue: Queue) -> None:
-        self.__event_queue = queue
 
     @property
     def state(self) -> AgentSharedState:
