@@ -1,5 +1,5 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.integrations.LinkedInIntegration import LinkedinIntegration, LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from datetime import datetime, date, timedelta
@@ -17,9 +17,9 @@ class LinkedinPostsWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for LinkedIn Posts Workflow.
     
     Attributes:
-        linkedin_integration_config (LinkedinIntegrationConfiguration): LinkedIn integration configuration
+        linkedin_integration_config (LinkedInIntegrationConfiguration): LinkedIn integration configuration
     """
-    linkedin_integration_config: LinkedinIntegrationConfiguration
+    linkedin_integration_config: LinkedInIntegrationConfiguration
 
 
 class LinkedinPostsWorkflowParameters(WorkflowParameters):
@@ -41,7 +41,7 @@ class LinkedinPostsWorkflow(Workflow):
     def __init__(self, configuration: LinkedinPostsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__linkedin_integration = LinkedinIntegration(self.__configuration.linkedin_integration_config)
+        self.__linkedin_integration = LinkedInIntegration(self.__configuration.linkedin_integration_config)
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""

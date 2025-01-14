@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations.LinkedInIntegration import LinkedinIntegration, LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
 from src import secret
 from dataclasses import dataclass   
 from pydantic import Field
@@ -17,9 +17,9 @@ class LinkedinPostsInteractionsWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for LinkedIn Posts Interactions Workflow.
     
     Attributes:
-        linkedin_integration_config (LinkedinIntegrationConfiguration): LinkedIn integration configuration
+        linkedin_integration_config (LinkedInIntegrationConfiguration): LinkedIn integration configuration
     """
-    linkedin_integration_config: LinkedinIntegrationConfiguration
+    linkedin_integration_config: LinkedInIntegrationConfiguration
 
 class LinkedinPostsInteractionsWorkflowParameters(WorkflowParameters):
     """Parameters for LinkedIn Posts Interactions Workflow.
@@ -38,7 +38,7 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
     def __init__(self, configuration: LinkedinPostsInteractionsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__linkedin = LinkedinIntegration(configuration.linkedin_integration_config)
+        self.__linkedin = LinkedInIntegration(configuration.linkedin_integration_config)
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow.
@@ -162,7 +162,7 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
 def main():
     linkedin_urls = ["https://www.linkedin.com/feed/update/urn:li:activity:1234567890"]
     config = LinkedinPostsInteractionsWorkflowConfiguration(
-        linkedin_integration_config=LinkedinIntegrationConfiguration(
+        linkedin_integration_config=LinkedInIntegrationConfiguration(
             li_at=secret.get("LINKEDIN_LI_AT").value,
             jsessionid=secret.get("LINKEDIN_JSESSIONID").value
         )
