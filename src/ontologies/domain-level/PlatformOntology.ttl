@@ -44,8 +44,14 @@ abi:DigitalWorkspace a owl:Class ;
     rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
     rdfs:label "Digital Workspace" ;
     skos:definition "A Digital Workspace is an Information Bearing Entity that provides an online environment for individuals or groups to perform tasks and collaborate on projects. It typically includes tools and resources necessary for communication, file sharing, and task management." ;
-    skos:example "A workspace for a data team to collaborate on projects."@en .
-    rdfs:comment "A Digital Workspace is fundamentally an Information Bearing Entity because it is a structured environment that supports the creation, manipulation, and sharing of information. It serves as a medium through which information processes are carried out in a digital format." ;
+    skos:example "A workspace for a data team to collaborate on projects."@en ;
+    rdfs:comment "A Digital Workspace is fundamentally an Information Bearing Entity because it is a structured environment that supports the creation, manipulation, and sharing of information. It serves as a medium through which information processes are carried out in a digital format." .
+
+abi:DigitalWorkspaceObject a owl:Class ;
+    rdfs:label "Digital Workspace Object"@en ;
+    rdfs:subClassOf bfo:BFO_0000024 ; # Specifically dependent continuant
+    skos:definition "An entity that can be a component of a Digital Workspace."@en ;
+    skos:example "A software module for data analytics or an AI assistant for service management in a Digital Workspace."@en .
 
 #################################################################
 #    Object Properties
@@ -56,6 +62,7 @@ abi:usesEmail a owl:ObjectProperty ;
     rdfs:domain cco:Agent ;               # domain is agent
     rdfs:range abi:EmailAddress ;         # range is email address
     rdfs:label "uses email" ;
+    skos:definition "Relates an agent to their email address." ;
     rdfs:comment "A subproperty that relates an agent to their email address." .
 
 abi:isEmailUsedBy a owl:ObjectProperty ;
@@ -64,57 +71,62 @@ abi:isEmailUsedBy a owl:ObjectProperty ;
     rdfs:range cco:Agent ;                # domain is agent
     rdfs:label "is email used by" ;
     owl:inverseOf abi:usesEmail ;
+    skos:definition "Relates an email address to the agent who owns it." ;
     rdfs:comment "A subproperty that relates an email address to the agent who owns it." .
 
 abi:isOperatedOnPlatform a owl:ObjectProperty ;
     rdfs:domain abi:DigitalWorkspace ;
     rdfs:range abi:Platform ;
     rdfs:label "is operated on platform" ;
-    rdfs:definition "Relates a Digital Workspace to the Platform on which it operates, indicating the technological or infrastructural basis that supports the digital environment." ;
+    skos:definition "Relates a Digital Workspace to the Platform on which it operates, indicating the technological or infrastructural basis that supports the digital environment." ;
     rdfs:comment "This property captures the dependency of a Digital Workspace on a specific technological platform, which is crucial for its operation and functionality." .
 
 abi:isOperatedBy a owl:ObjectProperty ;
     rdfs:domain abi:DigitalWorkspace ;
     rdfs:range abi:User ;
     rdfs:label "is operated by" ;
-    rdfs:definition "Relates a Digital Workspace to the User who operates it, indicating the agent responsible for managing the digital environment." ;
+    skos:definition "Relates a Digital Workspace to the User who operates it, indicating the agent responsible for managing the digital environment." ;
     rdfs:comment "This property captures the dependency of a Digital Workspace on a specific agent, which is crucial for its operation and functionality." .
+
+abi:containsWorkspaceObject a owl:ObjectProperty ;
+    rdfs:domain abi:DigitalWorkspace ;
+    rdfs:range abi:DigitalWorkspaceObject ;
+    rdfs:label "contains workspace object" ;
+    skos:definition "Relates a Digital Workspace to the Digital Workspace Objects it contains, indicating that these objects are components within the workspace that facilitate digital work processes." ;
+    rdfs:comment "This property models the structural relationship between a Digital Workspace and its constituent objects, emphasizing the role of these objects in enabling workspace functionality." .
 
 #################################################################
 #    Data Properties
 #################################################################
 
 abi:node_id a owl:DatatypeProperty ;
-    rdfs:label "description" ;
+    rdfs:label "node id" ;
+    skos:definition "The node id of a platform object." ;
     rdfs:range xsd:string .
 
 abi:bio a owl:DatatypeProperty ;
     rdfs:label "bio" ;
-    rdfs:range xsd:string ;
-    rdfs:comment "The bio of the user."@en .
-
-abi:domain a owl:DatatypeProperty ;
-    rdfs:label "domain"@en ;
-    rdfs:comment "The domain of the platform."@en ; 
-    rdfs:domain abi:Platform ;
+    skos:definition "The bio of the user." ;
     rdfs:range xsd:string .
 
 abi:following a owl:DatatypeProperty ;
     rdfs:label "following"@en ;
-    rdfs:comment "The number of users the user is following."@en ;
+    skos:definition "The number of users the user is following."@en ;
     rdfs:domain abi:User ;
     rdfs:range xsd:integer .
-
+    
 abi:followers a owl:DatatypeProperty ;
     rdfs:label "followers"@en ;
-    rdfs:comment "The number of users following the user."@en ;
+    skos:definition "The number of users following the user."@en ;
     rdfs:domain abi:User ;
     rdfs:range xsd:integer .
 
 abi:created_date a owl:DatatypeProperty ;
     rdfs:label "created date" ;
+    skos:definition "The date the user was created."@en ;
     rdfs:range xsd:dateTime .
 
 abi:updated_date a owl:DatatypeProperty ;
     rdfs:label "updated date" ;
+    skos:definition "The date the user was updated."@en ;
     rdfs:range xsd:dateTime .
