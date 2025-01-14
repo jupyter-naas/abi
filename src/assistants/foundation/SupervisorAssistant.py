@@ -4,8 +4,15 @@ from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from abi import logger
 from fastapi import APIRouter
+from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
+from src.assistants.domain.ContentAssistant import create_content_assistant
+from src.assistants.domain.GrowthAssistant import create_growth_assistant
+from src.assistants.domain.SalesAssistant import create_sales_assistant
+from src.assistants.domain.OperationsAssistant import create_operations_assistant
+from src.assistants.domain.FinanceAssistant import create_finance_assistant 
+from src.assistants.foundation.SupportAssistant import create_support_assistant
 
-AVATAR_URL = ""
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 DESCRIPTION = "A Supervisor Assistant that helps to supervise the other domain assistants."
 SUPERVISOR_AGENT_INSTRUCTIONS = """
 You are ABI a super-assistant.
@@ -40,15 +47,6 @@ def create_supervisor_agent():
         on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
     )
     model = ChatOpenAI(model="gpt-4o", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
-
-    # Import and create agents from domain assistants
-    from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
-    from src.assistants.domain.ContentAssistant import create_content_assistant
-    from src.assistants.domain.GrowthAssistant import create_growth_assistant
-    from src.assistants.domain.SalesAssistant import create_sales_assistant
-    from src.assistants.domain.OperationsAssistant import create_operations_assistant
-    from src.assistants.domain.FinanceAssistant import create_finance_assistant 
-    from src.assistants.foundation.SupportAssistant import create_support_assistant
 
     # Create assistant instances
     assistants = [

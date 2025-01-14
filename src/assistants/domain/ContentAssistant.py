@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations import ReplicateIntegration
 from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
-from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 from fastapi import APIRouter
 
@@ -42,7 +42,7 @@ def create_content_assistant(
     tools = []
     
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+        linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
 
         linkedin_posts_workflow = LinkedinPostsWorkflow(LinkedinPostsWorkflowConfiguration(
             linkedin_integration_config=linkedin_integration_config

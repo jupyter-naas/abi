@@ -1,9 +1,9 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import HubSpotIntegration, LinkedInIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration, SendGridIntegration
+from src.integrations import HubSpotIntegration, LinkedinIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration, SendGridIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
 from src.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
 from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
 from src.integrations.GoogleAnalyticsIntegration import GoogleAnalyticsIntegrationConfiguration
@@ -74,7 +74,7 @@ def create_campaign_manager_assistant(
     li_at = secret.get('li_at')
     jsessionid = secret.get('jsessionid')
     if li_at and jsessionid:
-        tools += LinkedInIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
 
     youtube_key = secret.get('YOUTUBE_API_KEY')
     if youtube_key:
