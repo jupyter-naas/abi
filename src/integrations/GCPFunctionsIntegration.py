@@ -6,7 +6,8 @@ from google.cloud import functions_v1
 from google.cloud.functions_v1 import CloudFunction
 import requests
 
-LOGO_URL = "https://logo.clearbit.com/google.com"
+LOGO_URL = "https://static-00.iconduck.com/assets.00/google-cloud-functions-icon-512x460-5z61oi5w.png"
+
 @dataclass
 class GCPFunctionsIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GCP Cloud Functions integration.
