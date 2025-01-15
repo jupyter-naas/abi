@@ -20,7 +20,8 @@ class OntologyYaml:
         graph,
         ontology_schemas: list = ["src/ontologies/ConsolidatedOntology.ttl"],
         class_colors_mapping: dict = {},
-        top_level_class: str = 'http://purl.obolibrary.org/obo/BFO_0000001'
+        top_level_class: str = 'http://purl.obolibrary.org/obo/BFO_0000001',
+        display_relations_names: bool = True,
     ):
         """Translate RDF graph to YAML.
 
@@ -29,13 +30,15 @@ class OntologyYaml:
             ontology_schemas (list): List of paths to ontology schemas.
             class_colors_mapping (dict): Mapping of classes to colors.
             top_level_class (str): Top level class to compute class levels.
+            display_relations_names (bool): Whether to display relations names.
         """
         translator = Translator()
         return translator.translate(
             graph,
             ontology_schemas=ontology_schemas,
             class_colors_mapping=class_colors_mapping,
-            top_level_class=top_level_class
+            top_level_class=top_level_class,
+            display_relations_names=display_relations_names
         )
 
 
@@ -113,7 +116,8 @@ class Translator:
         graph,
         ontology_schemas,
         class_colors_mapping,
-        top_level_class
+        top_level_class,
+        display_relations_names
     ):
         """Translate RDF graph to YAML.
 
@@ -122,6 +126,7 @@ class Translator:
             ontology_schemas (list): List of paths to ontology schemas.
             class_colors_mapping (dict): Mapping of classes to colors.
             top_level_class (str): Top level class to compute class levels.
+            display_relations_names (bool): Whether to display relations names.
         """
         # Extract triples from the Graph.
         self.load_triples(graph, ontology_schemas)
@@ -142,7 +147,7 @@ class Translator:
         self.map_oprop_labels()
         
         # Create the YAML file.
-        return self.create_yaml(class_colors_mapping)
+        return self.create_yaml(class_colors_mapping, display_relations_names)
 
     def __handle_onto_tuples(self, s, p, o):
         """Load SPO in onto_tuples dictionary.
@@ -235,8 +240,6 @@ class Translator:
         # Reset amount_per_level
         self.amount_per_level = {}
         self.__compute_class_levels(cls_id)
-    
-
 
     # get_first_rest is used to get the values from unionOf, intersectionOf and complementOf.
     def __get_first_rest(self, tpl):
@@ -321,9 +324,9 @@ class Translator:
         self.mapping_oprop = {}
         for o in self.onto_oprop:
             if o and "label" in self.onto_oprop.get(o):
-                self.mapping_oprop[o] = self.onto_oprop.get(o).get("label")[0]#.replace(" ", "_")
+                self.mapping_oprop[o] = self.onto_oprop.get(o).get("label")[0]
         
-    def create_yaml(self, class_color):
+    def create_yaml(self, class_color, display_relations_names):
         # Init
         all_classes = {}
         classes = {}
@@ -549,7 +552,7 @@ class Translator:
                         for v in individual.get(r):
                             entity_relations.append(
                                 {
-                                    "label": r,
+                                    "label": r if display_relations_names else None,
                                     "to": v
                                 }
                             )
