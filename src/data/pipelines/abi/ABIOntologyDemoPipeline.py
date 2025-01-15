@@ -6,7 +6,7 @@ from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from abi.utils.OntologyYaml import OntologyYaml
-from rdflib import Graph, RDFS, OWL, DC, URIRef
+from rdflib import Graph, RDFS, OWL, DC, URIRef, RDF
 from rdflib.namespace import Namespace
 from pathlib import Path
 import importlib
@@ -31,7 +31,7 @@ class ABIOntologyDemoConfiguration(PipelineConfiguration):
     """
     naas_integration_config: NaasIntegrationConfiguration
     ontology_store: IOntologyStoreService
-    ontology_store_name: str = "abi-ontology"
+    ontology_store_name: str = "abi-ontology-demo"
 
 class ABIOntologyDemoParameters(PipelineParameters):
     """Parameters for ABIOntology pipeline execution.
@@ -42,14 +42,12 @@ class ABIOntologyDemoParameters(PipelineParameters):
         description (str): The description of the ontology.
         logo_url (str): The logo URL of the ontology.
         level (str): The level of the ontology.
-        is_public (bool): Whether the ontology is public.
     """
-    workspace_id: str
+    workspace_id: str = "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
     label: str = "ABI Ontology"
     description: str = "Represents ABI Ontology with assistants, workflows, ontologies, pipelines and integrations."
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
     level: str = "USE_CASE"
-    is_public: bool = False
 
 class ABIOntologyDemoPipeline(Pipeline):
     """Pipeline for collecting and organizing ABI components into an ontology."""
@@ -57,6 +55,7 @@ class ABIOntologyDemoPipeline(Pipeline):
     __configuration: ABIOntologyDemoConfiguration
     
     def __init__(self, configuration: ABIOntologyDemoConfiguration):
+        super().__init__(configuration)
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
 
@@ -74,7 +73,7 @@ class ABIOntologyDemoPipeline(Pipeline):
         """Scan integrations and add to graph."""
         integrations_dir = Path("src/integrations")
         nb_integrations = len(glob.glob("src/integrations/*.py", recursive=True)) - 1
-        logger.info(f"Found {nb_integrations} integrations")
+        logger.debug(f"---> Found {nb_integrations} integrations.")
         coordinates = self.__generate_coordinates(900, nb_integrations)
         
         from src.data.pipelines.abi.mappings import ASSISTANTS_INTEGRATIONS
@@ -86,7 +85,6 @@ class ABIOntologyDemoPipeline(Pipeline):
                 if integration not in integrations_order:
                     integrations_order[integration] = order
                     order += 1
-        logger.debug(f"Integrations order: {integrations_order}")
 
         for file in integrations_dir.glob("*.py"):
             if "__IntegrationTemplate__" in str(file):
@@ -94,7 +92,6 @@ class ABIOntologyDemoPipeline(Pipeline):
             if file.stem.endswith("Integration"):
                 try:
                     i = integrations_order.get(str(file.stem), None)
-                    logger.debug(f"Integration {file.stem} is in order {i}")
                     if i is None:
                         i = order
                         order += 1
@@ -129,7 +126,7 @@ class ABIOntologyDemoPipeline(Pipeline):
         """Scan domain-level ontologies and add to graph."""
         ontologies_dir = Path("src/ontologies/domain-level")
         nb_ontologies = len(list(ontologies_dir.glob("*.ttl")))
-        logger.info(f"Found {nb_ontologies} ontologies")
+        logger.debug(f"---> Found {nb_ontologies} ontologies.")
         coordinates = self.__generate_coordinates(500, nb_ontologies)
 
         from src.data.pipelines.abi.mappings import ASSISTANTS_ONTOLOGIES
@@ -141,14 +138,12 @@ class ABIOntologyDemoPipeline(Pipeline):
                 if ontology not in ontologies_order:
                     ontologies_order[ontology] = order
                     order += 1
-        logger.debug(f"Ontologies order: {ontologies_order}")
         
         for file in ontologies_dir.glob("*.ttl"):
             if "__OntologyTemplate__" in str(file) or "ConsolidatedOntology" in str(file):
                 continue
             try:
                 i = ontologies_order.get(str(file.stem), None)
-                logger.debug(f"Ontology {file.stem} is in order {i}")
                 if i is None:
                     i = order
                     order += 1
@@ -202,7 +197,7 @@ class ABIOntologyDemoPipeline(Pipeline):
         """Scan assistants directory and add to graph, excluding experts/integrations."""
         assistants_dir = Path("src/assistants")
         nb_assistants = len(glob.glob("src/assistants/domain/*.py", recursive=True)) + len(glob.glob("src/assistants/foundation/*.py", recursive=True))
-        logger.info(f"Found {nb_assistants} assistants")
+        logger.debug(f"---> Found {nb_assistants} assistants.")
         coordinates = self.__generate_coordinates(200, nb_assistants - 2) # Exclude supervisor assistant
         i = 0
 
@@ -249,50 +244,56 @@ class ABIOntologyDemoPipeline(Pipeline):
                             y = coordinates[i][1]
                         return title, slug, description, prompt, avatar, x, y
                     
-                    title, slug, description, prompt, avatar, x, y = get_assistant_metadata(file.stem, module, coordinates)
-                    
-                    assistant = graph.add_individual_to_prefix(
-                        prefix=ABI,
-                        uid=str(file.stem),
-                        label=title,
-                        is_a=ABI.Assistant,
-                        description=description,
-                        avatar=avatar,
-                        prompt=prompt,
-                        slug=slug,
-                        ontology_group="Assistants",
-                        x=x,
-                        y=y,
-                    )
+                    # Create assistant if it doesn't exist
+                    assistant = URIRef(str(ABI.Assistant) + "#" + file.stem)
+                    if (assistant, RDF.type, OWL.NamedIndividual) not in graph:
+                        title, slug, description, prompt, avatar, x, y = get_assistant_metadata(file.stem, module, coordinates)
+                        assistant = graph.add_individual_to_prefix(
+                            prefix=ABI,
+                            uid=str(file.stem),
+                            label=title,
+                            is_a=ABI.Assistant,
+                            description=description,
+                            avatar=avatar,
+                            prompt=prompt,
+                            slug=slug,
+                            ontology_group="Assistants",
+                            x=x,
+                            y=y,
+                        )
+                    else:
+                        logger.debug(f"Assistant {file.stem} already exists.")
 
-                    # Find integrations used in the assistant
+                    # Find components used in the assistant
                     with open(file, 'r') as f:
                         content = f.read()
 
                         # Look for import from src.assistants
                         assistant_imports = re.findall(r'from (src\.assistants(?:\.\w+)*\.\w+Assistant)', content)
-                        logger.info(f"Found {len(assistant_imports)} assistants in {file.stem}")
                         for a in assistant_imports:
-                            logger.info(f"Importing assistant {a}")
-                            module = importlib.import_module(a)
-                            title, slug, description, prompt, avatar, x, y = get_assistant_metadata(a.split(".")[-1], module, coordinates)
-                            assistant_uri = graph.add_individual_to_prefix(
-                                prefix=ABI,
-                                uid=str(a),
-                                label=title,
-                                is_a=ABI.Assistant,
-                                description=description,
-                                avatar=avatar,
-                                prompt=prompt,
-                                slug=slug,
-                                ontology_group="Assistants",
-                                x=x,
-                                y=y,
-                            )
+                            uid = a.split(".")[-1]
+                            assistant_uri = URIRef(str(ABI.Assistant) + "#" + uid)
+                            if (assistant_uri, RDF.type, OWL.NamedIndividual) not in graph:
+                                module = importlib.import_module(a)
+                                title, slug, description, prompt, avatar, x, y = get_assistant_metadata(uid, module, coordinates)
+                                assistant_uri = graph.add_individual_to_prefix(
+                                    prefix=ABI,
+                                    uid=uid,
+                                    label=title,
+                                    is_a=ABI.Assistant,
+                                    description=description,
+                                    avatar=avatar,
+                                    prompt=prompt,
+                                    slug=slug,
+                                    ontology_group="Assistants",
+                                    x=x,
+                                    y=y,
+                                )
+                            else:
+                                logger.debug(f"Assistant {a} already exists.")
 
-                            logger.info(f"Adding relation between assistant {assistant} and assistant {assistant_uri}")
+                            logger.debug(f"Adding relation between assistant {assistant} and assistant {assistant_uri}")
                             graph.add((assistant, ABI.communicatesWithAssistant, assistant_uri))
-
                 except ImportError as e:
                     logger.error(f"Error importing assistant {file.stem}: {e}")
 
@@ -300,8 +301,8 @@ class ABIOntologyDemoPipeline(Pipeline):
         """Scan pipelines directory and add to graph."""
         pipelines_dir = Path("src/data/pipelines/github")
         nb_pipelines = len(list(pipelines_dir.glob("*.py")))
-        logger.info(f"Found {nb_pipelines} pipelines")
-        coordinates = self.__generate_coordinates(700, nb_pipelines, 90)
+        logger.debug(f"---> Found {nb_pipelines} pipelines.")
+        coordinates = self.__generate_coordinates(700, nb_pipelines, 45)
         i = 0
         for file in pipelines_dir.glob("*.py"):
             if "__PipelineTemplate__" in str(file):
@@ -339,7 +340,7 @@ class ABIOntologyDemoPipeline(Pipeline):
 
                     # Add assistants relations
                     operations_assistant = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
-                    graph.add((pipeline, ABI.processesPipeline, operations_assistant))
+                    graph.add((operations_assistant, ABI.processesPipeline, pipeline))
                 except Exception as e:
                     logger.error(f"Error processing pipeline {file}: {e}")
 
@@ -347,8 +348,8 @@ class ABIOntologyDemoPipeline(Pipeline):
         """Scan workflows directory and add to graph."""
         workflows_dir = Path("src/workflows/operations_assistant")
         nb_workflows = len(list(workflows_dir.glob("*.py")))
-        logger.info(f"Found {nb_workflows} workflows")
-        coordinates = self.__generate_coordinates(350, nb_workflows, 75)
+        logger.debug(f"---> Found {nb_workflows} workflows.")
+        coordinates = self.__generate_coordinates(350, nb_workflows, 25)
         i = 0
         for file in workflows_dir.glob("*.py"):
             if "__WorkflowTemplate__" in str(file):
@@ -378,7 +379,7 @@ class ABIOntologyDemoPipeline(Pipeline):
 
                     # Add assistants relations
                     operations_assistant = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
-                    graph.add((workflow, ABI.executesWorkflow, operations_assistant))
+                    graph.add((operations_assistant, ABI.executesWorkflow, workflow))
                 except Exception as e:
                     logger.error(f"Error processing workflow {file}: {e}")
 
@@ -419,25 +420,6 @@ class ABIOntologyDemoPipeline(Pipeline):
         onto_description = parameters.description
         onto_logo_url = parameters.logo_url
         onto_level = parameters.level
-        onto_is_public = parameters.is_public
-        
-        # # Create backup directory if it doesn't exist
-        # backup_dir = "src/data/ontology-yaml"
-        # os.makedirs(backup_dir, exist_ok=True)
-
-        # # Generate filename with timestamp
-        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # backup_file = os.path.join(backup_dir, f"ontology_yaml_{timestamp}.yaml")
-
-        # # Convert to YAML format and save
-        # with open(backup_file, "w", encoding="utf-8") as f:
-        #     yaml_str = yaml.dump(yaml_data, Dumper=Dumper)
-        #     f.write(yaml_str)
-            
-        # # Load and parse YAML back
-        # with open(backup_file, "r", encoding="utf-8") as f:
-        #     yaml_data = yaml.load(f, Loader=Loader)
-        # logger.info(f"Saved and loaded to {backup_file}")
 
         # Push ontology to workspace if API key provided
         try:
@@ -516,4 +498,4 @@ if __name__ == "__main__":
         ),
         ontology_store=ontology_store
     ))
-    pipeline.run(ABIOntologyDemoParameters(workspace_id="96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"))
+    pipeline.run(ABIOntologyDemoParameters())
