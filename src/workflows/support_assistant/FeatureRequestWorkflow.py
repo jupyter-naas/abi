@@ -78,8 +78,8 @@ class FeatureRequestWorkflow(Workflow):
             list[StructuredTool]: List containing the workflow tool
         """
         return [StructuredTool(
-            name="feature_request",
-            description="Creates GitHub Issue to request a new feature and adds it to project",
+            name="create_feature_request",
+            description="Create or post a feature request for the support assistant.",
             func=lambda **kwargs: self.run(FeatureRequestWorkflowParameters(**kwargs)),
             args_schema=FeatureRequestWorkflowParameters
         )]

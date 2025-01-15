@@ -6,6 +6,7 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.workflows.support_assistant import FeatureRequestWorkflow, ReportBugWorkflow, IssueListWorkflow
 
+AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
 SUPPORT_ASSISTANT_INSTRUCTIONS = """
 You are a support assistant focusing creating GitHub Issues to request new features or report bugs.

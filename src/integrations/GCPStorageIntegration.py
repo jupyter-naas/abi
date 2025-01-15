@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Union, BinaryIO
 from google.oauth2 import service_account
 from google.cloud import storage
 
-LOGO_URL = "https://logo.clearbit.com/google.com"
+LOGO_URL = "https://k21academy.com/wp-content/uploads/2021/02/Google-Cloud-Storage-logo.png"
 
 @dataclass
 class GCPStorageIntegrationConfiguration(IntegrationConfiguration):

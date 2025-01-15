@@ -4,6 +4,8 @@ import requests
 from typing import Dict, Optional
 from abi import logger
 
+LOGO_URL = "https://media.glassdoor.com/sqll/100431/glassdoor-squareLogo-1689738456066.png"
+
 @dataclass
 class GlassdoorIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Glassdoor integration.
