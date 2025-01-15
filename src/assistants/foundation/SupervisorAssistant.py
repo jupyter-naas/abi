@@ -41,12 +41,16 @@ You have access to the following assistants:
     - If the user intent match with an existing issue, ask the user if they want to create a new one, update the existing one or do nothing.
 """
 
-def create_supervisor_agent():
+def create_supervisor_assistant():
     agent_configuration = AgentConfiguration(
         on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
         on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
     )
-    model = ChatOpenAI(model="gpt-4o", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
+    model = ChatOpenAI(
+        model="gpt-4o", 
+        temperature=0, 
+        api_key=secret.get('OPENAI_API_KEY')
+    )
 
     # Create assistant instances
     assistants = [
@@ -58,8 +62,6 @@ def create_supervisor_agent():
         create_finance_assistant(AgentSharedState(thread_id=6), agent_configuration),
         create_support_assistant(AgentSharedState(thread_id=7), agent_configuration)
     ]
-
-    # TODO: Consider moving this piece inside the Agent.py class directly ?
     # Get tools info from each assistant
     assistants_info = []
     for assistant in assistants[:-1]:  # Exclude support assistant
