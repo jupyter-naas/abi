@@ -2,7 +2,7 @@ from src.apps.terminal_agent.terminal_style import clear_screen, print_welcome_m
 from abi.services.agent.Agent import Agent
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
 # Domain assistants
 from src.assistants.domain.ContentAssistant import create_content_assistant
 from src.assistants.domain.FinanceAssistant import create_finance_assistant
@@ -96,7 +96,7 @@ def run_support_agent():
     run_agent(agent)
 
 def run_supervisor_agent():
-    agent = create_supervisor_agent()
+    agent = create_supervisor_assistant()
     run_agent(agent)
 
 def run_opendata_agent():

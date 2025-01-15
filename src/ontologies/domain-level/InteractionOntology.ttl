@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for social media interactions."@en ;
     dc:license "" ;
-    dc:title "Interaction Domain Ontology" .
+    dc:title "Interaction Ontology" .
 
 #################################################################
 #    Classes

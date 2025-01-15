@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for growth metrics and cohort analysis."@en ;
     dc:license "" ;
-    dc:title "Growth Domain Ontology" .
+    dc:title "Growth Ontology" .
 
 #################################################################
 #    Classes

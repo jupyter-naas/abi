@@ -2,7 +2,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from langchain_openai import ChatOpenAI
 from src.integrations import LinkedInIntegration, YouTubeIntegration, NewsAPIIntegration, PerplexityIntegration
-from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
 from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
 from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
@@ -81,7 +81,7 @@ def create_content_analyst_assistant(
     li_at = secret.get('li_at')
     jsessionid = secret.get('jsessionid')
     if li_at and jsessionid:
-        tools += LinkedInIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
 
     youtube_key = secret.get('YOUTUBE_API_KEY')
     if youtube_key:
