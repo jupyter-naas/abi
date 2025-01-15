@@ -1,28 +1,21 @@
 COLORS_NODES = {
     'http://ontology.naas.ai/abi/Pipeline': '#47DD82',
-    'http://ontology.naas.ai/abi/Workflow': '#47DD82',
+    'http://ontology.naas.ai/abi/Workflow': '#FFFDA2',
     'http://ontology.naas.ai/abi/Assistant': 'orange', 
     'http://ontology.naas.ai/abi/Ontology': 'white',
     'http://ontology.naas.ai/abi/Integration': 'white',
 }
 
 ASSISTANTS_ORDER = {
-    "OpenDataAssistant": 0,
-    "ContentAssistant": 1,
-    "GrowthAssistant": 2,
-    "SalesAssistant": 3,
-    "OperationsAssistant": 4,
-    "FinanceAssistant": 5,
+    "ContentAssistant": 0,
+    "GrowthAssistant": 1,
+    "SalesAssistant": 2,
+    "OperationsAssistant": 3,
+    "FinanceAssistant": 4,
+    "OpenDataAssistant": 5, 
 }
 
 ASSISTANTS_INTEGRATIONS = {
-    "OpenDataAssistant": [
-        "GlassdoorIntegration",
-        "NewsAPIIntegration", 
-        "PerplexityIntegration",
-        "SerperIntegration",
-        "YahooFinanceIntegration"
-    ],
     "ContentAssistant": [
         "GladiaIntegration",
         "InstagramIntegration",
@@ -73,14 +66,17 @@ ASSISTANTS_INTEGRATIONS = {
         "PennylaneIntegration",
         "QontoIntegration",
         "StripeIntegration"
+    ],
+    "OpenDataAssistant": [
+        "GlassdoorIntegration",
+        "NewsAPIIntegration", 
+        "PerplexityIntegration",
+        "SerperIntegration",
+        "YahooFinanceIntegration"
     ]
 }
 
 ASSISTANTS_ONTOLOGIES = {
-    "OpenDataAssistant": [
-        "ResourceOntology",
-        "EventsOntology",
-    ],
     "ContentAssistant": [
         "PublicationOntology",
         "IdeaOntology",
@@ -108,7 +104,11 @@ ASSISTANTS_ONTOLOGIES = {
         "ContractOntology",
         "TransactionOntology",
         "AccountingOntology",
-    ]
+    ],
+    "OpenDataAssistant": [
+        "ResourceOntology",
+        "EventsOntology",
+    ],
 }
 
 
