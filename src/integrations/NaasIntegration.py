@@ -246,7 +246,8 @@ class NaasIntegration(Integration):
         source: str,
         level: str,
         description: str = None,
-        logo_url: str = None
+        logo_url: str = None,
+        is_public: bool = False
     ) -> Dict:
         """Create a new ontology.
         
@@ -257,6 +258,7 @@ class NaasIntegration(Integration):
             level (str): Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP
             description (str, optional): Description of the ontology
             logo_url (str, optional): Logo URL for the ontology
+            is_public (bool, optional): Whether the ontology is public
         """
         payload = {"ontology": {
             "label": label,
@@ -264,7 +266,8 @@ class NaasIntegration(Integration):
             "workspace_id": workspace_id,
             "level": level,
             "description": description,
-            "logo_url": logo_url
+            "logo_url": logo_url,
+            "is_public": is_public
         }}
         return self._make_request("POST", "/ontology/", payload)
 
@@ -304,6 +307,7 @@ class NaasIntegration(Integration):
             level: str = None,
             description: str = None,
             logo_url: str = None,
+            is_public: bool = False
         ) -> Dict:
         """Update an existing ontology.
         
@@ -315,6 +319,7 @@ class NaasIntegration(Integration):
             level (str): Level
             description (str): Description
             logo_url (str): Logo URL
+            is_public (bool): Whether the ontology is public
         """
         field_masks = []
 
@@ -337,6 +342,9 @@ class NaasIntegration(Integration):
         if logo_url:
             ontology["logo_url"] = logo_url
             field_masks.append("logo_url")
+        if is_public:
+            ontology["is_public"] = is_public
+            field_masks.append("is_public")
 
         ontology["field_mask"] = {"paths": field_masks}
 
@@ -683,6 +691,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         level: str = Field(..., description="Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP")
         description: Optional[str] = Field(None, description="Description of the ontology")
         logo_url: Optional[str] = Field(None, description="Logo URL for the ontology")
+        is_public: Optional[bool] = Field(False, description="Whether the ontology is public")
 
     class GetOntologySchema(BaseModel):
         workspace_id: str = Field(..., description="Workspace ID to get an ontology from")
@@ -699,6 +708,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         level: Optional[str] = Field(None, description="Updated ontology level")
         description: Optional[str] = Field(None, description="Updated ontology description")
         logo_url: Optional[str] = Field(None, description="Updated ontology logo URL")
+        is_public: Optional[bool] = Field(False, description="Whether the ontology is public")
 
     class DeleteOntologySchema(BaseModel):
         workspace_id: str = Field(..., description="Workspace ID to delete an ontology from")
@@ -834,7 +844,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="create_naas_ontology",
             description="Create a new ontology from workspace",
-            func=lambda workspace_id, label, source, level, description, logo_url: integration.create_ontology(workspace_id, label, source, level, description, logo_url),
+            func=lambda workspace_id, label, source, level, description, logo_url, is_public: integration.create_ontology(workspace_id, label, source, level, description, logo_url, is_public),
             args_schema=CreateOntologySchema
         ),
         StructuredTool(
@@ -852,7 +862,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         StructuredTool(
             name="update_naas_ontology",
             description="Update an existing ontology from workspace",
-            func=lambda workspace_id, ontology_id, download_url, source, level, description, logo_url: integration.update_ontology(workspace_id, ontology_id, download_url, source, level, description, logo_url),
+            func=lambda workspace_id, ontology_id, download_url, source, level, description, logo_url, is_public: integration.update_ontology(workspace_id, ontology_id, download_url, source, level, description, logo_url, is_public),
             args_schema=UpdateOntologySchema
         ),
         StructuredTool(
