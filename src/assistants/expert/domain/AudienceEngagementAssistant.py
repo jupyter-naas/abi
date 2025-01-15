@@ -1,8 +1,8 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import LinkedinIntegration, YouTubeIntegration
-from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
+from src.integrations import LinkedInIntegration, YouTubeIntegration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
 
 NAME = "Audience Engagement"

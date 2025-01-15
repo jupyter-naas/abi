@@ -1,9 +1,9 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import HubSpotIntegration, LinkedinIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration, SendGridIntegration
+from src.integrations import HubSpotIntegration, LinkedInIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration, SendGridIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
 from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
 from src.integrations.GoogleAnalyticsIntegration import GoogleAnalyticsIntegrationConfiguration
