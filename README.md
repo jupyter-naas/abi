@@ -6,44 +6,40 @@
 
 ## Table of Contents
 
-- [ABI](#abi)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-    - [Key Features](#key-features)
-    - [License](#license)
-  - [Setup Project](#setup-project)
-    - [Sneak peek 👀](#sneak-peek-)
-    - [Getting Started](#getting-started)
-    - [Managing Dependencies](#managing-dependencies)
-      - [Add a new Python dependency to `src` project](#add-a-new-python-dependency-to-src-project)
-      - [Add a new Python dependency to `lib/abi` project](#add-a-new-python-dependency-to-libabi-project)
-    - [Setup Git remote](#setup-git-remote)
-  - [Build New Components](#build-new-components)
-    - [Create Integration](#create-integration)
-    - [Create Pipeline](#create-pipeline)
-    - [Create Workflow](#create-workflow)
-    - [Create Assistant (Single Agent)](#create-assistant-single-agent)
-      - [Create Assistant File](#create-assistant-file)
-      - [Add Integrations, Workflows and Pipelines as tools](#add-integrations-workflows-and-pipelines-as-tools)
-      - [Chat with Assistant in Terminal](#chat-with-assistant-in-terminal)
-  - [Standard Operating Procedure](#standard-operating-procedure)
-    - [Start with user intent](#start-with-user-intent)
-    - [Map Business Problem to Ontology](#map-business-problem-to-ontology)
-    - [Build Components](#build-components)
-    - [Setup Assistant](#setup-assistant)
-    - [Validate your solution](#validate-your-solution)
-    - [Deploy to production](#deploy-to-production)
-    - [Learn more](#learn-more)
-  - [Deploying the API](#deploying-the-api)
-    - [Prerequisites](#prerequisites)
-    - [Setup GitHub Repository Secrets](#setup-github-repository-secrets)
-    - [Customize Deployment Configuration](#customize-deployment-configuration)
-    - [Deployment Process](#deployment-process)
-    - [Monitoring Deployment](#monitoring-deployment)
-    - [Customize API](#customize-api)
-  - [Cursor users](#cursor-users)
-  - [Contributing](#contributing)
-  - [Support](#support)
+- [Overview](#overview)
+  - [Key Features](#key-features)
+  - [License](#license)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation Options](#installation-options)
+  - [Environment Setup](#environment-setup)
+  - [Running Agents](#running-agents)
+  - [Managing Dependencies](#managing-dependencies)
+  - [Git Remote Setup](#setup-git-remote)
+- [Development Guide](#build-new-components)
+  - [Creating Components](#build-new-components)
+    - [Integrations](#create-integration)
+    - [Pipelines](#create-pipeline)
+    - [Workflows](#create-workflow)
+    - [Assistants](#create-assistant-single-agent)
+  - [Development Process](#standard-operating-procedure)
+    - [Understanding User Intent](#start-with-user-intent)
+    - [Ontology Mapping](#map-business-problem-to-ontology)
+    - [Component Development](#build-components)
+    - [Component Testing](#test-components)
+    - [Assistant Configuration](#setup-assistant)
+    - [Solution Validation](#validate-your-solution)
+    - [Production Deployment](#deploy-to-production)
+- [API Deployment](#deploying-the-api)
+  - [Setup Requirements](#prerequisites-1)
+  - [Configuration](#customize-deployment-configuration)
+  - [Deployment Steps](#deployment-process)
+  - [Monitoring](#monitoring-deployment)
+  - [API Customization](#customize-api)
+- [Additional Resources](#learn-more)
+- [Development Tools](#cursor-users)
+- [Community](#contributing)
+- [Help & Support](#support)
 
 ## Overview
 
@@ -62,109 +58,105 @@ The **ABI** (Augmented Business Intelligence) project is a Python-based backend 
 ### License
 ABI Framework is open-source and available for non-production use under the [AGPL license](https://opensource.org/licenses/AGPL). For production deployments, a commercial license is required. Please contact us at support@naas.ai for details on licensing options.
 
-## Setup Project
+## Getting Started
 
-### Sneak peek 👀
+### Prerequisites
 
-![ABI Terminal](https://naasai-public.s3.eu-west-3.amazonaws.com/abi2.gif)
+1. **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)**
 
+### Installation Options
 
-### Getting Started
+Choose one of the following options:
 
-1. **Prerequisites**
-   - Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+a. **Clone the Repository** (for personal use)
+```bash
+git clone https://github.com/jupyter-naas/abi.git
+cd abi
+```
 
-2. **Get the Repository**
-   
-   Choose one of the following options:
+b. **Fork the Repository** (to contribute changes)
+```bash
+# 1. Fork via GitHub UI
+# 2. Clone your fork
+git clone https://github.com/YOUR-USERNAME/abi.git
+cd abi
+```
 
-   a. **Clone the Repository** (for personal use)
-   ```bash
-   git clone https://github.com/jupyter-naas/abi.git
-   cd abi
-   ```
+c. **Create a Private Fork** (for private development)
+```bash
+# 1. Create private repository via GitHub UI
+# 2. Clone your private repository
+git clone https://github.com/YOUR-USERNAME/abi-private.git
+cd abi-private
+git remote add upstream https://github.com/jupyter-naas/abi.git
+git pull --rebase upstream main
+git push
+```
 
-   b. **Fork the Repository** (to contribute changes)
-   ```bash
-   # 1. Fork via GitHub UI
-   # 2. Clone your fork
-   git clone https://github.com/YOUR-USERNAME/abi.git
-   cd abi
-   ```
+### Environment Setup
 
-   c. **Create a Private Fork** (for private development)
-   ```bash
-   # 1. Create private repository via GitHub UI
-   # 2. Clone your private repository
-   git clone https://github.com/YOUR-USERNAME/abi-private.git
-   cd abi-private
-   git remote add upstream https://github.com/jupyter-naas/abi.git
-   git pull --rebase upstream main
-   git push
-   ```
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+cp config.yaml.example config.yaml
+# Edit config.yaml with your configuration
+```
 
-3. **Set Up Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   cp config.yaml.example config.yaml
-   # Edit config.yaml with your configuration
-   ```
+### Running Agents
 
-4. **Create Docker Container & Start Chatting**
-   ```bash
-   # Start default agent (chat-supervisor-agent) which can access to all domain agents and tools
-   make
+```bash
+# Start default agent (chat-supervisor-agent) which can access to all domain agents and tools
+make
 
-   # Or start a specific foundation agent:
-   make chat-support-agent     # Support agent
+# Or start a specific foundation agent:
+make chat-support-agent     # Support agent
 
-   # Or start a specific domain agent:
-   make chat-content-agent      # Content agent
-   make chat-finance-agent      # Finance agent  
-   make chat-growth-agent       # Growth agent
-   make chat-opendata-agent     # Open Data agent
-   make chat-operations-agent   # Operations agent
-   make chat-sales-agent        # Sales agent
+# Or start a specific domain agent:
+make chat-content-agent      # Content agent
+make chat-finance-agent      # Finance agent  
+make chat-growth-agent       # Growth agent
+make chat-opendata-agent     # Open Data agent
+make chat-operations-agent   # Operations agent
+make chat-sales-agent        # Sales agent
 
-   # Or start a specific custom agent:
-   make chat-airtable-agent     # Airtable agent
-   make chat-agicap-agent       # Agicap agent
-   make chat-aws-s3-agent       # AWS S3 agent
-   make chat-brevo-agent        # Brevo agent
-   make chat-clockify-agent     # Clockify agent
-   make chat-discord-agent      # Discord agent
-   make chat-github-agent       # Github agent
-   make chat-gladia-agent       # Gladia agent
-   make chat-gmail-agent        # Gmail agent
-   make chat-google-analytics-agent # Google Analytics agent
-   make chat-google-calendar-agent # Google Calendar agent
-   make chat-google-drive-agent # Google Drive agent
-   make chat-google-sheets-agent # Google Sheets agent
-   make chat-harvest-agent       # Harvest agent
-   make chat-hubspot-agent       # Hubspot agent
-   make chat-linkedin-agent      # LinkedIn agent
-   make chat-mercury-agent       # Mercury agent
-   make chat-naas-agent         # Naas agent
-   make chat-news-api-agent     # News API agent
-   make chat-notion-agent       # Notion agent
-   make chat-onedrive-agent     # OneDrive agent
-   make chat-pennylane-agent    # Pennylane agent
-   make chat-pipedrive-agent    # Pipedrive agent
-   make chat-postgres-agent     # Postgres agent
-   make chat-qonto-agent        # Qonto agent
-   make chat-sendgrid-agent     # Sendgrid agent
-   make chat-serper-agent       # Serper agent
-   make chat-slack-agent        # Slack agent
-   make chat-stripe-agent       # Stripe agent
-   make chat-supabase-agent     # Supabase agent
-   make chat-yahoo-finance-agent # Yahoo Finance agent
-   make chat-youtube-agent      # YouTube agent
-   make chat-zerobounce-agent   # Zerobounce agent
-   ```
+# Or start a specific custom agent:
+make chat-airtable-agent     # Airtable agent
+make chat-agicap-agent       # Agicap agent
+make chat-aws-s3-agent       # AWS S3 agent
+make chat-brevo-agent        # Brevo agent
+make chat-clockify-agent     # Clockify agent
+make chat-discord-agent      # Discord agent
+make chat-github-agent       # Github agent
+make chat-gladia-agent       # Gladia agent
+make chat-gmail-agent        # Gmail agent
+make chat-google-analytics-agent # Google Analytics agent
+make chat-google-calendar-agent # Google Calendar agent
+make chat-google-drive-agent # Google Drive agent
+make chat-google-sheets-agent # Google Sheets agent
+make chat-harvest-agent       # Harvest agent
+make chat-hubspot-agent       # Hubspot agent
+make chat-linkedin-agent      # LinkedIn agent
+make chat-mercury-agent       # Mercury agent
+make chat-naas-agent         # Naas agent
+make chat-news-api-agent     # News API agent
+make chat-notion-agent       # Notion agent
+make chat-onedrive-agent     # OneDrive agent
+make chat-pennylane-agent    # Pennylane agent
+make chat-pipedrive-agent    # Pipedrive agent
+make chat-postgres-agent     # Postgres agent
+make chat-qonto-agent        # Qonto agent
+make chat-sendgrid-agent     # Sendgrid agent
+make chat-serper-agent       # Serper agent
+make chat-slack-agent        # Slack agent
+make chat-stripe-agent       # Stripe agent
+make chat-supabase-agent     # Supabase agent
+make chat-yahoo-finance-agent # Yahoo Finance agent
+make chat-youtube-agent      # YouTube agent
+make chat-zerobounce-agent   # Zerobounce agent
+```
 
-   You will only have a access to tools registered in .env file.
-   To change default agent please update: `.DEFAULT_GOAL := chat-supervisor-agent` in Makefile
+You will only have a access to tools registered in .env file.
+To change default agent please update: `.DEFAULT_GOAL := chat-supervisor-agent` in Makefile
 
 ### Managing Dependencies
 
@@ -219,9 +211,11 @@ So by default will just use:
 - The branch you are actually on
 - The `origin` remote. Even if other exists, it will always use `origin` by default.
 
-## Build New Components
+## Development Guide
 
-### Create Integration
+### Creating Components
+
+### Integrations
 
 To create a new integration, follow these steps:
 
@@ -244,7 +238,7 @@ To create a new integration, follow these steps:
 
 For more detailed examples, check the existing integrations in the `src/integrations/` directory.
 
-### Create Pipeline
+### Pipelines
 
 Pipelines in ABI are used to process and transform data. Here's how to create a new pipeline:
 
@@ -265,7 +259,7 @@ Pipelines in ABI are used to process and transform data. Here's how to create a 
 
 For examples, see existing pipelines in the `src/data/pipelines/` directory.
 
-### Create Workflow
+### Workflows
 
 To create a new workflow in ABI, follow these steps:
 
@@ -293,7 +287,7 @@ To create a new workflow in ABI, follow these steps:
 
 For examples, see existing workflows in the `src/workflows/` directory.
 
-### Create Assistant (Single Agent)
+### Assistants
 
 To create a new assistant, follow these steps:
 
@@ -311,17 +305,17 @@ Create a new file in `src/assistants/custom/YourAssistant.py` using template: `s
 - Add new function in Makefile: `make chat-<assistant-name>-agent`
 - Run new assistant: `make chat-<assistant-name>-agent`
 
-## Standard Operating Procedure
+### Development Process
 
 This standard procedure explain how to answer to user intent using the ABI framework.
 
-### Start with user intent
+#### Understanding User Intent
 
 Begin by identifying the user's business problem and core question they want answered. 
 Understanding this clearly will help guide the solution design.
 For example, **"What are my top priorities?"**
 
-### Map Business Problem to Ontology
+#### Ontology Mapping
 
 Map your business problem to ontological concepts:
 
@@ -345,7 +339,7 @@ Map your business problem to ontological concepts:
    - Use schema to retrieve data from all relevant subclasses
    - Ensures solution remains tool-agnostic and reusable
 
-### Build Components
+#### Component Development
 
 Once you have your ontological concepts, build your solution in three steps:
 
@@ -365,85 +359,128 @@ Once you have your ontological concepts, build your solution in three steps:
    Workflows should focus on business logic rather than data transformation.
    Please checkout `src/workflows/operations_assistant/GetTopPrioritiesWorkflow` for more details.
 
+#### Component Testing
+
+Testing individual components is a crucial part of development. ABI provides a simple way to test integrations, pipelines, and workflows using Python's `__main__` block pattern. This allows you to:
+
+- Validate component functionality in isolation
+- Debug issues without running the full system
+- Experiment with different configurations and parameters
+- Verify data transformations and outputs
+- Rapidly iterate on component development
+
+Here's how to test a component:
+
+```python
+# src/data/pipelines/YourPipeline.py
+if __name__ == "__main__":
+      from src import secret
+      from src.integrations import YourIntegration
+      from abi.services.ontology_store import OntologyStoreService
+      
+      # Setup dependencies
+      integration = YourIntegration(YourIntegrationConfiguration(...))
+      ontology_store = OntologyStoreService()
+      
+      # Create pipeline configuration
+      config = YourPipelineConfiguration(
+         integration=integration,
+         ontology_store=ontology_store
+      )
+      
+      # Initialize and run pipeline
+      pipeline = YourPipeline(config)
+      result = pipeline.run(YourPipelineParameters(
+         parameter_1="test",
+         parameter_2=123
+      ))
+      
+      # Print results in Turtle format to verify ontology mapping
+      print(result.serialize(format="turtle"))
+```
+Run with: `poetry run python src/data/pipelines/YourPipeline.py`
+
+Best Practices:
+- Start testing from the lowest level (integrations) and work up
+- Test with various input parameters to ensure robust handling
+- Verify outputs match expected formats and structures
+- Use print statements strategically for debugging
+- Keep test configurations in a separate file if they become complex
+
+Remember to handle your secrets appropriately and never commit sensitive credentials to version control.
+
 NB: Each component (Integration, Pipeline, Workflow) can be used as both an AI assistant tool and a REST API endpoint.
 
-### Setup Assistant
+#### Assistant Configuration
 1. [Create or use an existing assistant](#create-assistant-single-agent) in `src/assistants`.
 2. Setup the workflow that answer to the user intent as a tool in the assistant. We recommend to put the user intent as description of your workflow so the assistant can understand it better.
 3. You can also add your pipelines and integrations function as tools if you want to trigger them from the assistant.
 
-### Validate your solution
+#### Solution Validation
 1. Setup your assistant to validate your solution with your terminal. See [Chat with Assistant](#chat-with-assistant-in-terminal) for detailed instructions.
 2. Ask the user intent and see if the solution is working as expected.
 3. If not, you can update your assistant configuration, workflow, pipeline and integration and test again.
 
-### Deploy to production
+#### Production Deployment
 Merge your branch into main.
 - Your assistant will be deployed to production and you will be able to use it with API but also in Naas platform.
 - Your workflows, pipelines and integrations will also be deployed as API.
 - Your pipelines will schedule according to your configuration.
 
-### Learn more
+## API Deployment
 
-- lib/abi: [lib/abi/README.md](lib/README.md)
-- src: [src/README.md](src/README.md)
+### Setup Requirements
 
-## Deploying the API
-
-### Prerequisites
-
-1. Create a GitHub Classic Personal Access Token:
+1. **Create a GitHub Classic Personal Access Token**:
    - Go to GitHub Settings > Developer Settings > Personal Access Tokens > Tokens (classic)
    - Generate a new token with the following permissions:
      - `repo` (Full control of private repositories)
      - `read:packages` and `write:packages` (For container registry access)
    - Copy the token value
 
-2. Get required API keys:
+2. **Get required API keys**:
    - OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
    - NAAS Credentials JWT Token from your NAAS account
 
-### Setup GitHub Repository Secrets
+### Configuration
 
-1. Navigate to your repository's Settings > Secrets and variables > Actions
-2. Add the following secrets:
+1. **Navigate to your repository's Settings > Secrets and variables > Actions**
+2. **Add the following secrets**:
    - `ACCESS_TOKEN`: Your GitHub Classic Personal Access Token
    - `OPENAI_API_KEY`: Your OpenAI API key
    - `NAAS_CREDENTIALS_JWT_TOKEN`: Your NAAS Credentials JWT Token
    - `ABI_API_KEY`: Your key to access the API
 
-### Customize Deployment Configuration
+3. **Open `.github/workflows/deploy_api.yml**
+4. **Update the registry name**: `REGISTRY_NAME`
+5. **Add your github secrets in the env section of the**: "Push latest abi container"
+6. **Pass the secrets to space environment in `ENV_CONFIG`**
 
-1. Open `.github/workflows/deploy_api.yml`
-2. Update the registry name: `REGISTRY_NAME`
-3. Add your github secrets in the env section of the: "Push latest abi container".
-4. Pass the secrets to space environment in `ENV_CONFIG`.
-
-### Deployment Process
+### Deployment Steps
 
 The API deployment is automated through GitHub Actions and triggers when:
 1. A new container is built (via the "Build ABI Container" workflow)
 2. The deployment workflow creates/updates a NAAS space with the latest container image
 3. The API will be accessible through the NAAS platform once deployment is complete as the following URL: `https://<REGISTRY_NAME>.default.space.naas.ai/`
 
-### Monitoring Deployment
+### Monitoring
 
-1. Go to your repository's Actions tab
-2. Look for the "ABI API" workflow
-3. Check the latest workflow run for deployment status and logs
+1. **Go to your repository's Actions tab**
+2. **Look for the "ABI API" workflow**
+3. **Check the latest workflow run for deployment status and logs**
 
-### Customize API
+### API Customization
 
 To customize the API appearance and functionality:
 
-1. Add custom branding:
+1. **Add custom branding**:
    - Place `logo.png` and `favicon.ico` in the `assets` folder
 
-2. Update API documentation:
+2. **Update API documentation**:
    - Modify TITLE and DESCRIPTION in `src/openapi_docs.py`
    - Customize documentation structure by editing `src/openapi_docs.py`
 
-3. Add new routes:
+3. **Add new routes**:
    - Add route handlers in `src/api.py`
    - Example: Adding a new assistant
    - Import your assistant from `src/assistants/custom/YourAssistant.py`
@@ -454,17 +491,22 @@ To customize the API appearance and functionality:
    your_assistant.as_api(assistants_router)
    ```
 
-## Cursor users
+## Additional Resources
+
+- **lib/abi**: [lib/abi/README.md](lib/README.md)
+- **src**: [src/README.md](src/README.md)
+
+## Development Tools
 
 For Cursor users there is the [.cursorrules](.cursorrules) file already configured to help you create new Integrations, Pipelines and Workflows.
 
 More will be added as we add more components to the framework.
 
-## Contributing
+## Community
 
-1. Fork the repository.
-2. Create a new branch with your feature or fix.
-3. Open a pull request to the main branch.
+1. **Fork the repository**
+2. **Create a new branch with your feature or fix**
+3. **Open a pull request to the main branch**
 
-## Support
+## Help & Support
 For any questions or support requests, please reach out via support@naas.ai or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2xmz8c3j8-OH3UAqvwsYkTR3BLRHGXeQ) on Slack.
