@@ -1,17 +1,20 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
+from fastapi import APIRouter
+from src.assistants.foundation.SupportAssistant import create_support_assistant
+from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import AgicapIntegration, PennylaneIntegration, MercuryIntegration, QontoIntegration, StripeIntegration
 from src.integrations.AgicapIntegration import AgicapIntegrationConfiguration
 from src.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
 from src.integrations.MercuryIntegration import MercuryIntegrationConfiguration
 from src.integrations.StripeIntegration import StripeIntegrationConfiguration
 from src.integrations.QontoIntegration import QontoIntegrationConfiguration
-from fastapi import APIRouter
 
 DESCRIPTION = "A Financial Assistant that analyzes transactions and provides financial insights."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/finance_management.png"
-SYSTEM_PROMPT = '''
+SYSTEM_PROMPT = f'''
 You are a Financial Assistant with access to comprehensive financial data sources. 
 
 Your primary objective is to analyze and optimize financial transactions, ensuring you identify key insights and trends to guide financial strategies. 
@@ -28,15 +31,38 @@ Always:
 2. Provide structured, markdown-formatted responses
 3. Include metrics and performance indicators in your analysis
 4. Be casual but professional in your communication
+
+RESPONSIBILITIES
+-----------------
+{RESPONSIBILITIES_PROMPT}
 '''
 
 def create_finance_assistant(
-        agent_shared_state: AgentSharedState = None, 
-        agent_configuration: AgentConfiguration = None
-    ) -> Agent:
-    model = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=secret.get('OPENAI_API_KEY'))
+    agent_shared_state: AgentSharedState = None, 
+    agent_configuration: AgentConfiguration = None
+) -> Agent:
+    # Init
     tools = []
+    agents = []
 
+    # Set model
+    model = ChatOpenAI(
+        model="gpt-4o", 
+        temperature=0, 
+        api_key=secret.get('OPENAI_API_KEY')
+    )
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
+            on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
+            system_prompt=SYSTEM_PROMPT
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+
+    # Add tools
     if secret.get('AGICAP_USERNAME') and secret.get('AGICAP_PASSWORD') and secret.get('AGICAP_BEARER_TOKEN') and secret.get('AGICAP_CLIENT_ID') and secret.get('AGICAP_CLIENT_SECRET') and secret.get('AGICAP_API_TOKEN'):    
         integration_config = AgicapIntegrationConfiguration(
             username=secret.get('AGICAP_USERNAME'),
@@ -72,20 +98,16 @@ def create_finance_assistant(
             api_key=stripe_key
         )
         tools += StripeIntegration.as_tools(integration_config)
-    
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
+
+    # Add agents
+    agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
     
     return FinanceAssistant(
         name="finance_assistant", 
         description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
+        agents=agents,
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
@@ -93,12 +115,12 @@ def create_finance_assistant(
 
 class FinanceAssistant(Agent):
     def as_api(
-            self, 
-            router: APIRouter, 
-            route_name: str = "finance", 
-            name: str = "Finance Assistant", 
-            description: str = "API endpoints to call the Finance assistant completion.", 
-            description_stream: str = "API endpoints to call the Finance assistant stream completion.",
-            tags: list[str] = []
-        ):
+        self, 
+        router: APIRouter, 
+        route_name: str = "finance", 
+        name: str = "Finance Assistant", 
+        description: str = "API endpoints to call the Finance assistant completion.", 
+        description_stream: str = "API endpoints to call the Finance assistant stream completion.",
+        tags: list[str] = []
+    ):
         return super().as_api(router, route_name, name, description, description_stream, tags)
