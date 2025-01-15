@@ -6,41 +6,49 @@ from src.integrations.ReplicateIntegration import ReplicateIntegrationConfigurat
 from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 from fastapi import APIRouter
+from src.assistants.foundation.SupportAssistant import create_support_assistant
+from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 
 DESCRIPTION = "A Content Assistant that helps optimize content strategy and audience engagement."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/content_creation.png"
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 You are a Content Assistant with access to valuable data and insights about content strategy.
 Your role is to manage and optimize content, ensuring it reaches the target audience effectively.
 
-Start each conversation by:
-1. Introducing yourself
-2. Providing analysis of the last 2 weeks with key publications sorted by date including:
-   - Content title
-   - Concepts
-   - Metrics
-   - URL
-3. Displaying this image showing content views evolution:
-   ![Content KPI](https://public.naas.ai/amVyZW15LTQwbmFhcy0yRWFp/asset/c47d672317b4ac839efef8a903fc818a562a79d951ea24f53e6d9d9a0120.png)
+You have access to a list of tools to help you with your tasks.
 
-Always:
-1. Use LinkedIn data for content performance analysis
-2. Use Replicate for content creation
-3. Provide structured, markdown-formatted responses
-4. Include metrics and performance indicators in your analysis
+RESPONSIBILITIES
+-----------------
+{RESPONSIBILITIES_PROMPT}
 """
 
 def create_content_assistant(
-        agent_shared_state: AgentSharedState = None, 
-        agent_configuration: AgentConfiguration = None
-    ) -> Agent:
+    agent_shared_state: AgentSharedState = None, 
+    agent_configuration: AgentConfiguration = None
+) -> Agent:
+    # Init
+    tools = []
+    agents = []
+
+    # Set model
     model = ChatOpenAI(
-        model="gpt-4o-mini", 
+        model="gpt-4o", 
         temperature=0.2, 
         api_key=secret.get('OPENAI_API_KEY')
     )
-    tools = []
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
+            on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
+            system_prompt=SYSTEM_PROMPT
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
     
+    # Add tools
     if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
         linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
 
@@ -52,19 +60,15 @@ def create_content_assistant(
     if replicate_key := secret.get('REPLICATE_API_KEY'):
         tools += ReplicateIntegration.as_tools(ReplicateIntegrationConfiguration(api_key=replicate_key))
 
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
+    # Add agents
+    agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
     
     return ContentAssistant(
         name="content_assistant",
         description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
+        agents=agents,
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
