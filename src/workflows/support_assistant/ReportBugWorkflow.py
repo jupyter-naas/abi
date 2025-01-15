@@ -82,8 +82,8 @@ class ReportBugWorkflow(Workflow):
             list[StructuredTool]: List containing the workflow tool
         """
         return [StructuredTool(
-            name="report_bug",
-            description="Creates GitHub Issue to report bug",
+            name="create_bug_report",
+            description="Create or post a bug report for the support assistant.",
             func=lambda **kwargs: self.run(ReportBugWorkflowParameters(**kwargs)),
             args_schema=ReportBugWorkflowParameters
         )]
