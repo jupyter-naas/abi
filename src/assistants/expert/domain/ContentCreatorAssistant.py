@@ -1,8 +1,8 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_anthropic import ChatAnthropic
-from src.integrations import LinkedinIntegration, YouTubeIntegration, ReplicateIntegration, NewsAPIIntegration, ReplicateIntegration, PerplexityIntegration
-from src.integrations.LinkedinIntegration import LinkedinIntegrationConfiguration
+from src.integrations import LinkedInIntegration, YouTubeIntegration, ReplicateIntegration, NewsAPIIntegration, ReplicateIntegration, PerplexityIntegration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
 from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
 from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
