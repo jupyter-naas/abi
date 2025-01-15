@@ -15,7 +15,6 @@ from rdflib.namespace import Namespace
 from pathlib import Path
 import hashlib
 import asyncio
-import git
 
 CCO = Namespace("https://www.commoncoreontologies.org/")
 DC = DCTERMS = Namespace("http://purl.org/dc/terms/")
@@ -30,10 +29,12 @@ class UpdateAlgoliaIndexConfiguration(WorkflowConfiguration):
     """
     algolia_integration_config: AlgoliaIntegrationConfiguration
 
+
 class UpdateAlgoliaIndexParameters(WorkflowParameters):
     """Parameters for UpdateAlgoliaIndex execution."""
     index_name: str = Field(default="abi-search", description="Name of the Algolia index to update")
     branch_name: str = Field(default="main", description="Name of the active branch")
+
 
 class UpdateAlgoliaIndex(Workflow):
     """Workflow for updating the Algolia index."""
@@ -666,31 +667,31 @@ class UpdateAlgoliaIndex(Workflow):
         all_records = []
 
         # Collect all data with branch_name parameter
-        assistants = self.__scan_assistants(self.__configuration.branch_name)
+        assistants = self.__scan_assistants(parameters.branch_name)
         logger.info(f"Found {len(assistants)} assistants")
         all_records.extend(assistants)
 
-        integrations = self.__scan_integrations(self.__configuration.branch_name)
+        integrations = self.__scan_integrations(parameters.branch_name)
         logger.info(f"Found {len(integrations)} integrations")
         all_records.extend(integrations)
 
-        analytics = self.__scan_analytics(self.__configuration.branch_name)
+        analytics = self.__scan_analytics(parameters.branch_name)
         logger.info(f"Found {len(analytics)} analytics")
         all_records.extend(analytics)
 
-        workflows = self.__scan_workflows(self.__configuration.branch_name)
+        workflows = self.__scan_workflows(parameters.branch_name)
         logger.info(f"Found {len(workflows)} workflows")
         all_records.extend(workflows)
 
-        pipelines = self.__scan_pipelines(self.__configuration.branch_name)
+        pipelines = self.__scan_pipelines(parameters.branch_name)
         logger.info(f"Found {len(pipelines)} pipelines")
         all_records.extend(pipelines)
 
-        models = self.__scan_models(self.__configuration.branch_name)
+        models = self.__scan_models(parameters.branch_name)
         logger.info(f"Found {len(models)} models")
         all_records.extend(models)
 
-        ontologies = self.__scan_ontologies(self.__configuration.branch_name)
+        ontologies = self.__scan_ontologies(parameters.branch_name)
         logger.info(f"Found {len(ontologies)} ontologies")
         all_records.extend(ontologies)
         
@@ -736,3 +737,19 @@ class UpdateAlgoliaIndex(Workflow):
         @router.post("/update_algolia_index")
         def update_algolia_index(parameters: UpdateAlgoliaIndexParameters):
             return self.run(parameters)
+        
+if __name__ == "__main__":
+    from src.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
+    from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
+    from src import secret
+    import asyncio
+    
+    # Create configuration
+    config = UpdateAlgoliaIndexConfiguration(
+        algolia_integration_config=AlgoliaIntegrationConfiguration(
+            app_id=secret.get("ALGOLIA_APPLICATION_ID"),
+            api_key=secret.get("ALGOLIA_API_KEY")
+        ),
+    )
+    workflow = UpdateAlgoliaIndex(config)
+    asyncio.run(workflow.run(UpdateAlgoliaIndexParameters(index_name="workspace-search")))
