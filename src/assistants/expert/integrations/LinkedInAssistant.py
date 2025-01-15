@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import LinkedInIntegration
-from src.integrations.LinkedInIntegration import LinkedinIntegrationConfiguration
+from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
@@ -33,7 +33,7 @@ def create_linkedin_agent():
     
     # Add integration based on available credentials
     if secret.get('li_at') and secret.get('jsessionid'):    
-        linkedin_integration_config = LinkedinIntegrationConfiguration(li_at=secret.get('li_at'), jsessionid=secret.get('jsessionid'))
+        linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=secret.get('li_at'), jsessionid=secret.get('jsessionid'))
         tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
     # Add support assistant

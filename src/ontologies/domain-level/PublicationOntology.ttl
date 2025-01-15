@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for publications."@en ;
     dc:license "" ;
-    dc:title "Publication Domain Ontology" .
+    dc:title "Publication Ontology" .
 
 #################################################################
 #    Classes

@@ -56,8 +56,8 @@ class IssueListWorkflow(Workflow):
             list[StructuredTool]: List containing the workflow tool
         """
         return [StructuredTool(
-            name="list_github_issues",
-            description="Lists GitHub issues from the specified repository",
+            name="list_feature_requests_and_bug_reports",
+            description="Lists feature requests and bug reports.",
             func=lambda **kwargs: self.run(IssueListWorkflowParameters(**kwargs)),
             args_schema=IssueListWorkflowParameters
         )]

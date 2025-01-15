@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for contracts and agreements."@en ;
     dc:license "" ;
-    dc:title "Contract Domain Ontology" .
+    dc:title "Contract Ontology" .
 
 #################################################################
 #    Classes

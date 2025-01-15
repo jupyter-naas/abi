@@ -11,7 +11,7 @@ from abi import logger
 LOGO_URL = "https://logo.clearbit.com/linkedin.com"
 
 @dataclass
-class LinkedinIntegrationConfiguration(IntegrationConfiguration):
+class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for LinkedIn integration.
     
     Attributes:
@@ -25,15 +25,15 @@ class LinkedinIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://www.linkedin.com/voyager/api"
     custom_api_url: str = "https://3hz1hdpnlf.execute-api.eu-west-1.amazonaws.com/prod"
 
-class LinkedinIntegration(Integration):
+class LinkedInIntegration(Integration):
     """LinkedIn API integration client.
     
     This integration provides methods to interact with LinkedIn's API endpoints. Using the custom API maintained by the team.
     """
 
-    __configuration: LinkedinIntegrationConfiguration
+    __configuration: LinkedInIntegrationConfiguration
 
-    def __init__(self, configuration: LinkedinIntegrationConfiguration):
+    def __init__(self, configuration: LinkedInIntegrationConfiguration):
         """Initialize LinkedIn client with authentication cookies."""
         super().__init__(configuration)
         self.__configuration = configuration
@@ -505,11 +505,11 @@ class LinkedinIntegration(Integration):
 
         return df.reset_index(drop=True)
 
-def as_tools(configuration: LinkedinIntegrationConfiguration):
+def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     
-    integration = LinkedinIntegration(configuration)
+    integration = LinkedInIntegration(configuration)
 
     class GetProfileViewSchema(BaseModel):
         profile_url: str = Field(..., description="LinkedIn profile URL")
