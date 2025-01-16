@@ -106,7 +106,7 @@ assistants_router = APIRouter(
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
-supervisor_agent = create_supervisor_agent()
+supervisor_agent = create_supervisor_assistant()
 supervisor_agent.as_api(assistants_router)
 
 support_agent = create_support_assistant()
