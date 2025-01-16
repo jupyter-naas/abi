@@ -15,7 +15,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
 # Domain assistants
 from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
 from src.assistants.domain.ContentAssistant import create_content_assistant
