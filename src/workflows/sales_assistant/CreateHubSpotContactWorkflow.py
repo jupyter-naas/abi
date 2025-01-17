@@ -14,7 +14,6 @@ class CreateHubSpotContactWorkflowConfiguration(WorkflowConfiguration):
     Attributes:
         hubspot_integration_config (HubSpotIntegrationConfiguration): Configuration for the HubSpot integration
     """
-
     hubspot_integration_config: HubSpotIntegrationConfiguration
 
 

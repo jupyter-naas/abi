@@ -27,7 +27,7 @@ from src.assistants.expert.integrations.GoogleDriveAssistant import create_googl
 from src.assistants.expert.integrations.GoogleSheetsAssistant import create_google_sheets_agent
 from src.assistants.expert.integrations.GlassdoorAssistant import create_glassdoor_agent
 from src.assistants.expert.integrations.HarvestAssistant import create_harvest_agent
-from src.assistants.expert.integrations.HubspotAssistant import create_hubspot_agent
+from src.assistants.expert.integrations.HubSpotAssistant import create_hubspot_agent
 from src.assistants.expert.integrations.LinkedInAssistant import create_linkedin_agent
 from src.assistants.expert.integrations.MailchimpAssistant import create_mailchimp_agent
 from src.assistants.expert.integrations.MercuryAssistant import create_mercury_agent
