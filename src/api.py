@@ -32,15 +32,16 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 # Docs
-from src.openapi_doc import TITLE, DESCRIPTION, TAGS_METADATA, API_LANDING_HTML
+from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
+from src import config
 
 # Init API
+TITLE = config.api_title
+DESCRIPTION = config.api_description
 app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
 # Set logo path
-logo_path = "assets/logo.png"
-if not os.path.exists(logo_path):
-    logo_path = "assets/logo_default.png"
+logo_path = config.logo_path
 logo_name = os.path.basename(logo_path)
 
 # Mount the static directory
