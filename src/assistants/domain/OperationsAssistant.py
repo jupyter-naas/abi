@@ -21,7 +21,7 @@ from src.data.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline,
 from src.data.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
 from src.workflows.operations_assistant.NaasStorageWorkflows import NaasStorageWorkflows, NaasStorageWorkflowsConfiguration
 from src.workflows.operations_assistant.NaasWorkspaceWorkflows import NaasWorkspaceWorkflows, NaasWorkspaceWorkflowsConfiguration
-
+from src.workflows.operations_assistant.SetupGithubABIWorkflows import SetupGithubABIWorkflows, SetupGithubABIWorkflowsConfiguration
 
 DESCRIPTION = "An Operations Assistant that manages tasks and projects to improve operational efficiency."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/operations_efficiency.png"
@@ -96,6 +96,12 @@ def create_operations_assistant(
     if github_access_token := secret.get('GITHUB_ACCESS_TOKEN'):
         github_integration_config = GithubIntegrationConfiguration(access_token=github_access_token)
         github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=github_access_token)
+
+        # Add SetupGithubABIWorkflows tool
+        setup_github_abi_workflows = SetupGithubABIWorkflows(SetupGithubABIWorkflowsConfiguration(
+            github_integration_config=github_integration_config
+        ))
+        tools += setup_github_abi_workflows.as_tools()
 
         # Add CreateIssueAndAddToProjectWorkflow tool
         create_issue_and_add_to_project_workflow = CreateIssueAndAddToProjectWorkflow(CreateIssueAndAddToProjectWorkflowConfiguration(
