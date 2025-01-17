@@ -44,6 +44,10 @@ app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 logo_path = config.logo_path
 logo_name = os.path.basename(logo_path)
 
+# Set favicon path
+favicon_path = config.favicon_path
+favicon_name = os.path.basename(favicon_path)
+
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
 
@@ -202,11 +206,11 @@ app.openapi = custom_openapi
 
 @app.get("/docs", include_in_schema=False)
 def overridden_swagger():
-	return get_swagger_ui_html(openapi_url="/openapi.json", title=TITLE, swagger_favicon_url=f"/static/favicon.ico")
+	return get_swagger_ui_html(openapi_url="/openapi.json", title=TITLE, swagger_favicon_url=f"/static/{favicon_name}")
 
 @app.get("/redoc", include_in_schema=False)
 def overridden_redoc():
-	return get_redoc_html(openapi_url="/openapi.json", title=TITLE, redoc_favicon_url=f"/static/favicon.ico")
+	return get_redoc_html(openapi_url="/openapi.json", title=TITLE, redoc_favicon_url=f"/static/{favicon_name}")
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
