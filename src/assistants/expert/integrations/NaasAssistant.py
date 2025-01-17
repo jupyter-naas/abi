@@ -3,9 +3,8 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from fastapi import APIRouter
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import NaasIntegration, NaasCreditsIntegration
+from src.integrations import NaasIntegration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.integrations.NaasCreditsIntegration import NaasCreditsIntegrationConfiguration
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
@@ -49,10 +48,6 @@ def create_naas_agent(
     if secret.get('NAAS_API_KEY'):    
         naas_integration_config = NaasIntegrationConfiguration(api_key=secret.get('NAAS_API_KEY'))
         tools += NaasIntegration.as_tools(naas_integration_config)
-
-    if secret.get('CREDITS_API_TOKEN'):
-        naas_credits_integration_config = NaasCreditsIntegrationConfiguration(api_key=secret.get('CREDITS_API_TOKEN'))
-        tools += NaasCreditsIntegration.as_tools(naas_credits_integration_config)
 
     # Add agents
     agents.append(create_support_assistant(AgentSharedState(thread_id=2), agent_configuration))
