@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 from contextlib import contextmanager
+import pandas as pd
 
 LOGO_URL = "https://logo.clearbit.com/postgresql.org"
 
@@ -62,6 +63,24 @@ class PostgresIntegration(Integration):
             connection.close()
         except Exception as e:
             raise IntegrationConnectionError(f"PostgreSQL connection failed: {str(e)}")
+        
+    def execute_pandas_query(self, query: str) -> pd.DataFrame:
+        """Execute a SQL query and return results as a pandas DataFrame.
+        
+        Args:
+            query (str): SQL query to execute
+            
+        Returns:
+            pd.DataFrame: Query results as a pandas DataFrame
+            
+        Raises:
+            IntegrationConnectionError: If the operation fails
+        """
+        try:
+            with self.__get_connection() as conn:
+                return pd.read_sql_query(query, conn)
+        except Exception as e:
+            raise IntegrationConnectionError(f"PostgreSQL query failed: {str(e)}")
 
     def execute_query(self,
                      query: str,
@@ -217,7 +236,10 @@ def as_tools(configuration: PostgresIntegrationConfiguration):
     from pydantic import BaseModel, Field
     
     integration = PostgresIntegration(configuration)
-    
+
+    class PandasQuerySchema(BaseModel):
+        query: str = Field(..., description="SQL query")
+
     class QuerySchema(BaseModel):
         query: str = Field(..., description="SQL query")
         params: Optional[Union[Tuple, Dict]] = Field(None, description="Query parameters")
@@ -243,32 +265,38 @@ def as_tools(configuration: PostgresIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="execute_postgres_query",
+            name="postgres_execute_pandas_query",
+            description="Execute a PostgreSQL query and return results as a pandas DataFrame",
+            func=lambda query: integration.execute_pandas_query(query),
+            args_schema=PandasQuerySchema
+        ),
+        StructuredTool(
+            name="postgres_execute_query",
             description="Execute a PostgreSQL query",
             func=lambda query, params, fetch: integration.execute_query(query, params, fetch),
             args_schema=QuerySchema
         ),
         StructuredTool(
-            name="batch_insert_postgres",
+            name="postgres_batch_insert",
             description="Insert multiple rows into a PostgreSQL table",
             func=lambda table, columns, values, page_size:
                 integration.batch_insert(table, columns, values, page_size),
             args_schema=BatchInsertSchema
         ),
         StructuredTool(
-            name="call_postgres_procedure",
+            name="postgres_call_procedure",
             description="Call a PostgreSQL stored procedure",
             func=lambda procedure, params: integration.call_procedure(procedure, params),
             args_schema=ProcedureSchema
         ),
         StructuredTool(
-            name="get_postgres_table_schema",
+            name="postgres_get_table_schema",
             description="Get PostgreSQL table schema information",
             func=lambda table: integration.get_table_schema(table),
             args_schema=TableSchema
         ),
         StructuredTool(
-            name="create_postgres_table",
+            name="postgres_create_table",
             description="Create a new PostgreSQL table",
             func=lambda table, columns, if_not_exists:
                 integration.create_table(table, columns, if_not_exists),

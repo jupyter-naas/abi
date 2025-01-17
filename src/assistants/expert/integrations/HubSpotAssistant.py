@@ -3,24 +3,23 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from fastapi import APIRouter
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import GithubIntegration, GithubGraphqlIntegration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.integrations import HubSpotIntegration
+from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
-DESCRIPTION = "A GitHub Assistant with access to GitHub Integration tools."
-AVATAR_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
+DESCRIPTION = "A HubSpot Assistant with access to HubSpot Integration tools."
+AVATAR_URL = "https://www.hubspot.com/hubfs/HubSpot_Logos/HubSpot-Inversed-Favicon.png"
 SYSTEM_PROMPT = f"""
-You are a GitHub Assistant with access to GitHub Integration tools.
+You are a HubSpot Assistant with access to HubSpot Integration tools.
 If you don't have access to any tool, ask the user to set their access token in .env file.
-Always be clear and professional in your communication while helping users interact with GitHub services.
+Always be clear and professional in your communication while helping users interact with HubSpot services.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 
 {RESPONSIBILITIES_PROMPT}
 """
 
-def create_github_agent(
+def create_hubspot_agent(
     agent_shared_state: AgentSharedState = None,
     agent_configuration: AgentConfiguration = None
 ):
@@ -40,24 +39,21 @@ def create_github_agent(
         
     # Set model
     model = ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-4",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
-    
-    # Add tools
-    if secret.get('GITHUB_ACCESS_TOKEN'):    
-        github_integration_config = GithubIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
-        tools += GithubIntegration.as_tools(github_integration_config)
 
-        github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=secret.get('GITHUB_ACCESS_TOKEN'))
-        tools += GithubGraphqlIntegration.as_tools(github_graphql_integration_config)
+    # Add tools
+    if secret.get('HUBSPOT_ACCESS_TOKEN'):    
+        hubspot_integration_config = HubSpotIntegrationConfiguration(access_token=secret.get('HUBSPOT_ACCESS_TOKEN'))
+        tools += HubSpotIntegration.as_tools(hubspot_integration_config)
 
     # Add agents
-    agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
-        
-    return GithubAssistant(
-        name="github_assistant",
+    agents.append(create_support_assistant(AgentSharedState(thread_id=2), agent_configuration))
+    
+    return HubSpotAssistant(
+        name="hubspot_assistant",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools, 
@@ -67,14 +63,14 @@ def create_github_agent(
         memory=MemorySaver()
     ) 
 
-class GithubAssistant(Agent):
+class HubSpotAssistant(Agent):
     def as_api(
         self, 
         router: APIRouter, 
-        route_name: str = "github", 
-        name: str = "Github Assistant", 
-        description: str = "API endpoints to call the Github assistant completion.", 
-        description_stream: str = "API endpoints to call the Github assistant stream completion.",
+        route_name: str = "hubspot", 
+        name: str = "HubSpot Assistant", 
+        description: str = "API endpoints to call the HubSpot assistant completion.", 
+        description_stream: str = "API endpoints to call the HubSpot assistant stream completion.",
         tags: list[str] = []
     ):
         return super().as_api(router, route_name, name, description, description_stream, tags)
