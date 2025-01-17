@@ -1,7 +1,7 @@
 name: ABI API
 
 env:
-  REGISTRY_NAME: ${{ github.event.repository.name }}-api
+  REGISTRY_NAME: abi-forvismazars-api
   
 on:
   workflow_run:
