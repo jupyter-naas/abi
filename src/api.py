@@ -15,7 +15,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
 # Domain assistants
 from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
 from src.assistants.domain.ContentAssistant import create_content_assistant
@@ -32,15 +32,16 @@ from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationCo
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 # Docs
-from src.openapi_doc import TITLE, DESCRIPTION, TAGS_METADATA, API_LANDING_HTML
+from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
+from src import config
 
 # Init API
+TITLE = config.api_title
+DESCRIPTION = config.api_description
 app = FastAPI(title=TITLE, docs_url=None, redoc_url=None)
 
 # Set logo path
-logo_path = "assets/logo.png"
-if not os.path.exists(logo_path):
-    logo_path = "assets/logo_default.png"
+logo_path = config.logo_path
 logo_name = os.path.basename(logo_path)
 
 # Mount the static directory
@@ -106,7 +107,7 @@ assistants_router = APIRouter(
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
-supervisor_agent = create_supervisor_agent()
+supervisor_agent = create_supervisor_assistant()
 supervisor_agent.as_api(assistants_router)
 
 support_agent = create_support_assistant()
