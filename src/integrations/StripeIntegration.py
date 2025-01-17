@@ -127,6 +127,10 @@ class StripeIntegration(Integration):
         """Update an existing customer."""
         return self._make_request("POST", f"/customers/{customer_id}", data=data)
     
+    def list_customer_payment_methods(self, customer_id: str) -> Dict:
+        """Get the payment methods of a specific customer."""
+        return self._make_request("GET", f"/customers/{customer_id}/payment_methods")
+    
     def get_products(self) -> Dict:
         """Get the products of the account."""
         return self._make_request(f"/products")
@@ -291,6 +295,9 @@ def as_tools(configuration: StripeIntegrationConfiguration):
         customer_id: str = Field(..., description="ID of the customer to update")
         data: Dict = Field(..., description="Data to update for the customer")
 
+    class ListCustomerPaymentMethodsSchema(BaseModel):
+        customer_id: str = Field(..., description="ID of the customer to get the payment methods")
+
     class GetProductsSchema(BaseModel):
         pass
 
@@ -390,6 +397,12 @@ def as_tools(configuration: StripeIntegrationConfiguration):
             description="Update an existing Stripe customer",
             func=lambda customer_id, data: integration.update_customer(customer_id, data),
             args_schema=UpdateCustomerSchema
+        ),
+        StructuredTool(
+            name="list_customer_payment_methods",
+            description="List the payment methods of a specific customer",
+            func=lambda customer_id: integration.list_customer_payment_methods(customer_id),
+            args_schema=ListCustomerPaymentMethodsSchema
         ),
         StructuredTool(
             name="get_stripe_products",
