@@ -3,7 +3,7 @@ from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor impor
 from src import cli
 import yaml
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 @dataclass
@@ -14,12 +14,15 @@ class PipelineConfig:
 
 @dataclass
 class Config:
-    storage_name: Optional[str]
-    workspace_id: Optional[str]
-    workspace_name: Optional[str]
+    workspace_id: str
+    github_project_repository: str
     github_support_repository: str
     github_project_id: int
     ontology_store_path: str
+    api_title: str
+    api_description: str
+    logo_path: str
+    favicon_path: str
     pipelines: List[PipelineConfig]
 
     @classmethod
@@ -35,12 +38,15 @@ class Config:
                 ) for p in data['pipelines']
             ]
             return cls(
-                storage_name=config_data.get('storage_name'),
                 workspace_id=config_data.get('workspace_id'),
-                workspace_name=config_data.get('workspace_name'),
+                github_project_repository=config_data['github_project_repository'],
                 github_support_repository=config_data['github_support_repository'],
                 github_project_id=config_data['github_project_id'],
                 ontology_store_path=config_data['ontology_store_path'],
+                api_title=config_data['api_title'],
+                api_description=config_data['api_description'],
+                logo_path=config_data['logo_path'],
+                favicon_path=config_data['favicon_path'],
                 pipelines=pipeline_configs
             )
 
