@@ -1,7 +1,7 @@
 name: ABI API
 
 env:
-  REGISTRY_NAME: "abi-api"
+  REGISTRY_NAME: ${{ github.event.repository.name }}-api
   
 on:
   workflow_run:
