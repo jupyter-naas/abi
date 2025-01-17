@@ -121,7 +121,7 @@ class NaasIntegration(Integration):
             Dict: Response from the API containing the workspace details
         """
         payload = {
-            "user_id": "",  # API expects this field but uses the authenticated user
+            "user_id": self.get_user_id_from_jwt(self.__configuration.api_key),  # API expects this field but uses the authenticated user
             "workspace_id": workspace_id
         }
         return self._make_request("GET", f"/workspace/{workspace_id}", payload)
@@ -237,7 +237,23 @@ class NaasIntegration(Integration):
             plugin_id (str): Plugin ID
         """
         return self._make_request("DELETE", f"/workspace/{workspace_id}/plugin/{plugin_id}")
-
+    
+    def search_plugin(self, key: str, value: str, plugins: List[Dict[str, str]] = [], workspace_id: str = None) -> Dict[str, str]:
+        """Search for an assistant by key/value pair in payload.
+        
+        Returns:
+            Dict[str, str]: Dictionary containing the assistant ID and name
+        """
+        if not plugins:
+            plugins = self.get_plugins(workspace_id).get("workspace_plugins", [])
+        for i, a in enumerate(plugins):
+            plugin_id = a.get("id")
+            a_json = json.loads(a.get("payload"))
+            identifier = a_json.get(key)
+            if identifier == value:
+                return plugin_id
+        return None
+    
     # Ontology methods
     def create_ontology(
         self,
