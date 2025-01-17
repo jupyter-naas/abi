@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for ideas and content concepts."@en ;
     dc:license "" ;
-    dc:title "Idea Domain Ontology" .
+    dc:title "Idea Ontology" .
 
 #################################################################
 #    Classes

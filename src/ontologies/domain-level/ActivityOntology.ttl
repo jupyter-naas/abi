@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for activities."@en ;
     dc:license "" ;
-    dc:title "Activity Domain Ontology" .
+    dc:title "Activity Ontology" .
 
 #################################################################
 #    Classes

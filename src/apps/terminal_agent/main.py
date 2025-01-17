@@ -2,7 +2,7 @@ from src.apps.terminal_agent.terminal_style import clear_screen, print_welcome_m
 from abi.services.agent.Agent import Agent
 # Foundation assistants
 from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAssistant import create_supervisor_agent
+from src.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
 # Domain assistants
 from src.assistants.domain.ContentAssistant import create_content_assistant
 from src.assistants.domain.FinanceAssistant import create_finance_assistant
@@ -27,7 +27,7 @@ from src.assistants.expert.integrations.GoogleDriveAssistant import create_googl
 from src.assistants.expert.integrations.GoogleSheetsAssistant import create_google_sheets_agent
 from src.assistants.expert.integrations.GlassdoorAssistant import create_glassdoor_agent
 from src.assistants.expert.integrations.HarvestAssistant import create_harvest_agent
-from src.assistants.expert.integrations.HubspotAssistant import create_hubspot_agent
+from src.assistants.expert.integrations.HubSpotAssistant import create_hubspot_agent
 from src.assistants.expert.integrations.LinkedInAssistant import create_linkedin_agent
 from src.assistants.expert.integrations.MailchimpAssistant import create_mailchimp_agent
 from src.assistants.expert.integrations.MercuryAssistant import create_mercury_agent
@@ -96,7 +96,7 @@ def run_support_agent():
     run_agent(agent)
 
 def run_supervisor_agent():
-    agent = create_supervisor_agent()
+    agent = create_supervisor_assistant()
     run_agent(agent)
 
 def run_opendata_agent():

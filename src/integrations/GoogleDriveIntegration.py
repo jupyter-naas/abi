@@ -7,7 +7,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 import io
 
-LOGO_URL = "https://image.similarpng.com/very-thumbnail/2020/12/Google-drive-logo-Premium-vector--PNG.png"
+LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/Google_Drive_logo.png/2048px-Google_Drive_logo.png"
 
 @dataclass
 class GoogleDriveIntegrationConfiguration(IntegrationConfiguration):

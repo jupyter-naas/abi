@@ -14,7 +14,7 @@
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PersonOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for persons and individuals."@en ;
-    dc:title "Person Domain Ontology" .
+    dc:title "Person Ontology" .
 
 #################################################################
 #    Classes

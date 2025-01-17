@@ -4,18 +4,18 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.workflows.support_assistant import FeatureRequestWorkflow, ReportBugWorkflow, IssueListWorkflow
+from src.workflows.support_assistant.GitHubSupportWorkflows import GitHubSupportWorkflows, GitHubSupportWorkflowsConfiguration
+from src.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
 
+AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
-SUPPORT_ASSISTANT_INSTRUCTIONS = """
-You are a support assistant focusing creating GitHub Issues to request new features or report bugs.
-1. Identify if the user intent is a "feature_request" or "bug_report".
-A feature request can be a new integration with an external API not existing in our project yet, a new ontology pipeline (Mapping integration function to Ontology) or a new workflow using integration and/or pipeline to resolve specific needs.
-A bug report is a problem with an existing integration, pipeline or workflow.
-2. Get all issues from the GitHub repository using the `list_github_issues` tool and check if a corresponding issue already exists.
-3. Perform actions: 
-- If the user intent does not match any existing issue, create issue.
-- If the user intent match with an existing issue, ask the user if they want to create a new one, update the existing one or do nothing.
+SUPPORT_ASSISTANT_INSTRUCTIONS = f"""
+You are a support assistant focusing on answering user requests and creating features requests or reporting bugs.
+
+Be sure to follow the chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
+
+You MUST be sure to validate all input arguments before executing any tool.
+Be clear and concise in your responses.
 """
 
 def create_support_assistant(
@@ -34,24 +34,11 @@ def create_support_assistant(
         github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=github_access_token)
 
         # Add GetIssuesWorkflow tool
-        get_issues_workflow = IssueListWorkflow.IssueListWorkflow(IssueListWorkflow.IssueListWorkflowConfiguration(
-            github_integration_config=github_integration_config
+        get_issues_workflow = GitHubSupportWorkflows(GitHubSupportWorkflowsConfiguration(
+            github_integration_config=github_integration_config,
+            github_graphql_integration_config=github_graphql_integration_config,
         ))
         tools += get_issues_workflow.as_tools()
-
-        # Add FeatureRequestWorkflow tool
-        feature_request_workflow = FeatureRequestWorkflow.FeatureRequestWorkflow(FeatureRequestWorkflow.FeatureRequestWorkflowConfiguration(
-            github_integration_config=github_integration_config,
-            github_graphql_integration_config=github_graphql_integration_config,
-        ))
-        tools += feature_request_workflow.as_tools()
-        
-        # Add ReportBugWorkflow tool
-        report_bug_workflow = ReportBugWorkflow.ReportBugWorkflow(ReportBugWorkflow.ReportBugWorkflowConfiguration(
-            github_integration_config=github_integration_config,
-            github_graphql_integration_config=github_graphql_integration_config,
-        ))
-        tools += report_bug_workflow.as_tools()
     
     # Use provided configuration or create default one
     if agent_configuration is None:
@@ -73,12 +60,12 @@ def create_support_assistant(
 
 class SupportAssistant(Agent):
     def as_api(
-            self, 
-            router: APIRouter, 
-            route_name: str = "support", 
-            name: str = "Support Assistant", 
-            description: str = "API endpoints to call the Support assistant completion.", 
-            description_stream: str = "API endpoints to call the Support assistant stream completion.",
-            tags: list[str] = []
-        ):
+        self, 
+        router: APIRouter, 
+        route_name: str = "support", 
+        name: str = "Support Assistant", 
+        description: str = "API endpoints to call the Support assistant completion.", 
+        description_stream: str = "API endpoints to call the Support assistant stream completion.",
+        tags: list[str] = []
+    ):
         return super().as_api(router, route_name, name, description, description_stream, tags)

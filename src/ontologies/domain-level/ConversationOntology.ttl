@@ -15,7 +15,7 @@
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for conversations and communications."@en ;
     dc:license "" ;
-    dc:title "Conversation Domain Ontology" .
+    dc:title "Conversation Ontology" .
 
 #################################################################
 #    Classes

@@ -1,29 +1,11 @@
-RESPONSIBILITIES_PROMPT = """
-Responsibilities:
+from src.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
+
+RESPONSIBILITIES_PROMPT = f"""
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
-
-    Chain of thought for support_assistant:
-    1.1. Identify if the user intent is a "feature_request" or "bug_report":
-       - Feature request: New integration with external API, new ontology pipeline, or new workflow
-       - Bug report: Issue with existing integration, pipeline, or workflow
+     ALWAYS use the support_assistant following this chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
     
-    1.2. Use `list_github_issues` tool to check for similar existing issues
-    
-    1.3. Take appropriate action:
-       - If no matching issue exists: 
-         * Generate the draft proposition based on templates
-         * Include the complete draft in your response to the user and ask for user approval to create the issue
-         * Create a new issue only after explicit user approval
-       - If matching issue found: 
-         * Show the existing issue details and present options to the user:
-           - Create new issue (include draft in your response)
-           - Update existing issue (include proposed updates in your response)
-           - Take no action
-         * Wait for user decision before proceeding
-
 2. Before executing any tool, you MUST validate with the user all required input arguments you will use in the tool
 
 3. For DELETE operations, you MUST validate input arguments TWICE with explicit user confirmation

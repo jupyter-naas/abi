@@ -13,84 +13,110 @@
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OrganizationOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for organizations and companies."@en ;
+    dc:description "Domain ontology for organizations."@en ;
     dc:license "" ;
-    dc:title "Organization Domain Ontology" .
+    dc:title "Organization Ontology" .
 
 #################################################################
 #    Classes
 #################################################################
 
-abi:Organization a owl:Class ;
-    rdfs:label "Organization"@en ;
-    rdfs:subClassOf bfo:BFO_0000027 ; # Object Aggregate
-    skos:definition "A formal group of people with shared goals and objectives"@en .
+abi:BusinessDomain a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "Business Domain" ;
+    skos:definition "A Business Domain is an Information Content Entity that represents a specific area of expertise or activity within an organization, characterized by distinct processes, goals, and practices." ;
+    skos:example "Marketing, Sales, Engineering, etc." ;
+    rdfs:comment "Business Domains are specialized areas within an organization that focus on specific business functions or activities." .
+
+abi:Industry a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "Industry" ;
+    skos:definition "An Industry is an Information Content Entity that represents a broad category of businesses or organizations that produce similar products or services within a market." ;
+    skos:example "Technology, Finance, Healthcare, etc." ;
+    rdfs:comment "Industries encompass the collective market activities and economic sector of companies producing similar goods or services." .
 
 abi:StaffRange a owl:Class ;
-    rdfs:label "Staff Range"@en .
-
-abi:MicroTeam a abi:StaffRange .
-abi:SmallTeam a abi:StaffRange .
-abi:MediumTeam a abi:StaffRange .
-abi:LargeTeam a abi:StaffRange .
-abi:EnterpriseTeam a abi:StaffRange .
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "Staff Range"@en ;
+    skos:definition "A Staff Range is an Information Content Entity that represents a range of staff size within an organization." ;
+    skos:example "Micro Team, Small Team, Medium Team, Large Team, Enterprise Team." ;
+    rdfs:comment "Staff Ranges are used to categorize the size of an organization's staff." .
 
 #################################################################
 #    Object Properties
 #################################################################
 
 abi:hasStaffRange a owl:ObjectProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range abi:StaffRange .
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain cco:ont00000647 ; # Organization
+    rdfs:range abi:StaffRange ;
+    rdfs:label "has staff range"@en ;
+    skos:definition "A relation between an organization and its staff range."@en ;
+    rdfs:comment "This property captures the relationship between an organization and the size of its staff, which is crucial for understanding the organizational structure and capacity." .
 
-abi:hasMembers a owl:ObjectProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range abi:Person .
+abi:hasBusinessDomain a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain cco:ont00000647 ; # Organization
+    rdfs:range abi:BusinessDomain ;
+    rdfs:label "has business domain" ;
+    skos:definition "Relates an Organization to the Business Domain it operates in, indicating the specific areas of expertise or activity within the organization." ;
+    rdfs:comment "This property links an organization to its internal areas of specialization and activity." .
+
+abi:operatesInIndustry a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain cco:ont00000647 ; # Organization
+    rdfs:range abi:Industry ;
+    rdfs:label "operates in industry" ;
+    skos:definition "Relates an Organization to the Industry in which it operates, indicating the broader market category of its products or services." ;
+    rdfs:comment "This property connects an organization to the wider economic sector it belongs to, based on its market activities." .
 
 #################################################################
 #    Data Properties
 #################################################################
 
-abi:hasName a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
+abi:logo a owl:DatatypeProperty ;
+    rdfs:domain cco:ont00000647 ; # Organization
+    rdfs:range xsd:string ;
+    rdfs:label "logo" ;
+    skos:definition "The URL of the logo of the organization." ;
+    rdfs:comment "The URL of the logo of the organization." .
 
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
+#################################################################
+#    Individuals
+#################################################################
 
-abi:hasTagline a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
+abi:Solopreneur a abi:StaffRange ;
+    rdfs:label "Solopreneur" ;
+    skos:definition "An individual entrepreneur or freelancer operating alone (0-1 employees)" .
 
-abi:hasWebsite a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:anyURI .
+abi:MicroTeam a abi:StaffRange ;
+    rdfs:label "Micro Team" ;
+    skos:definition "A small team consisting of 2 to 10 members" .
 
-abi:hasLinkedInID a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
+abi:SmallCompany a abi:StaffRange ;
+    rdfs:label "Small Company" ;
+    skos:definition "A small company with 11 to 50 employees" .
 
-abi:hasCRMOrgID a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:string .
+abi:MediumCompany a abi:StaffRange ;
+    rdfs:label "Medium Company" ;
+    skos:definition "A medium-sized company with 51 to 200 employees" .
 
-abi:hasInteractionScore a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+abi:LargeCompany a abi:StaffRange ;
+    rdfs:label "Large Company" ;
+    skos:definition "A large company with 201 to 500 employees" .
 
-abi:hasDirectInteractions a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+abi:EnterpriseLevelCompany a abi:StaffRange ;
+    rdfs:label "Enterprise Level" ;
+    skos:definition "An enterprise-level organization with 501 to 1000 employees" .
 
-abi:hasIndirectInteractions a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+abi:MajorCorporation a abi:StaffRange ;
+    rdfs:label "Major Corporation" ;
+    skos:definition "A large corporation with 1001 to 5000 employees" .
 
-abi:hasStaffCount a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+abi:GlobalCorporation a abi:StaffRange ;
+    rdfs:label "Global Corporation" ;
+    skos:definition "A global corporation with 5001 to 10000 employees" .
 
-abi:hasFollowersCount a owl:DatatypeProperty ;
-    rdfs:domain abi:Organization ;
-    rdfs:range xsd:integer .
+abi:MegaCorporation a abi:StaffRange ;
+    rdfs:label "Mega Corporation" ;
+    skos:definition "A massive corporation with more than 10000 employees" .

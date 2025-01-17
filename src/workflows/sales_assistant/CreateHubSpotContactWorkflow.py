@@ -14,7 +14,6 @@ class CreateHubSpotContactWorkflowConfiguration(WorkflowConfiguration):
     Attributes:
         hubspot_integration_config (HubSpotIntegrationConfiguration): Configuration for the HubSpot integration
     """
-
     hubspot_integration_config: HubSpotIntegrationConfiguration
 
 
@@ -50,7 +49,7 @@ class CreateHubSpotContactWorkflowParameters(WorkflowParameters):
         if self.linkedinbio: properties["linkedinbio"] = self.linkedinbio
         return properties
 
-class CreateHubspotContactWorkflow(Workflow):
+class CreateHubSpotContactWorkflow(Workflow):
     """Create a new contact in HubSpot with the given properties."""
     __configuration: CreateHubSpotContactWorkflowConfiguration
     
