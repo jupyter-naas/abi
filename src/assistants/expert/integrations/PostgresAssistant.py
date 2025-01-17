@@ -1,11 +1,13 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
+from fastapi import APIRouter
+from src.assistants.foundation.SupportAssistant import create_support_assistant
+from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import PostgresIntegration
 from src.integrations.PostgresIntegration import PostgresIntegrationConfiguration
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+
 
 DESCRIPTION = "A PostgreSQL Assistant for managing database operations."
 AVATAR_URL = "https://logo.clearbit.com/postgresql.org"
@@ -18,40 +20,69 @@ Always provide all the context (tool response, draft, etc.) to the user in your 
 {RESPONSIBILITIES_PROMPT}
 """
 
-def create_postgres_agent():
-    agent_configuration = AgentConfiguration(
-        on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
-        on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
-        system_prompt=SYSTEM_PROMPT
-    )
+def create_postgres_agent(
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None
+) -> Agent:
+    # Init
+    tools = []
+    agents = []
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
+            on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
+            system_prompt=SYSTEM_PROMPT
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+        
+    # Set model
     model = ChatOpenAI(
-        model="gpt-4",
+        model="gpt-4o",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
-    tools = []
     
-    # Add integration based on available credentials
-    if all(secret.get(key) for key in ['POSTGRES_HOST', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD']):    
+    # Add tools
+    postgres_user = secret.get('POSTGRES_USER')
+    postgres_password = secret.get('POSTGRES_PASSWORD')
+    postgres_dbname = secret.get('POSTGRES_DBNAME')
+    postgres_host = secret.get('POSTGRES_HOST')
+    postgres_port = secret.get('POSTGRES_PORT')
+    if postgres_user and postgres_password and postgres_dbname and postgres_host and postgres_port:    
         integration_config = PostgresIntegrationConfiguration(
-            host=secret.get('POSTGRES_HOST'),
-            port=int(secret.get('POSTGRES_PORT', 5432)),
-            database=secret.get('POSTGRES_DB'),
-            user=secret.get('POSTGRES_USER'),
-            password=secret.get('POSTGRES_PASSWORD')
+            host=postgres_host,
+            port=postgres_port,
+            database=postgres_dbname,
+            user=postgres_user,
+            password=postgres_password
         )
         tools += PostgresIntegration.as_tools(integration_config)
 
-    # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    # Add agents
+    agents.append(create_support_assistant(agent_shared_state, agent_configuration))
     
-    return Agent(
+    return PostgresAssistant(
         name="postgres_assistant",
-        description="Use to manage PostgreSQL database operations",
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools,
-        state=AgentSharedState(thread_id=1),
+        agents=agents,
+        state=agent_shared_state,
         configuration=agent_configuration,
         memory=MemorySaver()
     ) 
+
+class PostgresAssistant(Agent):
+    def as_api(
+        self, 
+        router: APIRouter, 
+        route_name: str = "postgres", 
+        name: str = "Postgres Assistant", 
+        description: str = "API endpoints to call the Postgres assistant completion.", 
+        description_stream: str = "API endpoints to call the Postgres assistant stream completion.",
+        tags: list[str] = []
+    ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)

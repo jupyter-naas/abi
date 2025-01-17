@@ -7,23 +7,20 @@ from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROM
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.workflows.sales_assistant.CreateHubspotContactWorkflow import CreateHubspotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
+from src.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.integrations.StripeIntegration import StripeIntegrationConfiguration
+from src.integrations.PostgresIntegration import PostgresIntegrationConfiguration
+from src.workflows.sales_assistant.CreateHubSpotContactWorkflow import CreateHubSpotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
 
 DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 You are a Sales Assistant.
 Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
 
-Start each conversation by:
-1. Introducing yourself
-2. Providing a brief analysis of 'Abi' new interactions (max 3 bullet points)
-3. Displaying this image showing contacts reached over weeks:
-   ![Contacts Reached](https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_trend.png)
-
-Always:
-1. Provide structured, markdown-formatted responses
-2. Be casual but professional in your communication
+RESPONSIBILITIES
+-----------------
+{RESPONSIBILITIES_PROMPT}
 """
 
 def create_sales_assistant(
@@ -36,7 +33,7 @@ def create_sales_assistant(
 
     # Set model
     model = ChatOpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
@@ -52,12 +49,10 @@ def create_sales_assistant(
         agent_shared_state = AgentSharedState(thread_id=0)
         
     # Add tools
-    if hubspot_access_token := secret.get('HUBSPOT_ACCESS_TOKEN'):
+    hubspot_access_token = secret.get('HUBSPOT_ACCESS_TOKEN')
+    if hubspot_access_token:
         hubspot_integration_config = HubSpotIntegrationConfiguration(access_token=hubspot_access_token)
-        
-        tools += HubSpotIntegration.as_tools(hubspot_integration_config)
-        
-        create_hubspot_contact_workflow = CreateHubspotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
+        create_hubspot_contact_workflow = CreateHubSpotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
             hubspot_integration_config=hubspot_integration_config
         ))
         tools += create_hubspot_contact_workflow.as_tools()
