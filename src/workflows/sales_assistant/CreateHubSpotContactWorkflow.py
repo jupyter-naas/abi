@@ -49,7 +49,7 @@ class CreateHubSpotContactWorkflowParameters(WorkflowParameters):
         if self.linkedinbio: properties["linkedinbio"] = self.linkedinbio
         return properties
 
-class CreateHubspotContactWorkflow(Workflow):
+class CreateHubSpotContactWorkflow(Workflow):
     """Create a new contact in HubSpot with the given properties."""
     __configuration: CreateHubSpotContactWorkflowConfiguration
     
