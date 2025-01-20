@@ -10,7 +10,7 @@ from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.StripeIntegration import StripeIntegrationConfiguration
 from src.integrations.PostgresIntegration import PostgresIntegrationConfiguration
-from src.workflows.sales_assistant.CreateHubSpotContactWorkflow import CreateHubSpotContactWorkflow, CreateHubSpotContactWorkflowConfiguration
+from src.workflows.sales_assistant.HubSpotWorkflows import HubSpotWorkflows, HubSpotWorkflowsConfiguration
 
 DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"
@@ -52,10 +52,10 @@ def create_sales_assistant(
     hubspot_access_token = secret.get('HUBSPOT_ACCESS_TOKEN')
     if hubspot_access_token:
         hubspot_integration_config = HubSpotIntegrationConfiguration(access_token=hubspot_access_token)
-        create_hubspot_contact_workflow = CreateHubSpotContactWorkflow(CreateHubSpotContactWorkflowConfiguration(
+        hubspot_workflows = HubSpotWorkflows(HubSpotWorkflowsConfiguration(
             hubspot_integration_config=hubspot_integration_config
         ))
-        tools += create_hubspot_contact_workflow.as_tools()
+        tools += hubspot_workflows.as_tools()
     
     # Add agents
     agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
