@@ -110,6 +110,7 @@ class GithubIssuePipeline(Pipeline):
         issue_created_at = datetime.strptime(issue_data['created_at'], "%Y-%m-%dT%H:%M:%SZ")
         issue_updated_at = datetime.strptime(issue_data['updated_at'], "%Y-%m-%dT%H:%M:%SZ")
         issue_closed_at = datetime.strptime(issue_data['closed_at'], "%Y-%m-%dT%H:%M:%SZ") if issue_data.get("closed_at") else None
+        issue_pull_request = issue_data.get("pull_request")
         logger.debug(f"Issue: {issue_label} - {issue_url}")
 
         # Init issue properties from GithubGraphQLIntegration
@@ -173,6 +174,12 @@ class GithubIssuePipeline(Pipeline):
                     issue_due_date = issue_due_date.strftime("%Y-%m-%d")
                 logger.debug(f"Issue due date: {issue_due_date}")
 
+        # Find Class
+        if issue_pull_request:
+            issue_class = ABI.GitHubPullRequest
+        else:
+            issue_class = ABI.GitHubIssue
+
         # Add Process: Task Completion
         task_completion = graph.add_individual_to_prefix(
             prefix=ABI,
@@ -197,7 +204,7 @@ class GithubIssuePipeline(Pipeline):
             prefix=ABI,
             uid=str(issue_id),
             label=issue_label,
-            is_a=ABI.GitHubIssue,
+            is_a=issue_class,
             description=issue_description,
             issue_node_id=issue_node_id,
             url=issue_url,
@@ -208,7 +215,7 @@ class GithubIssuePipeline(Pipeline):
             estimate=issue_estimate,
             due_date=issue_due_date,
             updated_date=issue_updated_at,
-            ontology_group=str(ABI.GitHubIssue).split("/")[-1]
+            ontology_group=str(issue_class).split("/")[-1]
         )
         graph.add((task_completion, BFO.BFO_0000058, github_issue))
         graph.add((github_issue, BFO.BFO_0000059, task_completion))
@@ -233,7 +240,7 @@ class GithubIssuePipeline(Pipeline):
             uid=str(int(issue_created_at.timestamp())),
             label=issue_created_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
             is_a=BFO.BFO_0000203,
-            ontology_group=str(BFO.BFO_0000203).split("/")[-1]
+            ontology_group="TemporalRegion"
         )
         graph.add((task_completion, BFO.BFO_0000222, first_instant))
 
