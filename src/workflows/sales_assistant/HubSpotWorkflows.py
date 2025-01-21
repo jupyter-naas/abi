@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Optional, List
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
+from datetime import datetime, timedelta
 
 @dataclass
 class HubSpotWorkflowsConfiguration(WorkflowConfiguration):
@@ -24,11 +25,8 @@ class SearchContactByEmailParameters(WorkflowParameters):
     
     Attributes:
         email (Optional[str]): Email address to search for
-        firstname (Optional[str]): First name to search for
-        lastname (Optional[str]): Last name to search for
-        properties (Optional[List[str]]): List of contact properties to include in results
     """
-    email: Optional[str] = Field(None, description="Optional, Email address to search for")
+    email: Optional[str] = Field(None, description="Optional, Email address to search for or domain to search for")
 
 class SearchContactByNameParameters(WorkflowParameters):
     """Parameters for HubSpotWorkflows.
@@ -64,6 +62,46 @@ class SearchTaskBySubjectParameters(WorkflowParameters):
     """
     subject: Optional[str] = Field(None, description="Optional, Subject of the task to search for")
 
+class SearchTaskByOwnerParameters(WorkflowParameters):
+    """Parameters for HubSpotWorkflows.
+    
+    Attributes:
+        owner_id (Optional[str]): ID of the owner to search for
+    """
+    owner_id: Optional[str] = Field(None, description="Optional, ID of the owner to search for")
+
+class CreateTaskParameters(WorkflowParameters):
+    """Parameters for HubSpotWorkflows.
+    
+    Attributes:
+        subject (str): Subject of the task to create
+    """
+    subject: str = Field(..., description="Subject of the task to create")
+    body: str = Field(None, description="Task notes/description")
+    type: Optional[str] = Field("TODO", description="Type of task (EMAIL, CALL, or TODO). Use default TODO if not specified")
+    priority: Optional[str] = Field("MEDIUM", description="Priority level (LOW, MEDIUM, or HIGH)")
+    due_date: Optional[str] = Field(None, description="Due date for task in format YYYY-MM-DD")
+    owner_id: Optional[str] = Field(None, description="ID of assigned user")
+    contact_ids: Optional[List[str]] = Field([], description="Optional list of contact IDs to associate with the task.")
+    company_ids: Optional[List[str]] = Field([], description="Optional list of company IDs to associate with the task.")
+    deal_ids: Optional[List[str]] = Field([], description="Optional list of deal IDs to associate with the task.")
+
+class UpdateTaskParameters(WorkflowParameters):
+    task_id: str = Field(..., description="ID of the task to update")
+    subject: Optional[str] = Field(None, description="Task title")
+    body: Optional[str] = Field(None, description="Task notes/description")
+    type: Optional[str] = Field("TODO", description="Type of task (EMAIL, CALL, or TODO). Use default TODO if not specified")
+    status: Optional[str] = Field("NOT_STARTED", description="Status NOT_STARTED or COMPLETED")
+    priority: Optional[str] = Field("MEDIUM", description="Priority level (LOW, MEDIUM, or HIGH)")
+    due_date: Optional[str] = Field(None, description="Due date for task in format YYYY-MM-DD")
+    owner_id: Optional[str] = Field(None, description="ID of assigned user")
+    contact_ids: Optional[List[str]] = Field([], description="Optional list of contact IDs to associate with the task.")
+    company_ids: Optional[List[str]] = Field([], description="Optional list of company IDs to associate with the task.")
+    deal_ids: Optional[List[str]] = Field([], description="Optional list of deal IDs to associate with the task.")
+
+class DeleteTaskParameters(WorkflowParameters):
+    task_id: str = Field(..., description="ID of the task to delete")
+
 class HubSpotWorkflows(Workflow):
     """Search for contacts in HubSpot by email or name."""
     __configuration: HubSpotWorkflowsConfiguration
@@ -76,7 +114,7 @@ class HubSpotWorkflows(Workflow):
         filters = [
             {
                 "propertyName": "email",
-                "operator": "EQ",
+                "operator": "CONTAINS_TOKEN",
                 "value": parameters.email
             }
         ]
@@ -87,7 +125,7 @@ class HubSpotWorkflows(Workflow):
         ]
         sorts = [
             {
-                "propertyName": "lastmodifieddate", 
+                "propertyName": "createdate", 
                 "direction": "DESCENDING"
             }
         ]
@@ -116,7 +154,7 @@ class HubSpotWorkflows(Workflow):
         ]
         sorts = [
             {
-                "propertyName": "lastmodifieddate", 
+                "propertyName": "createdate", 
                 "direction": "DESCENDING"
             }
         ]
@@ -220,9 +258,87 @@ class HubSpotWorkflows(Workflow):
         results = self.__hubspot_integration.search_objects("tasks", filter_groups=filter_groups, properties=properties, sorts=sorts)
         return [result.get("properties", {}) for result in results]
     
+    def search_tasks_by_owner(self, parameters: SearchTaskByOwnerParameters) -> List[Dict]:
+        filters = [
+            {
+                "propertyName": "hubspot_owner_id",
+                "operator": "EQ",
+                "value": parameters.owner_id
+            },
+            {
+                "propertyName": "hs_task_status",
+                "operator": "EQ",
+                "value": "NOT_STARTED"
+            }
+        ]
+        properties = [
+            "hs_task_subject",
+            "hs_task_type",
+            "hs_task_body",
+            "hs_task_priority",
+            "hs_task_status",
+            "hs_task_timestamp",
+            "hubspot_owner_id"
+        ]
+        sorts = [
+            {
+                "propertyName": "hs_lastmodifieddate",
+                "direction": "DESCENDING"
+            }
+        ]
+        results = self.__hubspot_integration.search_objects("tasks", filters=filters, properties=properties, sorts=sorts)
+        return [result.get("properties", {}) for result in results]
+    
     def get_owners(self, parameters: GetOwnersParameters) -> List[Dict]:
         results = self.__hubspot_integration.get_owners()
-        return [result.get("properties", {}) for result in results]
+        return results
+    
+    def create_task(self, parameters: CreateTaskParameters) -> Dict:
+        if parameters.due_date is not None:
+            due_date = int((datetime.strptime(parameters.due_date, "%Y-%m-%d")).replace(hour=12, minute=0, second=0, microsecond=0).timestamp() * 1000)
+        else:
+            due_date = None
+
+        result = self.__hubspot_integration.create_task(
+            subject=parameters.subject,
+            type=parameters.type,
+            body=parameters.body,
+            status="NOT_STARTED",
+            priority=parameters.priority,
+            due_date=due_date,
+            owner_id=parameters.owner_id,
+            contact_ids=parameters.contact_ids,
+            company_ids=parameters.company_ids,
+            deal_ids=parameters.deal_ids
+        )
+        return result
+    
+    def update_task(self, parameters: UpdateTaskParameters) -> Dict:
+        if parameters.due_date is not None:
+            due_date = int((datetime.strptime(parameters.due_date, "%Y-%m-%d")).replace(hour=12, minute=0, second=0, microsecond=0).timestamp() * 1000)
+        else:
+            due_date = None
+
+        result = self.__hubspot_integration.update_task(
+            task_id=parameters.task_id,
+            subject=parameters.subject,
+            body=parameters.body,
+            type=parameters.type,
+            priority=parameters.priority,
+            status=parameters.status,
+            due_date=due_date,
+            owner_id=parameters.owner_id,
+            contact_ids=parameters.contact_ids,
+            company_ids=parameters.company_ids,
+            deal_ids=parameters.deal_ids
+        )
+        return result
+    
+    def delete_task(self, parameters: DeleteTaskParameters) -> Dict:
+        result = self.__hubspot_integration.delete_task(
+            task_id=parameters.task_id
+        )
+        return result
     
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow.
@@ -233,7 +349,7 @@ class HubSpotWorkflows(Workflow):
         return [
             StructuredTool(
                 name="hubspot_get_owners",
-                description="Get the owners of HubSpot contacts",
+                description="Get the owners/users of HubSpot.",
                 func=lambda: self.get_owners(GetOwnersParameters()),
                 args_schema=GetOwnersParameters
             ),
@@ -246,9 +362,7 @@ class HubSpotWorkflows(Workflow):
             StructuredTool(
                 name="hubspot_search_contact_by_name",
                 description="Search for HubSpot contacts by first name and/or last name. At least one of firstname or lastname must be provided.",
-                func=lambda firstname=None, lastname=None: self.search_contacts_by_name(
-                    SearchContactByNameParameters(firstname=firstname, lastname=lastname)
-                ),
+                func=lambda **kwargs: self.search_contacts_by_name(SearchContactByNameParameters(**kwargs)),
                 args_schema=SearchContactByNameParameters
             ),
             StructuredTool(
@@ -268,6 +382,30 @@ class HubSpotWorkflows(Workflow):
                 description="Search for tasks in HubSpot by subject",
                 func=lambda subject: self.search_tasks_by_subject(SearchTaskBySubjectParameters(subject=subject)),
                 args_schema=SearchTaskBySubjectParameters
+            ),
+            StructuredTool(
+                name="hubspot_search_task_by_owner",
+                description="Search for tasks in HubSpot by owner ID",
+                func=lambda owner_id: self.search_tasks_by_owner(SearchTaskByOwnerParameters(owner_id=owner_id)),
+                args_schema=SearchTaskByOwnerParameters
+            ),
+            StructuredTool(
+                name="hubspot_create_task",
+                description="Create a new task in HubSpot",
+                func=lambda **kwargs: self.create_task(CreateTaskParameters(**kwargs)),
+                args_schema=CreateTaskParameters
+            ),
+            StructuredTool(
+                name="hubspot_update_task",
+                description="Update a task in HubSpot",
+                func=lambda **kwargs: self.update_task(**kwargs),
+                args_schema=UpdateTaskParameters
+            ),
+            StructuredTool(
+                name="hubspot_delete_task",
+                description="Delete a task in HubSpot",
+                func=lambda task_id: self.delete_task(DeleteTaskParameters(task_id=task_id)),
+                args_schema=DeleteTaskParameters
             )
         ]
 
