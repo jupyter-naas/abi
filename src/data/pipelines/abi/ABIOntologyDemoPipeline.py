@@ -20,7 +20,6 @@ from datetime import datetime
 import yaml
 from yaml import Dumper, Loader
 
-
 @dataclass
 class ABIOntologyDemoConfiguration(PipelineConfiguration):
     """Configuration for ABIOntology pipeline.
@@ -76,7 +75,7 @@ class ABIOntologyDemoPipeline(Pipeline):
         logger.debug(f"---> Found {nb_integrations} integrations.")
         coordinates = self.__generate_coordinates(900, nb_integrations)
         
-        from src.data.pipelines.abi.mappings import ASSISTANTS_INTEGRATIONS
+        from src.mappings import ASSISTANTS_INTEGRATIONS
         # Create mapping of integration to order based on ASSISTANTS_INTEGRATIONS
         integrations_order = {}
         order = 0
@@ -129,7 +128,7 @@ class ABIOntologyDemoPipeline(Pipeline):
         logger.debug(f"---> Found {nb_ontologies} ontologies.")
         coordinates = self.__generate_coordinates(500, nb_ontologies)
 
-        from src.data.pipelines.abi.mappings import ASSISTANTS_ONTOLOGIES
+        from src.mappings import ASSISTANTS_ONTOLOGIES
         # Create mapping of ontology to order based on ASSISTANTS_ONTOLOGIES
         ontologies_order = {}
         order = 0
@@ -238,7 +237,7 @@ class ABIOntologyDemoPipeline(Pipeline):
                             x = 50
                             y = -25
                         else:
-                            from src.data.pipelines.abi.mappings import ASSISTANTS_ORDER
+                            from src.mappings import ASSISTANTS_ORDER
                             i = ASSISTANTS_ORDER.get(str(file_stem))
                             x = coordinates[i][0]
                             y = coordinates[i][1]
@@ -410,7 +409,7 @@ class ABIOntologyDemoPipeline(Pipeline):
         # Store the graph
         self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
 
-        from src.data.pipelines.abi.mappings import COLORS_NODES
+        from src.mappings import COLORS_NODES
         # Generate YAML data with mapping colors
         yaml_data = OntologyYaml.rdf_to_yaml(graph, class_colors_mapping=COLORS_NODES, display_relations_names=False)
 
@@ -473,13 +472,13 @@ class ABIOntologyDemoPipeline(Pipeline):
         ]  
 
     def as_api(
-            self, 
-            router: APIRouter,
-            route_name: str = "abiontology",
-            name: str = "ABI Ontology",
-            description: str = "Creates an ontology of ABI components and their relationships",
-            tags: list[str] = []
-        ) -> None:
+        self, 
+        router: APIRouter,
+        route_name: str = "abiontology",
+        name: str = "ABI Ontology",
+        description: str = "Creates an ontology of ABI components and their relationships",
+        tags: list[str] = []
+    ) -> None:
         """Adds API endpoints for this pipeline to the given router."""
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: ABIOntologyDemoParameters):
