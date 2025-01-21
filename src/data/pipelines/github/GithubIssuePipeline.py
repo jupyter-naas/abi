@@ -268,21 +268,23 @@ class GithubIssuePipeline(Pipeline):
         return graph
     
     def as_tools(self) -> list[StructuredTool]:
-        return [StructuredTool(
-            name="github_issue_pipeline",
-            description="Adds an issue to the ontology",
-            func=lambda **kwargs: self.run(GithubIssuePipelineParameters(**kwargs)),
-            args_schema=GithubIssuePipelineParameters
-        )]
+        return [
+            StructuredTool(
+                name="github_issue_pipeline",
+                description="Adds an issue to the ontology",
+                func=lambda **kwargs: self.run(GithubIssuePipelineParameters(**kwargs)),
+                args_schema=GithubIssuePipelineParameters
+            )
+        ]
 
     def as_api(
-            self, 
-            router: APIRouter, 
-            route_name: str = "githubissue", 
-            name: str = "Github Issue to Ontology", 
-            description: str = "Fetches a specific GitHub issue by repository and issue ID, extracts its metadata including title, description, labels, assignees, and project details, then maps it to the ontology as a task completion with temporal information and agent relationships.",
-            tags: list[str] = []
-        ) -> None:
+        self, 
+        router: APIRouter, 
+        route_name: str = "githubissue", 
+        name: str = "Github Issue to Ontology", 
+        description: str = "Fetches a specific GitHub issue by repository and issue ID, extracts its metadata including title, description, labels, assignees, and project details, then maps it to the ontology as a task completion with temporal information and agent relationships.",
+        tags: list[str] = []
+    ) -> None:
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubIssuePipelineParameters):
             return self.run(parameters).serialize(format="turtle")
