@@ -63,41 +63,22 @@ class PostgresIntegration(Integration):
             connection.close()
         except Exception as e:
             raise IntegrationConnectionError(f"PostgreSQL connection failed: {str(e)}")
-        
-    def execute_pandas_query(self, query: str) -> pd.DataFrame:
-        """Execute a SQL query and return results as a pandas DataFrame.
-        
-        Args:
-            query (str): SQL query to execute
-            
-        Returns:
-            pd.DataFrame: Query results as a pandas DataFrame
-            
-        Raises:
-            IntegrationConnectionError: If the operation fails
-        """
-        try:
-            with self.__get_connection() as conn:
-                return pd.read_sql_query(query, conn)
-        except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL query failed: {str(e)}")
 
-    def execute_query(self,
-                     query: str,
-                     params: Optional[Union[Tuple, Dict]] = None,
-                     fetch: bool = True) -> Union[List[Dict], int]:
+    def execute_query(
+        self,
+        query: str,
+        params: Optional[Union[Tuple, Dict]] = None,
+        fetch: bool = True
+    ) -> Union[List[Dict], int]:
         """Execute a SQL query.
         
         Args:
             query (str): SQL query
-            params (Union[Tuple, Dict], optional): Query parameters
-            fetch (bool, optional): Whether to fetch results. Defaults to True
+            params (Optional[Union[Tuple, Dict]], optional): Query parameters. Defaults to None.
+            fetch (bool, optional): Whether to fetch results. Defaults to True.
             
         Returns:
             Union[List[Dict], int]: Query results or number of affected rows
-            
-        Raises:
-            IntegrationConnectionError: If the operation fails
         """
         try:
             with self.__get_connection() as conn:
@@ -112,123 +93,45 @@ class PostgresIntegration(Integration):
                         return cur.rowcount
         except Exception as e:
             raise IntegrationConnectionError(f"PostgreSQL operation failed: {str(e)}")
-
-    def batch_insert(self,
-                    table: str,
-                    columns: List[str],
-                    values: List[Tuple],
-                    page_size: int = 1000) -> int:
-        """Insert multiple rows into a table.
         
-        Args:
-            table (str): Table name
-            columns (List[str]): Column names
-            values (List[Tuple]): Values to insert
-            page_size (int, optional): Batch size. Defaults to 1000
-            
-        Returns:
-            int: Number of inserted rows
-            
-        Raises:
-            IntegrationConnectionError: If the operation fails
-        """
-        try:
-            with self.__get_connection() as conn:
-                with conn.cursor() as cur:
-                    return execute_values(
-                        cur,
-                        f"INSERT INTO {table} ({', '.join(columns)}) VALUES %s",
-                        values,
-                        page_size=page_size
-                    )
-        except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL operation failed: {str(e)}")
-
-    def call_procedure(self,
-                      procedure: str,
-                      params: Optional[Union[Tuple, Dict]] = None) -> Optional[List[Dict]]:
-        """Call a stored procedure.
+    def list_tables(self) -> List[str]:
+        """Get list of all tables in the connected database.
         
-        Args:
-            procedure (str): Procedure name
-            params (Union[Tuple, Dict], optional): Procedure parameters
-            
         Returns:
-            Optional[List[Dict]]: Procedure results if any
-            
-        Raises:
-            IntegrationConnectionError: If the operation fails
-        """
-        try:
-            with self.__get_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.callproc(procedure, params)
-                    
-                    try:
-                        results = cur.fetchall()
-                        return [dict(row) for row in results]
-                    except psycopg2.ProgrammingError:
-                        conn.commit()
-                        return None
-        except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL operation failed: {str(e)}")
-
-    def get_table_schema(self, table: str) -> List[Dict]:
-        """Get table schema information.
-        
-        Args:
-            table (str): Table name
-            
-        Returns:
-            List[Dict]: Column information
-            
-        Raises:
-            IntegrationConnectionError: If the operation fails
+            List[str]: List of table names
         """
         query = """
-            SELECT 
-                column_name,
-                data_type,
-                character_maximum_length,
-                column_default,
-                is_nullable
-            FROM information_schema.columns
-            WHERE table_name = %s
-            ORDER BY ordinal_position;
-        """
-        
-        return self.execute_query(query, (table,))
-
-    def create_table(self,
-                    table: str,
-                    columns: List[Dict[str, str]],
-                    if_not_exists: bool = True) -> None:
-        """Create a new table.
-        
-        Args:
-            table (str): Table name
-            columns (List[Dict[str, str]]): Column definitions
-            if_not_exists (bool, optional): Add IF NOT EXISTS clause. Defaults to True
-            
-        Raises:
-            IntegrationConnectionError: If the operation fails
+            SELECT table_name 
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+            ORDER BY table_name;
         """
         try:
-            column_defs = []
-            for col in columns:
-                definition = f"{col['name']} {col['type']}"
-                if col.get('nullable') is False:
-                    definition += " NOT NULL"
-                if 'default' in col:
-                    definition += f" DEFAULT {col['default']}"
-                column_defs.append(definition)
-
-            exists_clause = "IF NOT EXISTS" if if_not_exists else ""
-            query = f"CREATE TABLE {exists_clause} {table} ({', '.join(column_defs)})"
-            
-            self.execute_query(query, fetch=False)
+            results = self.execute_query(query)
+            return [row['table_name'] for row in results]
         except Exception as e:
-            raise IntegrationConnectionError(f"PostgreSQL operation failed: {str(e)}")
+            raise IntegrationConnectionError(f"Failed to list tables: {str(e)}")
+        
+    def get_table_schema(self, table_name: str) -> Dict[str, Any]:
+        """Get schema information for a specific table.
+        
+        Args:
+            table_name (str): Table name
+            
+        Returns:
+            Dict[str, Any]: Table schema information
+        """
+        query = f"""
+            SELECT column_name, data_type, is_nullable
+            FROM information_schema.columns
+            WHERE table_name = '{table_name}'
+            ORDER BY ordinal_position;
+        """
+        try:
+            results = self.execute_query(query)
+            return [dict(row) for row in results]
+        except Exception as e:
+            raise IntegrationConnectionError(f"Failed to get table schema: {str(e)}")
 
 def as_tools(configuration: PostgresIntegrationConfiguration):
     """Convert PostgreSQL integration into LangChain tools."""
@@ -237,39 +140,18 @@ def as_tools(configuration: PostgresIntegrationConfiguration):
     
     integration = PostgresIntegration(configuration)
 
-    class PandasQuerySchema(BaseModel):
-        query: str = Field(..., description="SQL query")
-
     class QuerySchema(BaseModel):
         query: str = Field(..., description="SQL query")
-        params: Optional[Union[Tuple, Dict]] = Field(None, description="Query parameters")
+        params: Optional[Union[Tuple, Dict]] = Field(None, description="Query parameters to be used in the query if needed.")
         fetch: bool = Field(default=True, description="Whether to fetch results")
 
-    class BatchInsertSchema(BaseModel):
-        table: str = Field(..., description="Table name")
-        columns: List[str] = Field(..., description="Column names")
-        values: List[Tuple] = Field(..., description="Values to insert")
-        page_size: int = Field(default=1000, description="Batch size")
-
-    class ProcedureSchema(BaseModel):
-        procedure: str = Field(..., description="Procedure name")
-        params: Optional[Union[Tuple, Dict]] = Field(None, description="Procedure parameters")
-
-    class TableSchema(BaseModel):
-        table: str = Field(..., description="Table name")
-
-    class CreateTableSchema(BaseModel):
-        table: str = Field(..., description="Table name")
-        columns: List[Dict[str, str]] = Field(..., description="Column definitions")
-        if_not_exists: bool = Field(default=True, description="Add IF NOT EXISTS clause")
+    class ListTablesSchema(BaseModel):
+        pass
+    
+    class GetTableSchemaSchema(BaseModel):
+        table_name: str = Field(..., description="Table name")
     
     return [
-        StructuredTool(
-            name="postgres_execute_pandas_query",
-            description="Execute a PostgreSQL query and return results as a pandas DataFrame",
-            func=lambda query: integration.execute_pandas_query(query),
-            args_schema=PandasQuerySchema
-        ),
         StructuredTool(
             name="postgres_execute_query",
             description="Execute a PostgreSQL query",
@@ -277,29 +159,15 @@ def as_tools(configuration: PostgresIntegrationConfiguration):
             args_schema=QuerySchema
         ),
         StructuredTool(
-            name="postgres_batch_insert",
-            description="Insert multiple rows into a PostgreSQL table",
-            func=lambda table, columns, values, page_size:
-                integration.batch_insert(table, columns, values, page_size),
-            args_schema=BatchInsertSchema
-        ),
-        StructuredTool(
-            name="postgres_call_procedure",
-            description="Call a PostgreSQL stored procedure",
-            func=lambda procedure, params: integration.call_procedure(procedure, params),
-            args_schema=ProcedureSchema
+            name="postgres_list_tables",
+            description="Get list of all tables in the connected database",
+            func=lambda: integration.list_tables(),
+            args_schema=ListTablesSchema
         ),
         StructuredTool(
             name="postgres_get_table_schema",
-            description="Get PostgreSQL table schema information",
-            func=lambda table: integration.get_table_schema(table),
-            args_schema=TableSchema
-        ),
-        StructuredTool(
-            name="postgres_create_table",
-            description="Create a new PostgreSQL table",
-            func=lambda table, columns, if_not_exists:
-                integration.create_table(table, columns, if_not_exists),
-            args_schema=CreateTableSchema
+            description="Get schema information for a specific table",
+            func=lambda table_name: integration.get_table_schema(table_name),
+            args_schema=GetTableSchemaSchema
         )
-    ] 
+    ]
