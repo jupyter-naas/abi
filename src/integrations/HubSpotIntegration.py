@@ -104,9 +104,6 @@ class HubSpotIntegration(Integration):
         Returns:
             List of dictionaries containing search results with specified properties
         """
-        valid_types = ["contacts", "companies", "deals", "tasks", "notes"]
-        if object_type not in valid_types:
-            raise ValueError(f"Invalid object type. Must be one of: {', '.join(valid_types)}")
         data = {
             "properties": properties if properties else [],
             "sorts": sorts,
@@ -124,10 +121,6 @@ class HubSpotIntegration(Integration):
 
     def list_properties(self, object_type: str) -> List[Dict]:
         """List properties of a specified HubSpot object type."""
-        valid_types = ["contacts", "companies", "deals"]
-        if object_type not in valid_types:
-            raise ValueError(f"Invalid object type. Must be one of: {', '.join(valid_types)}")
-
         url = f"{self.__configuration.base_url}/crm/v3/properties/{object_type}"
         response = requests.get(url, headers=self.headers)
 
@@ -137,13 +130,8 @@ class HubSpotIntegration(Integration):
             for prop in properties:
                 prop_name = prop['name']
                 prop_label = prop['label']
-                print(f"Property Name: {prop_name}")
-                print(f"Property Label: {prop_label}")
-                print()
             return properties
         else:
-            print(f"Failed to retrieve properties. Status code: {response.status_code}")
-            print(response.json())
             return []
 
     def get_associations(self, from_object_type: str, object_ids: List[str], to_object_type: str, after: Optional[str] = None, limit: Optional[int] = 100) -> Dict:
@@ -302,16 +290,17 @@ class HubSpotIntegration(Integration):
         deal_stages.sort(key=lambda x: (x["pipeline"], x["displayOrder"]))
         return deal_stages
     
-    def list_deals(self, properties: Optional[List[str]] = None) -> pd.DataFrame:
+    def list_deals(self, properties: Optional[List[str]] = None, limit: Optional[int] = 10) -> pd.DataFrame:
         """Get all deals from HubSpot with optional property filtering.
         
         Args:
             properties: Optional list of deal properties to include. If None, includes all properties.
+            limit: Maximum number of results to return. Defaults to 10.
             
         Returns:
             DataFrame containing all deals with specified properties.
         """
-        return self.__get_all("/crm/v3/objects/deals", properties)
+        return self.__get_all("/crm/v3/objects/deals", hs_properties=properties, limit=limit)
     
     def get_deal(self, deal_id: str, properties: Optional[List[str]] = None) -> Dict:
         """Get a deal by ID.
@@ -360,7 +349,10 @@ class HubSpotIntegration(Integration):
         Returns:
             Dict containing the company data
         """
-        return self._make_request("GET", f"/crm/v3/objects/companies/{company_id}", params={"properties": ",".join(properties)})
+        params = {}
+        if properties:
+            params["properties"] = ",".join(properties)
+        return self._make_request("GET", f"/crm/v3/objects/companies/{company_id}", params=params)
     
     def create_company(self, properties: Dict) -> Dict:
         """Create a new company in HubSpot."""
@@ -380,39 +372,17 @@ class HubSpotIntegration(Integration):
         self,
         properties: Optional[List[str]] = None,
         limit: Optional[int] = 10,
-        after: Optional[str] = None,
-        properties_with_history: Optional[List[str]] = None,
-        associations: Optional[List[str]] = None,
-        archived: Optional[bool] = False
-    ) -> pd.DataFrame:
+    ) -> List[Dict]:
         """Get all tasks from HubSpot with optional filtering and pagination.
         
         Args:
             properties: Optional list of task properties to include. If None, includes all properties.
             limit: Maximum number of results to return per page. Defaults to 10.
-            after: Cursor token for pagination. Used to get the next page of results.
-            properties_with_history: Optional list of properties to return with their history of previous values.
-                Using this reduces the maximum number of objects that can be read in a single request.
-            associations: Optional list of object types to retrieve associated IDs for.
-            archived: Whether to return only archived tasks. Defaults to False.
             
         Returns:
             DataFrame containing tasks with specified properties.
         """
-        params = {
-            "limit": limit,
-            "archived": archived
-        }
-        if after:
-            params["after"] = after
-        if properties:
-            params["properties"] = ",".join(properties)
-        if properties_with_history:
-            params["propertiesWithHistory"] = ",".join(properties_with_history)
-        if associations:
-            params["associations"] = ",".join(associations)
-            
-        return self.get_all("/crm/v3/objects/tasks", params=params)
+        return self.__get_all("/crm/v3/objects/tasks", hs_properties=properties, limit=limit)
     
     def get_task(
         self,
@@ -454,41 +424,63 @@ class HubSpotIntegration(Integration):
             
         return self._make_request("GET", f"/crm/v3/objects/tasks/{task_id}", params=params)
 
-    def create_task(
+    def _create_task_properties(
         self,
-        subject: str,
-        type: Optional[str] = "TODO", 
-        body: Optional[str] = None,
-        priority: Optional[str] = "LOW",
-        status: Optional[str] = "NOT_STARTED",
-        timestamp: Optional[str] = None,
-        owner_id: Optional[str] = None,
-        contact_ids: List[str] = [],
-        company_ids: List[str] = [],
-        deal_ids: List[str] = []
+        subject: Optional[str] = None,
+        type: Optional[str] = None,
+        body: Optional[str] = None, 
+        priority: Optional[str] = None,
+        status: Optional[str] = None,
+        due_date: Optional[str] = None,
+        owner_id: Optional[str] = None
     ) -> Dict:
-        """Create a new task in HubSpot.
+        """Helper function to create task properties dictionary.
         
         Args:
             subject: Task title
-            type: Type of task (EMAIL, CALL, or TODO). Defaults to TODO
+            type: Type of task (EMAIL, CALL, or TODO)
             body: Task notes/description
             priority: Priority level (LOW, MEDIUM, or HIGH)
-            status: Status NOT_STARTED, COMPLETED, IN_PROGRESS, WAITING, DEFERRED
-            timestamp: Task due date in UTC format or Unix timestamp (ms)
+            status: Status NOT_STARTED or COMPLETED
+            due_date: Task due date in UTC format or Unix timestamp (ms)
             owner_id: ID of assigned user
+            
+        Returns:
+            Dict containing task properties with non-None values
+        """
+        # Get current timestamp if not provided
+        if not due_date:
+            due_date = datetime.now().replace(tzinfo=timezone.utc).strftime("%s") + "000"
+            
+        properties = {
+            "hs_task_subject": subject,
+            "hs_task_type": type,
+            "hs_task_body": body,
+            "hs_task_status": status,
+            "hs_task_priority": priority,
+            "hs_timestamp": due_date,
+            "hubspot_owner_id": owner_id
+        }
+        
+        # Filter out None values
+        return {k: v for k, v in properties.items() if v is not None}
+
+    def _create_task_associations(
+        self,
+        contact_ids: List[str] = [],
+        company_ids: List[str] = [],
+        deal_ids: List[str] = []
+    ) -> List[Dict]:
+        """Helper function to create task associations.
+        
+        Args:
             contact_ids: List of contact IDs to associate with task
             company_ids: List of company IDs to associate with task
             deal_ids: List of deal IDs to associate with task
             
         Returns:
-            Dict containing the created task data
+            List of association dictionaries
         """
-        # Get current timestamp if not provided
-        if not timestamp:
-            timestamp = datetime.now().replace(tzinfo=timezone.utc).strftime("%s") + "000"
-            
-        # Build associations
         associations = []
         
         # Add contact associations
@@ -520,20 +512,55 @@ class HubSpotIntegration(Integration):
                     "associationTypeId": 216
                 }]
             })
+            
+        return associations
 
-        # Build properties
-        properties = {
-            "hs_task_subject": subject,
-            "hs_task_type": type,
-            "hs_task_body": body,
-            "hs_task_status": status,
-            "hs_task_priority": priority,
-            "hs_timestamp": timestamp,
-            "hubspot_owner_id": owner_id
-        }
+    def create_task(
+        self,
+        subject: str,
+        type: Optional[str] = "TODO", 
+        body: Optional[str] = None,
+        priority: Optional[str] = "LOW",
+        status: Optional[str] = "NOT_STARTED",
+        due_date: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        contact_ids: List[str] = [],
+        company_ids: List[str] = [],
+        deal_ids: List[str] = []
+    ) -> Dict:
+        """Create a new task in HubSpot.
         
-        # Filter out None values
-        properties = {k: v for k, v in properties.items() if v is not None}
+        Args:
+            subject: Task title
+            type: Type of task (EMAIL, CALL, or TODO). Defaults to TODO
+            body: Task notes/description
+            priority: Priority level (LOW, MEDIUM, or HIGH)
+            status: Status NOT_STARTED or COMPLETED
+            due_date: Task due date in UTC format or Unix timestamp (ms)
+            owner_id: ID of assigned user
+            contact_ids: List of contact IDs to associate with task
+            company_ids: List of company IDs to associate with task
+            deal_ids: List of deal IDs to associate with task
+            
+        Returns:
+            Dict containing the created task data
+        """
+        # Build properties and associations using helper functions
+        properties = self._create_task_properties(
+            subject=subject,
+            type=type,
+            body=body,
+            priority=priority,
+            status=status,
+            due_date=due_date,
+            owner_id=owner_id
+        )
+        
+        associations = self._create_task_associations(
+            contact_ids=contact_ids,
+            company_ids=company_ids,
+            deal_ids=deal_ids
+        )
         
         data = {
             "properties": properties,
@@ -544,35 +571,57 @@ class HubSpotIntegration(Integration):
     def update_task(
         self, 
         task_id: str, 
-        properties: Dict
+        subject: str,
+        type: Optional[str] = "TODO", 
+        body: Optional[str] = None,
+        priority: Optional[str] = "LOW",
+        status: Optional[str] = "NOT_STARTED",
+        due_date: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        contact_ids: List[str] = [],
+        company_ids: List[str] = [],
+        deal_ids: List[str] = []
     ) -> Dict:
         """Update an existing task in HubSpot.
         
         Args:
             task_id: ID of the task to update
-            properties: Dictionary of task properties to update. Can include:
-                - hs_timestamp (str): Task due date in UTC format
-                - hs_task_body (str): Task notes/description
-                - hubspot_owner_id (str): ID of assigned user
-                - hs_task_subject (str): Task title
-                - hs_task_status (str): Status - COMPLETED or NOT_STARTED
-                - hs_task_priority (str): Priority - LOW, MEDIUM, or HIGH
+            subject: Task title
+            type: Type of task (EMAIL, CALL, or TODO). Defaults to TODO
+            body: Task notes/description
+            priority: Priority level (LOW, MEDIUM, or HIGH)
+            status: Status NOT_STARTED or COMPLETED
+            due_date: Task due date in UTC format or Unix timestamp (ms)
+            owner_id: ID of assigned user
+            contact_ids: List of contact IDs to associate with task
+            company_ids: List of company IDs to associate with task
+            deal_ids: List of deal IDs to associate with task
                 
         Returns:
             Dict containing the updated task data
-            
-        Example:
-            >>> properties = {
-            ...     "hs_timestamp": "2019-10-30T03:30:17.883Z",
-            ...     "hs_task_body": "Send Proposal", 
-            ...     "hubspot_owner_id": "64492917",
-            ...     "hs_task_subject": "Close deal",
-            ...     "hs_task_status": "COMPLETED",
-            ...     "hs_task_priority": "HIGH"
-            ... }
-            >>> integration.update_task("123", properties)
         """
-        data = {"properties": properties}
+        # Extract values from properties dict
+        task_properties = self._create_task_properties(
+            subject=subject,
+            type=type,
+            body=body,
+            priority=priority,
+            status=status,
+            due_date=due_date,
+            owner_id=owner_id
+        )
+        
+        # Create associations
+        associations = self._create_task_associations(
+            contact_ids=contact_ids,
+            company_ids=company_ids,
+            deal_ids=deal_ids
+        )
+        
+        data = {
+            "properties": task_properties,
+            "associations": associations
+        }
         return self._make_request("PATCH", f"/crm/v3/objects/tasks/{task_id}", data)
 
     def delete_task(
@@ -661,10 +710,10 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
     integration : HubSpotIntegration = HubSpotIntegration(configuration)
 
     class ListPropertiesSchema(BaseModel):
-        object_type: str = Field(..., description="Type of object to get properties for (contacts, companies, deals)")
+        object_type: str = Field(..., description="Type of object to get properties for (contacts, companies, deals, tasks, notes)")
 
     class GetAssociationsSchema(BaseModel):
-        from_object_type: str = Field(..., description="Type of the source objects (contacts, companies, deals, etc.)")
+        from_object_type: str = Field(..., description="Type of the source objects (contacts, companies, deals, tasks, notes)")
         object_ids: List[str] = Field(..., description="List of source object IDs to get associations for")
         to_object_type: str = Field(..., description="Type of the target objects to get associations for")
         after: Optional[str] = Field(None, description="Optional cursor for pagination")
@@ -747,8 +796,8 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         type: Optional[str] = Field("TODO", description="Type of task (EMAIL, CALL, or TODO). Defaults to TODO")
         body: Optional[str] = Field(None, description="Task notes/description")
         priority: Optional[str] = Field("LOW", description="Priority level (LOW, MEDIUM, or HIGH)")
-        status: Optional[str] = Field("NOT_STARTED", description="Status NOT_STARTED, COMPLETED, IN_PROGRESS, WAITING, DEFERRED")
-        timestamp: Optional[int] = Field(None, description="Timestamp for the task (milliseconds since epoch)")
+        status: Optional[str] = Field("NOT_STARTED", description="Status NOT_STARTED or COMPLETED")
+        due_date: Optional[int] = Field(None, description="Due date for the task (milliseconds since epoch)")
         owner_id: Optional[str] = Field(None, description="ID of assigned user")
         contact_ids: List[str] = Field(..., description="List of contact IDs to associate with the task")
         company_ids: Optional[List[str]] = Field(None, description="Optional list of company IDs to associate with the task")
@@ -756,18 +805,27 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
 
     class UpdateTaskSchema(BaseModel):
         task_id: str = Field(..., description="ID of the task to update")
-        properties: Dict = Field(..., description="Properties to update for the task")
+        subject: str = Field(..., description="Task title")
+        type: Optional[str] = Field("TODO", description="Type of task (EMAIL, CALL, or TODO). Defaults to TODO")
+        body: Optional[str] = Field(None, description="Task notes/description")
+        priority: Optional[str] = Field("LOW", description="Priority level (LOW, MEDIUM, or HIGH)")
+        status: Optional[str] = Field("NOT_STARTED", description="Status NOT_STARTED or COMPLETED")
+        due_date: Optional[int] = Field(None, description="Due date for the task (milliseconds since epoch)")
+        owner_id: Optional[str] = Field(None, description="ID of assigned user")
+        contact_ids: List[str] = Field(..., description="List of contact IDs to associate with the task")
+        company_ids: Optional[List[str]] = Field(None, description="Optional list of company IDs to associate with the task")
+        deal_ids: Optional[List[str]] = Field(None, description="Optional list of deal IDs to associate with the task")
 
     class DeleteTaskSchema(BaseModel):
         task_id: str = Field(..., description="ID of the task to delete")
 
     class CreateNoteSchema(BaseModel):
         body: str = Field(..., description="Content of the note")    
-        deal_ids: Optional[List[str]] = Field(..., description="Optional list of deal IDs to associate with the note")
+        deal_ids: List[str] = Field(default_factory=list, description="List of deal IDs to associate with the note")
         contact_ids: List[str] = Field(..., description="List of contact IDs to associate with the note. At least one contact ID is required.")
-        company_ids: Optional[List[str]] = Field(..., description="Optional list of company IDs to associate with the note")
-        hs_timestamp: Optional[int] = Field(..., description="Optional timestamp for the note (milliseconds since epoch)")
-        unique_id: Optional[str] = Field(..., description="Optional unique identifier for the note")
+        company_ids: List[str] = Field(default_factory=list, description="List of company IDs to associate with the note")
+        hs_timestamp: Optional[int] = Field(None, description="Optional timestamp for the note (milliseconds since epoch)")
+        unique_id: Optional[str] = Field(None, description="Optional unique identifier for the note")
 
     return [
         StructuredTool(
@@ -805,7 +863,7 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         StructuredTool(
             name="hubspot_update_contact",
             description="Update an existing contact in HubSpot.",
-            func=lambda contact_id, properties: integration.update_contact(contact_id, properties) if contact_id else integration.update_contact_by_email(email, properties),
+            func=lambda contact_id, properties: integration.update_contact(contact_id, properties),
             args_schema=UpdateContactSchema
         ),
         StructuredTool(
@@ -901,13 +959,13 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         StructuredTool(
             name="hubspot_create_task",
             description="Create a task in HubSpot.",
-            func=lambda subject, type, body, priority, status, timestamp, owner_id, contact_ids, company_ids, deal_ids: integration.create_task(subject, type, body, priority, status, timestamp, owner_id, contact_ids, company_ids, deal_ids),
+            func=lambda **kwargs: integration.create_task(**kwargs),
             args_schema=CreateTaskSchema
         ),
         StructuredTool(
             name="hubspot_update_task",
             description="Update a task in HubSpot.",
-            func=lambda task_id, properties: integration.update_task(task_id, properties),
+            func=lambda **kwargs: integration.update_task(**kwargs),
             args_schema=UpdateTaskSchema
         ),
         StructuredTool(
@@ -919,7 +977,7 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         StructuredTool(
             name="hubspot_create_note",
             description="Create a note in HubSpot with associations to contacts, deals, or companies. If date is explicitly provided by user, convert it to milliseconds since epoch.",
-            func=lambda body, deal_ids=[], contact_ids=[], company_ids=[], hs_timestamp=None, unique_id=None: integration.create_note(body, deal_ids, contact_ids, company_ids, hs_timestamp, unique_id),
+            func=lambda **kwargs: integration.create_note(**kwargs),
             args_schema=CreateNoteSchema
         )
     ]
