@@ -1,5 +1,5 @@
 config:
-  workspace_id: # Naas workspace ID
+  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
   github_project_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
   github_support_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
