@@ -301,16 +301,16 @@ class GithubIntegration(Integration):
         return self._make_request("GET", f"/repos/{repo_name}/issues/{issue_id}")
 
     def list_issues(
-            self, 
-            repo_name: str, 
-            filter: Optional[str] = "all", 
-            state: Optional[str] = "open", 
-            sort: Optional[str] = "created", 
-            direction: Optional[str] = "desc",
-            limit: Optional[int] = -1,
-            since: Optional[str] = None,
-            labels: Optional[str] = None, 
-        ) -> List[Dict]:
+        self, 
+        repo_name: str, 
+        filter: Optional[str] = "all", 
+        state: Optional[str] = "open", 
+        sort: Optional[str] = "created", 
+        direction: Optional[str] = "desc",
+        limit: Optional[int] = -1,
+        since: Optional[str] = None,
+        labels: Optional[str] = None
+    ) -> List[Dict]:
         """Get issues from a repository.
         
         Args:
@@ -337,7 +337,6 @@ class GithubIntegration(Integration):
                 "state": state,
                 "sort": sort,
                 "direction": direction,
-                "pulls": False,
                 "per_page": per_page,
                 "page": page
             }

@@ -13,7 +13,7 @@ from typing import List, Optional
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import Field
-
+from src import secret, config
 
 @dataclass
 class GithubIssuesPipelineConfiguration(PipelineConfiguration):
@@ -60,7 +60,7 @@ class GithubIssuesPipeline(Pipeline):
         # Process each repository
         for repository in parameters.github_repositories:
             # Get all issues from the repository
-            issues_data = self.__github_integration.get_issues(repository, state=parameters.state, limit=parameters.limit)
+            issues_data = self.__github_integration.list_issues(repository, state=parameters.state, limit=parameters.limit)
             logger.debug(f"Issues fetched for {repository}: {len(issues_data)}")
 
             # Get project data from GithubGraphqlIntegration
@@ -100,21 +100,53 @@ class GithubIssuesPipeline(Pipeline):
         Returns:
             list[StructuredTool]: List containing the GithubIssuesPipeline tool
         """
-        return [StructuredTool(
-            name="map_github_issues_to_ontology",
-            description="Fetches multiple GitHub issues and adds them to the ontology",
-            func=lambda **kwargs: self.run(GithubIssuesPipelineParameters(**kwargs)),
-            args_schema=GithubIssuesPipelineParameters
-        )]
+        return [
+            StructuredTool(
+                name="map_github_issues_to_ontology",
+                description="Fetches multiple GitHub issues and adds them to the ontology",
+                func=lambda **kwargs: self.run(GithubIssuesPipelineParameters(**kwargs)),
+                args_schema=GithubIssuesPipelineParameters
+            )
+        ]
 
     def as_api(
-            self, 
-            router: APIRouter, 
-            route_name: str = "githubissues", 
-            name: str = "Github Issues from Repository to Ontology", 
-            description: str = "Fetches multiple GitHub issues from a repository, extracts their metadata, and maps them to the ontology as task completions with temporal information and agent relationships.", 
-            tags: list[str] = []
-        ) -> None:
+        self, 
+        router: APIRouter, 
+        route_name: str = "githubissues", 
+        name: str = "Github Issues from Repository to Ontology", 
+        description: str = "Fetches multiple GitHub issues from a repository, extracts their metadata, and maps them to the ontology as task completions with temporal information and agent relationships.", 
+        tags: list[str] = []
+    ) -> None:
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubIssuesPipelineParameters):
             return self.run(parameters).serialize(format="turtle")
+
+if __name__ == "__main__":
+    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+
+    # Initialize ontology store
+    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
+
+    # Initialize Github integration
+    github_integration_config = GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
+
+    # Initialize Github GraphQL integration
+    github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
+
+    # Initialize pipeline
+    pipeline = GithubIssuesPipeline(GithubIssuesPipelineConfiguration(
+        github_integration_config=github_integration_config,
+        github_graphql_integration_config=github_graphql_integration_config,
+        ontology_store=ontology_store,
+        ontology_store_name="github"
+    ))
+
+    # Run pipeline
+    pipeline.run(
+        GithubIssuesPipelineParameters(
+            github_repositories=["jupyter-naas/abi"],
+            limit=10,
+            state="all"
+        )
+    )
