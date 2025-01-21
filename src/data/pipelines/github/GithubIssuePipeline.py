@@ -12,7 +12,7 @@ from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional
-
+from src import secret, config
 
 @dataclass
 class GithubIssuePipelineConfiguration(PipelineConfiguration):
@@ -49,7 +49,15 @@ class GithubIssuePipeline(Pipeline):
 
     def run(self, parameters: GithubIssuePipelineParameters) -> Graph:
         # Init graph
-        graph = self.__configuration.ontology_store.get(self.__configuration.ontology_store_name)
+        try:    
+            existing_graph = self.__configuration.ontology_store.get(self.__configuration.ontology_store_name)
+            # Create new ABIGraph and merge existing data
+            graph = ABIGraph()
+            for triple in existing_graph:
+                graph.add(triple)
+        except Exception as e:
+            logger.error(f"Error getting graph: {e}")
+            graph = ABIGraph()
 
         # Get issue data from GithubIntegration
         # GitHub Issue API Response Schema:
@@ -180,7 +188,8 @@ class GithubIssuePipeline(Pipeline):
             priority=issue_priority,
             estimate=issue_estimate,
             due_date=issue_due_date,
-            updated_date=issue_updated_at
+            updated_date=issue_updated_at,
+            ontology_group=str(ABI.TaskCompletion).split("/")[-1]
         )
 
         # Add GDC: GitHubIssue
@@ -198,7 +207,8 @@ class GithubIssuePipeline(Pipeline):
             priority=issue_priority,
             estimate=issue_estimate,
             due_date=issue_due_date,
-            updated_date=issue_updated_at
+            updated_date=issue_updated_at,
+            ontology_group=str(ABI.GitHubIssue).split("/")[-1]
         )
         graph.add((task_completion, BFO.BFO_0000058, github_issue))
         graph.add((github_issue, BFO.BFO_0000059, task_completion))
@@ -211,7 +221,8 @@ class GithubIssuePipeline(Pipeline):
             uid=repo_name,
             label=repo_name,
             is_a=ABI.GitHubRepository,
-            url=repo_url
+            url=repo_url,
+            ontology_group=str(ABI.GitHubRepository).split("/")[-1]
         )
         graph.add((task_completion, BFO.BFO_0000058, github_repo))
         graph.add((github_repo, BFO.BFO_0000059, task_completion))
@@ -221,7 +232,8 @@ class GithubIssuePipeline(Pipeline):
             prefix=ABI,
             uid=str(int(issue_created_at.timestamp())),
             label=issue_created_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            is_a=BFO.BFO_0000203
+            is_a=BFO.BFO_0000203,
+            ontology_group=str(BFO.BFO_0000203).split("/")[-1]
         )
         graph.add((task_completion, BFO.BFO_0000222, first_instant))
 
@@ -245,6 +257,7 @@ class GithubIssuePipeline(Pipeline):
             label=user_label,
             is_a=ABI.GitHubUser,
             url=user_url,
+            ontology_group=str(ABI.GitHubUser).split("/")[-1]
         )
         graph.add((task_completion, ABI.hasCreator, github_user))
 
@@ -260,6 +273,7 @@ class GithubIssuePipeline(Pipeline):
                 label=assignee_label,
                 is_a=ABI.GitHubUser,
                 url=assignee_url,
+                ontology_group=str(ABI.GitHubUser).split("/")[-1]
             )
             graph.add((task_completion, ABI.hasAssignee, github_assignee))
         
@@ -288,3 +302,32 @@ class GithubIssuePipeline(Pipeline):
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubIssuePipelineParameters):
             return self.run(parameters).serialize(format="turtle")
+        
+if __name__ == "__main__":
+    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+    # Initialize ontology store
+    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
+
+    # Initialize Github integration
+    github_integration_config = GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
+
+    # Initialize Github GraphQL integration
+    github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
+
+    # Initialize pipeline
+    pipeline = GithubIssuePipeline(GithubIssuePipelineConfiguration(
+        github_integration_config=github_integration_config,
+        github_graphql_integration_config=github_graphql_integration_config,
+        ontology_store=ontology_store,
+        ontology_store_name="github"
+    ))
+
+    # Run pipeline
+    pipeline.run(
+        GithubIssuePipelineParameters(
+            github_repository="jupyter-naas/abi",
+            github_issue_id="1",
+            github_project_id=config.github_project_id,
+        )
+    )
