@@ -27,27 +27,41 @@ class Config:
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> 'Config':
-        with open(yaml_path, 'r') as file:
-            data = yaml.safe_load(file)
-            config_data = data['config']
-            pipeline_configs = [
-                PipelineConfig(
-                    name=p['name'],
-                    cron=p['cron'],
-                    parameters=p['parameters']
-                ) for p in data['pipelines']
-            ]
+        try:
+            with open(yaml_path, 'r') as file:
+                data = yaml.safe_load(file)
+                config_data = data['config']
+                pipeline_configs = [
+                    PipelineConfig(
+                        name=p['name'],
+                        cron=p['cron'],
+                        parameters=p['parameters']
+                    ) for p in data['pipelines']
+                ]
+                return cls(
+                    workspace_id=config_data.get('workspace_id'),
+                    github_project_repository=config_data['github_project_repository'],
+                    github_support_repository=config_data['github_support_repository'], 
+                    github_project_id=config_data['github_project_id'],
+                    ontology_store_path=config_data['ontology_store_path'],
+                    api_title=config_data['api_title'],
+                    api_description=config_data['api_description'],
+                    logo_path=config_data['logo_path'],
+                    favicon_path=config_data['favicon_path'],
+                    pipelines=pipeline_configs
+                )
+        except FileNotFoundError:
             return cls(
-                workspace_id=config_data.get('workspace_id'),
-                github_project_repository=config_data['github_project_repository'],
-                github_support_repository=config_data['github_support_repository'],
-                github_project_id=config_data['github_project_id'],
-                ontology_store_path=config_data['ontology_store_path'],
-                api_title=config_data['api_title'],
-                api_description=config_data['api_description'],
-                logo_path=config_data['logo_path'],
-                favicon_path=config_data['favicon_path'],
-                pipelines=pipeline_configs
+                workspace_id="",
+                github_project_repository="",
+                github_support_repository="",
+                github_project_id=0,
+                ontology_store_path="",
+                api_title="",
+                api_description="",
+                logo_path="",
+                favicon_path="",
+                pipelines=[]
             )
 
 secret = Secret(DotenvSecretSecondaryAdaptor())

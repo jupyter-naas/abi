@@ -34,7 +34,7 @@ abi:GitHubPullRequest rdf:type owl:Class ;
     skos:example "A pull request that adds a new feature to a software project."@en .
 
 abi:GitHubRepository rdf:type owl:Class ;
-    rdfs:subClassOf abi:SitePlatform ;
+    rdfs:subClassOf abi:Platform ;
     rdfs:label "GitHub Repository"@en ;
     skos:definition "A GitHub Repository is a site on the GitHub platform where code, documentation, issues, and collaborative work are managed."@en ;
     skos:example "The 'jupyter-naas/awesome-notebooks' repository on GitHub."@en .
