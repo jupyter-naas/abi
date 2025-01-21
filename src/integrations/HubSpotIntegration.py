@@ -312,7 +312,10 @@ class HubSpotIntegration(Integration):
         Returns:
             Dict containing the deal data
         """
-        return self._make_request("GET", f"/crm/v3/objects/deals/{deal_id}", params={"properties": ",".join(properties)})
+        params = {}
+        if properties:
+            params["properties"] = ",".join(properties)
+        return self._make_request("GET", f"/crm/v3/objects/deals/{deal_id}", params=params)
     
     def create_deal(self, properties: Dict) -> Dict:
         """Create a new deal in HubSpot."""
@@ -388,10 +391,7 @@ class HubSpotIntegration(Integration):
         self,
         task_id: str,
         properties: Optional[List[str]] = None,
-        properties_with_history: Optional[List[str]] = None,
         associations: Optional[List[str]] = None,
-        archived: Optional[bool] = False,
-        id_property: Optional[str] = None
     ) -> Dict:
         """Get a task by ID or unique property value.
         
@@ -413,14 +413,8 @@ class HubSpotIntegration(Integration):
         params = {}
         if properties:
             params["properties"] = ",".join(properties)
-        if properties_with_history:
-            params["propertiesWithHistory"] = ",".join(properties_with_history)
         if associations:
             params["associations"] = ",".join(associations)
-        if archived:
-            params["archived"] = archived
-        if id_property:
-            params["idProperty"] = id_property
             
         return self._make_request("GET", f"/crm/v3/objects/tasks/{task_id}", params=params)
 
@@ -953,7 +947,7 @@ def as_tools(configuration: HubSpotIntegrationConfiguration):
         StructuredTool(
             name="hubspot_get_task",
             description="Get a task by its HubSpot ID.",
-            func=lambda task_id, properties=None, associations=None: integration.get_task(task_id, properties, associations),
+            func=lambda **kwargs: integration.get_task(**kwargs),
             args_schema=GetTaskSchema
         ),
         StructuredTool(
