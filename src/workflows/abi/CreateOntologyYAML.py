@@ -132,14 +132,7 @@ class CreateOntologyYAML(Workflow):
 if __name__ == "__main__":
     from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
     from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-    import argparse
     from src.mappings import COLORS_NODES
-
-    # Create argument parser
-    parser = argparse.ArgumentParser(description='Create or update ontology YAML')
-    parser.add_argument('--ontology_name', required=True, help='Name of the ontology store to use')
-    parser.add_argument('--label', required=True, help='Label of the ontology')
-    parser.add_argument('--description', required=True, help='Description of the ontology')
 
     # Initialize configurations
     ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
