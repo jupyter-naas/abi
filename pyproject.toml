@@ -50,6 +50,7 @@ rich = "^13.9.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
+ipykernel = "^6.29.5"
 
 [tool.poetry.scripts]
 # Foundation agents
