@@ -39,7 +39,7 @@ def create_hubspot_agent(
         
     # Set model
     model = ChatOpenAI(
-        model="gpt-4",
+        model="gpt-4o",
         temperature=0,
         api_key=secret.get('OPENAI_API_KEY')
     )
