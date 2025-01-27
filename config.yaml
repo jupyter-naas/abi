@@ -8,7 +8,8 @@ config:
   api_description: "API for ABI, your Artifical Business Intelligence" # API description
   logo_path: "assets/logo.png" # Path to the logo
   favicon_path: "assets/favicon.ico" # Path to the favicon
-
+  storage_name: "abi" # Name of the storage
+  
 pipelines:
   - name: github.GithubIssuesPipeline
     cron: "0 0 * * *"

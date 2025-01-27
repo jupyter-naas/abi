@@ -1,29 +1,35 @@
 .venv:
-	@ docker compose run abi poetry install
+	@ docker compose run --rm abi poetry install
 
 install:
-	@ docker compose run abi poetry install
-	@ docker compose run abi poetry update abi
+	@ docker compose run --rm abi poetry install
+	@ docker compose run --rm abi poetry update abi
 
 abi-add: .venv
-	@ docker compose run abi bash -c 'cd lib && poetry add $(dep) && poetry lock --no-update'
+	@ docker compose run --rm abi bash -c 'cd lib && poetry add $(dep) && poetry lock --no-update'
 
 add:
-	@ docker compose run abi bash -c 'poetry add $(dep) && poetry lock --no-update'
+	@ docker compose run --rm abi bash -c 'poetry add $(dep) && poetry lock --no-update'
 
 lock:
-	@ docker compose run abi poetry lock --no-update
+	@ docker compose run --rm abi poetry lock --no-update
 
 path=tests/
 test:
-	@ docker compose run abi poetry run pytest $(path)
+	@ docker compose run --rm abi poetry run pytest $(path)
 
 sh: .venv
-	@ docker compose run -it abi bash
+	@ docker compose run --rm -it abi bash
   
 api: .venv
-	@ docker compose run -p 9879:9879 abi poetry run api
+	@ docker compose run --rm -p 9879:9879 abi poetry run api
 
+
+dvc-login: 
+	@ docker compose run --rm  abi poetry run python scripts/setup_dvc.py | sh
+
+__dvc-login:
+	
 
 # Docker Build Commands
 # -------------------
