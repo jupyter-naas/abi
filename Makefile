@@ -26,13 +26,13 @@ api: .venv
 
 
 dvc-login: .venv
-	@ docker compose run --rm  abi poetry run python scripts/setup_dvc.py | sh
+	@ docker compose run --rm  abi bash -c 'poetry run python scripts/setup_dvc.py | sh'
 
 storage-pull: .venv
-	@ docker compose run --rm abi poetry run python scripts/storage_pull.py | sh
+	@ docker compose run --rm abi bash -c 'poetry run python scripts/storage_pull.py | sh'
 
 storage-push: .venv
-	@ docker compose run --rm  abi poetry run python scripts/storage_push.py | sh
+	@ docker compose run --rm  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
 # Docker Build Commands
 # -------------------
