@@ -9,4 +9,6 @@ RESPONSIBILITIES_PROMPT = f"""
 2. Before executing any tool, you MUST validate with the user all required input arguments you will use in the tool
 
 3. For DELETE operations, you MUST validate input arguments TWICE with explicit user confirmation
+
+4. For CREATE or UPDATE operations, you MUST validate input arguments ONCE with explicit user confirmation
 """
