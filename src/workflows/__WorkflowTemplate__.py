@@ -1,71 +1,79 @@
 from abi.workflow import Workflow, WorkflowConfiguration
+from abi.workflow.workflow import WorkflowParameters
 from src.integrations import YourIntegration, YourIntegrationConfiguration
-from src import secret
+from src import config, secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
+from typing import Optional, List, Dict
+from abi import logger
+from fastapi import APIRouter
+from langchain_core.tools import StructuredTool
+from typing import Any
 
 @dataclass
 class YourWorkflowConfiguration(WorkflowConfiguration):
-    attribute_1 : str
-    attribute_2 : int
+    """Configuration for YourWorkflow.
+    
+    Attributes:
+        integration_config (YourIntegrationConfiguration): Configuration for the integration
+    """
+    integration_config: YourIntegrationConfiguration
+
+class YourWorkflowParameters(WorkflowParameters):
+    """Parameters for YourWorkflow execution.
+    
+    Attributes:
+        parameter_1 (str): Description of parameter_1
+        parameter_2 (int): Description of parameter_2
+    """
+    parameter_1: str = Field(..., description="Description of parameter_1")
+    parameter_2: int = Field(..., description="Description of parameter_2")
 
 class YourWorkflow(Workflow):
     __configuration: YourWorkflowConfiguration
     
     def __init__(self, configuration: YourWorkflowConfiguration):
-        super().__init__(configuration)
         self.__configuration = configuration
-        
-        self.__your_integration = YourIntegration(
-            YourIntegrationConfiguration(attribute_1=self.__configuration.attribute_1, attribute_2=self.__configuration.attribute_2)
-        )
-    def run(self) -> str:
+        self.__integration = YourIntegration(self.__configuration.integration_config)
 
-        # ... Add your code here
-        
+    def run(self, parameters: YourWorkflowParameters) -> Any:
+        # Add your workflow logic here
         return "Your result"
+
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow.
         
+        Returns:
+            list[StructuredTool]: List containing the workflow tool
+        """
+        return [StructuredTool(
+            name="your_workflow_name",
+            description="Description of what your workflow does",
+            func=lambda **kwargs: self.run(YourWorkflowParameters(**kwargs)),
+            args_schema=YourWorkflowParameters
+        )]
 
-def api():
-    import fastapi
-    import uvicorn
-    
-    app = fastapi.FastAPI()
-    
-    @app.get("/your_endpoint")
-    def your_endpoint():
-        configuration = YourWorkflowConfiguration()
-        workflow = YourWorkflow(configuration)
-        return workflow.run()
-    
-    uvicorn.run(app, host="0.0.0.0", port=9877)  # Note: Using different port from github workflow
-
-def main():
-    
-    configuration = YourWorkflowConfiguration(attribute_1="attribute_1", attribute_2=1)
-    workflow = YourWorkflow(configuration)
-    turtle = workflow.run()
-    print(turtle)
-
-def as_tool():
-    from langchain_core.tools import StructuredTool
-    
-    def your_tool_function():
-        configuration = YourWorkflowConfiguration(attribute_1="attribute_1", attribute_2=1)
-        workflow = YourWorkflow(configuration)
-        return workflow.run()
-    
-    
-    class YourToolSchema(BaseModel):
-        attribute_1: str = Field(..., description="The attribute_1 of the tool.")
-        attribute_2: int = Field(..., description="The attribute_2 of the tool.")
-    
-    return StructuredTool(
-        name="your_tool_name",
-        description="Your tool description.",
-        func=your_tool_function,
-        args_schema=YourToolSchema
-    )
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router.
+        
+        Args:
+            router (APIRouter): FastAPI router to add endpoints to
+        """
+        @router.post("/your_endpoint")
+        def run_workflow(parameters: YourWorkflowParameters):
+            return self.run(parameters)
 
 if __name__ == "__main__":
-    main()
+    from src.integrations import YourIntegration, YourIntegrationConfiguration
+    
+    # Initialize integration
+    integration = YourIntegration(YourIntegrationConfiguration(attribute_1=secret.get("YOUR_SECRET_1"), attribute_2=secret.get("YOUR_SECRET_2")))
+    
+    # Initialize configuration
+    configuration = YourWorkflowConfiguration(integration=integration)
+    
+    # Initialize workflow
+    workflow = YourWorkflow(configuration)
+
+    # Run workflow
+    result = workflow.run(YourWorkflowParameters(parameter_1="value1", parameter_2=123))
