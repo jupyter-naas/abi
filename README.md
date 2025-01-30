@@ -307,7 +307,7 @@ To change default agent please update: `.DEFAULT_GOAL := chat-supervisor-agent` 
 
 ### Running Python Scripts
 
-To run a Python script, use the `__main__` block pattern in the script file and run with: `poetry run python YourScriptPath.py`
+To run a Python script, use the `__main__` block pattern in the script file and run by using the command `make sh` and then the script path: `poetry run python src/pipelines/abi/AbiApplicationPipeline.py`
 
 Here is an example of how to run a pipeline in your terminal:
 
