@@ -30,7 +30,7 @@ class AbiApplicationPipelineConfiguration(PipelineConfiguration):
     """
     naas_integration_config: NaasIntegrationConfiguration
     ontology_store: IOntologyStoreService
-    ontology_store_name: str = "abi-boilerplate"
+    ontology_store_name: str = "application/abi-boilerplate"
 
 class OntologyPipelineParameters(PipelineParameters):
     """Parameters for ABIOntology pipeline execution.
