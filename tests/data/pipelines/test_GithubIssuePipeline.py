@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 from datetime import datetime
 from rdflib import Graph
 
-from src.data.pipelines.github.GithubIssuePipeline import (
+from src.pipelines.github.GithubIssuePipeline import (
     GithubIssuePipeline,
     GithubIssuePipelineConfiguration,
     GithubIssuePipelineParameters
