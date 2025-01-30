@@ -4,7 +4,8 @@ from src.data.integrations import YourIntegration
 from abi.utils.Graph import ABIGraph
 from rdflib import Graph
 from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
-from src import secret
+from abi import logger
+from src import config, secret
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 
@@ -36,6 +37,14 @@ class YourPipeline(Pipeline):
     
     def __init__(self, configuration: YourPipelineConfiguration):
         self.__configuration = configuration
+
+    def run(self, parameters: YourPipelineParameters) -> Graph:        
+        graph = ABIGraph()
+        
+        # ... Add your code here
+        
+        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
+        return graph
         
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this pipeline.
@@ -59,11 +68,29 @@ class YourPipeline(Pipeline):
         @router.post("/YourPipeline")
         def run(parameters: YourPipelineParameters):
             return self.run(parameters).serialize(format="turtle")
+        
+if __name__ == "__main__":
+    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+    from src.integrations import YourIntegration, YourIntegrationConfiguration
+    
+    # Init store
+    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
 
-    def run(self, parameters: YourPipelineParameters) -> Graph:        
-        graph = ABIGraph()
-        
-        # ... Add your code here
-        
-        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
-        return graph
+    # Initialize integration
+    integration = YourIntegration(YourIntegrationConfiguration(attribute_1=secret.get("YOUR_SECRET_1"), attribute_2=secret.get("YOUR_SECRET_2")))
+                    
+    # Initialize configuration  
+    configuration = YourPipelineConfiguration(
+        integration=integration,
+        ontology_store=ontology_store,
+        ontology_store_name="yourstorename"
+    )
+    
+    # Initialize pipeline
+    pipeline = YourPipeline(configuration)
+    
+    # Run pipeline
+    result = pipeline.run(YourPipelineParameters(parameter_1="value1", parameter_2=123))
+
+
