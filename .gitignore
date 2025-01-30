@@ -59,6 +59,7 @@ l2_prepared/
 l3_gold/
 l3_trusted/
 data/ontology-store/
+storage/
 
 # Ignore all contents but keep the directories
 !l1_bronze/.gitkeep
