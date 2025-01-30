@@ -21,7 +21,7 @@ import yaml
 from yaml import Dumper, Loader
 
 @dataclass
-class ABIOntologyDemoConfiguration(PipelineConfiguration):
+class AbiApplicationPipelineConfiguration(PipelineConfiguration):
     """Configuration for ABIOntology pipeline.
     
     Attributes:
@@ -32,7 +32,7 @@ class ABIOntologyDemoConfiguration(PipelineConfiguration):
     ontology_store: IOntologyStoreService
     ontology_store_name: str = "abi-ontology-demo"
 
-class ABIOntologyDemoParameters(PipelineParameters):
+class OntologyPipelineParameters(PipelineParameters):
     """Parameters for ABIOntology pipeline execution.
     
     Attributes:
@@ -48,12 +48,12 @@ class ABIOntologyDemoParameters(PipelineParameters):
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
     level: str = "USE_CASE"
 
-class ABIOntologyDemoPipeline(Pipeline):
+class AbiApplicationPipeline(Pipeline):
     """Pipeline for collecting and organizing ABI components into an ontology."""
     
-    __configuration: ABIOntologyDemoConfiguration
+    __configuration: AbiApplicationPipelineConfiguration
     
-    def __init__(self, configuration: ABIOntologyDemoConfiguration):
+    def __init__(self, configuration: AbiApplicationPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
@@ -298,7 +298,7 @@ class ABIOntologyDemoPipeline(Pipeline):
 
     def scan_pipelines(self, graph: Graph) -> None:
         """Scan pipelines directory and add to graph."""
-        pipelines_dir = Path("src/data/pipelines/github")
+        pipelines_dir = Path("src/pipelines/github")
         nb_pipelines = len(list(pipelines_dir.glob("*.py")))
         logger.debug(f"---> Found {nb_pipelines} pipelines.")
         coordinates = self.__generate_coordinates(700, nb_pipelines, 45)
@@ -383,7 +383,7 @@ class ABIOntologyDemoPipeline(Pipeline):
                     logger.error(f"Error processing workflow {file}: {e}")
 
 
-    def run(self, parameters: ABIOntologyDemoParameters) -> Graph:
+    def run(self, parameters: OntologyPipelineParameters) -> Graph:
         """Executes the pipeline to create the ABI ontology.
         
         Args:
@@ -466,8 +466,8 @@ class ABIOntologyDemoPipeline(Pipeline):
             StructuredTool(
                 name="abi_ontology_pipeline",
                 description="Creates an ontology of ABI components and their relationships",
-                func=lambda **kwargs: self.run(ABIOntologyDemoParameters(**kwargs)),
-                args_schema=ABIOntologyDemoParameters
+                func=lambda **kwargs: self.run(OntologyPipelineParameters(**kwargs)),
+                args_schema=OntologyPipelineParameters
             )
         ]  
 
@@ -481,7 +481,7 @@ class ABIOntologyDemoPipeline(Pipeline):
     ) -> None:
         """Adds API endpoints for this pipeline to the given router."""
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
-        def run(parameters: ABIOntologyDemoParameters):
+        def run(parameters: OntologyPipelineParameters):
             return self.run(parameters).serialize(format="turtle") 
 
 if __name__ == "__main__":
@@ -491,10 +491,10 @@ if __name__ == "__main__":
 
     ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
 
-    pipeline = ABIOntologyDemoPipeline(ABIOntologyDemoConfiguration(
+    pipeline = AbiApplicationPipeline(AbiApplicationPipelineConfiguration(
         naas_integration_config=NaasIntegrationConfiguration(
             api_key=secret.get("NAAS_API_KEY")
         ),
         ontology_store=ontology_store
     ))
-    pipeline.run(ABIOntologyDemoParameters())
+    pipeline.run(OntologyPipelineParameters())
