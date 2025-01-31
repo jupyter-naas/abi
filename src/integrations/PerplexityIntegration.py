@@ -1,15 +1,9 @@
 from typing import Optional, Dict, List
 import requests
 from dataclasses import dataclass
-import json
-import os
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-
+from abi import logger
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
-
-# Load environment variables
-load_dotenv()
 
 LOGO_URL = "https://logo.clearbit.com/perplexity.ai"
 
@@ -41,15 +35,6 @@ class PerplexityIntegration(Integration):
             "Authorization": f"Bearer {self.__configuration.api_key}",
             "Content-Type": "application/json"
         }
-        
-        # # Test connection
-        # try:
-        #     self._make_request("POST", "/chat/completions", {
-        #         "model": "llama-3.1-sonar-small-128k-online",
-        #         "messages": [{"role": "user", "content": "test"}]
-        #     })
-        # except Exception as e:
-        #     raise IntegrationConnectionError(f"Failed to connect to Perplexity: {str(e)}")
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
         """Make HTTP request to Perplexity API."""
@@ -60,7 +45,7 @@ class PerplexityIntegration(Integration):
                 url=url,
                 headers=self.headers,
                 json=data,
-                timeout=30
+                timeout=120
             )
             response.raise_for_status()
             return response.json() if response.content else {}
@@ -71,12 +56,22 @@ class PerplexityIntegration(Integration):
         self,
         question: str,
         system_prompt: str = "Be precise and concise.",
+        model: str = "sonar-pro",
+        frequency_penalty: float = 1,
+        max_tokens: Optional[int] = None,
+        presence_penalty: float = 0,
         temperature: float = 0.2,
-        max_tokens: Optional[int] = None
+        top_p: float = 0.9,
+        top_k: int = 0,
+        stream: bool = False,
+        search_domain_filter: List[str] = ["perplexity.ai"],
+        search_recency_filter: str = "month",
+        response_format: str = {},
+        return_images: bool = False,
+        return_related_questions: bool = False
     ) -> str:
         """Ask a question to Perplexity AI."""
         payload = {
-            "model": "llama-3.1-sonar-small-128k-online",
             "messages": [
                 {
                     "role": "system",
@@ -87,21 +82,22 @@ class PerplexityIntegration(Integration):
                     "content": question
                 }
             ],
+            "model": model,
+            "frequency_penalty": frequency_penalty,
+            "response_format": response_format,
             "temperature": temperature,
-            "top_p": 0.9,
-            "search_domain_filter": ["perplexity.ai"],
-            "return_images": False,
-            "return_related_questions": False,
-            "search_recency_filter": "month",
-            "top_k": 0,
-            "stream": False,
-            "presence_penalty": 0,
-            "frequency_penalty": 1
+            "top_p": top_p,
+            "search_domain_filter": search_domain_filter,
+            "return_images": return_images,
+            "return_related_questions": return_related_questions,
+            "search_recency_filter": search_recency_filter,
+            "top_k": top_k,
+            "stream": stream,
+            "presence_penalty": presence_penalty,
+            "max_tokens": max_tokens
         }
-        
-        if max_tokens:
-            payload["max_tokens"] = max_tokens
-
+        # Remove None values from payload
+        payload = {k: v for k, v in payload.items() if v is not None and v != [] and v != {}}
         response = self._make_request("POST", "/chat/completions", payload)
         return response['choices'][0]['message']['content']
 
@@ -125,18 +121,3 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
             args_schema=AskQuestionSchema
         )
     ]
-
-# Direct testing
-if __name__ == "__main__":
-    print("\nTesting Perplexity API:")
-    try:
-        api_key = os.getenv("PERPLEXITY_API_KEY")
-        if not api_key:
-            raise ValueError("PERPLEXITY_API_KEY environment variable not set")
-            
-        config = PerplexityIntegrationConfiguration(api_key=api_key)
-        integration = PerplexityIntegration(config)
-        result = integration.ask_question("Who won the US presidential election in 2024?")
-        print(f"Success: {result}")
-    except Exception as e:
-        print(f"Test failed: {str(e)}") 
