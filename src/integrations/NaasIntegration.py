@@ -699,7 +699,29 @@ class NaasIntegration(Integration):
             Dict: Response containing the asset details
         """
         return self._make_request("GET", f"/workspace/{workspace_id}/asset/{asset_id}")
-
+    
+    def create_completion(self, model_id: str, prompt: str, system_prompt: str = None, temperature: float = 0.3) -> Dict:
+        """Create a completion using a specified model.
+        
+        Args:
+            model_id (str): ID of the model to use for completion
+            messages (List[Dict[str, str]]): List of message dictionaries with 'role' and 'content' keys
+                
+        Returns:
+            Dict: Response containing the completion details
+        """
+        payload = {
+            "id": model_id,
+            "payload": json.dumps({
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": temperature
+            })
+        }
+        completion_response = self._make_request("POST", f"/model/{model_id}/completion", data=payload)
+        return completion_response["completion"]["completions"][0]
 
 def as_tools(configuration: NaasIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
