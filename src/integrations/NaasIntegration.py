@@ -639,6 +639,67 @@ class NaasIntegration(Integration):
         # Get storage credentials
         credentials = self.create_workspace_storage_credentials(workspace_id, storage_name)
         return credentials
+    
+    def create_asset(
+        self,
+        workspace_id: str,
+        storage_name: str,
+        object_name: str,
+        visibility: str = "public",
+        content_disposition: str = "inline",
+        password: str = None
+    ) -> Dict:
+        """Create a new asset in the workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            storage_name (str): Name of the storage to create asset in
+            object_name (str): Name of the object/file in storage
+            visibility (str, optional): Asset visibility. Defaults to "private"
+            content_disposition (str, optional): Content disposition header. Defaults to "inline"
+            password (str, optional): Password protection for asset. Defaults to None
+            
+        Returns:
+            Dict: Response containing the created asset details
+        """
+        data = {
+            "workspace_id": workspace_id,
+            "asset_creation": {
+                "workspace_id": workspace_id,
+                "storage_name": storage_name,
+                "object_name": object_name,
+                "visibility": visibility,
+                "content_disposition": content_disposition,
+                "password": password,
+            }
+        }
+        return self._make_request("POST", f"/workspace/{workspace_id}/asset/", data)
+
+    def update_asset(self, workspace_id: str, asset_id: str, data: Dict) -> Dict:
+        """Update an existing asset.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            asset_id (str): ID of the asset to update
+            data (Dict): Updated asset data
+            
+        Returns:
+            Dict: Response containing the updated asset details
+        """
+        return self._make_request("PUT", f"/workspace/{workspace_id}/asset/{asset_id}", data)
+
+    def get_asset(self, workspace_id: str, asset_id: str) -> Dict:
+        """Get asset details by ID.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            asset_id (str): ID of the asset to retrieve
+            
+        Returns:
+            Dict: Response containing the asset details
+        """
+        return self._make_request("GET", f"/workspace/{workspace_id}/asset/{asset_id}")
+
 
 def as_tools(configuration: NaasIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
