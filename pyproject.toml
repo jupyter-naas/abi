@@ -105,6 +105,7 @@ chat-brevo-agent = "src.apps.terminal_agent.main:run_brevo_agent"
 chat-whatsapp-agent = "src.apps.terminal_agent.main:run_whatsapp_agent"
 chat-instagram-agent = "src.apps.terminal_agent.main:run_instagram_agent"
 chat-glassdoor-agent = "src.apps.terminal_agent.main:run_glassdoor_agent"
+chat-powerpoint-agent = "src.apps.terminal_agent.main:run_powerpoint_agent"
 
 # Analytics agents
 chat-plotly-agent = "src.apps.terminal_agent.main:run_plotly_agent"

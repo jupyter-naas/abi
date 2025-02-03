@@ -197,6 +197,9 @@ chat-whatsapp-agent: .venv
 chat-glassdoor-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-glassdoor-agent'
 
+chat-powerpoint-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-powerpoint-agent'
+
 .DEFAULT_GOAL := chat-supervisor-agent
 
 .PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
