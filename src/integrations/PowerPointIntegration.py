@@ -111,8 +111,6 @@ class PowerPointIntegration(Integration):
                     "shapes": shapes
                 }
             )
-        with open("storage/datalake/powerpoint-store/slides.json", "w") as f:
-            json.dump(slides, f, indent=4, ensure_ascii=False)
         return slides
     
     def add_slide(
@@ -570,13 +568,3 @@ def as_tools(configuration: PowerPointIntegrationConfiguration):
             args_schema=ListSlidesSchema
         )
     ]
-
-if __name__ == "__main__":
-    template_path = "assets/Template_ForvisMazars_Data&AIServices_Client_Presentation.pptx"
-    integration = PowerPointIntegration(PowerPointIntegrationConfiguration(template_path=template_path))
-
-    presentation = integration.create_presentation()
-
-    # integration.add_slide(presentation, 0)
-
-    slides = integration.list_slides(presentation, text=True)
