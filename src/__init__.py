@@ -15,6 +15,7 @@ class PipelineConfig:
 @dataclass
 class Config:
     workspace_id: str
+    storage_name: str
     github_project_repository: str
     github_support_repository: str
     github_project_id: int
@@ -40,6 +41,7 @@ class Config:
                 ]
                 return cls(
                     workspace_id=config_data.get('workspace_id'),
+                    storage_name=config_data.get('storage_name'),
                     github_project_repository=config_data['github_project_repository'],
                     github_support_repository=config_data['github_support_repository'], 
                     github_project_id=config_data['github_project_id'],
@@ -53,6 +55,7 @@ class Config:
         except FileNotFoundError:
             return cls(
                 workspace_id="",
+                storage_name="",
                 github_project_repository="",
                 github_support_repository="",
                 github_project_id=0,
