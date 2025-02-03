@@ -1,0 +1,80 @@
+from langchain_openai import ChatOpenAI
+from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from src import secret
+from fastapi import APIRouter
+from src.assistants.foundation.SupportAssistant import create_support_assistant
+from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.integrations import PowerPointIntegration
+from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
+
+
+DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
+AVATAR_URL = "https://logo.clearbit.com/microsoft.com"
+SYSTEM_PROMPT = f"""
+You are a PowerPoint Assistant with access to PowerPointIntegration tools.
+If you don't have access to any tool, ask the user to set their PowerPoint credentials in .env file.
+Always be clear and professional in your communication while helping users create and manage their PowerPoint presentations.
+Always provide all the context (tool response, draft, etc.) to the user in your final response.
+
+{RESPONSIBILITIES_PROMPT}
+"""
+
+def create_powerpoint_agent(
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None
+) -> Agent:
+    # Init
+    tools = []
+    agents = []
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
+            on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
+            system_prompt=SYSTEM_PROMPT
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+        
+    # Set model
+    model = ChatOpenAI(
+        model="o3-mini",
+        temperature=0,
+        api_key=secret.get('OPENAI_API_KEY')
+    )
+    
+    # Add tools
+    powerpoint_credentials = secret.get('POWERPOINT_CREDENTIALS')
+    if powerpoint_credentials:    
+        integration_config = PowerPointIntegrationConfiguration(
+            credentials=powerpoint_credentials
+        )
+        tools += PowerPointIntegration.as_tools(integration_config)
+
+    # Add agents
+    agents.append(create_support_assistant(agent_shared_state, agent_configuration))
+    
+    return PowerPointAssistant(
+        name="powerpoint_assistant",
+        description=DESCRIPTION,
+        chat_model=model,
+        tools=tools,
+        agents=agents,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver()
+    ) 
+
+class PowerPointAssistant(Agent):
+    def as_api(
+        self, 
+        router: APIRouter, 
+        route_name: str = "powerpoint", 
+        name: str = "PowerPoint Assistant", 
+        description: str = "API endpoints to call the PowerPoint assistant completion.", 
+        description_stream: str = "API endpoints to call the PowerPoint assistant stream completion.",
+        tags: list[str] = []
+    ):
+        return super().as_api(router, route_name, name, description, description_stream, tags) 

@@ -49,6 +49,7 @@ from src.assistants.expert.integrations.InstagramAssistant import create_instagr
 from src.assistants.expert.integrations.YahooFinanceAssistant import create_yahoo_finance_agent
 from src.assistants.expert.integrations.YouTubeAssistant import create_youtube_agent
 from src.assistants.expert.integrations.ZeroBounceAssistant import create_zerobounce_agent
+from src.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
 # Expert analytics assistants
 from src.assistants.expert.analytics.PlotlyAssistant import create_plotly_agent
 from src.assistants.expert.analytics.MatplotlibAssistant import create_matplotlib_agent
@@ -371,6 +372,12 @@ def run_matplotlib_agent():
 
 def run_glassdoor_agent():
     agent = create_glassdoor_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_powerpoint_agent():
+    agent = create_powerpoint_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
