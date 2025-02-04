@@ -8,6 +8,9 @@ import os
 from abi import logger
 import jwt
 
+from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory, ObjectStorageExceptions, ObjectStorageService
+
+
 LOGO_URL = "https://logo.clearbit.com/naas.ai"
 
 @dataclass
@@ -639,6 +642,122 @@ class NaasIntegration(Integration):
         # Get storage credentials
         credentials = self.create_workspace_storage_credentials(workspace_id, storage_name)
         return credentials
+    
+    def create_asset(
+        self,
+        workspace_id: str,
+        storage_name: str,
+        object_name: str,
+        visibility: str = "public",
+        content_disposition: str = "inline",
+        password: str = None
+    ) -> Dict:
+        """Create a new asset in the workspace.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            storage_name (str): Name of the storage to create asset in
+            object_name (str): Name of the object/file in storage
+            visibility (str, optional): Asset visibility. Defaults to "private"
+            content_disposition (str, optional): Content disposition header. Defaults to "inline"
+            password (str, optional): Password protection for asset. Defaults to None
+            
+        Returns:
+            Dict: Response containing the created asset details
+        """
+        data = {
+            "workspace_id": workspace_id,
+            "asset_creation": {
+                "workspace_id": workspace_id,
+                "storage_name": storage_name,
+                "object_name": object_name,
+                "visibility": visibility,
+                "content_disposition": content_disposition,
+                "password": password,
+            }
+        }
+        return self._make_request("POST", f"/workspace/{workspace_id}/asset/", data)
+
+    def upload_asset(self,
+        data: bytes,
+        workspace_id: str,
+        storage_name: str,
+        prefix: str,
+        object_name: str,
+        visibility: str = "public",
+        content_disposition: str = "inline",
+        password: str = None):
+        
+        
+        naas_storage : ObjectStorageService = ObjectStorageFactory.ObjectStorageServiceNaas(
+            self.__configuration.api_key,
+            workspace_id=workspace_id,
+            storage_name=storage_name
+        )
+        
+        naas_storage.put_object(
+            prefix=prefix,
+            key=object_name,
+            content=data
+        )
+        
+        # Check if an asset already exists.
+        return self.create_asset(
+            workspace_id=workspace_id,
+            storage_name=storage_name,
+            object_name=os.path.join(prefix, object_name),
+            visibility=visibility,
+            content_disposition=content_disposition,
+            password=password
+        )
+        
+    def update_asset(self, workspace_id: str, asset_id: str, data: Dict) -> Dict:
+        """Update an existing asset.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            asset_id (str): ID of the asset to update
+            data (Dict): Updated asset data
+            
+        Returns:
+            Dict: Response containing the updated asset details
+        """
+        return self._make_request("PUT", f"/workspace/{workspace_id}/asset/{asset_id}", data)
+
+    def get_asset(self, workspace_id: str, asset_id: str) -> Dict:
+        """Get asset details by ID.
+        
+        Args:
+            workspace_id (str): ID of the workspace
+            asset_id (str): ID of the asset to retrieve
+            
+        Returns:
+            Dict: Response containing the asset details
+        """
+        return self._make_request("GET", f"/workspace/{workspace_id}/asset/{asset_id}")
+    
+    def create_completion(self, model_id: str, prompt: str, system_prompt: str = None, temperature: float = 0.3) -> Dict:
+        """Create a completion using a specified model.
+        
+        Args:
+            model_id (str): ID of the model to use for completion
+            messages (List[Dict[str, str]]): List of message dictionaries with 'role' and 'content' keys
+                
+        Returns:
+            Dict: Response containing the completion details
+        """
+        payload = {
+            "id": model_id,
+            "payload": json.dumps({
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": temperature
+            })
+        }
+        completion_response = self._make_request("POST", f"/model/{model_id}/completion", data=payload)
+        return completion_response["completion"]["completions"][0]
 
 def as_tools(configuration: NaasIntegrationConfiguration):
     from langchain_core.tools import StructuredTool

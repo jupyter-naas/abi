@@ -11,4 +11,5 @@ services:
       #- /Users/jrvmac/Library/CloudStorage/OneDrive-SharedLibraries-ForvisMazars:/Users/jrvmac/Library/CloudStorage/OneDrive-SharedLibraries-ForvisMazars
     environment:
       - PYTHONPATH=/app
+      - ENV=dev
     command: ["poetry", "run"]

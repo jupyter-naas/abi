@@ -1,5 +1,6 @@
 from abi.services.secret.Secret import Secret
 from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import DotenvSecretSecondaryAdaptor
+from src.services import init_services
 from src import cli
 import yaml
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ class PipelineConfig:
 @dataclass
 class Config:
     workspace_id: str
+    storage_name: str
     github_project_repository: str
     github_support_repository: str
     github_project_id: int
@@ -26,7 +28,7 @@ class Config:
     logo_path: str
     favicon_path: str
     pipelines: List[PipelineConfig]
-    storage_name: str
+    space_name: str
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> 'Config':
@@ -43,6 +45,7 @@ class Config:
                 ]
                 return cls(
                     workspace_id=config_data.get('workspace_id'),
+                    storage_name=config_data.get('storage_name'),
                     github_project_repository=config_data['github_project_repository'],
                     github_support_repository=config_data['github_support_repository'], 
                     github_project_id=config_data['github_project_id'],
@@ -52,11 +55,12 @@ class Config:
                     logo_path=config_data['logo_path'],
                     favicon_path=config_data['favicon_path'],
                     pipelines=pipeline_configs,
-                    storage_name=config_data['storage_name']
+                    space_name=config_data.get('space_name')
                 )
         except FileNotFoundError:
             return cls(
                 workspace_id="",
+                storage_name="",
                 github_project_repository="",
                 github_support_repository="",
                 github_project_id=0,
@@ -66,17 +70,15 @@ class Config:
                 logo_path="",
                 favicon_path="",
                 pipelines=[],
-                storage_name=""
+                space_name=""
             )
 
 secret = Secret(DotenvSecretSecondaryAdaptor())
 config = Config.from_yaml()
 
-object_storage = ObjectStorageFactory.ObjectStorageServiceNaas(
-    naas_api_key=secret.get('NAAS_API_KEY'),
-    workspace_id=config.workspace_id,
-    storage_name=config.storage_name
-)
+services = init_services(config, secret)
+
+print(type(services.storage_service.adapter))
 
 if __name__ == "__main__":
     cli()

@@ -23,6 +23,9 @@ from src.assistants.domain.FinanceAssistant import create_finance_assistant
 from src.assistants.domain.GrowthAssistant import create_growth_assistant
 from src.assistants.domain.OperationsAssistant import create_operations_assistant
 from src.assistants.domain.SalesAssistant import create_sales_assistant
+# Integrations
+from src.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
+from src.assistants.expert.integrations.NaasAssistant import create_naas_agent
 # Pipelines
 from src.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
 from src.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
@@ -134,6 +137,12 @@ operations_agent.as_api(assistants_router)
 
 finance_agent = create_finance_assistant()
 finance_agent.as_api(assistants_router)
+
+naas_agent = create_naas_agent()
+naas_agent.as_api(assistants_router)
+
+powerpoint_agent = create_powerpoint_agent()
+powerpoint_agent.as_api(assistants_router)
 
 # Create Pipelines API Router
 pipelines_router = APIRouter(
