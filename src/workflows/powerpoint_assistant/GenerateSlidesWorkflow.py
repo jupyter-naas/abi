@@ -248,7 +248,7 @@ if __name__ == "__main__":
         naas_integration_config=naas_integration_config,
     )
     workflow = GenerateSlidesWorkflow(configuration)
-    prompt = "Generate a PowerPoint presentation about Forvis Mazars, firm that provides accounting, tax, and consulting services."
+    prompt = "Can you create slides on Palantir Technologies and the future of AI Agents?"
     number_of_slides = 8
     use_cache = True
     output = workflow.generate_slides(GenerateSlidesWorkflowParameters(prompt=prompt, number_of_slides=number_of_slides, use_cache=use_cache))
