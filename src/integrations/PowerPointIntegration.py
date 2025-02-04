@@ -10,10 +10,11 @@ import io
 from abi import logger
 import json
 from pptx.util import Inches, Pt, Cm
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
 from pptx.enum.shapes import MSO_CONNECTOR
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL
+
 
 @dataclass
 class PowerPointIntegrationConfiguration(IntegrationConfiguration):
@@ -352,6 +353,8 @@ class PowerPointIntegration(Integration):
             
         if text is not None:
             shape.text = text
+            # shape.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+            # shape.text_frame.word_wrap = True
             
         if fill_color is not None:
             shape.fill.solid()
