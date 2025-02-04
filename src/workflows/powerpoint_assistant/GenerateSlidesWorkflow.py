@@ -166,6 +166,7 @@ class GenerateSlidesWorkflow(Workflow):
         prompt = f"""
         {parameters.prompt}
         Create {parameters.number_of_slides} slides.
+        Only use input text to generate the presentation.
         Use the following template slides as a reference and update the text of the shapes: 
         ```json	
         {template_slides}
@@ -175,7 +176,7 @@ class GenerateSlidesWorkflow(Workflow):
         # Create system prompt to generate the presentation
         system_prompt = """
         You are a PowerPoint presentation generator. 
-        You are given a prompt and a template presentation structure.
+        You are given a text and a template presentation structure to generate a presentation in JSON format.
         Please output a JSON object containing the following fields: 
         ```json
         {{
