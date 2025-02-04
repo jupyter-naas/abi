@@ -5,12 +5,10 @@ from fastapi import APIRouter
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import PowerPointIntegration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
-
-from src.workflows.powerpoint_assistant.PowerPointWorkflows import PowerPointWorkflows, PowerPointWorkflowsConfiguration
-
+from src.workflows.powerpoint_assistant.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
+from src.workflows.powerpoint_assistant.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
 AVATAR_URL = "https://logo.clearbit.com/microsoft.com"
@@ -34,14 +32,21 @@ def create_powerpoint_agent(
     agents = []
 
     if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '':
-        pptWorkflows = PowerPointWorkflows(PowerPointWorkflowsConfiguration(
+        generateSlidesWorkflow = GenerateSlidesWorkflow(GenerateSlidesWorkflowConfiguration(
             powerpoint_integration_config=PowerPointIntegrationConfiguration(),
             naas_integration_config=NaasIntegrationConfiguration(
                 api_key=secret.get('NAAS_API_KEY')
             )
         ))
-    
-        tools += pptWorkflows.as_tools()
+        tools += generateSlidesWorkflow.as_tools()
+
+        updateOrganizationSlidesWorkflow = UpdateOrganizationSlidesWorkflow(UpdateOrganizationSlidesWorkflowConfiguration(
+            powerpoint_integration_config=PowerPointIntegrationConfiguration(),
+            naas_integration_config=NaasIntegrationConfiguration(
+                api_key=secret.get('NAAS_API_KEY')
+            )
+        ))
+        tools += updateOrganizationSlidesWorkflow.as_tools()
 
     # Set configuration
     if agent_configuration is None:
@@ -55,12 +60,10 @@ def create_powerpoint_agent(
         
     # Set model
     model = ChatOpenAI(
-        model="o3-mini",
-        temperature=0,
-        api_key=secret.get('OPENAI_API_KEY')
+        model="gpt-4o",
+        api_key=secret.get('OPENAI_API_KEY'),
+        temperature=0
     )
-    
-
     # Add agents
     agents.append(create_support_assistant(agent_shared_state, agent_configuration))
     
