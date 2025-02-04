@@ -5,7 +5,6 @@ import os
 class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
     def __init__(self, base_path: str):
         self.base_path = base_path
-        print(f"Base path: {self.base_path}")
         
     def __create_path(self, prefix: str) -> None:
         os.makedirs(os.path.join(self.base_path, prefix), exist_ok=True)

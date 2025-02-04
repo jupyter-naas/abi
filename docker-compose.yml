@@ -9,4 +9,5 @@ services:
       - .:/app
     environment:
       - PYTHONPATH=/app
+      - ENV=dev
     command: ["poetry", "run"]
