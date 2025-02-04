@@ -44,7 +44,7 @@ class GenerateSlidesWorkflowParameters(WorkflowParameters):
         template_path (str): Path to the PowerPoint template
     """
     prompt: str = Field(..., description="Prompt to generate the presentation. Make sure you include all information needed to generate the presentation.")
-    number_of_slides: int = Field(..., description="Number of slides to generate.")
+    number_of_slides: int = Field(5, description="Number of slides to generate.")
     use_cache: bool = Field(True, description="Use cache to generate the presentation. By default, it is set to True.")
 
 class GenerateSlidesWorkflow(Workflow):
