@@ -364,16 +364,16 @@ class PowerPointIntegration(Integration):
             shape.line.color.rgb = RGBColor(*line_color)
             
         if left is not None:
-            shape.left = Inches(left)
+            shape.left = Cm(left)
             
         if top is not None:
-            shape.top = Inches(top)
+            shape.top = Cm(top)
             
         if width is not None:
-            shape.width = Inches(width)
+            shape.width = Cm(width)
             
         if height is not None:
-            shape.height = Inches(height)
+            shape.height = Cm(height)
             
         return presentation
 
