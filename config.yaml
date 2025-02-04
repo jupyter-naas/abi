@@ -3,7 +3,7 @@ config:
   github_project_repository: "jupyter-naas/abi-forvismazars.com" # Github repository name (e.g. jupyter-naas/abi)
   github_support_repository: "jupyter-naas/abi-forvismazars.com" # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
-  ontology_store_path: "src/data/ontology-store" # Path to the ontology store
+  ontology_store_path: "src/storage/triplestore" # Path to the ontology store
   api_title: "ABI Forvis Mazars API" # API title
   api_description: "API for ABI Forvis Mazars, your Artifical Business Intelligence" # API description
   logo_path: "assets/logo.png" # Path to the logo

@@ -2,6 +2,9 @@ from lib.abi.integration.integration import Integration, IntegrationConfiguratio
 from dataclasses import dataclass
 import requests
 from typing import Dict
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
+from abi import logger
 
 @dataclass
 class YourIntegrationConfiguration(IntegrationConfiguration):
@@ -63,10 +66,6 @@ class YourIntegration(Integration):
         return self._make_request(f"/{parameter}")
     
 def as_tools(configuration: YourIntegrationConfiguration):
-    """Convert Airtable integration into LangChain tools."""
-    from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel, Field
-    
     integration = YourIntegration(configuration)
 
     class YourToolSchema(BaseModel):
