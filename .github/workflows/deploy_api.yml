@@ -53,7 +53,7 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
         run: |
-          docker pull ghcr.io/${{ github.repository }}/abi:latest
+          docker pull ghcr.io/${{ env.REGISTRY_NAME }}/abi:latest
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
           # Generate timestamp to tag image
