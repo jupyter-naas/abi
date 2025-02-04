@@ -1,7 +1,7 @@
 name: ABI API
 
 env:
-  REGISTRY_NAME: abi-forvismazars-api
+  REGISTRY_NAME: abi-forvismazars
   
 on:
   workflow_run:
