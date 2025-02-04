@@ -8,6 +8,9 @@ import os
 from abi import logger
 import jwt
 
+from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory, ObjectStorageExceptions, ObjectStorageService
+
+
 LOGO_URL = "https://logo.clearbit.com/naas.ai"
 
 @dataclass
@@ -675,6 +678,39 @@ class NaasIntegration(Integration):
         }
         return self._make_request("POST", f"/workspace/{workspace_id}/asset/", data)
 
+    def upload_asset(self,
+        data: bytes,
+        workspace_id: str,
+        storage_name: str,
+        prefix: str,
+        object_name: str,
+        visibility: str = "public",
+        content_disposition: str = "inline",
+        password: str = None):
+        
+        
+        naas_storage : ObjectStorageService = ObjectStorageFactory.ObjectStorageServiceNaas(
+            self.__configuration.api_key,
+            workspace_id=workspace_id,
+            storage_name=storage_name
+        )
+        
+        naas_storage.put_object(
+            prefix=prefix,
+            key=object_name,
+            content=data
+        )
+        
+        # Check if an asset already exists.
+        return self.create_asset(
+            workspace_id=workspace_id,
+            storage_name=storage_name,
+            object_name=os.path.join(prefix, object_name),
+            visibility=visibility,
+            content_disposition=content_disposition,
+            password=password
+        )
+        
     def update_asset(self, workspace_id: str, asset_id: str, data: Dict) -> Dict:
         """Update an existing asset.
         
