@@ -82,16 +82,6 @@ class GetOntologyParameters(WorkflowParameters):
     workspace_id: str = Field(description="The ID of the workspace to get ontologies from.")
     ontology_id: str = Field(description="The ID of the ontology to get.")
 
-class PublishRemoteAssistantsParameters(WorkflowParameters):
-    """Parameters for PublishRemoteAssistants execution.
-    
-    Attributes:
-        workspace_id (str): The ID of the workspace to publish the remote assistants to.
-        repo_name (str): The name of the repository storing the remote assistants.
-    """
-    workspace_id: str = Field(config.workspace_id, description="The ID of the workspace to publish the remote assistants to. Default is the workspace ID set in config.yaml. If default is set, display this value to the user.")
-    repo_name: str = Field(config.github_project_repository.split("/")[-1], description="The name of the repository storing the remote assistants. Default is the project repository name set in config.yaml. If default is set, display this value to the user.")
-
 class NaasWorkspaceWorkflows(Workflow):
     """Workflows for listing all Naas workspaces with their IDs and names and getting the personal workspace."""
     
@@ -162,103 +152,6 @@ class NaasWorkspaceWorkflows(Workflow):
         """
         ontology = self.__naas.get_ontology(workspace_id=parameters.workspace_id, ontology_id=parameters.ontology_id).get("ontology", {})
         return ontology
-    
-    def publish_remote_assistants(self, parameters: PublishRemoteAssistantsParameters) -> List[str]:
-        """Publishes the remote assistants to the workspace.
-        
-        Returns:
-            List[str]: List of messages indicating the status of the publication
-        """
-        # Init
-        results = []
-
-        # Get workspace plugins to check for existing ones
-        workspace_plugins = self.__naas.get_plugins(parameters.workspace_id).get('workspace_plugins', [])
-        logger.debug(f"Workspace plugins: {len(workspace_plugins)}")
-
-        # Init
-        api_path = Path("src/api.py")
-        registry_name = f"{parameters.repo_name}-api"
-        api_base_url = f"https://{registry_name}.default.space.naas.ai"
-        logger.debug(f"API base URL: {api_base_url}")
-        api_key = secret.get("ABI_API_KEY")
-
-        # Read the content of the api.py file
-        with open(api_path, 'r') as file:
-            content = file.read()
-
-        # Get full import paths and run functions
-        import_matches = re.findall(r'from (src\.assistants(?:\.\w+)*\.\w+Assistant) import .*', content)
-
-        # Extract run functions from imports
-        for import_path in import_matches:
-            try:
-                # Convert module path to file path
-                file_path = Path(*import_path.split('.')).with_suffix('.py')
-                
-                # Find route_name in content by looking at as_api() calls
-                if file_path.exists():
-                    with open(file_path, 'r') as file:
-                        content = file.read()
-                    find_route_name = re.findall(r'route_name:\s*str\s*=\s*"([^"]*)"', content)
-                    if find_route_name:
-                        route_name = find_route_name[0]
-                    else:
-                        logger.warning(f"Route name not found in {file_path}")
-                        continue
-                
-                    # Import the module
-                    module = importlib.import_module(import_path)
-                    file_stem = import_path.split(".")[-1]
-                    title = (file_stem.replace("Assistant", " ")) + "Assistant"
-                    slug = title.lower().replace(" ", "-").replace("_", "-")
-                    description = getattr(module, "DESCRIPTION", "")
-                    prompt = getattr(module, "SYSTEM_PROMPT", "")
-                    avatar = getattr(module, "AVATAR_URL", "")
-                    route_name = file_stem.lower().replace("assistant", "")
-                    if "foundation" in import_path:
-                        type = "CORE"
-                    elif "domain" in import_path:
-                        type = "DOMAIN"
-                    else:
-                        type = "CUSTOM"
-                    plugin_data = {
-                        "id": "remote-" + slug, 
-                        "name": title, 
-                        "slug": slug, 
-                        "avatar": avatar, 
-                        "description": description, 
-                        "prompt": prompt, 
-                        "prompt_type": "system", 
-                        "model": "gpt-4o", 
-                        "temperature": 0,
-                        "type": type, 
-                        "include_ontology": "true",
-                        "include_date": "true",
-                        "remote": {"url": f"{api_base_url}/assistants/{route_name}/stream-completion?token={api_key}"}
-                    }
-                    # Check if plugin already exists
-                    existing_plugin_id = self.__naas.search_plugin(key='id', value=plugin_data['id'], plugins=workspace_plugins)
-                    if existing_plugin_id:
-                        self.__naas.update_plugin(
-                            workspace_id=parameters.workspace_id,
-                            plugin_id=existing_plugin_id,
-                            data=plugin_data
-                        )
-                        message = f"Plugin '{plugin_data['name']}' updated in workspace '{parameters.workspace_id}'"
-                    else:
-                        self.__naas.create_plugin(
-                            workspace_id=parameters.workspace_id,
-                            data=plugin_data
-                        )
-                        message = f"Plugin '{plugin_data['name']}' created in workspace '{parameters.workspace_id}'"
-                    logger.debug(message)
-                    results.append(message)
-                else:
-                    logger.warning(f"File not found: {file_path}")
-            except Exception as e:
-                logger.warning(f"Could not import module {import_path}: {str(e)}")
-        return results
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""
@@ -304,12 +197,6 @@ class NaasWorkspaceWorkflows(Workflow):
                 description="Get an ontology by its ID",
                 func=lambda workspace_id, ontology_id: self.get_ontology(GetOntologyParameters(workspace_id=workspace_id, ontology_id=ontology_id)),
                 args_schema=GetOntologyParameters
-            ),
-            StructuredTool(
-                name="publish_remote_assistants_to_workspace",
-                description="Publish the remote assistants (available in API) to a given Naas workspace.",
-                func=lambda workspace_id, repo_name: self.publish_remote_assistants(PublishRemoteAssistantsParameters(workspace_id=workspace_id, repo_name=repo_name)),
-                args_schema=PublishRemoteAssistantsParameters
             )
         ]
 
