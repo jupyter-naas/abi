@@ -10,10 +10,8 @@ from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel
 import os
-from fastapi import UploadFile
-from fastapi.responses import StreamingResponse
-import io
 import glob
+from src import config
 
 @dataclass
 class NaasStorageWorkflowsConfiguration(WorkflowConfiguration):
@@ -23,47 +21,16 @@ class NaasStorageWorkflowsConfiguration(WorkflowConfiguration):
         naas_integration_config (NaasIntegrationConfiguration): Configuration for Naas integration
     """
     naas_integration_config: NaasIntegrationConfiguration
-
-class ListNaasStorageParameters(WorkflowParameters):
-    """Parameters for listing Naas storage.
-    
-    Attributes:
-        workspace_id (str): ID of the workspace to list storage from
-    """
-    workspace_id: str = Field(..., description="ID of the workspace to list storage from")
-
-class CreateNaasStorageParameters(WorkflowParameters):
-    """Parameters for creating a new Naas storage.
-    
-    Attributes:
-        workspace_id (str): ID of the workspace to create storage in
-        storage_name (str): Name of the storage to create
-    """
-    workspace_id: str = Field(..., description="ID of the workspace to create storage in")
-    storage_name: str = Field(..., description="Name of the storage to create")
-
-class ListNaasStorageFilesParameters(WorkflowParameters):
-    """Parameters for ListNaasStorageFiles execution.
-    
-    Attributes:
-        workspace_id (str): ID of the workspace containing the storage
-        storage_name (str): Name of the storage to list files from
-        prefix (str, optional): Directory prefix to list objects under
-    """
-    workspace_id: str = Field(..., description="ID of the workspace containing the storage")
-    storage_name: str = Field(..., description="Name of the storage to list files from")
+    workspace_id: str = config.workspace_id
+    storage_name: str = config.storage_name
 
 class DownloadNaasStorageFileParameters(WorkflowParameters):
     """Parameters for downloading a file from Naas storage.
     
     Attributes:
-        workspace_id (str): ID of the workspace containing the storage
-        storage_name (str): Name of the storage to download from
         remote_path (str): Path to the file within the storage
         local_path (str): Destination path to download the file to
     """
-    workspace_id: str = Field(..., description="ID of the workspace containing the storage")
-    storage_name: str = Field(..., description="Name of the storage to download from")
     remote_path: str = Field(..., description="Path to the file within the storage")
     local_path: str = Field(..., description="Destination path to download the file to")
 
@@ -71,37 +38,25 @@ class DownloadAllFilesFromNaasStorageParameters(WorkflowParameters):
     """Parameters for downloading all files from Naas storage.
     
     Attributes:
-        workspace_id (str): ID of the workspace containing the storage
-        storage_name (str): Name of the storage to download from
         remote_directory_path (str): Path to the directory within the storage to download from
         local_directory_path (str): Destination directory path to download the files to
     """
-    workspace_id: str = Field(..., description="ID of the workspace containing the storage")
-    storage_name: str = Field(..., description="Name of the storage to download from")
     local_directory_path: Optional[str] = Field(..., description="Destination directory path to download the files to")
 
 class UploadNaasStorageFileParameters(WorkflowParameters):
     """Parameters for uploading a file to Naas storage.
     
     Attributes:
-        workspace_id (str): ID of the workspace containing the storage
-        storage_name (str): Name of the storage to upload to
         local_path (str): Source path to upload from
     """
-    workspace_id: str = Field(..., description="ID of the workspace containing the storage")
-    storage_name: str = Field(..., description="Name of the storage to upload to")
     local_path: str = Field(..., description="Source path to upload from")
 
 class UploadAllFilesFromLocalDirectoryParameters(WorkflowParameters):
     """Parameters for uploading all files from a local directory to Naas storage.
     
     Attributes:
-        workspace_id (str): ID of the workspace containing the storage
-        storage_name (str): Name of the storage to upload to
         local_directory_path (str): Source directory path to upload from
     """
-    workspace_id: str = Field(..., description="ID of the workspace containing the storage")
-    storage_name: str = Field(..., description="Name of the storage to upload to")
     local_directory_path: str = Field(..., description="Source directory path to upload from")
 
 class GetCurrentDirectoryParameters(WorkflowParameters):
@@ -119,6 +74,14 @@ class ListFilesInCurrentDirectoryParameters(WorkflowParameters):
         None
     """
     pass
+
+class CreateAssetParameters(WorkflowParameters):
+    """Parameters for creating an asset in Naas storage.
+    
+    Attributes:
+        file_path (str): Path to the file to create the asset from
+    """
+    file_path: str = Field(..., description="Path to the file to create the asset from")
 
 class NaasStorageWorkflows(Workflow):
     """Workflow for managing files in a Naas storage location."""
@@ -154,7 +117,7 @@ class NaasStorageWorkflows(Workflow):
         
         return AWSS3Integration(s3_config), bucket_name, bucket_prefix
     
-    def create_storage(self, parameters: CreateNaasStorageParameters) -> bool:
+    def create_storage(self) -> bool:
         """Creates a new storage in a Naas workspace.
         
         Args:
@@ -163,9 +126,9 @@ class NaasStorageWorkflows(Workflow):
         Returns:
             bool: True if storage was created successfully
         """
-        return self.__naas.create_workspace_storage(parameters.workspace_id, parameters.storage_name)
+        return self.__naas.create_workspace_storage(self.__configuration.workspace_id, self.__configuration.storage_name)
     
-    def list_storage(self, parameters: ListNaasStorageParameters) -> List[Dict[str, Any]]:
+    def list_storage(self) -> List[Dict[str, Any]]:
         """Lists storage in a Naas workspace.
         
         Args:
@@ -174,9 +137,9 @@ class NaasStorageWorkflows(Workflow):
         Returns:
             List[Dict[str, Any]]: List of storage information
         """
-        return self.__naas.list_workspace_storage(parameters.workspace_id)
+        return self.__naas.list_workspace_storage(self.__configuration.workspace_id)
     
-    def list_files_from_naas_storage(self, parameters: ListNaasStorageFilesParameters) -> List[Dict[str, Any]]:
+    def list_files_from_naas_storage(self) -> List[Dict[str, Any]]:
         """Lists files in a Naas storage location using AWS S3.
         
         Args:
@@ -186,8 +149,8 @@ class NaasStorageWorkflows(Workflow):
             List[Dict[str, Any]]: List of file information including keys, sizes, and last modified dates
         """
         s3_client, bucket_name, bucket_prefix = self._get_s3_client(
-            parameters.workspace_id, 
-            parameters.storage_name
+            self.__configuration.workspace_id, 
+            self.__configuration.storage_name
         )
 
         # Combine storage prefix with user-provided prefix
@@ -218,8 +181,8 @@ class NaasStorageWorkflows(Workflow):
             BinaryIO: File content as a binary stream
         """
         s3_client, bucket_name, bucket_prefix = self._get_s3_client(
-            parameters.workspace_id, 
-            parameters.storage_name
+            self.__configuration.workspace_id, 
+            self.__configuration.storage_name
         )
         remote_path = parameters.remote_path.replace(bucket_prefix, "")
         full_path = os.path.join(bucket_prefix, remote_path)
@@ -239,10 +202,10 @@ class NaasStorageWorkflows(Workflow):
             bool: True if download was successful
         """
         s3_client, bucket_name, bucket_prefix = self._get_s3_client(
-            parameters.workspace_id, 
-            parameters.storage_name
+            self.__configuration.workspace_id, 
+            self.__configuration.storage_name
         )
-        files = self.list_files_from_naas_storage(workspace_id=parameters.workspace_id, storage_name=parameters.storage_name)
+        files = self.list_files_from_naas_storage()
         
         # Create base directory if it doesn't exist
         logger.info(f"Local directory path: {parameters.local_directory_path}")
@@ -274,8 +237,8 @@ class NaasStorageWorkflows(Workflow):
             bool: True if upload was successful
         """
         s3_client, bucket_name, bucket_prefix = self._get_s3_client(
-            parameters.workspace_id, 
-            parameters.storage_name
+            self.__configuration.workspace_id, 
+            self.__configuration.storage_name
         )
         return s3_client.upload_file(parameters.local_path, bucket_name, bucket_prefix, parameters.local_path)
     
@@ -289,8 +252,8 @@ class NaasStorageWorkflows(Workflow):
             bool: True if upload was successful
         """
         s3_client, bucket_name, bucket_prefix = self._get_s3_client(
-            parameters.workspace_id, 
-            parameters.storage_name
+            self.__configuration.workspace_id, 
+            self.__configuration.storage_name
         )
         files_to_upload = glob.glob(os.path.join(parameters.local_directory_path, '**', '*'), recursive=True)
         logger.info(f"Files to upload: {len(files_to_upload)}")
@@ -323,6 +286,57 @@ class NaasStorageWorkflows(Workflow):
             str: Current directory
         """
         return glob.glob(os.path.join(os.getcwd(), '*'), recursive=True)
+    
+    def create_or_update_asset(self, parameters: CreateAssetParameters) -> str:
+        """Create or update an asset in storage and return its URL.
+        
+        Args:
+            parameters: Parameters containing file_path for the asset
+            
+        Returns:
+            str: URL of the created/updated asset
+            
+        Raises:
+            Exception: If there's an error uploading the file or creating the asset
+        """
+        
+        try:
+            logger.info(f"Uploading file to storage: {parameters.file_path}")
+            # Upload file to storage
+            self.upload_file_from_local(UploadNaasStorageFileParameters(
+                local_path=parameters.file_path
+            ))
+        except Exception as e:
+            logger.error(f"Error uploading file to storage: {str(e)}")
+            raise
+            
+        try:
+            # Create asset
+            asset = self.__naas.create_asset(
+                workspace_id=self.__configuration.workspace_id,
+                storage_name=self.__configuration.storage_name,
+                object_name=parameters.file_path,
+                visibility="public"
+            )
+            # Handle case where asset already exists
+            if "asset" not in asset and "error" in asset:
+                error_msg = asset["error"]["message"]
+                if "id:'" in error_msg:
+                    asset_id = error_msg.split("id:'")[1].split("'")[0]
+                    asset = self.__naas.get_asset(asset_id)
+                else:
+                    raise Exception(f"Unexpected error response: {error_msg}")
+            
+            asset_url = asset.get("asset", {}).get("url")
+            if not asset_url:
+                raise Exception("No URL found in asset response")
+                
+            logger.info(f"Asset created with URL: {asset_url}")
+            return asset_url
+            
+        except Exception as e:
+            logger.error(f"Error creating or updating asset: {str(e)}")
+            raise
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""
@@ -330,20 +344,20 @@ class NaasStorageWorkflows(Workflow):
             StructuredTool(
                 name="create_naas_storage",
                 description="Create a new storage in a Naas workspace",
-                func=lambda **kwargs: self.create_storage(CreateNaasStorageParameters(**kwargs)),
-                args_schema=CreateNaasStorageParameters
+                func=lambda: self.create_storage(),
+                args_schema=None
             ),
             StructuredTool(
                 name="list_naas_storage",
                 description="List storage names in a Naas workspace",
-                func=lambda **kwargs: self.list_storage(ListNaasStorageParameters(**kwargs)),
-                args_schema=ListNaasStorageParameters
+                func=lambda: self.list_storage(),
+                args_schema=None
             ),
             StructuredTool(
                 name="list_naas_storage_files",
                 description="List files in a Naas storage location",
-                func=lambda **kwargs: self.list_files_from_naas_storage(ListNaasStorageFilesParameters(**kwargs)),
-                args_schema=ListNaasStorageFilesParameters
+                func=lambda: self.list_files_from_naas_storage(),
+                args_schema=None
             ),
             StructuredTool(
                 name="download_file_from_naas_storage_to_local",
@@ -380,32 +394,14 @@ class NaasStorageWorkflows(Workflow):
                 description="List files in the current directory",
                 func=lambda **kwargs: self.list_files_in_current_directory(ListFilesInCurrentDirectoryParameters(**kwargs)),
                 args_schema=ListFilesInCurrentDirectoryParameters
+            ),
+            StructuredTool(
+                name="create_or_update_asset",
+                description="Create or update an asset in storage and return its URL",
+                func=lambda **kwargs: self.create_or_update_asset(CreateAssetParameters(**kwargs)),
+                args_schema=CreateAssetParameters
             )
         ]
 
     def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this workflow to the given router."""
-        @router.post("/list_storage_files")
-        def list_storage_files(parameters: ListNaasStorageFilesParameters):
-            return self.run(parameters)
-
-        @router.post("/download_file")
-        def download_file(parameters: DownloadNaasStorageFileParameters):
-            content = self.download_file(parameters)
-            return StreamingResponse(content, media_type="application/octet-stream")
-
-        @router.post("/upload_file")
-        async def upload_file(
-            workspace_id: str,
-            storage_name: str,
-            file_path: str,
-            file: UploadFile
-        ):
-            content = await file.read()
-            params = UploadNaasStorageFileParameters(
-                workspace_id=workspace_id,
-                storage_name=storage_name,
-                file_path=file_path,
-                content=content
-            )
-            return self.upload_file(params)
+        pass
