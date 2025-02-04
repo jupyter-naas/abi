@@ -1,5 +1,6 @@
 from abi.services.secret.Secret import Secret
 from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import DotenvSecretSecondaryAdaptor
+from src.services import init_services
 from src import cli
 import yaml
 from dataclasses import dataclass
@@ -71,8 +72,6 @@ class Config:
 
 secret = Secret(DotenvSecretSecondaryAdaptor())
 config = Config.from_yaml()
-
-from src.services import init_services
 
 services = init_services(config, secret)
 
