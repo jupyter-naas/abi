@@ -249,7 +249,7 @@ if __name__ == "__main__":
     )
     workflow = GenerateSlidesWorkflow(configuration)
     prompt = "Can you create slides on Palantir Technologies and the future of AI Agents?"
-    number_of_slides = 8
+    number_of_slides = 4
     use_cache = True
     output = workflow.generate_slides(GenerateSlidesWorkflowParameters(prompt=prompt, number_of_slides=number_of_slides, use_cache=use_cache))
     logger.info(output)
