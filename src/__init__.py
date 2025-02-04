@@ -27,7 +27,6 @@ class Config:
     logo_path: str
     favicon_path: str
     pipelines: List[PipelineConfig]
-    storage_name: str
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> 'Config':
@@ -53,8 +52,7 @@ class Config:
                     api_description=config_data['api_description'],
                     logo_path=config_data['logo_path'],
                     favicon_path=config_data['favicon_path'],
-                    pipelines=pipeline_configs,
-                    storage_name=config_data['storage_name']
+                    pipelines=pipeline_configs
                 )
         except FileNotFoundError:
             return cls(
@@ -68,18 +66,17 @@ class Config:
                 api_description="",
                 logo_path="",
                 favicon_path="",
-                pipelines=[],
-                storage_name=""
+                pipelines=[]
             )
 
 secret = Secret(DotenvSecretSecondaryAdaptor())
 config = Config.from_yaml()
 
-object_storage = ObjectStorageFactory.ObjectStorageServiceNaas(
-    naas_api_key=secret.get('NAAS_API_KEY'),
-    workspace_id=config.workspace_id,
-    storage_name=config.storage_name
-)
+from src.services import init_services
+
+services = init_services(config, secret)
+
+print(type(services.storage_service.adapter))
 
 if __name__ == "__main__":
     cli()
