@@ -7,6 +7,8 @@ services:
       - 8501:8501
     volumes:
       - .:/app
+      # This line is to mount the onedrive folder to the container, for admin access only
+      #- /Users/jrvmac/Library/CloudStorage/OneDrive-SharedLibraries-ForvisMazars:/Users/jrvmac/Library/CloudStorage/OneDrive-SharedLibraries-ForvisMazars
     environment:
       - PYTHONPATH=/app
     command: ["poetry", "run"]
