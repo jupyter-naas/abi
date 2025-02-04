@@ -13,6 +13,9 @@ import json
 from src import config
 from src.workflows.operations_assistant.NaasStorageWorkflows import NaasStorageWorkflows, NaasStorageWorkflowsConfiguration, CreateAssetParameters
 import hashlib
+import uuid
+
+from src.services import services, ObjectStorageExceptions
 
 @dataclass
 class PowerPointWorkflowsConfiguration(WorkflowConfiguration):
@@ -44,7 +47,7 @@ class GeneratePresentationFromPromptParameters(WorkflowParameters):
     """
     prompt: str = Field(..., description="Prompt to generate the presentation")
     number_of_slides: int = Field(..., description="Number of slides to generate")
-    force_update: bool = Field(False, description="Force update the presentation")
+    use_cache: bool = Field(True, description="Use cache to generate the presentation")
 
 class UpdatePresentationFromTextParameters(WorkflowParameters):
     """Parameters for PowerPoint Update Presentation Workflow execution.
@@ -54,7 +57,7 @@ class UpdatePresentationFromTextParameters(WorkflowParameters):
         template_path (str): Path to the PowerPoint template
     """
     text: str = Field(..., description="Text to update the presentation")
-    force_update: bool = Field(False, description="Force update the presentation")
+    use_cache: bool = Field(True, description="Use cache to generate the presentation")
 
 class PowerPointWorkflows(Workflow):
     """Workflow for generating a PowerPoint presentation based on a prompt."""
@@ -98,7 +101,7 @@ class PowerPointWorkflows(Workflow):
         prompt: str,
         system_prompt: str,
         template_slides: list[dict],
-        force_update: bool
+        use_cache: bool = True
     ) -> Path:
         """Generate a presentation based on a prompt."""
         # Create hash from prompt to use as unique identifier
@@ -106,17 +109,19 @@ class PowerPointWorkflows(Workflow):
 
         # Create directory if it doesn't exist
         output_dir = Path(output_dir) / prompt_hash
-        output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate output path
-        output_path = output_dir / "presentation"
+        
+        try:
+            completion = services.storage_service.get_object(output_dir, 'presentation.json').decode("utf-8")
+            data = json.loads(completion)
+        except ObjectStorageExceptions.ObjectNotFound:
+            completion = None
+            data = None
 
-        if not output_path.with_suffix(".json").exists() or force_update:
+        if completion is None or use_cache is False:
             # Create completion
-            logger.info(f"-----> Creating completion")
+            logger.info("-----> Creating completion")
             completion = self.__naas_integration.create_completion(model_id=self.__configuration.model_id, prompt=prompt, system_prompt=system_prompt, temperature=self.__configuration.temperature)
-            with open(output_path.with_suffix(".txt"), "w") as f:
-                f.write(completion)
             
             # Save completion to file
             completion_json = self.extract_json_from_completion(completion)
@@ -127,21 +132,48 @@ class PowerPointWorkflows(Workflow):
                 "temperature": self.__configuration.temperature,
                 "template_slides": template_slides,
                 "completion_text": completion,
-                "completion_json": completion_json
+                "completion_json": completion_json,
+                "output_dir": str(output_dir)
             }
-            with open(output_path.with_suffix(".json"), "w") as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
-        return output_path
+
+            services.storage_service.put_object(
+                prefix=output_dir,
+                key="presentation.json",
+                content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
+            )
+            
+        return data
     
-    def save_and_create_asset(self, presentation: Presentation, output_path: Path) -> str:
+    def save_and_create_asset(self, presentation: Presentation, output_dir: Path) -> str:
         # Save presentation
-        logger.info(f"-----> Saving presentation to {output_path.with_suffix('.pptx')}")
-        self.__powerpoint_integration.save_presentation(presentation, output_path.with_suffix('.pptx'))
+        logger.info("-----> Saving presentation")
+        
+        # Create byte stream
+        from io import BytesIO
+        byte_stream = BytesIO()
+        presentation.save(byte_stream)
+        byte_stream.seek(0)
+        
+        services.storage_service.put_object(
+            prefix=output_dir,
+            key="presentation.pptx",
+            content=byte_stream.getvalue()
+        )
+
 
         # Create or update asset
-        logger.info(f"-----> Uploading presentation to storage")
-        asset_url = self.__naas_storage_workflows.create_or_update_asset(CreateAssetParameters(file_path=str(output_path.with_suffix('.pptx'))))
-        return f"Presentation generated and saved to {asset_url}"
+        logger.info("-----> Uploading presentation to storage")
+        
+        byte_stream.seek(0)
+        asset = self.__naas_integration.upload_asset(
+            data=byte_stream.getvalue(),
+            workspace_id=config.workspace_id,
+            storage_name=config.storage_name,
+            prefix=output_dir,
+            object_name=f'{uuid.uuid4().hex}.pptx'
+        )
+        
+        return f"Presentation generated and saved to {asset.get('asset').get('url')}"
         
     def update_presentation_from_text(self, parameters: UpdatePresentationFromTextParameters) -> str:
         # Load presentation template
@@ -168,7 +200,7 @@ class PowerPointWorkflows(Workflow):
         """
 
         # Create system prompt to generate the presentation
-        system_prompt = f"""
+        system_prompt = """
         You are a PowerPoint presentation generator. 
         You are given a text and a template presentation structure.
         Please output a JSON object containing the following fields: 
@@ -188,13 +220,10 @@ class PowerPointWorkflows(Workflow):
         """
 
         # Generate new structure of the presentation
-        output_path = self.convert_input_to_json(parameters.text, self.__configuration.output_dir, prompt, system_prompt, template_slides, parameters.force_update)
-        logger.info(f"-----> Loading completion from file: {output_path.with_suffix('.json')}")
-        with open(output_path.with_suffix(".json"), "r") as f:
-            completion_json = json.load(f)
+        completion_json = self.convert_input_to_json(parameters.text, self.__configuration.output_dir, prompt, system_prompt, template_slides, parameters.use_cache)
 
         # Update slides in presentation
-        logger.info(f"-----> Updating slides in presentation")
+        logger.info("-----> Updating slides in presentation")
         for data in completion_json.get("completion_json", {}).get("shapes", []):
             self.__powerpoint_integration.update_shape(
                 presentation=presentation,
@@ -204,7 +233,7 @@ class PowerPointWorkflows(Workflow):
             )
             
         # Save presentation and create asset
-        return self.save_and_create_asset(presentation, output_path)
+        return self.save_and_create_asset(presentation, completion_json.get('output_dir'))
 
     def generate_presentation_from_prompt(self, parameters: GeneratePresentationFromPromptParameters) -> str:
         # Load presentation template
@@ -223,7 +252,7 @@ class PowerPointWorkflows(Workflow):
         """
 
         # Create system prompt to generate the presentation
-        system_prompt = f"""
+        system_prompt = """
         You are a PowerPoint presentation generator. 
         You are given a prompt and a template presentation structure.
         Please output a JSON object containing the following fields: 
@@ -246,10 +275,7 @@ class PowerPointWorkflows(Workflow):
         """
 
         # Generate new structure of the presentation
-        output_path = self.convert_input_to_json(str(parameters.prompt), self.__configuration.output_dir, prompt, system_prompt, parameters.force_update)
-        logger.info(f"-----> Loading completion from file: {output_path.with_suffix('.json')}")
-        with open(output_path.with_suffix(".json"), "r") as f:
-            completion_json = json.load(f)
+        completion_json = self.convert_input_to_json(str(parameters.prompt), self.__configuration.output_dir, prompt, system_prompt, parameters.use_cache)
 
         # Create empty presentation
         logger.info(f"-----> Creating PowerPoint presentation")
@@ -271,7 +297,7 @@ class PowerPointWorkflows(Workflow):
                 )
 
         # Save presentation
-        return self.save_and_create_asset(presentation, output_path)
+        return self.save_and_create_asset(presentation, completion_json.get('output_dir'))
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""
@@ -316,9 +342,10 @@ if __name__ == "__main__":
         naas_integration_config=naas_integration_config,
         naas_storage_workflows_config=naas_storage_workflows_config,
         template_path=template_path,
-        output_dir="storage/datalake/powerpoint-store",
+        output_dir="datalake/powerpoint-store",
     )
     workflow = PowerPointWorkflows(configuration)
     text = """Generate a PowerPoint presentation about Forvis Mazars, a leading semiconductor company."""
-    force_update = True
-    workflow.update_presentation_from_text(UpdatePresentationFromTextParameters(text=text, template_path=template_path, force_update=force_update))
+    use_cache = True
+    output = workflow.update_presentation_from_text(UpdatePresentationFromTextParameters(text=text, template_path=template_path, use_cache=use_cache))
+    logger.info(output)
