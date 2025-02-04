@@ -28,6 +28,7 @@ class Config:
     logo_path: str
     favicon_path: str
     pipelines: List[PipelineConfig]
+    space_name: str
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> 'Config':
@@ -53,7 +54,8 @@ class Config:
                     api_description=config_data['api_description'],
                     logo_path=config_data['logo_path'],
                     favicon_path=config_data['favicon_path'],
-                    pipelines=pipeline_configs
+                    pipelines=pipeline_configs,
+                    space_name=config_data.get('space_name')
                 )
         except FileNotFoundError:
             return cls(
@@ -67,7 +69,8 @@ class Config:
                 api_description="",
                 logo_path="",
                 favicon_path="",
-                pipelines=[]
+                pipelines=[],
+                space_name=""
             )
 
 secret = Secret(DotenvSecretSecondaryAdaptor())
