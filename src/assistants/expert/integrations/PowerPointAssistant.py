@@ -1,12 +1,15 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
-from src import secret
+from src import secret, config
 from fastapi import APIRouter
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations import PowerPointIntegration
+from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
+
+from src.workflows.powerpoint_assistant.PowerPointWorkflows import PowerPointWorkflows, PowerPointWorkflowsConfiguration
 
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
@@ -20,6 +23,8 @@ Always provide all the context (tool response, draft, etc.) to the user in your 
 {RESPONSIBILITIES_PROMPT}
 """
 
+
+
 def create_powerpoint_agent(
     agent_shared_state: AgentSharedState = None,
     agent_configuration: AgentConfiguration = None
@@ -27,6 +32,16 @@ def create_powerpoint_agent(
     # Init
     tools = []
     agents = []
+
+    if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '':
+        pptWorkflows = PowerPointWorkflows(PowerPointWorkflowsConfiguration(
+            powerpoint_integration_config=PowerPointIntegrationConfiguration(),
+            naas_integration_config=NaasIntegrationConfiguration(
+                api_key=secret.get('NAAS_API_KEY')
+            )
+        ))
+    
+        tools += pptWorkflows.as_tools()
 
     # Set configuration
     if agent_configuration is None:
@@ -45,13 +60,6 @@ def create_powerpoint_agent(
         api_key=secret.get('OPENAI_API_KEY')
     )
     
-    # Add tools
-    powerpoint_credentials = secret.get('POWERPOINT_CREDENTIALS')
-    if powerpoint_credentials:    
-        integration_config = PowerPointIntegrationConfiguration(
-            credentials=powerpoint_credentials
-        )
-        tools += PowerPointIntegration.as_tools(integration_config)
 
     # Add agents
     agents.append(create_support_assistant(agent_shared_state, agent_configuration))

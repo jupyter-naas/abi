@@ -31,7 +31,6 @@ class PowerPointWorkflowsConfiguration(WorkflowConfiguration):
     """
     powerpoint_integration_config: PowerPointIntegrationConfiguration
     naas_integration_config: NaasIntegrationConfiguration
-    naas_storage_workflows_config: NaasStorageWorkflowsConfiguration
     template_path: str = "assets/OrganizationTemplate.pptx"
     output_dir: str = "storage/datalake/powerpoint-store"
     model_id: str = "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"
@@ -68,7 +67,6 @@ class PowerPointWorkflows(Workflow):
         self.__configuration = configuration
         self.__powerpoint_integration = PowerPointIntegration(self.__configuration.powerpoint_integration_config)
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
-        self.__naas_storage_workflows = NaasStorageWorkflows(self.__configuration.naas_storage_workflows_config)
 
     def extract_json_from_completion(self, completion_text: str) -> dict:
         """Extract JSON object from completion text that contains markdown formatting.
@@ -330,17 +328,11 @@ if __name__ == "__main__":
     # Initialize powerpoint integration
     powerpoint_integration_config = PowerPointIntegrationConfiguration()
 
-    # Initialize naas storage workflows
-    naas_storage_workflows_config = NaasStorageWorkflowsConfiguration(
-        naas_integration_config=naas_integration_config,
-    )
-
     # Run workflow
     template_path = "assets/OrganizationTemplate.pptx"
     configuration = PowerPointWorkflowsConfiguration(
         powerpoint_integration_config=powerpoint_integration_config,
         naas_integration_config=naas_integration_config,
-        naas_storage_workflows_config=naas_storage_workflows_config,
         template_path=template_path,
         output_dir="datalake/powerpoint-store",
     )
