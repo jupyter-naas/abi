@@ -230,8 +230,8 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
-                name="powerpoint_update_organization_slides",
-                description=f"Update the slides of the Organization template presentation {self.__configuration.template_path} based on a user brief. Make sure the user used the structure provided by the tool 'powerpoint_get_organization_template_structure' to create a detailed brief.",
+                name="powerpoint_generate_organization_slides",
+                description=f"Generate slides from a user brief for an given organization using the template presentation {self.__configuration.template_path}. Map the brief to the presentation structure provided by the tool 'powerpoint_get_organization_template_structure'.",
                 func=lambda **kwargs: self.update_slides(UpdateOrganizationSlidesWorkflowParameters(**kwargs)),
                 args_schema=UpdateOrganizationSlidesWorkflowParameters
             ),
@@ -279,4 +279,3 @@ if __name__ == "__main__":
     """
     use_cache = True
     output = workflow.update_slides(UpdateOrganizationSlidesWorkflowParameters(text=text, use_cache=use_cache))
-    logger.info(output)
