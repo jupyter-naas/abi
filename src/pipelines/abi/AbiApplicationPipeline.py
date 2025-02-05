@@ -358,7 +358,7 @@ class AbiApplicationPipeline(Pipeline):
                     x = coordinates[i][0]
                     y = coordinates[i][1]
 
-                    module = importlib.import_module(f"src.workflows.operations_assistant.{file.stem}")
+                    module = importlib.import_module(f"src.workflows.operations.{file.stem}")
                     doc = inspect.getdoc(module)
 
                     workflow = graph.add_individual_to_prefix(
