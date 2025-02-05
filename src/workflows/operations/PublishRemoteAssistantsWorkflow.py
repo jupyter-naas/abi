@@ -50,7 +50,7 @@ class PublishRemoteAssistantsWorkflow(Workflow):
 
         # Init
         api_path = Path("src/api.py")
-        registry_name = f"{self.__configuration.space_name}-api"
+        registry_name = f"{self.__configuration.space_name}"
         api_base_url = f"https://{registry_name}.default.space.naas.ai"
         logger.debug(f"API base URL: {api_base_url}")
         api_key = secret.get("ABI_API_KEY")
