@@ -155,7 +155,10 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
             prefix=output_dir,
             object_name=f'{uuid.uuid4().hex}.pptx'
         )
-        return f"Presentation generated and saved to {asset.get('asset').get('url')}"
+        url = asset.get('asset').get('url')
+        if url.endswith('/'):
+            url = url[:-1]
+        return f"Presentation generated and saved to {url}"
     
     def get_template_structure(self) -> list[dict]:
         # Load presentation template

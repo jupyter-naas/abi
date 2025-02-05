@@ -153,7 +153,10 @@ class GenerateSlidesWorkflow(Workflow):
             prefix=output_dir,
             object_name=f'{uuid.uuid4().hex}.pptx'
         )
-        return f"Presentation generated and saved to {asset.get('asset').get('url')}"
+        url = asset.get('asset').get('url')
+        if url.endswith('/'):
+            url = url[:-1]
+        return f"Presentation generated and saved to {url}"
 
     def generate_slides(self, parameters: GenerateSlidesWorkflowParameters) -> str:
         # Load presentation template
