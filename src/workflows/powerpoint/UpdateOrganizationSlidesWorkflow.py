@@ -16,6 +16,7 @@ import uuid
 from src.services import services, ObjectStorageExceptions
 from io import BytesIO
 from datetime import datetime
+import os
 
 @dataclass
 class UpdateOrganizationSlidesWorkflowConfiguration(WorkflowConfiguration):
@@ -96,7 +97,7 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
         # Create directory if it doesn't exist
-        output_dir = Path(output_dir) / f"{timestamp}_{prompt_hash}"
+        output_dir = os.path.join(output_dir, f"{timestamp}_{prompt_hash}")
         
         try:
             completion = services.storage_service.get_object(output_dir, 'presentation.json').decode("utf-8")
