@@ -7,8 +7,8 @@ from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROM
 from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
-from src.workflows.powerpoint_assistant.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
-from src.workflows.powerpoint_assistant.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
+from src.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
+from src.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
 AVATAR_URL = "https://logo.clearbit.com/microsoft.com"

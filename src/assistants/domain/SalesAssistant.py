@@ -10,7 +10,7 @@ from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.StripeIntegration import StripeIntegrationConfiguration
 from src.integrations.PostgresIntegration import PostgresIntegrationConfiguration
-from src.workflows.sales_assistant.HubSpotWorkflows import HubSpotWorkflows, HubSpotWorkflowsConfiguration
+from src.workflows.sales.HubSpotWorkflows import HubSpotWorkflows, HubSpotWorkflowsConfiguration
 
 DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"

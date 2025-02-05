@@ -8,7 +8,7 @@ from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_
 from src.integrations import HubSpotIntegration
 from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
 from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.workflows.growth_assistant.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
+from src.workflows.growth.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
 
 DESCRIPTION = "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_marketing.png"

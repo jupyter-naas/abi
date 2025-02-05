@@ -740,7 +740,7 @@ class UpdateAlgoliaIndex(Workflow):
         
 if __name__ == "__main__":
     from src.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
-    from src.workflows.operations_assistant.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
+    from src.workflows.operations.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
     from src import secret
     import asyncio
     

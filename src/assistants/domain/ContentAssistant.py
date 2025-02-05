@@ -4,7 +4,7 @@ from src import secret
 from src.integrations import ReplicateIntegration
 from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
 from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.workflows.content_assistant.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
+from src.workflows.content.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 from fastapi import APIRouter
 from src.assistants.foundation.SupportAssistant import create_support_assistant
 from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
