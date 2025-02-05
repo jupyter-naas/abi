@@ -15,6 +15,7 @@ import hashlib
 import uuid
 from src.services import services, ObjectStorageExceptions
 from io import BytesIO
+from datetime import datetime
 
 @dataclass
 class UpdateOrganizationSlidesWorkflowConfiguration(WorkflowConfiguration):
@@ -92,9 +93,10 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         """Generate a presentation based on a prompt."""
         # Create hash from prompt to use as unique identifier
         prompt_hash = hashlib.md5(input.encode()).hexdigest()
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
         # Create directory if it doesn't exist
-        output_dir = Path(output_dir) / prompt_hash
+        output_dir = Path(output_dir) / f"{timestamp}_{prompt_hash}"
         
         try:
             completion = services.storage_service.get_object(output_dir, 'presentation.json').decode("utf-8")
@@ -153,6 +155,15 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
             object_name=f'{uuid.uuid4().hex}.pptx'
         )
         return f"Presentation generated and saved to {asset.get('asset').get('url')}"
+    
+    def get_template_structure(self) -> list[dict]:
+        # Load presentation template
+        presentation = self.__powerpoint_integration.create_presentation(self.__configuration.template_path)
+
+        # load slides and shapes with text to be updated: "template" must be in the text
+        template_slides = self.__powerpoint_integration.list_slides(presentation, text=True)
+        shapes = [{"slide_number": slide.get("slide_number"), "shape_id": shape.get("shape_id"), "shape_type": shape.get("shape_type"), "text": shape.get("text")} for slide in template_slides for shape in slide.get("shapes", []) if "template" in shape.get("text", "").lower()]
+        return shapes
     
     def update_slides(self, parameters: UpdateOrganizationSlidesWorkflowParameters) -> str:
         # Load presentation template
@@ -219,10 +230,16 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         return [
             StructuredTool(
                 name="powerpoint_update_organization_slides",
-                description=f"Update the slides of an analysis of an organization based on a text. Slides in presentation {self.__configuration.template_path} will be updated.",
+                description=f"Update the slides of the Organization template presentation {self.__configuration.template_path} based on a user brief. Make sure the user used the structure provided by the tool 'powerpoint_get_organization_template_structure' to create a detailed brief.",
                 func=lambda **kwargs: self.update_slides(UpdateOrganizationSlidesWorkflowParameters(**kwargs)),
                 args_schema=UpdateOrganizationSlidesWorkflowParameters
-            )
+            ),
+            StructuredTool(
+                name="powerpoint_get_organization_template_structure",
+                description=f"Get the structure of the Organization template presentation {self.__configuration.template_path} to help user creating a detailed brief based on information required to generate a PowerPoint presentation.",
+                func=self.get_template_structure,
+                args_schema=None
+            ),
         ]
 
     def as_api(self, router: APIRouter) -> None:

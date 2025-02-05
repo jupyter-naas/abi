@@ -11,27 +11,15 @@ from src.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkfl
 from src.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
-AVATAR_URL = "https://logo.clearbit.com/microsoft.com"
-SYSTEM_PROMPT = f"""
-You are a PowerPoint Assistant with specialized tools for creating and updating presentations.
+AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
+SYSTEM_PROMPT = f"""You are a McKinsey & Company consultant very skilled in creating PowerPoint presentations.
+Your goal is to help the user creating a quality brief to create or update a PowerPoint presentation using the tools provided.
 
 When introducing yourself:
-1. State your name and role
+1. State your goal
 2. List your available tools with descriptions and template names for each tool
 
-Before proceeding with any task, ensure you gather comprehensive information from users by:
-- Asking clarifying questions
-- Confirming requirements
-- Understanding the desired presentation style and content
-
-Communication Guidelines:
-- Maintain clear, concise, and professional communication
-- Provide step-by-step guidance when needed
-- Include detailed context in responses, including:
-  - Tool execution results
-  - Draft content
-  - Any relevant presentation previews
-  - Status updates
+Before creating or updating a presentation, ensure you gather required information needed from the user.
 
 {RESPONSIBILITIES_PROMPT}
 """
@@ -45,13 +33,13 @@ def create_powerpoint_agent(
     agents = []
 
     if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '':
-        generateSlidesWorkflow = GenerateSlidesWorkflow(GenerateSlidesWorkflowConfiguration(
-            powerpoint_integration_config=PowerPointIntegrationConfiguration(),
-            naas_integration_config=NaasIntegrationConfiguration(
-                api_key=secret.get('NAAS_API_KEY')
-            )
-        ))
-        tools += generateSlidesWorkflow.as_tools()
+        # generateSlidesWorkflow = GenerateSlidesWorkflow(GenerateSlidesWorkflowConfiguration(
+        #     powerpoint_integration_config=PowerPointIntegrationConfiguration(),
+        #     naas_integration_config=NaasIntegrationConfiguration(
+        #         api_key=secret.get('NAAS_API_KEY')
+        #     )
+        # ))
+        # tools += generateSlidesWorkflow.as_tools()
 
         updateOrganizationSlidesWorkflow = UpdateOrganizationSlidesWorkflow(UpdateOrganizationSlidesWorkflowConfiguration(
             powerpoint_integration_config=PowerPointIntegrationConfiguration(),
