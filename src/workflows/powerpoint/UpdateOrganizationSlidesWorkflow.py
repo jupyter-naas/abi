@@ -279,4 +279,3 @@ if __name__ == "__main__":
     """
     use_cache = True
     output = workflow.update_slides(UpdateOrganizationSlidesWorkflowParameters(text=text, use_cache=use_cache))
-    logger.info(output)
