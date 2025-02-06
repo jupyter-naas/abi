@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.utils import get_openapi
@@ -37,6 +37,7 @@ from abi.services.ontology_store.OntologyStoreService import OntologyStoreServic
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
+import requests
 
 # Init API
 TITLE = config.api_title
@@ -224,6 +225,16 @@ def overridden_redoc():
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
+
+# @app.post("/telegram")
+# async def telegram(req: Request):
+#     data = await req.json()
+#     chat_id = data['message']['chat']['id']
+#     text = data['message']['text']
+    
+#     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
+
+#     return data
 
 def api():
     import uvicorn
