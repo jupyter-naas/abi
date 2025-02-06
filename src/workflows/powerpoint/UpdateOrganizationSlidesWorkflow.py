@@ -1,8 +1,9 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from src.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration, Presentation
 from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.integrations.OpenAIIntegration import OpenAIIntegration, OpenAIIntegrationConfiguration
 from dataclasses import dataclass
-from pydantic import Field
+from pydantic import Field, BaseModel
 from abi import logger
 from typing import Optional
 from abi.workflow.workflow import WorkflowParameters
@@ -24,6 +25,7 @@ class UpdateOrganizationSlidesWorkflowConfiguration(WorkflowConfiguration):
     
     Attributes:
         powerpoint_integration_config (PowerPointIntegrationConfiguration): PowerPoint integration configuration
+        openai_integration_config (OpenAIIntegrationConfiguration): OpenAI integration configuration
         naas_integration_config (NaasIntegrationConfiguration): Naas integration configuration
         template_path (str): Path to the PowerPoint template file
         output_dir (str): Path to save the generated presentation
@@ -31,11 +33,11 @@ class UpdateOrganizationSlidesWorkflowConfiguration(WorkflowConfiguration):
         temperature (float): Temperature for the completion
     """
     powerpoint_integration_config: PowerPointIntegrationConfiguration
+    openai_integration_config: OpenAIIntegrationConfiguration
     naas_integration_config: NaasIntegrationConfiguration
     template_path: str = "assets/OrganizationTemplate_FM.pptx"
     output_dir: str = "datalake/powerpoint-store/update-organization-slides"
-    model_id: str = "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"
-    temperature: float = 0.3
+    model: str = "o3-mini"
 
 class UpdateOrganizationSlidesWorkflowParameters(WorkflowParameters):
     """Parameters for PowerPoint Update Organization Slides Workflow execution.
@@ -56,6 +58,7 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__powerpoint_integration = PowerPointIntegration(self.__configuration.powerpoint_integration_config)
+        self.__openai_integration = OpenAIIntegration(self.__configuration.openai_integration_config)
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
 
     def extract_json_from_completion(self, completion_text: str) -> dict:
@@ -89,6 +92,7 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         prompt: str,
         system_prompt: str,
         template_slides: list[dict],
+        response_format: dict,
         use_cache: bool = True
     ) -> Path:
         """Generate a presentation based on a prompt."""
@@ -109,15 +113,20 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         if completion is None or use_cache is False:
             # Create completion
             logger.info("-----> Creating completion")
-            completion = self.__naas_integration.create_completion(model_id=self.__configuration.model_id, prompt=prompt, system_prompt=system_prompt, temperature=self.__configuration.temperature)
+            completion = self.__openai_integration.create_chat_completion_beta(
+                prompt=prompt, 
+                system_prompt=system_prompt,
+                model=self.__configuration.model, 
+                response_format=response_format
+            )
             
             # Save completion to file
             completion_json = self.extract_json_from_completion(completion)
             data = {
                 "prompt": prompt,
                 "system_prompt": system_prompt,
-                "model_id": self.__configuration.model_id,
-                "temperature": self.__configuration.temperature,
+                "model": self.__configuration.model,
+                "response_format": response_format,
                 "template_slides": template_slides,
                 "completion_text": completion,
                 "completion_json": completion_json,
@@ -214,7 +223,15 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         """
 
         # Generate new structure of the presentation
-        completion_json = self.convert_input_to_json(parameters.text, self.__configuration.output_dir, prompt, system_prompt, template_slides, parameters.use_cache)
+        completion_json = self.convert_input_to_json(
+            parameters.text, 
+            self.__configuration.output_dir, 
+            prompt, 
+            system_prompt, 
+            template_slides, 
+            response_format={"type": "json_object"}, 
+            use_cache=parameters.use_cache
+        )
 
         # Update slides in presentation
         logger.info("-----> Updating slides in presentation")
@@ -282,3 +299,4 @@ if __name__ == "__main__":
     """
     use_cache = True
     output = workflow.update_slides(UpdateOrganizationSlidesWorkflowParameters(text=text, use_cache=use_cache))
+    logger.info(output)
