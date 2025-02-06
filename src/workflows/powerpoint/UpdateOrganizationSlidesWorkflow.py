@@ -35,7 +35,7 @@ class UpdateOrganizationSlidesWorkflowConfiguration(WorkflowConfiguration):
     powerpoint_integration_config: PowerPointIntegrationConfiguration
     openai_integration_config: OpenAIIntegrationConfiguration
     naas_integration_config: NaasIntegrationConfiguration
-    template_path: str = "assets/OrganizationTemplate_FM.pptx"
+    template_path: str = "assets/PresentationTemplate_FM.pptx"
     output_dir: str = "datalake/powerpoint-store/update-organization-slides"
     model: str = "o3-mini"
 
@@ -173,18 +173,26 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         # Load presentation template
         presentation = self.__powerpoint_integration.create_presentation(self.__configuration.template_path)
 
-        # load slides and shapes with text to be updated: "template" must be in the text
+        # Load all slides and shapes with their text as examples
         template_slides = self.__powerpoint_integration.list_slides(presentation, text=True)
-        shapes = [{"slide_number": slide.get("slide_number"), "shape_id": shape.get("shape_id"), "shape_type": shape.get("shape_type"), "text": shape.get("text")} for slide in template_slides for shape in slide.get("shapes", []) if "template" in shape.get("text", "").lower()]
+        shapes = []
+        for slide in template_slides:
+            slide_shapes = []
+            for shape in slide.get("shapes", []):
+                if shape.get("text", "").strip():  # Only include shapes that have text
+                    slide_shapes.append({
+                        "slide_number": slide.get("slide_number"),
+                        "shape_id": shape.get("shape_id"),
+                        "shape_type": shape.get("shape_type"),
+                        "text": shape.get("text")
+                    })
+            if slide_shapes:
+                shapes.extend(slide_shapes)
         return shapes
     
     def update_slides(self, parameters: UpdateOrganizationSlidesWorkflowParameters) -> str:
-        # Load presentation template
         presentation = self.__powerpoint_integration.create_presentation(self.__configuration.template_path)
-
-        # load slides and shapes with text to be updated: "template" must be in the text
-        template_slides = self.__powerpoint_integration.list_slides(presentation, text=True)
-        shapes = [{"slide_number": slide.get("slide_number"), "shape_id": shape.get("shape_id"), "shape_type": shape.get("shape_type"), "text": shape.get("text")} for slide in template_slides for shape in slide.get("shapes", []) if "template" in shape.get("text", "").lower()]
+        shapes = self.get_template_structure()
 
         # Create prompt to update the presentation
         prompt = f"""Generate a PowerPoint presentation from the following text: 
@@ -192,20 +200,29 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         {parameters.text}
         ```
         Rules:
-        - Do NOT create new slides.
-        - Use your internal knowledge to update if the initial input text does not have enough information to generate the presentation.
-        - Generate all shapes and all slides
+        - Follow the exact same structure as the example template
+        - Each shape in the template contains example content - use it as a reference for style and structure
+        - Generate new content that matches the style and structure of the example, but about the topic provided
+        - Keep the same professional tone and formatting as the example
+        - Generate content for all shapes in all slides
 
-        Use the following template slides as a reference: 
+        The template contains example content for reference. Here are the slides and their content: 
         ```json
         {shapes}
         ```
+
+        For each shape, generate new content that:
+        1. Matches the style and structure of the example text
+        2. Contains information about the provided topic
+        3. Maintains the same level of detail and professionalism
         """
 
         # Create system prompt to generate the presentation
         system_prompt = """
         You are a PowerPoint presentation generator. 
-        You are given a text and a template presentation structure.
+        You are given a text and an example presentation structure.
+        Study the example content and generate new content that follows the same style and structure.
+        
         Please output a JSON object containing the following fields: 
         ```json
         {{
@@ -220,6 +237,8 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
             ]
         }}
         ```
+        
+        The new_text should follow the same style and structure as the example text, but be about the new topic.
         """
 
         # Generate new structure of the presentation
@@ -228,7 +247,7 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
             self.__configuration.output_dir, 
             prompt, 
             system_prompt, 
-            template_slides, 
+            shapes, 
             response_format={"type": "json_object"}, 
             use_cache=parameters.use_cache
         )
@@ -251,13 +270,13 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         return [
             StructuredTool(
                 name="powerpoint_generate_organization_slides",
-                description=f"Generate slides from a user brief for an given organization using the template presentation {self.__configuration.template_path}. Map the brief to the presentation structure provided by the tool 'powerpoint_get_organization_template_structure'.",
+                description=f"Generate slides using {self.__configuration.template_path}.",
                 func=lambda **kwargs: self.update_slides(UpdateOrganizationSlidesWorkflowParameters(**kwargs)),
                 args_schema=UpdateOrganizationSlidesWorkflowParameters
             ),
             StructuredTool(
                 name="powerpoint_get_organization_template_structure",
-                description=f"Get the structure of the Organization template presentation {self.__configuration.template_path} to help user creating a detailed brief based on information required to generate a PowerPoint presentation.",
+                description=f"Get the structure of the template presentation example {self.__configuration.template_path} to show what the completion should strictly follow.",
                 func=self.get_template_structure,
                 args_schema=None
             ),
