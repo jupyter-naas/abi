@@ -60,7 +60,7 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         self.__powerpoint_integration = PowerPointIntegration(self.__configuration.powerpoint_integration_config)
         self.__openai_integration = OpenAIIntegration(self.__configuration.openai_integration_config)
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
-        
+
     def extract_json_from_completion(self, completion_text: str) -> dict:
         """Extract JSON object from completion text that contains markdown formatting.
         
@@ -265,44 +265,3 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
 
     def as_api(self, router: APIRouter) -> None:
         pass
-
-if __name__ == "__main__":
-    from src import secret
-
-    # Initialize naas integration
-    naas_integration_config = NaasIntegrationConfiguration(
-        api_key=secret.get("NAAS_API_KEY")
-    )
-
-    # Initialize openai integration
-    openai_integration_config = OpenAIIntegrationConfiguration(
-        api_key=secret.get("OPENAI_API_KEY")
-    )
-
-    # Initialize powerpoint integration
-    powerpoint_integration_config = PowerPointIntegrationConfiguration()
-
-    # Run workflow
-    configuration = UpdateOrganizationSlidesWorkflowConfiguration(
-        powerpoint_integration_config=powerpoint_integration_config,
-        openai_integration_config=openai_integration_config,
-        naas_integration_config=naas_integration_config,
-    )
-    workflow = UpdateOrganizationSlidesWorkflow(configuration)
-    text = """
-    Forvis Mazars is a leading global professional services firm providing comprehensive accounting, tax, and consulting solutions. Our key offerings include audit & assurance, tax advisory, management consulting, risk advisory, and digital transformation services. We have deep industry expertise across financial services, manufacturing, technology, healthcare, and other sectors.
-
-    Our capabilities are built on a foundation of technical excellence, industry knowledge, and innovative technology solutions. We leverage our global network of professionals and cutting-edge tools to deliver high-quality services. Our teams include certified professionals, industry specialists, and technology experts who work collaboratively to address complex business challenges.
-
-    In the market, we serve mid to large-sized organizations, including public and private companies, government entities, and non-profit organizations. Our global presence spans multiple countries with strong local market understanding. We compete effectively against Big 4 firms by providing personalized attention with global capabilities.
-
-    Our positioning emphasizes quality, innovation, and client focus. We differentiate ourselves through:
-    - Deep technical expertise and industry knowledge
-    - Personalized service with partner involvement
-    - Competitive pricing for high-value services
-    - Innovation and technology-enabled solutions
-    - Global reach with local market understanding
-    """
-    use_cache = True
-    output = workflow.update_slides(UpdateOrganizationSlidesWorkflowParameters(text=text, use_cache=use_cache))
-    logger.info(output)
