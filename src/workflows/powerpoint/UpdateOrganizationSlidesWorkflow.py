@@ -32,7 +32,7 @@ class UpdateOrganizationSlidesWorkflowConfiguration(WorkflowConfiguration):
     """
     powerpoint_integration_config: PowerPointIntegrationConfiguration
     naas_integration_config: NaasIntegrationConfiguration
-    template_path: str = "assets/OrganizationTemplate.pptx"
+    template_path: str = "assets/OrganizationTemplate_FM.pptx"
     output_dir: str = "datalake/powerpoint-store/update-organization-slides"
     model_id: str = "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"
     temperature: float = 0.3
