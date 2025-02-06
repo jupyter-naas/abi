@@ -78,3 +78,7 @@ storage/
 *.db
 *.sqlite
 *.sqlite3
+
+
+# Ignore the storage 
+storage

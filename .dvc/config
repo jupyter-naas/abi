@@ -1,4 +1,4 @@
 [core]
     remote = naas
 ['remote "naas"']
-    url = s3://api-naas-storage/96ce7ee7-e5f5-4bca-acf9-9d5d41317f81/abi/dvc
+    url = s3://api-naas-storage/59d41231-e6c2-498f-9f2b-77c564a7e45f/abi/dvc

@@ -8,8 +8,8 @@ This system empowers businesses to integrate, manage, and scale AI-driven operat
 Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
 
 ### API Overview
-The ABI API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
-This document describes the current version of the ABI API, which provides access to assistants, pipelines, workflows, integrations, ontology management and analytics features.
+The ABI Forvis Mazars API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
+This document describes the current version of the ABI Forvis Mazars API, which provides access to assistants, pipelines, workflows, integrations, ontology management and analytics features.
         """
     },
     {
