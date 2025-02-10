@@ -6,8 +6,8 @@ from src.core.assistants.foundation.SupportAssistant import create_support_assis
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.core.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
 from src.core.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
-from src.core.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
 from src.core.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
@@ -32,19 +32,14 @@ def create_powerpoint_agent(
     tools = []
     agents = []
 
-    if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '':
-        # generateSlidesWorkflow = GenerateSlidesWorkflow(GenerateSlidesWorkflowConfiguration(
-        #     powerpoint_integration_config=PowerPointIntegrationConfiguration(),
-        #     naas_integration_config=NaasIntegrationConfiguration(
-        #         api_key=secret.get('NAAS_API_KEY')
-        #     )
-        # ))
-        # tools += generateSlidesWorkflow.as_tools()
-
+    if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '' and secret.get('OPENAI_API_KEY'):
         updateOrganizationSlidesWorkflow = UpdateOrganizationSlidesWorkflow(UpdateOrganizationSlidesWorkflowConfiguration(
             powerpoint_integration_config=PowerPointIntegrationConfiguration(),
             naas_integration_config=NaasIntegrationConfiguration(
                 api_key=secret.get('NAAS_API_KEY')
+            ),
+            openai_integration_config=OpenAIIntegrationConfiguration(
+                api_key=secret.get('OPENAI_API_KEY')
             )
         ))
         tools += updateOrganizationSlidesWorkflow.as_tools()
