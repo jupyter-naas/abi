@@ -16,7 +16,7 @@ class IOntologyStorePort(ABC):
         pass
     
     @abstractmethod
-    def get_by_names(self, names: List[str]) -> List[Graph]:
+    def get_by_names(self, names: List[str]) -> Graph:
         pass
 
     @abstractmethod
