@@ -1,12 +1,12 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_anthropic import ChatAnthropic
-from src.integrations import LinkedInIntegration, YouTubeIntegration, ReplicateIntegration, NewsAPIIntegration, ReplicateIntegration, PerplexityIntegration
-from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
-from src.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
-from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.integrations import LinkedInIntegration, YouTubeIntegration, ReplicateIntegration, NewsAPIIntegration, ReplicateIntegration, PerplexityIntegration
+from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+from src.core.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
+from src.core.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
+from src.core.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.core.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 
 NAME = "Content Creator"
 SLUG = "content-creator"

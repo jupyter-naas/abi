@@ -1,11 +1,11 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import NotionIntegration
-from src.integrations.NotionIntegration import NotionIntegrationConfiguration
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations import NotionIntegration
+from src.core.integrations.NotionIntegration import NotionIntegrationConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Notion Assistant with access to Notion Integration tools."
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png"

@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from src import secret, config
 from dataclasses import dataclass
 from pydantic import Field

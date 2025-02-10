@@ -1,8 +1,8 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_anthropic import ChatAnthropic
-from src.integrations import PennylaneIntegration
-from src.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
+from src.core.integrations import PennylaneIntegration
+from src.core.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
 
 NAME = "Accountant"
 SLUG = "accountant"

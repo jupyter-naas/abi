@@ -2,13 +2,13 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config
 from fastapi import APIRouter
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
-from src.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
-from src.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.core.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
+from src.core.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
+from src.core.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"

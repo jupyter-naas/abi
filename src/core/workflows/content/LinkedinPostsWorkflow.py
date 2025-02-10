@@ -1,5 +1,5 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
+from src.core.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from datetime import datetime, date, timedelta

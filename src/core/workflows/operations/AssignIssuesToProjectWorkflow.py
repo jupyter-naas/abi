@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from src import secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field

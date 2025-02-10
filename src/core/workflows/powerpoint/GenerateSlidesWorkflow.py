@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration, Presentation
-from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration, Presentation
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
