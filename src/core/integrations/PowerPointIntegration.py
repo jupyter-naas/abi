@@ -352,9 +352,7 @@ class PowerPointIntegration(Integration):
             raise ValueError(f"Shape with ID {shape_id} not found on slide {slide_index}")
             
         if text is not None:
-            shape.text = text
-            # shape.text_frame.auto_size = MSO_AUTO_SIZE.NONE
-            # shape.text_frame.word_wrap = True
+            shape.text_frame.paragraphs[0].text = text
             
         if fill_color is not None:
             shape.fill.solid()
