@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
-from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
 from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter

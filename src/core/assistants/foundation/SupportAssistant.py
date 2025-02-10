@@ -2,10 +2,10 @@ from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.workflows.support.GitHubSupportWorkflows import GitHubSupportWorkflows, GitHubSupportWorkflowsConfiguration
-from src.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.core.workflows.support.GitHubSupportWorkflows import GitHubSupportWorkflows, GitHubSupportWorkflowsConfiguration
+from src.core.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
 
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."

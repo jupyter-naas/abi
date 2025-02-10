@@ -1,12 +1,12 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import GithubIntegration, GithubGraphqlIntegration, AWSS3Integration, SupabaseIntegration, PostgresIntegration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.integrations.AWSS3Integration import AWSS3IntegrationConfiguration
-from src.integrations.SupabaseIntegration import SupabaseIntegrationConfiguration
-from src.integrations.PostgresIntegration import PostgresIntegrationConfiguration
+from src.core.integrations import GithubIntegration, GithubGraphqlIntegration, AWSS3Integration, SupabaseIntegration, PostgresIntegration
+from src.core.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.core.integrations.AWSS3Integration import AWSS3IntegrationConfiguration
+from src.core.integrations.SupabaseIntegration import SupabaseIntegrationConfiguration
+from src.core.integrations.PostgresIntegration import PostgresIntegrationConfiguration
 
 NAME = "Devops Engineer"
 SLUG = "devops-engineer"

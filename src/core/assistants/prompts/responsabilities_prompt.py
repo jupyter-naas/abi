@@ -1,4 +1,4 @@
-from src.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
+from src.core.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
 
 RESPONSIBILITIES_PROMPT = f"""
 1. For any user request, first check if there's an appropriate tool available.

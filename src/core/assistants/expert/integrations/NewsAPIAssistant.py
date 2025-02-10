@@ -1,11 +1,11 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import NewsAPIIntegration
-from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations import NewsAPIIntegration
+from src.core.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A NewsAPI Assistant for retrieving news articles and headlines."
 AVATAR_URL = "https://newsapi.org/images/n-logo-border.png"

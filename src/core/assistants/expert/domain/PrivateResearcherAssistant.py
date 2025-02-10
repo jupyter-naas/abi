@@ -1,9 +1,9 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import NewsAPIIntegration, PerplexityIntegration
-from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.integrations import NewsAPIIntegration, PerplexityIntegration
+from src.core.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.core.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 
 NAME = "Private Researcher"
 SLUG = "private-researcher"

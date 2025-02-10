@@ -3,13 +3,13 @@ from unittest.mock import Mock, patch
 from datetime import datetime
 from rdflib import Graph
 
-from src.pipelines.github.GithubIssuePipeline import (
+from src.core.pipelines.github.GithubIssuePipeline import (
     GithubIssuePipeline,
     GithubIssuePipelineConfiguration,
     GithubIssuePipelineParameters
 )
-from src.integrations.GithubIntegration import GithubIntegration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration
+from src.core.integrations.GithubIntegration import GithubIntegration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 
 @pytest.fixture

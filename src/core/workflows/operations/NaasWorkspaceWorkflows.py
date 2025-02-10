@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from typing import List, Dict, Any

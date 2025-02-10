@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
+from src.core.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from typing import List, Dict, Any
@@ -56,7 +56,7 @@ class UpdateAlgoliaIndex(Workflow):
                 logger.info(f"Processing assistant {file}")
                 try:
                     # Build import path based on file location
-                    import_path = "src.assistants"
+                    import_path = "src.core.assistants"
                     relative_path = file.relative_to(assistants_dir)
                     if len(relative_path.parts) > 1:
                         # File is in subfolder(s)
@@ -127,7 +127,7 @@ class UpdateAlgoliaIndex(Workflow):
                 logger.info(f"Processing workflow {file}")
                 try:
                     # Build import path based on file location
-                    import_path = "src.workflows"
+                    import_path = "src.core.workflows"
                     relative_path = file.relative_to(workflows_dir)
                     if len(relative_path.parts) > 1:
                         # File is in subfolder(s)
@@ -246,7 +246,7 @@ class UpdateAlgoliaIndex(Workflow):
             if file.stem.endswith("Integration"):
                 logger.info(f"Processing integration {file}")
                 try:
-                    module = importlib.import_module(f"src.integrations.{file.stem}")
+                    module = importlib.import_module(f"src.core.integrations.{file.stem}")
                     class_name = file.stem
                     if hasattr(module, class_name):
                         integration_class = getattr(module, class_name)
@@ -326,7 +326,7 @@ class UpdateAlgoliaIndex(Workflow):
                 logger.info(f"Processing analytic {file}")
                 try:
                     # Build import path based on file location
-                    import_path = "src.analytics"
+                    import_path = "src.core.analytics"
                     relative_path = file.relative_to(analytics_dir)
                     
                     # Add subdirectories to import path if file is nested
@@ -739,8 +739,8 @@ class UpdateAlgoliaIndex(Workflow):
             return self.run(parameters)
         
 if __name__ == "__main__":
-    from src.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
-    from src.workflows.operations.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
+    from src.core.integrations.AlgoliaIntegration import AlgoliaIntegration, AlgoliaIntegrationConfiguration
+    from src.core.workflows.operations.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
     from src import secret
     import asyncio
     

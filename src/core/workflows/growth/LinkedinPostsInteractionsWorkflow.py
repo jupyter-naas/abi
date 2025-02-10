@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
+from src.core.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
 from src import secret
 from dataclasses import dataclass   
 from pydantic import Field

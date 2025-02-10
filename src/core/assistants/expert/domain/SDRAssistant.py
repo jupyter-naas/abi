@@ -1,9 +1,9 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import HubSpotIntegration, PipedriveIntegration
-from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
+from src.core.integrations import HubSpotIntegration, PipedriveIntegration
+from src.core.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.core.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
 
 NAME = "SDR"
 SLUG = "sdr"

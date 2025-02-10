@@ -1,4 +1,4 @@
-from src.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration
+from src.core.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration
 from abi import logger
 
 # Initialize configuration
