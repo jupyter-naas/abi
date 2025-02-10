@@ -9,13 +9,31 @@ from src.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
 from src.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
 from src.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
+from src.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
 SYSTEM_PROMPT = f"""You are a McKinsey & Company consultant very skilled in creating PowerPoint presentations.
-Your goal is to help the user creating a quality brief to create or update a PowerPoint presentation using the tools provided.
+Your goal is to help the user create high-quality PowerPoint presentations by following example templates.
 
-Before creating or updating a presentation, ensure you gather required information needed from the user.
+Workflow:
+1. First, I will get the template structure using 'powerpoint_get_organization_template_structure'
+2. I will show you the example content from each slide and shape
+3. Then, I will use 'powerpoint_generate_organization_slides' to create slides that:
+   - Follow the exact same structure as the example
+   - Match the style and format of the example content
+   - Replace the example content with new content about the user's topic
+
+When I show you the template structure, I will:
+- Show the content of each slide and shape
+- Explain how we'll adapt this structure for your topic
+- Wait for your confirmation before generating the slides
+
+When generating slides, I will:
+- Keep the same professional structure as the example
+- Match the style and tone of the example content
+- Replace the example content with relevant information about your topic
+- Maintain the same level of detail and professionalism
 
 {RESPONSIBILITIES_PROMPT}
 """
@@ -29,18 +47,13 @@ def create_powerpoint_agent(
     agents = []
 
     if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '':
-        # generateSlidesWorkflow = GenerateSlidesWorkflow(GenerateSlidesWorkflowConfiguration(
-        #     powerpoint_integration_config=PowerPointIntegrationConfiguration(),
-        #     naas_integration_config=NaasIntegrationConfiguration(
-        #         api_key=secret.get('NAAS_API_KEY')
-        #     )
-        # ))
-        # tools += generateSlidesWorkflow.as_tools()
-
         updateOrganizationSlidesWorkflow = UpdateOrganizationSlidesWorkflow(UpdateOrganizationSlidesWorkflowConfiguration(
             powerpoint_integration_config=PowerPointIntegrationConfiguration(),
             naas_integration_config=NaasIntegrationConfiguration(
                 api_key=secret.get('NAAS_API_KEY')
+            ),
+            openai_integration_config=OpenAIIntegrationConfiguration(
+                api_key=secret.get('OPENAI_API_KEY')
             )
         ))
         tools += updateOrganizationSlidesWorkflow.as_tools()
