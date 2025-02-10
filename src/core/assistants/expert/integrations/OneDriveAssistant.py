@@ -1,10 +1,10 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.integrations import OneDriveIntegration
-from src.integrations.OneDriveIntegration import OneDriveIntegrationConfiguration
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.integrations import OneDriveIntegration
+from src.core.integrations.OneDriveIntegration import OneDriveIntegrationConfiguration
 
 DESCRIPTION = "A OneDrive Assistant for managing files and folders in Microsoft OneDrive."
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/3/3c/Microsoft_Office_OneDrive_%282019%E2%80%93present%29.svg"

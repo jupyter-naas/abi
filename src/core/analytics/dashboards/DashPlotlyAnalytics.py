@@ -3,7 +3,7 @@ from dash import html, dcc
 import plotly.graph_objects as go
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
-from src.analytics.visualization.PlotlyAnalytics import PlotlyAnalytics, PlotlyAnalyticsConfiguration
+from src.core.analytics.visualization.PlotlyAnalytics import PlotlyAnalytics, PlotlyAnalyticsConfiguration
 
 @dataclass
 class DashPlotlyAnalyticsConfiguration:

@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations.HubSpotIntegration import HubSpotIntegration, HubSpotIntegrationConfiguration
+from src.core.integrations.HubSpotIntegration import HubSpotIntegration, HubSpotIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Dict, Optional, List

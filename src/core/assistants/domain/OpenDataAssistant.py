@@ -2,13 +2,13 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import PerplexityIntegration, NewsAPIIntegration, SerperIntegration
-from src.integrations.SerperIntegration import SerperIntegrationConfiguration
-from src.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations import PerplexityIntegration, NewsAPIIntegration, SerperIntegration
+from src.core.integrations.SerperIntegration import SerperIntegrationConfiguration
+from src.core.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.core.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 
 DESCRIPTION = "An Open Data Assistant that helps analyze external data sources and indicators."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/open_data_intelligence.png"

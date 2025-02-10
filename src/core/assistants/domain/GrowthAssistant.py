@@ -2,13 +2,13 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import HubSpotIntegration
-from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.workflows.growth.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations import HubSpotIntegration
+from src.core.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+from src.core.workflows.growth.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
 
 DESCRIPTION = "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_marketing.png"

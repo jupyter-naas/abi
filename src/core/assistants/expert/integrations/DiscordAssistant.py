@@ -1,11 +1,11 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import DiscordIntegration
-from src.integrations.DiscordIntegration import DiscordIntegrationConfiguration
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations import DiscordIntegration
+from src.core.integrations.DiscordIntegration import DiscordIntegrationConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Discord Assistant with access to Discord Integration tools."
 AVATAR_URL = "https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png"

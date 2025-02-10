@@ -2,15 +2,15 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations import AgicapIntegration, PennylaneIntegration, MercuryIntegration, QontoIntegration, StripeIntegration
-from src.integrations.AgicapIntegration import AgicapIntegrationConfiguration
-from src.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
-from src.integrations.MercuryIntegration import MercuryIntegrationConfiguration
-from src.integrations.StripeIntegration import StripeIntegrationConfiguration
-from src.integrations.QontoIntegration import QontoIntegrationConfiguration
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.integrations import AgicapIntegration, PennylaneIntegration, MercuryIntegration, QontoIntegration, StripeIntegration
+from src.core.integrations.AgicapIntegration import AgicapIntegrationConfiguration
+from src.core.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
+from src.core.integrations.MercuryIntegration import MercuryIntegrationConfiguration
+from src.core.integrations.StripeIntegration import StripeIntegrationConfiguration
+from src.core.integrations.QontoIntegration import QontoIntegrationConfiguration
 
 DESCRIPTION = "A Financial Assistant that analyzes transactions and provides financial insights."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/finance_management.png"

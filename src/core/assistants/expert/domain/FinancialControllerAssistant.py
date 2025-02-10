@@ -1,10 +1,10 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_anthropic import ChatAnthropic
-from src.integrations import PennylaneIntegration, QontoIntegration, StripeIntegration
-from src.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
-from src.integrations.QontoIntegration import QontoIntegrationConfiguration
-from src.integrations.StripeIntegration import StripeIntegrationConfiguration
+from src.core.integrations import PennylaneIntegration, QontoIntegration, StripeIntegration
+from src.core.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
+from src.core.integrations.QontoIntegration import QontoIntegrationConfiguration
+from src.core.integrations.StripeIntegration import StripeIntegrationConfiguration
 
 NAME = "Financial Controller"
 SLUG = "financial-controller"

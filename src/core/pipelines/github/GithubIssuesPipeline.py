@@ -1,10 +1,10 @@
 from abi.pipeline.pipeline import PipelineParameters, PipelineConfiguration
 from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
-from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from abi.pipeline import Pipeline
 from abi.utils.Graph import ABIGraph
-from src.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration, GithubIssuePipelineParameters
+from src.core.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration, GithubIssuePipelineParameters
 from dataclasses import dataclass
 from rdflib import Graph
 from abi import logger

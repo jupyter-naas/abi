@@ -1,13 +1,13 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import HubSpotIntegration, LinkedInIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration, SendGridIntegration
-from src.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
-from src.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
-from src.integrations.GoogleAnalyticsIntegration import GoogleAnalyticsIntegrationConfiguration
-from src.integrations.SendGridIntegration import SendGridIntegrationConfiguration
+from src.core.integrations import HubSpotIntegration, LinkedInIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration, SendGridIntegration
+from src.core.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+from src.core.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
+from src.core.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
+from src.core.integrations.GoogleAnalyticsIntegration import GoogleAnalyticsIntegrationConfiguration
+from src.core.integrations.SendGridIntegration import SendGridIntegrationConfiguration
 
 NAME = "Campaign Manager"
 SLUG = "campaign-manager"

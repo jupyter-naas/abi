@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations import YourIntegration, YourIntegrationConfiguration
+from src.core.integrations import YourIntegration, YourIntegrationConfiguration
 from src import config, secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
@@ -64,7 +64,7 @@ class YourWorkflow(Workflow):
             return self.run(parameters)
 
 if __name__ == "__main__":
-    from src.integrations import YourIntegration, YourIntegrationConfiguration
+    from src.core.integrations import YourIntegration, YourIntegrationConfiguration
     
     # Initialize integration
     integration = YourIntegration(YourIntegrationConfiguration(attribute_1=secret.get("YOUR_SECRET_1"), attribute_2=secret.get("YOUR_SECRET_2")))

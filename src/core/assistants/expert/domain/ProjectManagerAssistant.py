@@ -1,10 +1,10 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.integrations import GithubIntegration, GithubGraphqlIntegration, NotionIntegration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.integrations.NotionIntegration import NotionIntegrationConfiguration
+from src.core.integrations import GithubIntegration, GithubGraphqlIntegration, NotionIntegration
+from src.core.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.core.integrations.NotionIntegration import NotionIntegrationConfiguration
 
 NAME = "Project Manager"
 SLUG = "project-manager"

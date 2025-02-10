@@ -1,7 +1,7 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from dataclasses import dataclass
-from src.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime, timedelta

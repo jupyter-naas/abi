@@ -315,7 +315,7 @@ Here is an example of how to run a pipeline in your terminal:
 # src/data/pipelines/YourPipeline.py
 if __name__ == "__main__":
       from src import secret
-      from src.integrations import YourIntegration
+      from src.core.integrations import YourIntegration
       from abi.services.ontology_store import OntologyStoreService
       
       # Setup dependencies
@@ -431,7 +431,7 @@ To create a new workflow in ABI, follow these steps:
 
 4. **Use the Workflow**
    The workflow can be used in multiple ways:
-   - As a standalone script: `python -m src.workflows.YourWorkflow`
+   - As a standalone script: `python -m src.core.workflows.YourWorkflow`
    - As an API endpoint: Import and use the `api()` function
    - As a LangChain tool: Import and use the `as_tool()` function
 
@@ -451,7 +451,7 @@ Create a new file in `src/assistants/custom/YourAssistant.py` using template: `s
 
 #### Chat with Assistant in Terminal
 - Create function to run new assistant in `src/apps/terminal_agent/main.py` following the pattern of existing assistants
-- Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.apps.terminal_agent.main:run_<assistant-name>-agent"`
+- Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.core.apps.terminal_agent.main:run_<assistant-name>-agent"`
 - Add new function in Makefile: `make chat-<assistant-name>-agent`
 - Run new assistant: `make chat-<assistant-name>-agent`
 
@@ -464,7 +464,7 @@ Create a new file in `src/assistants/custom/YourAssistant.py` using template: `s
 - Import your assistant from `src/assistants/custom/YourAssistant.py`
 - Add it to the `assistants_router` variable as follow:
 ```python
-from src.assistants.custom.YourAssistant import create_your_assistant
+from src.core.assistants.custom.YourAssistant import create_your_assistant
 your_assistant = create_your_assistant()
 your_assistant.as_api(assistants_router)
 ```

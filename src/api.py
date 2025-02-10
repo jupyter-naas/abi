@@ -14,24 +14,24 @@ from abi import logger
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
 # Foundation assistants
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
 # Domain assistants
-from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
-from src.assistants.domain.ContentAssistant import create_content_assistant
-from src.assistants.domain.FinanceAssistant import create_finance_assistant
-from src.assistants.domain.GrowthAssistant import create_growth_assistant
-from src.assistants.domain.OperationsAssistant import create_operations_assistant
-from src.assistants.domain.SalesAssistant import create_sales_assistant
+from src.core.assistants.domain.OpenDataAssistant import create_open_data_assistant
+from src.core.assistants.domain.ContentAssistant import create_content_assistant
+from src.core.assistants.domain.FinanceAssistant import create_finance_assistant
+from src.core.assistants.domain.GrowthAssistant import create_growth_assistant
+from src.core.assistants.domain.OperationsAssistant import create_operations_assistant
+from src.core.assistants.domain.SalesAssistant import create_sales_assistant
 # Integrations
-from src.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
-from src.assistants.expert.integrations.NaasAssistant import create_naas_agent
+from src.core.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
+from src.core.assistants.expert.integrations.NaasAssistant import create_naas_agent
 # Pipelines
-from src.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
-from src.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
-from src.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.core.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
+from src.core.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
+from src.core.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 # Docs

@@ -1,9 +1,9 @@
-from src.workflows.powerpoint.UpdateSlidesWorkflow import UpdateSlidesWorkflow, UpdateSlidesWorkflowConfiguration, UpdateSlidesWorkflowParameters
+from src.core.workflows.powerpoint.UpdateSlidesWorkflow import UpdateSlidesWorkflow, UpdateSlidesWorkflowConfiguration, UpdateSlidesWorkflowParameters
 from abi import logger
 from src import secret
-from src.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
-from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.core.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
+from src.core.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
 
 # Initialize naas integration
 naas_integration_config = NaasIntegrationConfiguration(

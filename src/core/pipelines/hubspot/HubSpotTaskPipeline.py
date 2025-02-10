@@ -1,6 +1,6 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from dataclasses import dataclass
-from src.integrations.HubSpotIntegration import HubSpotIntegration, HubSpotIntegrationConfiguration
+from src.core.integrations.HubSpotIntegration import HubSpotIntegration, HubSpotIntegrationConfiguration
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime

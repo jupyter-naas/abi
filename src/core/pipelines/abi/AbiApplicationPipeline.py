@@ -12,7 +12,7 @@ from pathlib import Path
 import importlib
 import inspect
 import pydash as _
-from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 import re
 import glob
 import os
@@ -97,7 +97,7 @@ class AbiApplicationPipeline(Pipeline):
                     x = coordinates[i][0]
                     y = coordinates[i][1]
 
-                    module = importlib.import_module(f"src.integrations.{file.stem}")
+                    module = importlib.import_module(f"src.core.integrations.{file.stem}")
                     class_name = file.stem
                     if hasattr(module, class_name):
                         integration_class = getattr(module, class_name)
@@ -206,7 +206,7 @@ class AbiApplicationPipeline(Pipeline):
             if file.stem.endswith("Assistant"):
                 try:
                     # Build import path based on file location
-                    import_path = "src.assistants"
+                    import_path = "src.core.assistants"
                     relative_path = file.relative_to(assistants_dir)
                     if len(relative_path.parts) > 1:
                         # File is in subfolder(s)
@@ -267,7 +267,7 @@ class AbiApplicationPipeline(Pipeline):
                     with open(file, 'r') as f:
                         content = f.read()
 
-                        # Look for import from src.assistants
+                        # Look for import from src.core.assistants
                         assistant_imports = re.findall(r'from (src\.assistants(?:\.\w+)*\.\w+Assistant)', content)
                         for a in assistant_imports:
                             uid = a.split(".")[-1]
@@ -358,7 +358,7 @@ class AbiApplicationPipeline(Pipeline):
                     x = coordinates[i][0]
                     y = coordinates[i][1]
 
-                    module = importlib.import_module(f"src.workflows.operations.{file.stem}")
+                    module = importlib.import_module(f"src.core.workflows.operations.{file.stem}")
                     doc = inspect.getdoc(module)
 
                     workflow = graph.add_individual_to_prefix(

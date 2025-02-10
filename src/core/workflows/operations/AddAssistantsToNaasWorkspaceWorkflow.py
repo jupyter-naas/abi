@@ -1,5 +1,5 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src import secret
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
@@ -77,7 +77,7 @@ class AddAssistantsToNaasWorkspace(Workflow):
         for module_name, assistant_name in assistant_configs:
             try:
                 # Import each assistant module dynamically
-                module = import_module(f'src.assistants.domain.{module_name}')
+                module = import_module(f'src.core.assistants.domain.{module_name}')
                 assistants[assistant_name] = {
                     'instructions': module.SYSTEM_PROMPT,
                     'description': module.DESCRIPTION,
