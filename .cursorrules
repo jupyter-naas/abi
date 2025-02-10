@@ -137,7 +137,7 @@ Template to use:
 ```python
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.integrations import YourIntegration, YourIntegrationConfiguration
+from src.core.integrations import YourIntegration, YourIntegrationConfiguration
 from src import secret, config
 from dataclasses import dataclass
 from pydantic import BaseModel, Field

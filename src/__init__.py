@@ -78,7 +78,5 @@ config = Config.from_yaml()
 
 services = init_services(config, secret)
 
-print(type(services.storage_service.adapter))
-
 if __name__ == "__main__":
     cli()
