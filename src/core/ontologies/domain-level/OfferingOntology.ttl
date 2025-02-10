@@ -9,220 +9,113 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/OfferingOntology> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OfferingOntology.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for products and services offerings."@en ;
-    dc:license "" ;
-    dc:title "Offering Ontology" .
-
 #################################################################
 #    Classes
 #################################################################
 
 abi:Offering a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000016 ;
     rdfs:label "Offering"@en ;
-    rdfs:subClassOf cco:InformationContentEntity ;
-    skos:definition "A product or service offering with associated metadata"@en .
+    skos:definition "Products or services that are made available by an organization to satisfy wants or needs."@en ;
+    skos:example "Products, services, solutions, etc." .
 
-abi:MarketShare a owl:Class ;
-    rdfs:label "Market Share"@en ;
-    rdfs:subClassOf cco:MeasurementInformation .
+abi:Product a owl:Class ;
+    rdfs:subClassOf abi:Offering ;
+    rdfs:label "Product"@en ;
+    skos:definition "Tangible items that are created, manufactured, or sourced to satisfy a want or need."@en ;
+    skos:example "A software product, a physical product, a service, etc." .
 
-abi:CustomerSatisfactionScore a owl:Class ;
-    rdfs:label "Customer Satisfaction Score"@en ;
-    rdfs:subClassOf cco:MeasurementInformation .
+abi:Service a owl:Class ;
+    rdfs:subClassOf abi:Offering ;
+    rdfs:label "Service"@en ;
+    skos:definition "Intangible activities or benefits provided by one party to another, often to solve a problem or meet a need."@en ;
+    skos:example "A software service, a physical service, a service, etc." .
+
+abi:Solution a owl:Class ;
+    rdfs:subClassOf abi:Offering ;
+    rdfs:label "Solution"@en ;
+    skos:definition "An integrated combination of products and/or services specifically configured and packaged together to comprehensively address a complex business need or challenge."@en ;
+    skos:example "An end-to-end cybersecurity solution combining security software, monitoring services, and consulting"@en ,
+                 "A complete digital transformation package with hardware, software and training services"@en .
+
+abi:Market a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ;
+    rdfs:label "Market"@en ;
+    skos:definition "Represents the economic space where buyers and sellers interact to exchange goods, services, or information, typically characterized by supply and demand dynamics."@en ;
+    skos:example "The technology market"@en ,
+                 "The global oil market"@en ;
+    rdfs:comment "A market is an abstract concept used to describe the environment in which trade occurs. As such, it is best represented as a Descriptive Information Content Entity that encompasses the characteristics and dynamics of economic exchanges." .
+
+abi:MarketSegment a owl:Class ;
+    rdfs:subClassOf abi:Market ;
+    rdfs:label "Market Segment"@en ;
+    skos:definition "Represents a subset of a market, defined by specific characteristics or criteria that distinguish it from other segments, often based on consumer needs, preferences, or demographics."@en ;
+    skos:example "The luxury car segment within the automotive market"@en ,
+                 "The millennial smartphone user segment"@en ;
+    rdfs:comment "A market segment is a more focused abstraction that describes a particular portion of a market with shared attributes. It is best categorized as a Descriptive Information Content Entity that details the specific traits and preferences of a particular group within the larger market." .
+
 
 #################################################################
 #    Object Properties
 #################################################################
 
-abi:hasMarketShare a owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:MarketShare .
+abi:hasOffering a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:BFO_0000218 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Offering ;
+    rdfs:label "has_offering"@en ;
+    skos:definition "Relates an organization to its offerings (products, services, or solutions)."@en .
 
-abi:hasCustomerSatisfaction a owl:ObjectProperty ;
+abi:isOfferingOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
     rdfs:domain abi:Offering ;
-    rdfs:range abi:CustomerSatisfactionScore .
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasOffering ;
+    rdfs:label "is_offering_of"@en ;
+    skos:definition "Relates offerings back to their providing organization."@en .
+
+abi:hasMarket a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000218 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Market ;
+    rdfs:label "has market" ;
+    skos:definition "Relates an Organization to its Market." ;
+    rdfs:comment "This property connects an organization to its market, indicating the market it operates in." .
+
+abi:isMarketOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Market ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasMarket ;
+    rdfs:label "is market of" ;
+    skos:definition "Relates a Market to the Organization that it belongs to." ;
+    rdfs:comment "This property connects a market segment to the organization that it belongs to." .
+
+abi:hasMarketSegment a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000218 ;
+    rdfs:domain abi:Market ;
+    rdfs:range abi:MarketSegment ;
+    rdfs:label "has market segment" ;
+    skos:definition "Relates a Market to its Market Segment." ;
+    rdfs:comment "This property connects a market to its market segment, indicating the segment of the market it operates in." .
+
+abi:isMarketSegmentOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:MarketSegment ;
+    rdfs:range abi:Market ;
+    owl:inverseOf abi:hasMarketSegment ;
+    rdfs:label "is market segment of" ;
+    skos:definition "Relates a Market Segment to the Market that it belongs to." ;
+    rdfs:comment "This property connects a market segment to the market that it belongs to." .
+
+abi:isPartOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Offering ;
+    rdfs:range abi:Market ;
+    rdfs:label "is part of" ;
+    skos:definition "Relates an Offering to the Market that it belongs to." ;
+    rdfs:comment "This property connects an offering to the market that it belongs to." .
 
 #################################################################
 #    Data Properties
 #################################################################
-
-abi:hasName a owl:DatatypeProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range xsd:string .
-
-abi:hasDescription a owl:DatatypeProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range xsd:string .
-
-abi:hasVersion a owl:DatatypeProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range xsd:string .
-
-abi:CustomerSegment rdfs:subClassOf cco:HumanGroup ;
-    rdfs:label "Customer Segment"@en .
-
-abi:GeographicRegion rdfs:subClassOf cco:GeopoliticalRegion ;
-    rdfs:label "Geographic Region"@en .
-
-abi:Industry rdfs:subClassOf cco:OrganizationType ;
-    rdfs:label "Industry"@en .
-
-# 4. Value Proposition
-abi:ValueProposition rdfs:subClassOf cco:Proposition ;
-    rdfs:label "Value Proposition"@en .
-
-abi:KeyBenefit rdfs:subClassOf cco:Quality ;
-    rdfs:label "Key Benefit"@en .
-
-abi:UniqueSelllingPoint rdfs:subClassOf cco:Quality ;
-    rdfs:label "Unique Selling Point"@en .
-
-abi:ProblemSolved rdfs:subClassOf cco:Process ;
-    rdfs:label "Problem Solved"@en .
-
-# 5. Delivery Method
-abi:DeliveryMethod rdfs:subClassOf cco:Process ;
-    rdfs:label "Delivery Method"@en .
-
-abi:PhysicalDelivery rdfs:subClassOf cco:MaterialEntity ;
-    rdfs:label "Physical Delivery"@en .
-
-abi:DigitalDelivery rdfs:subClassOf cco:InformationContentEntity ;
-    rdfs:label "Digital Delivery"@en .
-
-abi:InPersonDelivery rdfs:subClassOf cco:Process ;
-    rdfs:label "In-Person Delivery"@en .
-
-abi:RemoteDelivery rdfs:subClassOf cco:Process ;
-    rdfs:label "Remote Delivery"@en .
-
-# 6. Lifecycle
-abi:Lifecycle rdfs:subClassOf bfo:Process ;
-    rdfs:label "Lifecycle"@en .
-
-abi:ProcessStage rdfs:subClassOf cco:ProcessStage ;
-    rdfs:label "Process Stage"@en .
-
-# 7. Related Entities
-abi:RelatedEntity rdfs:subClassOf cco:Organization ;
-    rdfs:label "Related Entity"@en .
-
-abi:Manufacturer rdfs:subClassOf cco:Organization ;
-    rdfs:label "Manufacturer"@en .
-
-abi:Supplier rdfs:subClassOf cco:Organization ;
-    rdfs:label "Supplier"@en .
-
-abi:Distributor rdfs:subClassOf cco:Organization ;
-    rdfs:label "Distributor"@en .
-
-abi:Competitor rdfs:subClassOf cco:Organization ;
-    rdfs:label "Competitor"@en .
-
-# 8. Performance Metrics
-abi:PerformanceMetric rdfs:subClassOf cco:MeasurementInformationContentEntity ;
-    rdfs:label "Performance Metric"@en .
-
-abi:SalesVolume rdfs:subClassOf cco:MeasurementValue ;
-    rdfs:label "Sales Volume"@en .
-
-abi:Revenue rdfs:subClassOf cco:MonetaryValue ;
-    rdfs:label "Revenue"@en .
-
-abi:CustomerSatisfactionScore rdfs:subClassOf cco:MeasurementValue ;
-    rdfs:label "Customer Satisfaction Score"@en .
-
-abi:MarketShare rdfs:subClassOf cco:Ratio ;
-    rdfs:label "Market Share"@en .
-
-# 9. Legal and Compliance
-abi:LegalDocument rdfs:subClassOf cco:DocumentAct ;
-    rdfs:label "Legal Document"@en .
-
-abi:Certification rdfs:subClassOf cco:DocumentAct ;
-    rdfs:label "Certification"@en .
-
-abi:Patent rdfs:subClassOf cco:DocumentAct ;
-    rdfs:label "Patent"@en .
-
-abi:RegulatoryApproval rdfs:subClassOf cco:DocumentAct ;
-    rdfs:label "Regulatory Approval"@en .
-
-# 10. Sustainability Aspects
-abi:SustainabilityAspect rdfs:subClassOf cco:Quality ;
-    rdfs:label "Sustainability Aspect"@en .
-
-abi:EnvironmentalImpact rdfs:subClassOf cco:Quality ;
-    rdfs:label "Environmental Impact"@en .
-
-abi:EthicalSourcing rdfs:subClassOf cco:Process ;
-    rdfs:label "Ethical Sourcing"@en .
-
-abi:Recyclability rdfs:subClassOf cco:Quality ;
-    rdfs:label "Recyclability"@en .
-
-# Object Properties
-abi:hasTargetMarket rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:TargetMarket .
-
-abi:hasDeliveryMethod rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:DeliveryMethod .
-
-abi:hasValueProposition rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:ValueProposition .
-
-abi:hasManufacturer rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:Manufacturer .
-
-abi:hasSupplier rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:Supplier .
-
-abi:hasDistributor rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:Distributor .
-
-abi:hasCompetitor rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:Competitor .
-
-abi:hasPerformanceMetric rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:PerformanceMetric .
-
-abi:hasLegalDocument rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:LegalDocument .
-
-abi:hasSustainabilityAspect rdf:type owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range abi:SustainabilityAspect .
-
-# Data Properties
-abi:launchDate rdf:type owl:DatatypeProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range xsd:dateTime .
-
-abi:hasEndOfLifeDate a owl:DatatypeProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range xsd:dateTime .
-
-abi:priceValue a owl:DatatypeProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range xsd:decimal .
-
-abi:marketShareValue a owl:DatatypeProperty ;
-    rdfs:domain abi:MarketShare ;
-    rdfs:range xsd:decimal .
-
-abi:satisfactionScore a owl:DatatypeProperty ;
-    rdfs:domain abi:CustomerSatisfactionScore ;
-    rdfs:range xsd:decimal . 
