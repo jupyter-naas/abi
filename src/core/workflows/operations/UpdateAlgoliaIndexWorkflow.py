@@ -199,7 +199,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_models(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan models directory and collect metadata."""
         results = []
-        models_dir = Path("src/coremodels/naas")
+        models_dir = Path("src/core/models/naas")
         
         for file in models_dir.glob("*.py"):
             if "__ModelTemplate__" in str(file):
