@@ -1,4 +1,4 @@
-from src.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration, UpdateOrganizationSlidesWorkflowParameters
+from src.workflows.powerpoint.UpdateSlidesWorkflow import UpdateSlidesWorkflow, UpdateSlidesWorkflowConfiguration, UpdateSlidesWorkflowParameters
 from abi import logger
 from src import secret
 from src.integrations.NaasIntegration import NaasIntegrationConfiguration
@@ -19,12 +19,12 @@ openai_integration_config = OpenAIIntegrationConfiguration(
 powerpoint_integration_config = PowerPointIntegrationConfiguration()
 
 # Run workflow
-configuration = UpdateOrganizationSlidesWorkflowConfiguration(
+configuration = UpdateSlidesWorkflowConfiguration(
     powerpoint_integration_config=powerpoint_integration_config,
     openai_integration_config=openai_integration_config,
     naas_integration_config=naas_integration_config,
 )
-workflow = UpdateOrganizationSlidesWorkflow(configuration)
+workflow = UpdateSlidesWorkflow(configuration)
 text = """
 NaasAI is a pioneering AI company specializing in natural language processing and machine learning solutions. 
 Our core offerings include AI model development, data analytics, and automated workflow systems. We have extensive expertise in language models, computer vision, and enterprise AI applications.
@@ -43,5 +43,5 @@ Our value proposition centers on AI innovation and practical business applicatio
 - Industry-specific AI applications
 """
 use_cache = True
-output = workflow.update_slides(UpdateOrganizationSlidesWorkflowParameters(text=text, use_cache=use_cache))
+output = workflow.update_slides(UpdateSlidesWorkflowParameters(text=text, use_cache=use_cache))
 logger.info(output)
