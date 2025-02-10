@@ -2,16 +2,6 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config
 from fastapi import APIRouter
-<<<<<<< HEAD:src/assistants/expert/integrations/PowerPointAssistant.py
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
-from src.workflows.powerpoint.GenerateSlidesWorkflow import GenerateSlidesWorkflow, GenerateSlidesWorkflowConfiguration
-from src.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
-from src.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
-=======
 from src.core.assistants.foundation.SupportAssistant import create_support_assistant
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
@@ -19,7 +9,6 @@ from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.core.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
 from src.core.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
 from src.core.workflows.powerpoint.UpdateOrganizationSlidesWorkflow import UpdateOrganizationSlidesWorkflow, UpdateOrganizationSlidesWorkflowConfiguration
->>>>>>> 371b92be7fc6cfc19087dea806f2d2e5878ec67f:src/core/assistants/expert/integrations/PowerPointAssistant.py
 
 DESCRIPTION = "A PowerPoint Assistant for creating and managing presentations."
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
@@ -56,11 +45,7 @@ def create_powerpoint_agent(
     tools = []
     agents = []
 
-<<<<<<< HEAD:src/assistants/expert/integrations/PowerPointAssistant.py
-    if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '':
-=======
     if secret.get('NAAS_API_KEY') and config.workspace_id != '' and config.storage_name != '' and secret.get('OPENAI_API_KEY'):
->>>>>>> 371b92be7fc6cfc19087dea806f2d2e5878ec67f:src/core/assistants/expert/integrations/PowerPointAssistant.py
         updateOrganizationSlidesWorkflow = UpdateOrganizationSlidesWorkflow(UpdateOrganizationSlidesWorkflowConfiguration(
             powerpoint_integration_config=PowerPointIntegrationConfiguration(),
             naas_integration_config=NaasIntegrationConfiguration(
@@ -84,7 +69,7 @@ def create_powerpoint_agent(
         
     # Set model
     model = ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-4",
         api_key=secret.get('OPENAI_API_KEY'),
         temperature=0
     )

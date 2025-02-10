@@ -42,7 +42,7 @@ class ReplicateIntegration(Integration):
 
     def _ensure_image_directory(self) -> Path:
         """Ensure the images directory exists and return its path."""
-        image_dir = Path("src/data/datalake/l1_bronze/assets/replicate_images")
+        image_dir = Path("storage/datalake/assets/image")
         image_dir.mkdir(parents=True, exist_ok=True)
         return image_dir
 
