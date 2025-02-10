@@ -47,7 +47,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_assistants(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan assistants directory and collect metadata."""
         results = []
-        assistants_dir = Path("src/assistants")
+        assistants_dir = Path("src/core/assistants")
         
         for file in assistants_dir.rglob("*.py"):
             if "__AssistantTemplate__" in str(file):
@@ -102,7 +102,7 @@ class UpdateAlgoliaIndex(Workflow):
                         "description": getattr(module, "DESCRIPTION", ""),
                         "image_url": getattr(module, "AVATAR_URL", ""),
                         "source_title": subfolder.capitalize(),
-                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/assistants/{relative_path}",
+                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/assistants/{relative_path}",
                         "ranking": ranking,
                         "slug": getattr(module, "SLUG", slug),
                         "model": getattr(module, "MODEL", "gpt-4o-mini"), 
@@ -118,7 +118,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_workflows(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan workflows directory and collect metadata."""
         results = []
-        workflows_dir = Path("src/workflows")
+        workflows_dir = Path("src/core/workflows")
         
         for file in workflows_dir.rglob("*.py"):
             if "__WorkflowTemplate__" in str(file):
@@ -147,7 +147,7 @@ class UpdateAlgoliaIndex(Workflow):
                             "description": doc,
                             "image_url": "",
                             "source_title": (file.parent.name).replace("_", " ").capitalize(),
-                            "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/workflows/{relative_path}",
+                            "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/workflows/{relative_path}",
                             "ranking": 2
                         })
                 except ImportError as e:
@@ -158,7 +158,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_pipelines(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan pipelines directory and collect metadata."""
         results = []
-        pipelines_dir = Path("src/data/pipelines")
+        pipelines_dir = Path("src/core/pipelines")
         
         for file in pipelines_dir.rglob("*.py"):
             if "__PipelineTemplate__" in str(file):
@@ -167,7 +167,7 @@ class UpdateAlgoliaIndex(Workflow):
                 logger.info(f"Processing pipeline {file}")
                 try:
                     # Build import path based on file location
-                    import_path = "src.data.pipelines"
+                    import_path = "src.core.pipelines"
                     relative_path = file.relative_to(pipelines_dir)
                     if len(relative_path.parts) > 1:
                         # File is in subfolder(s)
@@ -188,7 +188,7 @@ class UpdateAlgoliaIndex(Workflow):
                             "description": doc,
                             "image_url": "",
                             "source_title": source_title.capitalize(),
-                            "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/data/pipelines/{relative_path}",
+                            "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/pipelines/{relative_path}",
                             "ranking": 2
                         })
                 except ImportError as e:
@@ -199,7 +199,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_models(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan models directory and collect metadata."""
         results = []
-        models_dir = Path("src/models/naas")
+        models_dir = Path("src/coremodels/naas")
         
         for file in models_dir.glob("*.py"):
             if "__ModelTemplate__" in str(file):
@@ -207,7 +207,7 @@ class UpdateAlgoliaIndex(Workflow):
             if file.stem.endswith("AIModel"):
                 logger.info(f"Processing model {file}")
                 try:
-                    module = importlib.import_module(f"src.models.naas.{file.stem}")
+                    module = importlib.import_module(f"src.core.models.naas.{file.stem}")
                     
                     # Get model attributes
                     model_id = getattr(module, "ID", "")
@@ -226,7 +226,7 @@ class UpdateAlgoliaIndex(Workflow):
                         "description": description,
                         "image_url": image,
                         "source_title": owner.capitalize(),
-                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/models/naas/{file.name}",
+                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/models/naas/{file.name}",
                         "ranking": 2,
                         "context_window": context_window
                     })
@@ -238,7 +238,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_integrations(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan integrations directory and collect metadata."""
         results = []
-        integrations_dir = Path("src/integrations")
+        integrations_dir = Path("src/core/integrations")
         
         for file in integrations_dir.glob("*.py"):
             if "__IntegrationTemplate__" in str(file):
@@ -296,7 +296,7 @@ class UpdateAlgoliaIndex(Workflow):
                                         "description": tool.description,
                                         "image_url": logo_url,
                                         "source_title": source_title,
-                                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/integrations/{file.name}",
+                                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/integrations/{file.name}",
                                         "ranking": 2,
                                         "args_schema": "\n".join([
                                             f"-{name}: {field.description}\n"
@@ -313,7 +313,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_analytics(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan analytics directory and collect metadata."""
         results = []
-        analytics_dir = Path("src/analytics")
+        analytics_dir = Path("src/core/analytics")
         
         # Recursively scan all .py files in analytics directory and subdirectories
         for file in analytics_dir.rglob("*.py"):
@@ -380,9 +380,9 @@ class UpdateAlgoliaIndex(Workflow):
                                         "description": tool.description,
                                         "image_url": logo_url,
                                         "source_title": source_title,
-                                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/analytics/{relative_path}",
+                                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/analytics/{relative_path}",
                                         "ranking": 2,
-                                        "example": f"https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/{branch_name}/src/data/analytics-demo/{(file.stem.replace('Analytics', '')).lower()}_{tool.name.lower()}.png",
+                                        "example": f"https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/{branch_name}/examples/analytics/{(file.stem.replace('Analytics', '')).lower()}_{tool.name.lower()}.png",
                                         "args_schema": "\n".join([
                                             f"-{name}: {field.description}\n"
                                             for name, field in (tool.args_schema.__fields__.items() if hasattr(tool, 'args_schema') else [])
@@ -398,7 +398,7 @@ class UpdateAlgoliaIndex(Workflow):
     def __scan_ontologies(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan ontologies directory and collect metadata."""
         results = []
-        ontologies_dir = Path("src/ontologies")
+        ontologies_dir = Path("src/core/ontologies")
 
         # Create dictionary mapping URIs to their RDFS labels
         uri_to_label = {}
@@ -465,7 +465,7 @@ class UpdateAlgoliaIndex(Workflow):
                     "description": next(g.objects(None, DC.description), "No description provided.") + ("" if str(next(g.objects(None, DC.description), "No description provided.")).endswith(".") else "."),
                     "image_url": image_url,
                     "source_title": source_title,
-                    "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/ontologies/{file.name}",
+                    "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/ontologies/{file.name}",
                     "ranking": ranking,
                     "comment": next(g.objects(None, RDFS.comment), ""),
                     "contributors": ", ".join(g.objects(None, DC11.contributor)),
@@ -494,7 +494,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 "source_title": ontology_title,
                                 "source_url": str(s),
                                 "ranking": ranking+1,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/ontologies/{file.name}"),
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ''),
                                 "subClassOf": subclass_of,
@@ -583,7 +583,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 "source_title": ontology_title,
                                 "source_url": str(s),
                                 "ranking": ranking+1,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/ontologies/{file.name}"),
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ''),
                                 "domain": domain_objs,
@@ -617,7 +617,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 "source_title": ontology_title,
                                 "source_url": str(s),
                                 "ranking": ranking+1,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/ontologies/{file.name}"),
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ""),
                                 "range": range_val,
@@ -643,7 +643,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 "source_title": ontology_title,
                                 "source_url": str(s),
                                 "ranking": ranking+1,
-                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/ontologies/{file.name}"),
+                                "ontology_source_url": next(g.objects(s, CCO.ont00001760), f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/ontologies/{file.name}"),
                                 "comment": next(g.objects(s, RDFS.comment), ""),
                                 "example": next(g.objects(s, SKOS.example), ""),
                             })
@@ -694,25 +694,6 @@ class UpdateAlgoliaIndex(Workflow):
         ontologies = self.__scan_ontologies(parameters.branch_name)
         logger.info(f"Found {len(ontologies)} ontologies")
         all_records.extend(ontologies)
-        
-        # Save records to local file for backup
-        import json
-        import os
-        from datetime import datetime
-
-        # Create backup directory if it doesn't exist
-        backup_dir = "src/data/algolia_backups"
-        os.makedirs(backup_dir, exist_ok=True)
-
-        # Generate filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = os.path.join(backup_dir, f"algolia_records_{timestamp}.json")
-
-        # Save records to JSON file
-        with open(backup_file, "w", encoding="utf-8") as f:
-            json.dump(all_records, f, indent=2, ensure_ascii=False)
-
-        logger.info(f"Saved {len(all_records)} records to {backup_file}")
 
         # Update Algolia index
         result = await self.__algolia.update_index(parameters.index_name, all_records)
@@ -743,13 +724,22 @@ if __name__ == "__main__":
     from src.core.workflows.operations.UpdateAlgoliaIndexWorkflow import UpdateAlgoliaIndex, UpdateAlgoliaIndexConfiguration, UpdateAlgoliaIndexParameters
     from src import secret
     import asyncio
+
+    # Init algolia configuration
+    algolia_config = AlgoliaIntegrationConfiguration(
+        app_id=secret.get("ALGOLIA_APPLICATION_ID"),
+        api_key=secret.get("ALGOLIA_API_KEY")
+    )
     
     # Create configuration
     config = UpdateAlgoliaIndexConfiguration(
-        algolia_integration_config=AlgoliaIntegrationConfiguration(
-            app_id=secret.get("ALGOLIA_APPLICATION_ID"),
-            api_key=secret.get("ALGOLIA_API_KEY")
-        ),
+        algolia_integration_config=algolia_config
     )
+
+    # # Remove records from index
+    # algolia = AlgoliaIntegration(algolia_config)
+    # asyncio.run(algolia.delete_all_records(index_name="workspace-search"))
+
+    # Create workflow
     workflow = UpdateAlgoliaIndex(config)
     asyncio.run(workflow.run(UpdateAlgoliaIndexParameters(index_name="workspace-search")))
