@@ -62,6 +62,26 @@ class AlgoliaIntegration(Integration):
         if settings:
             index.set_settings(settings)
         return {"name": index_name, "settings": index.get_settings()}
+    
+    def list_indexes(self) -> Dict:
+        """List all indexes in Algolia.
+        
+        Returns:
+            Dict: List of indexes from Algolia
+        """
+        return self.__client.list_indices()
+    
+    def delete_index(self, index_name: str) -> Dict:
+        """Delete an index in Algolia.
+        
+        Args:
+            index_name (str): Name of the Algolia index to delete
+        
+        Returns:
+            Dict: Response from Algolia containing task ID
+        """
+        index = self.__client.init_index(index_name)
+        return index.delete()
 
     async def update_index(self, index_name: str, records: list) -> Dict:
         """Update records in a specified index.
@@ -108,6 +128,12 @@ def as_tools(configuration: AlgoliaIntegrationConfiguration):
         index_name: str = Field(..., description="Name of the Algolia index to create")
         settings: Dict[str, Any] = Field(None, description="Optional configuration settings for the index")
 
+    class AlgoliaListIndexesSchema(BaseModel):
+        pass
+
+    class AlgoliaDeleteIndexSchema(BaseModel):
+        index_name: str = Field(..., description="Name of the Algolia index to delete")
+
     class AlgoliaUpdateRecordsSchema(BaseModel):
         index_name: str = Field(..., description="Name of the Algolia index to update records")
         records: List[Dict[str, Any]] = Field(..., description="List of records to update")
@@ -117,7 +143,7 @@ def as_tools(configuration: AlgoliaIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="algolia_search",
+            name="algolia_search_index",
             description="Search for records in an Algolia index",
             func=integration.search,
             args_schema=AlgoliaSearchSchema
@@ -127,6 +153,18 @@ def as_tools(configuration: AlgoliaIntegrationConfiguration):
             description="Create a new index in Algolia",
             func=integration.create_index,
             args_schema=AlgoliaCreateIndexSchema
+        ),
+        StructuredTool(
+            name="algolia_list_indexes",
+            description="List all indexes in Algolia",
+            func=integration.list_indexes,
+            args_schema=AlgoliaListIndexesSchema
+        ),
+        StructuredTool(
+            name="algolia_delete_index",
+            description="Delete an index in Algolia",
+            func=integration.delete_index,
+            args_schema=AlgoliaDeleteIndexSchema
         ),
         StructuredTool(
             name="algolia_update_records",
