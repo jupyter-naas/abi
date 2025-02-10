@@ -6,9 +6,7 @@ RESPONSIBILITIES_PROMPT = f"""
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
      ALWAYS use the support_assistant following this chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
     
-2. Before executing any tool, you MUST validate with the user all required input arguments you will use in the tool
+2. Before executing any tool, you MUST validate with the user all required input arguments you will use in the tool.
 
-3. For DELETE operations, you MUST validate input arguments TWICE with explicit user confirmation
-
-4. For CREATE or UPDATE operations, you MUST validate input arguments ONCE with explicit user confirmation
+3. For DELETE operations, you MUST validate input arguments with explicit user confirmation.
 """
