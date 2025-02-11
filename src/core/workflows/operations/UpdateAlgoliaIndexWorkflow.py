@@ -52,8 +52,6 @@ class UpdateAlgoliaIndex(Workflow):
         assistants_dir = Path("src/core/assistants")
         
         for file in assistants_dir.rglob("*.py"):
-            if "__AssistantTemplate__" in str(file):
-                continue
             if file.stem.endswith("Assistant"):
                 logger.info(f"Processing assistant {file}")
                 try:
@@ -103,8 +101,6 @@ class UpdateAlgoliaIndex(Workflow):
         workflows_dir = Path("src/core/workflows")
         
         for file in workflows_dir.rglob("*.py"):
-            if "__WorkflowTemplate__" in str(file):
-                continue
             if "Workflow" in file.stem:
                 logger.info(f"Processing workflow {file}")
                 try:
@@ -118,10 +114,7 @@ class UpdateAlgoliaIndex(Workflow):
                     module = importlib.import_module(import_path)
                     class_name = file.stem
                     if hasattr(module, class_name):
-                        integration_class = getattr(module, class_name)
-                        doc = inspect.getdoc(integration_class) or ""
                         logo_url = getattr(module, "LOGO_URL", "")
-                        source_title = file.stem.replace("Workflow", "")
                         
                         # Get tools if as_tools function exists
                         if hasattr(module, "as_tools"):
@@ -137,12 +130,14 @@ class UpdateAlgoliaIndex(Workflow):
                                 for tool in tool_list:
                                     # Create a unique ID for each function
                                     function_id = hashlib.sha256(f"{file.stem}_{tool.name}".encode()).hexdigest()
+                                    tool_name = (tool.name).split("_", 1)[1].replace("_", " ").capitalize()
+                                    logger.info(f"Adding tool: {tool_name}")
                                     
                                     # Add function record
                                     results.append({
                                         "objectID": function_id,
                                         "type": "workflow",
-                                        "title": (tool.name).replace("_", " ").capitalize(),
+                                        "title": tool_name,
                                         "category": (file.parent.name).replace("_", " ").capitalize(),
                                         "description": tool.description,
                                         "image_url": logo_url,
@@ -154,35 +149,6 @@ class UpdateAlgoliaIndex(Workflow):
                                 logger.warning(f"Could not get tools for {file.stem}: {e}")
                 except ImportError as e:
                     logger.error(f"Error importing integration {file.stem}: {e}")
-
-                # try:
-                #     # Build import path based on file location
-                #     import_path = "src.core.workflows"
-                #     relative_path = file.relative_to(workflows_dir)
-                #     if len(relative_path.parts) > 1:
-                #         # File is in subfolder(s)
-                #         import_path += "." + ".".join(relative_path.parts[:-1])
-                #     import_path += f".{file.stem}"
-                    
-                #     module = importlib.import_module(import_path)
-                #     class_name = file.stem
-                #     if hasattr(module, class_name):
-                #         workflow_class = getattr(module, class_name)
-                #         doc = inspect.getdoc(workflow_class) or ""
-                #         results.append({
-                #             "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
-                #             "type": "workflow",
-                #             "category": file.parent.name,
-                #             "title": " ".join(re.findall('[A-Z][^A-Z]*', file.stem.replace("Workflow", ""))).strip(),
-                #             "description": doc,
-                #             "image_url": "",
-                #             "source_title": (file.parent.name).replace("_", " ").capitalize(),
-                #             "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/workflows/{relative_path}",
-                #             "ranking": 2
-                #         })
-                # except ImportError as e:
-                #     logger.error(f"Error importing workflow {file.stem}: {e}")
-        
         return results
     
     def __scan_pipelines(self, branch_name: str) -> List[Dict[str, str]]:
@@ -191,8 +157,6 @@ class UpdateAlgoliaIndex(Workflow):
         pipelines_dir = Path("src/core/pipelines")
         
         for file in pipelines_dir.rglob("*.py"):
-            if "__PipelineTemplate__" in str(file):
-                continue
             if file.stem.endswith("Pipeline"):
                 logger.info(f"Processing pipeline {file}")
                 try:
@@ -210,13 +174,14 @@ class UpdateAlgoliaIndex(Workflow):
                         pipeline_class = getattr(module, class_name)
                         doc = inspect.getdoc(pipeline_class) or ""
                         source_title = relative_path.parts[0] if len(relative_path.parts) > 1 else file.stem.replace("Pipeline", "")
+                        logo_url = getattr(module, "LOGO_URL", "")
                         results.append({
                             "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
                             "type": "data",
                             "category": "pipeline",
                             "title": " ".join(re.findall('[A-Z][^A-Z]*', file.stem.replace("Pipeline", ""))).strip() + " Pipeline",
                             "description": doc,
-                            "image_url": "",
+                            "image_url": logo_url,
                             "source_title": source_title.capitalize(),
                             "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/pipelines/{relative_path}",
                             "ranking": 2
@@ -232,8 +197,6 @@ class UpdateAlgoliaIndex(Workflow):
         models_dir = Path("src/core/models/naas")
         
         for file in models_dir.glob("*.py"):
-            if "__ModelTemplate__" in str(file):
-                continue
             if file.stem.endswith("AIModel"):
                 logger.info(f"Processing model {file}")
                 try:
@@ -271,8 +234,6 @@ class UpdateAlgoliaIndex(Workflow):
         integrations_dir = Path("src/core/integrations")
         
         for file in integrations_dir.glob("*.py"):
-            if "__IntegrationTemplate__" in str(file):
-                continue
             if file.stem.endswith("Integration"):
                 logger.info(f"Processing integration {file}")
                 try:
@@ -298,12 +259,14 @@ class UpdateAlgoliaIndex(Workflow):
                                 for tool in tool_list:
                                     # Create a unique ID for each function
                                     function_id = hashlib.sha256(f"{file.stem}_{tool.name}".encode()).hexdigest()
+                                    tool_name = (tool.name).split("_", 1)[1].replace("_", " ").capitalize()
+                                    logger.info(f"Adding tool: {tool_name}")
                                     
                                     # Add function record
                                     results.append({
                                         "objectID": function_id,
                                         "type": "integration",
-                                        "title": (tool.name).replace("_", " ").capitalize(),
+                                        "title": tool_name,
                                         "category": "function",
                                         "description": tool.description,
                                         "image_url": logo_url,
@@ -329,10 +292,6 @@ class UpdateAlgoliaIndex(Workflow):
         
         # Recursively scan all .py files in analytics directory and subdirectories
         for file in analytics_dir.rglob("*.py"):
-            # Skip template files
-            if "__AnalyticTemplate__" in str(file):
-                continue
-                
             # Only process files ending with Analytics
             if file.stem.endswith("Analytics"):
                 logger.info(f"Processing analytic {file}")
@@ -369,12 +328,14 @@ class UpdateAlgoliaIndex(Workflow):
                                 for tool in tool_list:
                                     # Create unique ID for each function
                                     function_id = hashlib.sha256(f"{file.stem}_{tool.name}".encode()).hexdigest()
+                                    tool_name = (tool.name).split("_", 1)[1].replace("_", " ").capitalize()
+                                    logger.info(f"Adding tool: {tool_name}")
                                     
                                     # Add function record
                                     results.append({
                                         "objectID": function_id,
                                         "type": "analytic",
-                                        "title": (tool.name).replace("_", " ").capitalize(),
+                                        "title": tool_name,
                                         "category": "function",
                                         "description": tool.description,
                                         "image_url": logo_url,
