@@ -342,7 +342,7 @@ class UpdateAlgoliaIndex(Workflow):
                                         "source_title": source_title,
                                         "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/analytics/{relative_path}",
                                         "ranking": 2,
-                                        "example": f"https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/{branch_name}/examples/analytics/{(file.stem.replace('Analytics', '')).lower()}_{tool.name.lower()}.png",
+                                        "example": f"https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/{branch_name}/examples/analytics/{tool.name}.png",
                                         "args_schema": "\n".join([
                                             f"-{name}: {field.description}\n"
                                             for name, field in (tool.args_schema.__fields__.items() if hasattr(tool, 'args_schema') else [])
