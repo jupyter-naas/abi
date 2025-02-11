@@ -3,10 +3,12 @@ from datetime import datetime
 from pathlib import Path
 import replicate
 import requests
-import os
+from src import config
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
+from src.services import services, ObjectStorageExceptions
 
 LOGO_URL = "https://logo.clearbit.com/replicate.com"
 
@@ -18,6 +20,8 @@ class ReplicateIntegrationConfiguration(IntegrationConfiguration):
         api_key (str): Replicate API key for authentication
     """
     api_key: str
+    storage_path: str = "storage/datalake/assets/image"
+    naas_integration_configuration: NaasIntegrationConfiguration
 
 class ReplicateIntegration(Integration):
     """Replicate API integration client.
@@ -31,31 +35,38 @@ class ReplicateIntegration(Integration):
         """Initialize Replicate client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
-        os.environ["REPLICATE_API_TOKEN"] = self.__configuration.api_key
-        
-        # Test connection
-        try:
-            # Simple test prediction to verify connection
-            replicate.Client(api_token=self.__configuration.api_key)
-        except Exception as e:
-            raise IntegrationConnectionError(f"Failed to connect to Replicate: {str(e)}")
-
-    def _ensure_image_directory(self) -> Path:
-        """Ensure the images directory exists and return its path."""
-        image_dir = Path("src/data/datalake/l1_bronze/assets/replicate_images")
-        image_dir.mkdir(parents=True, exist_ok=True)
-        return image_dir
+        self.__naas_integration = NaasIntegration(configuration.naas_integration_configuration)
 
     def _download_image(self, url: str, filename: str) -> str:
         """Download image from URL and save to file."""
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+        try:
+            response = requests.get(url, timeout=30)
+
+            # Save data to storage
+            services.storage_service.put_object(
+                prefix=self.__configuration.storage_path,
+                key=filename,
+                content=response.content
+            )
+
+            # Upload asset to Naas
+            asset = self.__naas_integration.upload_asset(
+                data=response.content,
+                workspace_id=config.workspace_id,
+                storage_name=config.storage_name,
+                prefix=str(self.__configuration.storage_path),
+                object_name=str(filename),
+                visibility="public"
+            )
+
+            # Save asset URL to JSON
+            asset_url = asset.get("asset").get("url")
+            if asset_url.endswith("/"):
+                asset_url = asset_url[:-1]
+        except Exception as e:
+            raise IntegrationConnectionError(f"Failed to download image: {str(e)}")
         
-        filepath = self._ensure_image_directory() / filename
-        with open(filepath, "wb") as f:
-            f.write(response.content)
-        
-        return str(filepath)
+        return f"File successfully uploaded to storage: {asset_url}"
 
     def generate_image(self, prompt: str, num_outputs: int = 1, aspect_ratio: str = "1:1") -> List[str]:
         """Generate images using Replicate's Flux Schnell model."""
