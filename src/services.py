@@ -25,11 +25,7 @@ class Services:
     
     def __init_dev(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
-        self.ontology_store_service = OntologyStoreFactory.OntologyStoreServiceNaas(
-            naas_api_key=self.secret.get('NAAS_API_KEY'),
-            workspace_id=self.config.workspace_id,
-            storage_name=self.config.storage_name
-        )
+        self.ontology_store_service = OntologyStoreFactory.OntologyStoreServiceFilesystem(self.config.ontology_store_path)
     
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
