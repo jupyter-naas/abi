@@ -1,9 +1,10 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.core.integrations import ReplicateIntegration
+from src.core.integrations import ReplicateIntegration, NaasIntegration
 from src.core.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
 from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration  
 from src.core.workflows.content.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 from fastapi import APIRouter
 from src.core.assistants.foundation.SupportAssistant import create_support_assistant
@@ -57,8 +58,10 @@ def create_content_assistant(
         ))
         tools += linkedin_posts_workflow.as_tools()
 
-    if replicate_key := secret.get('REPLICATE_API_KEY'):
-        tools += ReplicateIntegration.as_tools(ReplicateIntegrationConfiguration(api_key=replicate_key))
+    if (replicate_key := secret.get('REPLICATE_API_KEY')) and (naas_api_key := secret.get('NAAS_API_KEY')):
+        naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
+        replicate_integration_config = ReplicateIntegrationConfiguration(api_key=replicate_key, naas_integration_configuration=naas_integration_config)
+        tools += ReplicateIntegration.as_tools(replicate_integration_config)
 
     # Add agents
     agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))

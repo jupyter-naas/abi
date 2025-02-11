@@ -21,10 +21,10 @@ class ReplicateIntegrationConfiguration(IntegrationConfiguration):
         storage_path (str): Path to storage bucket
         naas_integration_configuration (NaasIntegrationConfiguration): Naas integration configuration
     """
+    naas_integration_configuration: NaasIntegrationConfiguration
     api_key: str
     storage_path: str = "datalake/assets/image"
-    naas_integration_configuration: NaasIntegrationConfiguration
-
+    
 class ReplicateIntegration(Integration):
     """Replicate API integration client.
     
