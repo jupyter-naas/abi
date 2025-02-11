@@ -63,7 +63,7 @@ class OntologyStoreService(IOntologyStoreService):
                 if (ss is None or ss == s) and (sp is None or sp == p) and (so is None or so == o):
                     if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
-                            callback(OntologyEvent.INSERT, name, s, p, o)
+                            callback(OntologyEvent.INSERT, name, (s, p, o))
                 
         merged_ontology = existing_ontology + filtered_inserted_ontology
 
@@ -81,7 +81,7 @@ class OntologyStoreService(IOntologyStoreService):
                 if (ss is None or ss == s) and (sp is None or sp == p) and (so is None or so == o):
                     if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.DELETE]:
-                            callback(OntologyEvent.DELETE, name, s, p, o)
+                            callback(OntologyEvent.DELETE, name, (s, p, o))
         
         merged_ontology = existing_ontology - filtered_removed_ontology
         
