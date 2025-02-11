@@ -892,157 +892,157 @@ def as_tools(configuration: GithubIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_user_details",
+            name="github_get_user_details",
             description="Get details about a GitHub user",
             func=lambda username: integration.get_user_details(username),
             args_schema=GetUserDetailsSchema
         ),
         StructuredTool(
-            name="create_user_repository",
+            name="github_create_user_repository",
             description="Create a new repository for the user",
             func=lambda name, private, description: integration.create_user_repository(name, private, description),
             args_schema=CreateUserRepositorySchema
         ),
         StructuredTool(
-            name="get_repository_details",
+            name="github_get_repository_details",
             description="Get details about a GitHub repository",
             func=lambda repo_name: integration.get_repository_details(repo_name),
             args_schema=GetRepositorySchema
         ),
         StructuredTool(
-            name="list_organization_repositories",
+            name="github_list_organization_repositories",
             description="Lists repositories for the specified organization in GitHub",
             func=lambda org: integration.list_organization_repositories(org),
             args_schema=ListOrganizationRepositoriesSchema
         ),
         StructuredTool(
-            name="create_organization_repository",
+            name="github_create_organization_repository",
             description="Create a new repository for an organization",
             func=lambda org, name, private, description: integration.create_organization_repository(org, name, private, description),
             args_schema=CreateOrganizationRepositorySchema
         ),
         StructuredTool(
-            name="update_organization_repository",
+            name="github_update_organization_repository",
             description="Update a repository for an organization",
             func=lambda org, repo_name, data: integration.update_organization_repository(org, repo_name, data),
             args_schema=UpdateOrganizationRepositorySchema
         ),
         StructuredTool(
-            name="delete_organization_repository",
+            name="github_delete_organization_repository",
             description="Delete a repository for an organization",
             func=lambda org, repo_name: integration.delete_organization_repository(org, repo_name),
             args_schema=DeleteOrganizationRepositorySchema
         ),
         StructuredTool(
-            name="list_repository_activities",
+            name="github_list_repository_activities",
             description="Get a list of activities for the specified repository",
             func=lambda repo_name: integration.list_repository_activities(repo_name),
             args_schema=ListRepositoryActivitiesSchema
         ),
         StructuredTool(
-            name="get_repository_contributors",
+            name="github_get_repository_contributors",
             description="Get a list of contributors for the specified repository",
             func=lambda repo_name: integration.get_repository_contributors(repo_name),
             args_schema=GetRepositoryContributorsSchema
         ),
         StructuredTool(
-            name="create_issue",
+            name="github_create_issue",
             description="Create an issue in the specified repository",
             func=lambda repo_name, title, body, labels, assignees: integration.create_issue(repo_name, title, body, labels, assignees),
             args_schema=CreateIssueSchema
         ),
         StructuredTool(
-            name="get_issue",
+            name="github_get_issue",
             description="Get an issue from a repository",
             func=lambda repo_name, issue_id: integration.get_issue(repo_name, issue_id),
             args_schema=GetIssueSchema
         ),
         StructuredTool(
-            name="list_issues",
+            name="github_list_issues",
             description="Get issues from a repository",
             func=lambda repo_name, filter, state, sort, direction, limit, since, labels: integration.list_issues(repo_name, filter, state, sort, direction, limit, since, labels),
             args_schema=GetIssuesSchema
         ),
         StructuredTool(
-            name="list_issue_comments",
+            name="github_list_issue_comments",
             description="Get comments on an issue or pull request",
             func=lambda repo_name, sort, direction, since, per_page, page: integration.list_issue_comments(repo_name, sort, direction, since, per_page, page),
             args_schema=ListIssueCommentsSchema
         ),
         StructuredTool(
-            name="get_issue_comment",
+            name="github_get_issue_comment",
             description="Get a comment on an issue or pull request",
             func=lambda repo_name, comment_id: integration.get_issue_comment(repo_name, comment_id),
             args_schema=GetIssueCommentSchema
         ),
         StructuredTool(
-            name="update_issue_comment",
+            name="github_update_issue_comment",
             description="Update a comment on an issue or pull request",
             func=lambda repo_name, comment_id, body: integration.update_issue_comment(repo_name, comment_id, body),
             args_schema=UpdateIssueCommentSchema
         ),
         StructuredTool(
-            name="delete_issue_comment",
+            name="github_delete_issue_comment",
             description="Delete a comment on an issue or pull request",
             func=lambda repo_name, comment_id: integration.delete_issue_comment(repo_name, comment_id),
             args_schema=DeleteIssueCommentSchema
         ),
         StructuredTool(
-            name="create_issue_comment",
+            name="github_create_issue_comment",
             description="Create a comment on an issue or pull request",
             func=lambda repo_name, issue_number, body: integration.create_issue_comment(repo_name, issue_number, body),
             args_schema=CreateIssueCommentSchema
         ),
         StructuredTool(
-            name="create_pull_request",
+            name="github_create_pull_request",
             description="Create a pull request in the specified repository",
             func=lambda repo_name, title, body, head, base: integration.create_pull_request(repo_name, title, body, head, base),
             args_schema=CreatePullRequestSchema
         ),
         StructuredTool(
-            name="list_assignees",
+            name="github_list_assignees",
             description="Get a list of assignees for the specified repository",
             func=lambda repo_name: integration.list_assignees(repo_name),
             args_schema=ListAssigneesSchema
         ),
         StructuredTool(
-            name="check_assignee_permission",
+            name="github_check_assignee_permission",
             description="Check if a user can be assigned to a specific issue",
             func=lambda repo_name, issue_number, assignee: integration.check_assignee_permission(repo_name, issue_number, assignee),
             args_schema=CheckAssigneePermissionSchema
         ),
         StructuredTool(
-            name="add_assignees_to_issue",
+            name="github_add_assignees_to_issue",
             description="Add assignees to an issue",
             func=lambda repo_name, issue_number, assignees: integration.add_assignees_to_issue(repo_name, issue_number, assignees),
             args_schema=AddAssigneesToIssueSchema
         ),
         StructuredTool(
-            name="remove_assignees_from_issue",
+            name="github_remove_assignees_from_issue",
             description="Remove assignees from an issue",
             func=lambda repo_name, issue_number, assignees: integration.remove_assignees_from_issue(repo_name, issue_number, assignees),
             args_schema=RemoveAssigneesFromIssueSchema
         ),
         StructuredTool(
-            name="list_repository_secrets",
+            name="github_list_repository_secrets",
             description="List all secrets available in a GitHub repository without revealing their encrypted values",
             func=lambda repo_name: integration.list_repository_secrets(repo_name),
             args_schema=ListRepositorySecretsSchema
         ),
         StructuredTool(
-            name="get_repository_secret",
+            name="github_get_repository_secret",
             description="Get a secret from a GitHub repository",
             func=lambda repo_name, secret_name: integration.get_repository_secret(repo_name, secret_name),
             args_schema=GetRepositorySecretSchema
         ),
         StructuredTool(
-            name="create_or_update_repository_secret",
+            name="github_create_or_update_repository_secret",
             description="Create or update a secret in a GitHub repository",
             func=lambda repo_name, secret_name, value: integration.create_or_update_repository_secret(repo_name, secret_name, value),
             args_schema=CreateOrUpdateRepositorySecretSchema
         ),
         StructuredTool(
-            name="delete_repository_secret",
+            name="github_delete_repository_secret",
             description="Delete a secret from a GitHub repository",
             func=lambda repo_name, secret_name: integration.delete_repository_secret(repo_name, secret_name),
             args_schema=DeleteRepositorySecretSchema

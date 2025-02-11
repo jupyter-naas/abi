@@ -114,10 +114,9 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="ask_perplexity",
-            description="OpenData: Ask a question to Perplexity AI to get external data from internet",
-            func=lambda question, system_prompt="Be precise and concise.", temperature=0.2, max_tokens=None: 
-                integration.ask_question(question, system_prompt, temperature, max_tokens),
+            name="perplexity_ask_question",
+            description="Ask a question to Perplexity AI to get external data/open data from web.",
+            func=lambda **kwargs: integration.ask_question(**kwargs),
             args_schema=AskQuestionSchema
         )
     ]

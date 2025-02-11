@@ -217,32 +217,32 @@ def as_tools(configuration: GCPStorageIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="list_gcp_buckets",
+            name="gcpstorage_list_buckets",
             description="List Cloud Storage buckets",
             func=lambda: integration.list_buckets(),
             args_schema=BaseModel
         ),
         StructuredTool(
-            name="get_gcp_bucket",
+            name="gcpstorage_get_bucket",
             description="Get bucket information",
             func=lambda bucket_name: integration.get_bucket(bucket_name),
             args_schema=BucketSchema
         ),
         StructuredTool(
-            name="list_gcp_blobs",
+            name="gcpstorage_list_blobs",
             description="List blobs in a bucket",
             func=lambda bucket_name, prefix: integration.list_blobs(bucket_name, prefix),
             args_schema=ListBlobsSchema
         ),
         StructuredTool(
-            name="upload_to_gcp_storage",
+            name="gcpstorage_upload_blob",
             description="Upload a file to Cloud Storage",
             func=lambda bucket_name, source_file, destination_blob_name:
                 integration.upload_blob(bucket_name, source_file, destination_blob_name),
             args_schema=UploadBlobSchema
         ),
         StructuredTool(
-            name="download_from_gcp_storage",
+            name="gcpstorage_download_blob",
             description="Download a blob from Cloud Storage",
             func=lambda bucket_name, source_blob_name, destination_file:
                 integration.download_blob(bucket_name, source_blob_name, destination_file),

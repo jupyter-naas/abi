@@ -149,25 +149,25 @@ def as_tools(configuration: InstagramIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="get_instagram_profile",
+            name="instagram_get_profile",
             description="Get the authenticated user's Instagram profile information",
             func=lambda: integration.get_user_profile(),
             args_schema=GetUserProfileSchema
         ),
         StructuredTool(
-            name="get_instagram_media",
+            name="instagram_get_media",
             description="Get the user's Instagram media posts",
             func=lambda limit: integration.get_media(limit),
             args_schema=GetMediaSchema
         ),
         StructuredTool(
-            name="get_instagram_media_insights",
+            name="instagram_get_media_insights",
             description="Get insights/metrics for a specific Instagram media item",
             func=lambda media_id: integration.get_media_insights(media_id),
             args_schema=GetMediaInsightsSchema
         ),
         StructuredTool(
-            name="send_instagram_message",
+            name="instagram_send_message",
             description="Send a direct message to a specified Instagram user",
             func=lambda to, message: integration.send_message(to, message),
             args_schema=SendMessageSchema

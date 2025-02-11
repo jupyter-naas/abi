@@ -279,27 +279,27 @@ def as_tools(configuration: GoogleCalendarIntegrationConfiguration):
             args_schema=ListEventsSchema
         ),
         StructuredTool(
-            name="get_calendar_event",
+            name="googlecalendar_get_event",
             description="Get a specific Google Calendar event",
             func=lambda event_id, calendar_id: integration.get_event(event_id, calendar_id),
             args_schema=GetEventSchema
         ),
         StructuredTool(
-            name="create_calendar_event",
+            name="googlecalendar_create_event",
             description="Create a new Google Calendar event",
             func=lambda summary, start, end, description, location, attendees, calendar_id:
                 integration.create_event(summary, start, end, description, location, attendees, calendar_id),
             args_schema=CreateEventSchema
         ),
         StructuredTool(
-            name="update_calendar_event",
+            name="googlecalendar_update_event",
             description="Update an existing Google Calendar event",
             func=lambda event_id, summary, start, end, description, location, attendees, calendar_id:
                 integration.update_event(event_id, summary, start, end, description, location, attendees, calendar_id),
             args_schema=UpdateEventSchema
         ),
         StructuredTool(
-            name="delete_calendar_event",
+            name="googlecalendar_delete_event",
             description="Delete a Google Calendar event",
             func=lambda event_id, calendar_id: integration.delete_event(event_id, calendar_id),
             args_schema=GetEventSchema

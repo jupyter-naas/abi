@@ -11,6 +11,8 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 
+LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
+
 @dataclass
 class CreateIssueAndAddToProjectWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for creating GitHub issues and adding them to projects.

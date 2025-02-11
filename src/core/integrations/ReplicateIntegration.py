@@ -100,7 +100,7 @@ def as_tools(configuration: ReplicateIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="generate_image",
+            name="replicate_generate_image",
             description="Generate images using Replicate's Flux Schnell model",
             func=lambda prompt, num_outputs=1, aspect_ratio="1:1": integration.generate_image(prompt, num_outputs, aspect_ratio),
             args_schema=GenerateImageSchema

@@ -277,20 +277,20 @@ def as_tools(configuration: GCPBigQueryIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="run_bigquery",
+            name="gcpbigquery_run_query",
             description="Run a BigQuery SQL query",
             func=lambda query, params, timeout: integration.run_query(query, params, timeout),
             args_schema=QuerySchema
         ),
         StructuredTool(
-            name="create_bigquery_dataset",
+            name="gcpbigquery_create_dataset",
             description="Create a new BigQuery dataset",
             func=lambda dataset_id, description, labels:
                 integration.create_dataset(dataset_id, description, labels),
             args_schema=CreateDatasetSchema
         ),
         StructuredTool(
-            name="create_bigquery_table",
+            name="gcpbigquery_create_table",
             description="Create a BigQuery table",
             func=lambda dataset_id, table_id, table_schema, description, partition_field, cluster_fields:
                 integration.create_table(dataset_id, table_id, table_schema, description,
@@ -298,7 +298,7 @@ def as_tools(configuration: GCPBigQueryIntegrationConfiguration):
             args_schema=CreateTableSchema
         ),
         StructuredTool(
-            name="load_bigquery_table",
+            name="gcpbigquery_load_table",
             description="Load data into a BigQuery table from JSON",
             func=lambda dataset_id, table_id, json_rows, table_schema:
                 integration.load_table_from_json(dataset_id, table_id, json_rows, table_schema),

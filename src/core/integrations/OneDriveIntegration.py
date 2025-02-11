@@ -126,19 +126,19 @@ def as_tools(configuration: OneDriveIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="list_onedrive_files",
+            name="onedrive_list_files",
             description="List files and folders in the specified OneDrive folder",
             func=lambda folder_path: integration.list_files(folder_path),
             args_schema=ListFilesSchema
         ),
         StructuredTool(
-            name="get_onedrive_file_details",
+            name="onedrive_get_file_details",
             description="Get details of a specific file in OneDrive",
             func=lambda file_id: integration.get_file_details(file_id),
             args_schema=GetFileDetailsSchema
         ),
         StructuredTool(
-            name="search_onedrive_files",
+            name="onedrive_search_files",
             description="Search for files and folders in OneDrive",
             func=lambda query: integration.search_files(query),
             args_schema=SearchFilesSchema

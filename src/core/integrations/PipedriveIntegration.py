@@ -179,31 +179,31 @@ def as_tools(configuration: PipedriveIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_pipedrive_deals",
+            name="pipedrive_get_deals",
             description="Get list of deals with optional status filter",
             func=lambda status: integration.get_deals(status),
             args_schema=DealsSchema
         ),
         StructuredTool(
-            name="get_pipedrive_deal",
+            name="pipedrive_get_deal",
             description="Get deal details by ID",
             func=lambda deal_id: integration.get_deal(deal_id),
             args_schema=DealSchema
         ),
         StructuredTool(
-            name="get_pipedrive_persons",
+            name="pipedrive_get_persons",
             description="Get list of persons with optional search term",
             func=lambda search_term: integration.get_persons(search_term),
             args_schema=SearchSchema
         ),
         StructuredTool(
-            name="get_pipedrive_organizations",
+            name="pipedrive_get_organizations",
             description="Get list of organizations with optional search term",
             func=lambda search_term: integration.get_organizations(search_term),
             args_schema=SearchSchema
         ),
         StructuredTool(
-            name="create_pipedrive_deal",
+            name="pipedrive_create_deal",
             description="Create a new deal",
             func=lambda title, value, currency, person_id, org_id: integration.create_deal(
                 title, value, currency, person_id, org_id

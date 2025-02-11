@@ -175,25 +175,25 @@ def as_tools(configuration: ClockifyIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_clockify_workspaces",
+            name="clockify_get_workspaces",
             description="Retrieve all workspaces for the authenticated user",
             func=lambda: integration.get_workspaces(),
             args_schema=WorkspaceSchema
         ),
         StructuredTool(
-            name="get_clockify_users",
+            name="clockify_get_users",
             description="Retrieve all users in a workspace",
             func=lambda workspace_id: integration.get_users(workspace_id),
             args_schema=UserSchema
         ),
-        StructuredTool(
-            name="get_clockify_projects",
+        StructuredTool( 
+            name="clockify_get_projects",
             description="Retrieve all projects in a workspace",
             func=lambda workspace_id: integration.get_projects(workspace_id),
             args_schema=ProjectSchema
         ),
         StructuredTool(
-            name="get_clockify_time_entries",
+            name="clockify_get_time_entries",
             description="Retrieve all time entries for a user in a workspace",
             func=lambda workspace_id, user_id, start_date, end_date: integration.get_time_entries(workspace_id, user_id, start_date, end_date),
             args_schema=TimeEntriesSchema
