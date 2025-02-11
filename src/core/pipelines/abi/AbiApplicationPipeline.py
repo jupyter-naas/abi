@@ -7,7 +7,6 @@ from fastapi import APIRouter
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from abi.utils.OntologyYaml import OntologyYaml
 from rdflib import Graph, RDFS, OWL, DC, URIRef, RDF
-from rdflib.namespace import Namespace
 from pathlib import Path
 import importlib
 import inspect
@@ -15,8 +14,6 @@ import pydash as _
 from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 import re
 import glob
-import os
-from datetime import datetime
 import yaml
 from yaml import Dumper, Loader
 
@@ -75,7 +72,7 @@ class AbiApplicationPipeline(Pipeline):
         logger.debug(f"---> Found {nb_integrations} integrations.")
         coordinates = self.__generate_coordinates(900, nb_integrations)
         
-        from src.mappings import ASSISTANTS_INTEGRATIONS
+        from src.core.pipelines.abi.mappings import ASSISTANTS_INTEGRATIONS
         # Create mapping of integration to order based on ASSISTANTS_INTEGRATIONS
         integrations_order = {}
         order = 0
@@ -128,7 +125,7 @@ class AbiApplicationPipeline(Pipeline):
         logger.debug(f"---> Found {nb_ontologies} ontologies.")
         coordinates = self.__generate_coordinates(500, nb_ontologies)
 
-        from src.mappings import ASSISTANTS_ONTOLOGIES
+        from src.core.pipelines.abi.mappings import ASSISTANTS_ONTOLOGIES
         # Create mapping of ontology to order based on ASSISTANTS_ONTOLOGIES
         ontologies_order = {}
         order = 0
@@ -237,7 +234,7 @@ class AbiApplicationPipeline(Pipeline):
                             x = 50
                             y = -25
                         else:
-                            from src.mappings import ASSISTANTS_ORDER
+                            from src.core.pipelines.abi.mappings import ASSISTANTS_ORDER
                             i = ASSISTANTS_ORDER.get(str(file_stem))
                             x = coordinates[i][0]
                             y = coordinates[i][1]
@@ -409,7 +406,7 @@ class AbiApplicationPipeline(Pipeline):
         # Store the graph
         self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
 
-        from src.mappings import COLORS_NODES
+        from src.core.pipelines.abi.mappings import COLORS_NODES
         # Generate YAML data with mapping colors
         yaml_data = OntologyYaml.rdf_to_yaml(graph, class_colors_mapping=COLORS_NODES, display_relations_names=False)
 

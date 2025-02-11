@@ -842,140 +842,140 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
     # Create tools list
     tools = [
         StructuredTool(
-            name="list_account_exports",
+            name="mailchimp_list_account_exports",
             description="Get a list of account exports",
             func=lambda **kwargs: integration.list_account_exports(**kwargs),
             args_schema=ListAccountExportsSchema
         ),
         StructuredTool(
-            name="create_account_export",
+            name="mailchimp_create_account_export",
             description="Create a new account export",
             func=lambda **kwargs: integration.create_account_export(**kwargs),
             args_schema=CreateAccountExportSchema
         ),
         StructuredTool(
-            name="get_campaign_info",
+            name="mailchimp_get_campaign_info",
             description="Get information about a specific campaign",
             func=lambda **kwargs: integration.get_campaign_info(**kwargs),
             args_schema=CampaignSchema
         ),
         StructuredTool(
-            name="set_campaign_content",
+            name="mailchimp_set_campaign_content",
             description="Set the content for a campaign",
             func=lambda **kwargs: integration.set_campaign_content(**kwargs),
             args_schema=CampaignContentSchema
         ),
         StructuredTool(
-            name="list_audiences",
+            name="mailchimp_list_audiences",
             description="Get information about all lists in the account",
             func=lambda: integration.list_audiences(),
             args_schema=AudienceSchema
         ),
         StructuredTool(
-            name="get_audience_info",
+            name="mailchimp_get_audience_info",
             description="Get information about a specific audience",
             func=lambda **kwargs: integration.get_audience_info(**kwargs),
             args_schema=AudienceSchema
         ),
         StructuredTool(
-            name="get_member_info",
+            name="mailchimp_get_member_info",
             description="Get information about a specific list member",
             func=lambda **kwargs: integration.get_member_info(**kwargs),
             args_schema=MemberSchema
         ),
         StructuredTool(
-            name="get_segment_info",
+            name="mailchimp_get_segment_info",
             description="Get information about a specific segment",
             func=lambda **kwargs: integration.get_segment_info(**kwargs),
             args_schema=SegmentSchema
         ),
         StructuredTool(
-            name="create_campaign",
+            name="mailchimp_create_campaign",
             description="Create a new Mailchimp campaign",
             func=lambda **kwargs: integration.create_campaign(**kwargs),
             args_schema=CampaignCreateSchema
         ),
         StructuredTool(
-            name="update_campaign_settings",
+            name="mailchimp_update_campaign_settings",
             description="Update settings for a specific campaign",
             func=lambda **kwargs: integration.update_campaign_settings(**kwargs),
             args_schema=CampaignUpdateSchema
         ),
         StructuredTool(
-            name="delete_campaign",
+            name="mailchimp_delete_campaign",
             description="Remove a campaign from your Mailchimp account",
             func=lambda **kwargs: integration.delete_campaign(**kwargs),
             args_schema=CampaignSchema
         ),
         StructuredTool(
-            name="send_campaign",
+            name="mailchimp_send_campaign",
             description="Send a Mailchimp campaign",
             func=lambda **kwargs: integration.send_campaign(**kwargs),
             args_schema=CampaignSchema
         ),
         StructuredTool(
-            name="schedule_campaign",
+            name="mailchimp_schedule_campaign",
             description="Schedule a campaign for delivery",
             func=lambda **kwargs: integration.schedule_campaign(**kwargs),
             args_schema=CampaignScheduleSchema
         ),
         StructuredTool(
-            name="unschedule_campaign",
+            name="mailchimp_unschedule_campaign",
             description="Unschedule a scheduled campaign",
             func=lambda **kwargs: integration.unschedule_campaign(**kwargs),
             args_schema=CampaignSchema
         ),
         StructuredTool(
-            name="send_test_email",
+            name="mailchimp_send_test_email",
             description="Send a test email for a campaign",
             func=lambda **kwargs: integration.send_test_email(**kwargs),
             args_schema=CampaignTestEmailSchema
         ),
         StructuredTool(
-            name="add_or_update_list_member",
+            name="mailchimp_add_or_update_list_member",
             description="Add or update a list member",
             func=lambda **kwargs: integration.add_or_update_list_member(**kwargs),
             args_schema=ListMemberActionSchema
         ),
         StructuredTool(
-            name="archive_list_member",
+            name="mailchimp_archive_list_member",
             description="Archive a list member",
             func=lambda **kwargs: integration.archive_list_member(**kwargs),
             args_schema=MemberSchema
         ),
         StructuredTool(
-            name="delete_list_member",
+            name="mailchimp_delete_list_member",
             description="Delete all personally identifiable information related to a list member",
             func=lambda **kwargs: integration.delete_list_member(**kwargs),
             args_schema=MemberSchema
         ),
         StructuredTool(
-            name="list_webhooks",
+            name="mailchimp_list_webhooks",
             description="Get information about all webhooks for a specific list",
             func=lambda **kwargs: integration.list_webhooks(**kwargs),
             args_schema=ListSchema
         ),
         StructuredTool(
-            name="add_webhook",
+            name="mailchimp_add_webhook",
             description="Create a new webhook for a specific list",
             func=lambda **kwargs: integration.add_webhook(**kwargs),
             args_schema=WebhookSchema
         ),
         StructuredTool(
-            name="delete_webhook",
+            name="mailchimp_delete_webhook",
             description="Delete a specific webhook in a list",
             func=lambda **kwargs: integration.delete_webhook(**kwargs),
             args_schema=WebhookSchema
         ),
         # Member Events
         StructuredTool(
-            name="list_member_events",
+            name="mailchimp_list_member_events",
             description="Get events for a contact",
             func=lambda **kwargs: integration.list_member_events(**kwargs),
             args_schema=MemberSchema
         ),
         StructuredTool(
-            name="add_member_event",
+            name="mailchimp_add_member_event",
             description="Add an event for a list member",
             func=lambda **kwargs: integration.add_member_event(**kwargs),
             args_schema=MemberEventSchema
@@ -983,31 +983,31 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Member Notes
         StructuredTool(
-            name="list_member_notes",
+            name="mailchimp_list_member_notes",
             description="Get recent notes for a specific list member",
             func=lambda **kwargs: integration.list_member_notes(**kwargs),
             args_schema=MemberSchema
         ),
         StructuredTool(
-            name="add_member_note",
+            name="mailchimp_add_member_note",
             description="Add a new note for a specific subscriber",
             func=lambda **kwargs: integration.add_member_note(**kwargs),
             args_schema=MemberNoteSchema
         ),
         StructuredTool(
-            name="get_member_note",
+            name="mailchimp_get_member_note",
             description="Get a specific note for a specific list member",
             func=lambda **kwargs: integration.get_member_note(**kwargs),
             args_schema=MemberNoteSchema
         ),
         StructuredTool(
-            name="update_member_note",
+            name="mailchimp_update_member_note",
             description="Update a specific note for a specific list member",
             func=lambda **kwargs: integration.update_member_note(**kwargs),
             args_schema=MemberNoteSchema
         ),
         StructuredTool(
-            name="delete_member_note",
+            name="mailchimp_delete_member_note",
             description="Delete a specific note for a specific list member",
             func=lambda **kwargs: integration.delete_member_note(**kwargs),
             args_schema=MemberNoteSchema
@@ -1015,31 +1015,31 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Interest Categories
         StructuredTool(
-            name="list_interest_categories",
+            name="mailchimp_list_interest_categories",
             description="Get information about a list's interest categories",
             func=lambda **kwargs: integration.list_interest_categories(**kwargs),
             args_schema=ListSchema
         ),
         StructuredTool(
-            name="create_interest_category",
+            name="mailchimp_create_interest_category",
             description="Create a new interest category",
             func=lambda **kwargs: integration.create_interest_category(**kwargs),
             args_schema=InterestCategorySchema
         ),
         StructuredTool(
-            name="get_interest_category_info",
+            name="mailchimp_get_interest_category_info",
             description="Get information about a specific interest category",
             func=lambda **kwargs: integration.get_interest_category_info(**kwargs),
             args_schema=InterestCategorySchema
         ),
         StructuredTool(
-            name="update_interest_category",
+            name="mailchimp_update_interest_category",
             description="Update a specific interest category",
             func=lambda **kwargs: integration.update_interest_category(**kwargs),
             args_schema=InterestCategorySchema
         ),
         StructuredTool(
-            name="delete_interest_category",
+            name="mailchimp_delete_interest_category",
             description="Delete a specific interest category",
             func=lambda **kwargs: integration.delete_interest_category(**kwargs),
             args_schema=InterestCategorySchema
@@ -1047,31 +1047,31 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Interests
         StructuredTool(
-            name="list_interests_in_category",
+            name="mailchimp_list_interests_in_category",
             description="Get a list of this category's interests",
             func=lambda **kwargs: integration.list_interests_in_category(**kwargs),
             args_schema=InterestCategorySchema
         ),
         StructuredTool(
-            name="add_interest_in_category",
+            name="mailchimp_add_interest_in_category",
             description="Create a new interest or 'group name' for a specific category",
             func=lambda **kwargs: integration.add_interest_in_category(**kwargs),
             args_schema=InterestSchema
         ),
         StructuredTool(
-            name="get_interest_in_category",
+            name="mailchimp_get_interest_in_category",
             description="Get interests or 'group names' for a specific category",
             func=lambda **kwargs: integration.get_interest_in_category(**kwargs),
             args_schema=InterestSchema
         ),
         StructuredTool(
-            name="update_interest_in_category",
+            name="mailchimp_update_interest_in_category",
             description="Update interests or 'group names' for a specific category",
             func=lambda **kwargs: integration.update_interest_in_category(**kwargs),
             args_schema=InterestSchema
         ),
         StructuredTool(
-            name="delete_interest_in_category",
+            name="mailchimp_delete_interest_in_category",
             description="Delete interests or group names in a specific category",
             func=lambda **kwargs: integration.delete_interest_in_category(**kwargs),
             args_schema=InterestSchema
@@ -1079,31 +1079,31 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Merge Fields
         StructuredTool(
-            name="list_merge_fields",
+            name="mailchimp_list_merge_fields",
             description="Get a list of all merge fields for an audience",
             func=lambda **kwargs: integration.list_merge_fields(**kwargs),
             args_schema=ListSchema
         ),
         StructuredTool(
-            name="add_merge_field",
+            name="mailchimp_add_merge_field",
             description="Add a new merge field for a specific audience",
             func=lambda **kwargs: integration.add_merge_field(**kwargs),
             args_schema=MergeFieldSchema
         ),
         StructuredTool(
-            name="get_merge_field",
+            name="mailchimp_get_merge_field",
             description="Get information about a specific merge field",
             func=lambda **kwargs: integration.get_merge_field(**kwargs),
             args_schema=MergeFieldSchema
         ),
         StructuredTool(
-            name="update_merge_field",
+            name="mailchimp_update_merge_field",
             description="Update a specific merge field",
             func=lambda **kwargs: integration.update_merge_field(**kwargs),
             args_schema=MergeFieldSchema
         ),
         StructuredTool(
-            name="delete_merge_field",
+            name="mailchimp_delete_merge_field",
             description="Delete a specific merge field",
             func=lambda **kwargs: integration.delete_merge_field(**kwargs),
             args_schema=MergeFieldSchema
@@ -1111,7 +1111,7 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Segments
         StructuredTool(
-            name="batch_add_remove_members",
+            name="mailchimp_batch_add_remove_members",
             description="Batch add/remove list members to static segment",
             func=lambda **kwargs: integration.batch_add_remove_members(**kwargs),
             args_schema=SegmentActionSchema
@@ -1119,25 +1119,25 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Surveys
         StructuredTool(
-            name="list_surveys",
+            name="mailchimp_list_surveys",
             description="Get information about all available surveys for a specific list",
             func=lambda **kwargs: integration.list_surveys(**kwargs),
             args_schema=ListSchema
         ),
         StructuredTool(
-            name="get_survey",
+            name="mailchimp_get_survey",
             description="Get details about a specific survey",
             func=lambda **kwargs: integration.get_survey(**kwargs),
             args_schema=SurveySchema
         ),
         StructuredTool(
-            name="publish_survey",
+            name="mailchimp_publish_survey",
             description="Publish a survey that is in draft, unpublished, or has been previously published and edited",
             func=lambda **kwargs: integration.publish_survey(**kwargs),
             args_schema=SurveySchema
         ),
         StructuredTool(
-            name="unpublish_survey",
+            name="mailchimp_unpublish_survey",
             description="Unpublish a survey that has been published",
             func=lambda **kwargs: integration.unpublish_survey(**kwargs),
             args_schema=SurveySchema
@@ -1145,7 +1145,7 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
         
         # Tags
         StructuredTool(
-            name="search_tags",
+            name="mailchimp_search_tags",
             description="Search for tags on a list by name",
             func=lambda **kwargs: integration.search_tags(**kwargs),
             args_schema=TagSearchSchema

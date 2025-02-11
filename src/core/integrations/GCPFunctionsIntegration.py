@@ -244,25 +244,25 @@ def as_tools(configuration: GCPFunctionsIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="list_cloud_functions",
+            name="gcpfunctions_list_functions",
             description="List Cloud Functions in the project",
             func=lambda show_deleted, filter_str: integration.list_functions(show_deleted, filter_str),
             args_schema=ListFunctionsSchema
         ),
         StructuredTool(
-            name="get_cloud_function",
+            name="gcpfunctions_get_function",
             description="Get details of a specific Cloud Function",
             func=lambda function_name: integration.get_function(function_name),
             args_schema=GetFunctionSchema
         ),
         StructuredTool(
-            name="call_cloud_function",
+            name="gcpfunctions_call_function",
             description="Call a Cloud Function via HTTP trigger",
             func=lambda function_name, data, timeout: integration.call_function(function_name, data, timeout),
             args_schema=CallFunctionSchema
         ),
         StructuredTool(
-            name="get_cloud_function_logs",
+            name="gcpfunctions_get_logs",
             description="Get logs for a specific Cloud Function",
             func=lambda function_name, start_time, end_time, page_size:
                 integration.get_function_logs(function_name, start_time, end_time, page_size),

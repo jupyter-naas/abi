@@ -153,7 +153,7 @@ def as_tools(configuration: NewsAPIIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_news_top_headlines",
+            name="newsapi_get_top_headlines",
             description="Get top news headlines with optional filters",
             func=lambda country, category, q, page_size, page: integration.get_top_headlines(
                 country, category, q, page_size, page
@@ -161,7 +161,7 @@ def as_tools(configuration: NewsAPIIntegrationConfiguration):
             args_schema=TopHeadlinesSchema
         ),
         StructuredTool(
-            name="search_news_articles",
+            name="newsapi_search_articles",
             description="Search all news articles with various filters",
             func=lambda q, from_date, to_date, language, sort_by, page_size, page: integration.get_everything(
                 q, from_date, to_date, language, sort_by, page_size, page

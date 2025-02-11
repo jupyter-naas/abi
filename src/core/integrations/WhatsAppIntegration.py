@@ -88,8 +88,8 @@ def as_tools(configuration: WhatsAppIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="send_whatsapp_message",
-            description="Send a WhatsApp message to a specified number",
+            name="whatsapp_send_message",
+            description="Send a WhatsApp message to a specified number.",
             func=lambda to, message: integration.send_message(to, message),
             args_schema=SendMessageSchema
         )

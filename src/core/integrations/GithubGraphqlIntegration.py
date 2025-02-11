@@ -447,13 +447,13 @@ def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="get_github_project_node_id",
+            name="githubgraphql_get_project_node_id",
             description="Get the node ID of an organization project in GitHub from its number.",
             func=lambda organization, number: integration.get_project_node_id(organization, number),
             args_schema=GetProjectNodeIdSchema
         ),
         StructuredTool(
-            name="get_github_project_details",
+            name="githubgraphql_get_project_details",
             description="Get detailed information about a GitHub Project including fields configuration and items count from its node ID.",
             func=lambda project_node_id: integration.get_project_details(project_node_id),
             args_schema=GetProjectDetailsSchema

@@ -136,3 +136,51 @@ class SendGridIntegration(Integration):
             Dict: List of unsubscribe groups
         """
         return self._make_request("GET", "/asm/groups") 
+
+def as_tools(configuration: SendGridIntegrationConfiguration):
+    """Convert SendGrid integration into LangChain tools."""
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field
+    
+    integration = SendGridIntegration(configuration)
+
+    class CreateContactsSchema(BaseModel):
+        contacts: List[Dict] = Field(..., description="List of contact data dictionaries")
+        list_ids: List[str] = Field(..., description="List of list IDs to add contacts to")
+
+    class SearchContactsSchema(BaseModel):
+        query: Optional[str] = Field(None, description="SGQL query string")
+        email: Optional[str] = Field(None, description="Email address to search for")
+
+    class GetListsSchema(BaseModel):
+        pass    
+
+    class GetUnsubscribeGroupsSchema(BaseModel):
+        pass
+    
+    return [
+        StructuredTool(
+            name="sendgrid_create_contacts",
+            description="Create or update contacts and add them to specified lists.",
+            func=lambda contacts, list_ids: integration.create_contacts(contacts, list_ids),
+            args_schema=CreateContactsSchema
+        ),
+        StructuredTool(
+            name="sendgrid_search_contacts",
+            description="Search for contacts.",
+            func=lambda query, email: integration.search_contacts(query, email),
+            args_schema=SearchContactsSchema
+        ),
+        StructuredTool(
+            name="sendgrid_get_lists",
+            description="Get all contact lists.",
+            func=lambda: integration.get_lists(),
+            args_schema=GetListsSchema
+        ),
+        StructuredTool(
+            name="sendgrid_get_unsubscribe_groups",
+            description="Get all unsubscribe groups.",
+            func=lambda: integration.get_unsubscribe_groups(),
+            args_schema=GetUnsubscribeGroupsSchema
+        )
+    ] 

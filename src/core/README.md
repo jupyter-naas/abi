@@ -22,7 +22,6 @@ Houses application-specific code, including terminal agents.
 ### `assistants/`
 Defines various AI assistants with different scopes and integrations.
 
-- **custom/**: Custom assistants tailored to specific needs.
 - **domain/**: Domain-specific assistants focusing on particular areas.
 - **expert/**: Expert assistants focused on specific tasks and tools.
 - **foundation/**: Foundational components and manager for assistants.

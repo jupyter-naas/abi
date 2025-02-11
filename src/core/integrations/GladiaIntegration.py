@@ -184,13 +184,13 @@ def as_tools(configuration: GladiaIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="transcribe_audio",
+            name="gladia_transcribe_audio",
             description="Transcribe audio file to text",
             func=transcribe_wrapper,
             args_schema=TranscriptionSchema
         ),
         StructuredTool(
-            name="text_to_speech",
+            name="gladia_text_to_speech",
             description="Convert text to speech",
             func=lambda text, voice_id, language, audio_format: integration.text_to_speech(
                 text, voice_id, language, audio_format
@@ -198,7 +198,7 @@ def as_tools(configuration: GladiaIntegrationConfiguration):
             args_schema=TTSSchema
         ),
         StructuredTool(
-            name="list_gladia_voices",
+            name="gladia_list_voices",
             description="Get list of available voices for text-to-speech",
             func=lambda: integration.list_available_voices(),
             args_schema=VoiceListSchema

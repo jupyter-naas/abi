@@ -227,7 +227,7 @@ def as_tools(configuration: GoogleAnalyticsIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="run_analytics_report",
+            name="googleanalytics_run_report",
             description="Run a Google Analytics report",
             func=lambda metrics, dimensions, date_ranges, dimension_filters, metric_filters, offset, limit:
                 integration.run_report(metrics, dimensions, date_ranges, dimension_filters,
@@ -235,7 +235,7 @@ def as_tools(configuration: GoogleAnalyticsIntegrationConfiguration):
             args_schema=RunReportSchema
         ),
         StructuredTool(
-            name="run_analytics_realtime",
+            name="googleanalytics_run_realtime_report",
             description="Run a Google Analytics realtime report",
             func=lambda metrics, dimensions, dimension_filters, metric_filters, limit:
                 integration.run_realtime_report(metrics, dimensions, dimension_filters,

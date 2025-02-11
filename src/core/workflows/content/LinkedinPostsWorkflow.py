@@ -11,6 +11,7 @@ from abi.workflow.workflow import WorkflowParameters
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 
+LOGO_URL = "https://logo.clearbit.com/linkedin.com"
 
 @dataclass
 class LinkedinPostsWorkflowConfiguration(WorkflowConfiguration):
@@ -42,21 +43,6 @@ class LinkedinPostsWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__linkedin_integration = LinkedInIntegration(self.__configuration.linkedin_integration_config)
-
-    def as_tools(self) -> list[StructuredTool]:
-        """Returns a list of LangChain tools for this workflow."""
-        return [StructuredTool(
-            name="get_linkedin_posts",
-            description="Get LinkedIn posts for a profile or organization within date range",
-            func=lambda **kwargs: self.run(LinkedinPostsWorkflowParameters(**kwargs)).to_dict('records'),
-            args_schema=LinkedinPostsWorkflowParameters
-        )]
-
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this workflow to the given router."""
-        @router.post("/linkedin/posts")
-        def get_posts(parameters: LinkedinPostsWorkflowParameters):
-            return self.run(parameters).to_dict('records')
 
     def run(self, parameters: LinkedinPostsWorkflowParameters) -> pd.DataFrame:
         # Initialize empty DataFrame
@@ -125,4 +111,18 @@ class LinkedinPostsWorkflow(Workflow):
                     raise e
                 break
 
-        return df.reset_index(drop=True)
+        return df.to_dict('records')
+    
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow."""
+        return [
+            StructuredTool(
+                name="linkedin_get_posts_from_url",
+                description="Get LinkedIn posts for a profile or organization within date range.",
+                func=lambda **kwargs: self.run(LinkedinPostsWorkflowParameters(**kwargs)).to_dict('records'),
+                args_schema=LinkedinPostsWorkflowParameters
+            )
+        ]
+
+    def as_api(self, router: APIRouter) -> None:
+        pass

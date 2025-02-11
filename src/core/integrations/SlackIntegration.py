@@ -189,26 +189,26 @@ def as_tools(configuration: SlackIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="list_slack_channels",
-            description="Retrieve all channels the bot has access to",
+            name="slack_list_channels",
+            description="Retrieve all channels the bot has access to in Slack.",
             func=lambda types: integration.list_channels(types),
             args_schema=ChannelListSchema
         ),
         StructuredTool(
-            name="list_slack_users",
-            description="Retrieve all users in the workspace",
+            name="slack_list_users",
+            description="Retrieve all users in the workspace in Slack.",
             func=lambda: integration.list_users(),
             args_schema=UserListSchema
         ),
         StructuredTool(
-            name="send_slack_message",
-            description="Send a message to a Slack channel",
+            name="slack_send_message",
+            description="Send a message to a Slack channel.",
             func=lambda channel, text, thread_ts: integration.send_message(channel, text, thread_ts),
             args_schema=MessageSchema
         ),
         StructuredTool(
-            name="get_slack_channel_history",
-            description="Retrieve message history from a Slack channel",
+            name="slack_get_channel_history",
+            description="Retrieve message history from a Slack channel.",
             func=lambda channel, limit: integration.get_channel_history(channel, limit),
             args_schema=HistorySchema
         )

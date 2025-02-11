@@ -214,39 +214,39 @@ def as_tools(configuration: LinkedInSalesNavigatorConfiguration):
 
     return [
         StructuredTool(
-            name="get_sales_navigator_account",
+            name="linkedinsalesnavigator_get_account",
             description="Get detailed information about a specific Sales Navigator account",
             func=lambda account_id: integration.get_account(account_id),
             args_schema=GetAccountSchema
         ),
         StructuredTool(
-            name="search_sales_navigator_accounts",
+            name="linkedinsalesnavigator_search_accounts",
             description="Search for accounts using various filters in Sales Navigator",
             func=lambda keywords=None, filters=None, start=0, count=25: 
                 integration.search_accounts(keywords, filters, start, count),
             args_schema=SearchAccountsSchema
         ),
         StructuredTool(
-            name="get_sales_navigator_lead",
+            name="linkedinsalesnavigator_get_lead",
             description="Get detailed information about a specific Sales Navigator lead",
             func=lambda lead_id: integration.get_lead(lead_id),
             args_schema=GetLeadSchema
         ),
         StructuredTool(
-            name="search_sales_navigator_leads",
+            name="linkedinsalesnavigator_search_leads",
             description="Search for leads using various filters in Sales Navigator",
             func=lambda keywords=None, filters=None, start=0, count=25: 
                 integration.search_leads(keywords, filters, start, count),
             args_schema=SearchLeadsSchema
         ),
         StructuredTool(
-            name="send_sales_navigator_message",
+            name="linkedinsalesnavigator_send_message",
             description="Send a message to a lead in Sales Navigator",
             func=lambda recipient_id, message: integration.send_message(recipient_id, message),
             args_schema=SendMessageSchema
         ),
         StructuredTool(
-            name="get_sales_navigator_conversation_history",
+            name="linkedinsalesnavigator_get_conversation_history",
             description="Get message history for a specific conversation in Sales Navigator",
             func=lambda conversation_id, count=50: 
                 integration.get_conversation_history(conversation_id, count),

@@ -195,37 +195,37 @@ def as_tools(configuration: GlassdoorIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="search_companies",
+            name="glassdoor_search_companies",
             description="Search for companies on Glassdoor",
             func=lambda query, location: integration.search_companies(query, location),
             args_schema=SearchCompaniesSchema
         ),
         StructuredTool(
-            name="get_company_reviews",
+            name="glassdoor_get_company_reviews",
             description="Get reviews for a specific company",
             func=lambda company_id, page: integration.get_company_reviews(company_id, page),
             args_schema=GetCompanyReviewsSchema
         ), 
         StructuredTool(
-            name="get_company_salaries",
+            name="glassdoor_get_company_salaries",
             description="Get salary information for a specific company",
             func=lambda company_id: integration.get_company_salaries(company_id),
             args_schema=GetCompanySalariesSchema
         ),
         StructuredTool(
-            name="get_company_interviews",
+            name="glassdoor_get_company_interviews",
             description="Get interview reviews for a specific company",
             func=lambda company_id, page: integration.get_company_interviews(company_id, page),
             args_schema=GetCompanyInterviewsSchema
         ),
         StructuredTool(
-            name="get_company_benefits",
+            name="glassdoor_get_company_benefits",
             description="Get benefits information for a specific company",
             func=lambda company_id: integration.get_company_benefits(company_id),
             args_schema=GetCompanyBenefitsSchema
         ),
         StructuredTool(
-            name="get_job_listings",
+            name="glassdoor_get_job_listings",
             description="Search for job listings on Glassdoor",
             func=lambda keyword, location, page: integration.get_job_listings(keyword, location, page),
             args_schema=GetJobListingsSchema

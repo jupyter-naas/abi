@@ -116,20 +116,20 @@ def as_tools(configuration: ZeroBounceIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="validate_email",
+            name="zerobounce_validate_email",
             description="Validate an email address using ZeroBounce API",
             func=integration.validate_email,
             args_schema=ValidateEmailSchema
         ),
         StructuredTool(
-            name="get_credits",
-            description="Get the number of remaining API credits",
+            name="zerobounce_get_credits",
+            description="Get the number of remaining API credits from ZeroBounce.",
             func=integration.get_credits,
             args_schema=GetCreditsSchema
         ),
         StructuredTool(
-            name="get_api_usage",
-            description="Get API usage statistics for a date range",
+            name="zerobounce_get_api_usage",
+            description="Get API usage statistics for a date range from ZeroBounce.",
             func=integration.get_api_usage,
             args_schema=GetApiUsageSchema
         )

@@ -877,121 +877,121 @@ def as_tools(configuration: QontoIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="get_organization_details",
+            name="qonto_get_organization_details",
             description="Get organization and its bank accounts details and balances. Always use this tool to get the bank accounts details.",
             func=lambda: integration.get_organization_details(),
             args_schema=GetOrganizationSchema
         ),
         StructuredTool(
-            name="list_transactions",
+            name="qonto_list_transactions",
             description="Get list of transactions for an account.",
             func=lambda **kwargs: integration.list_transactions(**kwargs),
             args_schema=ListTransactionsSchema
         ),
         StructuredTool(
-            name="get_transaction",
+            name="qonto_get_transaction",
             description="Retrieve a single transaction by ID.",
             func=lambda **kwargs: integration.get_transaction(**kwargs),
             args_schema=GetTransactionSchema
         ),
         StructuredTool(
-            name="get_supplier_invoices",
+            name="qonto_get_supplier_invoices",
             description="Retrieve supplier invoices for the organization.",
             func=lambda **kwargs: integration.get_supplier_invoices(**kwargs),
             args_schema=GetSupplierInvoicesSchema
         ),
         StructuredTool(
-            name="get_client_invoices",
+            name="qonto_get_client_invoices",
             description="Retrieve client invoices for the organization.",
             func=lambda **kwargs: integration.get_client_invoices(**kwargs),
             args_schema=GetClientInvoicesSchema
         ),
         StructuredTool(
-            name="list_clients",
+            name="qonto_list_clients",
             description="Get list of clients for the organization.",
             func=lambda **kwargs: integration.list_clients(**kwargs),
             args_schema=ListClientsSchema
         ),
         StructuredTool(
-            name="get_client",
+            name="qonto_get_client",
             description="Get details of a specific client by ID.",
             func=lambda **kwargs: integration.get_client(**kwargs),
             args_schema=GetClientSchema
         ),
         StructuredTool(
-            name="list_cards",
+            name="qonto_list_cards",
             description="Get list of cards for the organization.",
             func=lambda **kwargs: integration.list_cards(**kwargs),
             args_schema=ListCardsSchema
         ),
         StructuredTool(
-            name="get_card_data_view",
+            name="qonto_get_card_data_view",
             description="Get URL for card data view iframe.",
             func=lambda **kwargs: integration.get_card_data_view(**kwargs),
             args_schema=GetCardDataViewSchema
         ),
         StructuredTool(
-            name="list_beneficiaries",
+            name="qonto_list_beneficiaries",
             description="Get list of beneficiaries.",
             func=lambda **kwargs: integration.list_beneficiaries(**kwargs),
             args_schema=ListBeneficiariesSchema
         ),
         StructuredTool(
-            name="get_beneficiary",
+            name="qonto_get_beneficiary",
             description="Get details of a single beneficiary.",
             func=lambda **kwargs: integration.get_beneficiary(**kwargs),
             args_schema=GetBeneficiarySchema
         ),
         StructuredTool(
-            name="get_attachment",
+            name="qonto_get_attachment",
             description="Get details of a specific attachment.",
             func=lambda **kwargs: integration.get_attachment(**kwargs),
             args_schema=GetAttachmentSchema
         ),
         StructuredTool(
-            name="list_labels",
+            name="qonto_list_labels",
             description="Get all labels within the organization.",
             func=lambda: integration.list_labels(),
             args_schema=ListLabelsSchema
         ),
         StructuredTool(
-            name="get_label",
+            name="qonto_get_label",
             description="Get details of a specific label.",
             func=lambda **kwargs: integration.get_label(**kwargs),
             args_schema=GetLabelSchema
         ),
         StructuredTool(
-            name="list_memberships",
+            name="qonto_list_memberships",
             description="Get all memberships within the organization.",
             func=lambda: integration.list_memberships(),
             args_schema=ListMembershipsSchema
         ),
         StructuredTool(
-            name="get_membership",
+            name="qonto_get_membership",
             description="Get details of the authenticated membership.",
             func=lambda: integration.get_membership(),
             args_schema=GetMembershipSchema
         ),
         StructuredTool(
-            name="list_transaction_attachments",
+            name="qonto_list_transaction_attachments",
             description="Get list of attachments for a transaction.",
             func=lambda **kwargs: integration.list_transaction_attachments(**kwargs),
             args_schema=ListTransactionAttachmentsSchema
         ),
         StructuredTool(
-            name="list_teams",
+            name="qonto_list_teams",
             description="Get list of teams within the organization.",
             func=lambda **kwargs: integration.list_teams(**kwargs),
             args_schema=ListTeamsSchema
         ),
         StructuredTool(
-            name="list_statements",
+            name="qonto_list_statements",
             description="Get list of statements for the organization.",
             func=lambda **kwargs: integration.list_statements(**kwargs),
             args_schema=ListStatementsSchema
         ),
         StructuredTool(
-            name="get_statement",
+            name="qonto_get_statement",
             description="Get details of a specific statement by ID.",
             func=lambda **kwargs: integration.get_statement(**kwargs),
             args_schema=GetStatementSchema

@@ -252,38 +252,38 @@ def as_tools(configuration: AWSS3IntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="list_s3_buckets",
+            name="awss3_list_buckets",
             description="List all S3 buckets",
             func=lambda: integration.list_buckets(),
             args_schema=BaseModel
         ),
         StructuredTool(
-            name="list_s3_objects",
+            name="awss3_list_objects",
             description="List objects in an S3 bucket",
             func=lambda bucket, prefix, max_keys: integration.list_objects(bucket, prefix, max_keys),
             args_schema=ListObjectsSchema
         ),
         StructuredTool(
-            name="upload_to_s3",
+            name="awss3_upload_file",
             description="Upload a file to S3",
             func=lambda source_path, bucket, prefix, destination_path:
                 integration.upload_file(source_path, bucket, prefix, destination_path),
             args_schema=UploadFileSchema
         ),
         StructuredTool(
-            name="download_from_s3",
+            name="awss3_download_file",
             description="Download a file from S3",
             func=lambda bucket, key, local_path: integration.download_file(bucket, key, local_path),
             args_schema=DownloadFileSchema
         ),
         StructuredTool(
-            name="delete_from_s3",
+            name="awss3_delete_object",
             description="Delete an object from S3",
             func=lambda bucket, key: integration.delete_object(bucket, key),
             args_schema=ObjectSchema
         ),
         StructuredTool(
-            name="get_s3_presigned_url",
+            name="awss3_get_presigned_url",
             description="Generate a presigned URL for an S3 object",
             func=lambda bucket, key, expiration, operation:
                 integration.generate_presigned_url(bucket, key, expiration, operation),

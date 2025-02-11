@@ -911,193 +911,193 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="create_naas_workspace",
+            name="naas_create_workspace",
             description="Create a new workspace on naas.ai platform",
             func=lambda **kwargs: integration.create_workspace(**kwargs),
             args_schema=CreateWorkspaceSchema
         ),
         StructuredTool(
-            name="get_naas_workspace",
+            name="naas_get_workspace",
             description="Get details of a specific workspace from naas.ai platform",
             func=lambda workspace_id: integration.get_workspace(workspace_id),
             args_schema=GetWorkspaceSchema
         ),
         StructuredTool(
-            name="get_naas_workspaces",
+            name="naas_get_workspaces",
             description="Get all workspaces from naas.ai platform",
             func=lambda: integration.get_workspaces(),
             args_schema=GetWorkspacesSchema
         ),
         StructuredTool(
-            name="get_naas_personal_workspace",
+            name="naas_get_personal_workspace",
             description="Get personal workspace ID from naas.ai platform",
             func=lambda: integration.get_personal_workspace(),
             args_schema=GetPersonalWorkspaceSchema
         ),
         StructuredTool(
-            name="update_naas_workspace",
+            name="naas_update_workspace",
             description="Update an existing workspace on naas.ai platform",
             func=lambda **kwargs: integration.update_workspace(**kwargs),
             args_schema=UpdateWorkspaceSchema
         ),
         StructuredTool(
-            name="delete_naas_workspace",
+            name="naas_delete_workspace",
             description="Delete an existing workspace from naas.ai platform",
             func=lambda workspace_id: integration.delete_workspace(workspace_id),
             args_schema=DeleteWorkspaceSchema
         ),
         StructuredTool(
-            name="create_naas_assistant",
+            name="naas_create_assistant",
             description="Create a new plugin or assistant from workspace",
             func=lambda workspace_id, data: integration.create_plugin(workspace_id, data),
             args_schema=CreatePluginSchema
         ),
         StructuredTool(
-            name="get_naas_assistant",
+            name="naas_get_assistant",
             description="Get plugin detail or assistant from workspace",
             func=lambda workspace_id, plugin_id: integration.get_plugin(workspace_id, plugin_id),
             args_schema=GetPluginSchema
         ),
         StructuredTool(
-            name="get_naas_assistants",
+            name="naas_get_assistants",
             description="Get all plugins or assistants from workspace",
             func=lambda workspace_id: integration.get_plugins(workspace_id),
             args_schema=GetPluginsSchema
         ),
         StructuredTool(
-            name="update_naas_assistant",
+            name="naas_update_assistant",
             description="Update an existing plugin or assistant from workspace",
             func=lambda workspace_id, plugin_id, data: integration.update_plugin(workspace_id, plugin_id, data),
             args_schema=UpdatePluginSchema
         ),
         StructuredTool(
-            name="delete_naas_assistant",
+            name="naas_delete_assistant",
             description="Delete an existing plugin or assistant from workspace",
             func=lambda workspace_id, plugin_id: integration.delete_plugin(workspace_id, plugin_id),
             args_schema=DeletePluginSchema
         ),
         StructuredTool(
-            name="create_naas_ontology",
+            name="naas_create_ontology",
             description="Create a new ontology from workspace",
             func=lambda workspace_id, label, source, level, description, logo_url, is_public: integration.create_ontology(workspace_id, label, source, level, description, logo_url, is_public),
             args_schema=CreateOntologySchema
         ),
         StructuredTool(
-            name="get_naas_ontology",
+            name="naas_get_ontology",
             description="Get ontology by ID",
             func=lambda workspace_id, ontology_id: integration.get_ontology(workspace_id, ontology_id),
             args_schema=GetOntologySchema
         ),
         StructuredTool(
-            name="get_naas_ontologies",
+            name="naas_get_ontologies",
             description="Get all ontologies from workspace",
             func=lambda workspace_id: integration.get_ontologies(workspace_id),
             args_schema=GetOntologiesSchema
         ),
         StructuredTool(
-            name="update_naas_ontology",
+            name="naas_update_ontology",
             description="Update an existing ontology from workspace",
             func=lambda workspace_id, ontology_id, download_url, source, level, description, logo_url, is_public: integration.update_ontology(workspace_id, ontology_id, download_url, source, level, description, logo_url, is_public),
             args_schema=UpdateOntologySchema
         ),
         StructuredTool(
-            name="delete_naas_ontology",
+            name="naas_delete_ontology",
             description="Delete an existing ontology from workspace",
             func=lambda workspace_id, ontology_id: integration.delete_ontology(workspace_id, ontology_id),
             args_schema=DeleteOntologySchema
         ),
         StructuredTool(
-            name="get_naas_workspace_users",
+            name="naas_get_workspace_users",
             description="List all users in a workspace",
             func=lambda workspace_id: integration.get_workspace_users(workspace_id),
             args_schema=GetWorkspaceUsersSchema
         ),
         StructuredTool(
-            name="invite_naas_workspace_user",
+            name="naas_invite_workspace_user",
             description="Invite a user to a workspace",
             func=lambda **kwargs: integration.invite_workspace_user(**kwargs),
             args_schema=InviteWorkspaceUserSchema
         ),
         StructuredTool(
-            name="get_naas_workspace_user",
+            name="naas_get_workspace_user",
             description="Get details of a specific user in a workspace",
             func=lambda workspace_id, user_id: integration.get_workspace_user(workspace_id, user_id),
             args_schema=GetWorkspaceUserSchema
         ),
         StructuredTool(
-            name="update_naas_workspace_user",
+            name="naas_update_workspace_user",
             description="Update a user's role or status in a workspace",
             func=lambda **kwargs: integration.update_workspace_user(**kwargs),
             args_schema=UpdateWorkspaceUserSchema
         ),
         StructuredTool(
-            name="delete_naas_workspace_user",
+            name="naas_delete_workspace_user",
             description="Remove a user from a workspace",
             func=lambda workspace_id, user_id: integration.delete_workspace_user(workspace_id, user_id),
             args_schema=DeleteWorkspaceUserSchema
         ),
         StructuredTool(
-            name="list_naas_secrets",
+            name="naas_list_secrets",
             description="List all secrets in a workspace",
             func=lambda: integration.list_secrets(),
             args_schema=ListSecretsSchema
         ),
         StructuredTool(
-            name="list_secrets_names",
+            name="naas_list_secrets_names",
             description="List all secrets names.",
             func=lambda: integration.list_secrets_names(),
             args_schema=ListSecretsSchema
         ),
         StructuredTool(
-            name="create_naas_secret",
+            name="naas_create_secret",
             description="Create a new secret.",
             func=lambda name, value: integration.create_secret(name, value),
             args_schema=CreateSecretSchema
         ),
         StructuredTool(
-            name="get_naas_secret",
+            name="naas_get_secret",
             description="Get a specific secret.",
             func=lambda secret_id: integration.get_secret(secret_id),
             args_schema=GetSecretSchema
         ),
         StructuredTool(
-            name="update_naas_secret",
+            name="naas_update_secret",
             description="Update an existing secret.",
             func=lambda secret_id, value: integration.update_secret(secret_id, value),
             args_schema=UpdateSecretSchema
         ),
         StructuredTool(
-            name="delete_naas_secret",
+            name="naas_delete_secret",
             description="Delete a secret.",
             func=lambda secret_id: integration.delete_secret(secret_id),
             args_schema=DeleteSecretSchema
         ),
         StructuredTool(
-            name="list_naas_workspace_storage",
+            name="naas_list_workspace_storage",
             description="List all storage in a workspace",
             func=lambda workspace_id: integration.list_workspace_storage(workspace_id),
             args_schema=ListWorkspaceStorageSchema
         ),
         StructuredTool(
-            name="list_naas_workspace_storage_objects",
+            name="naas_list_workspace_storage_objects",
             description="List all objects and subdirectories in a workspace storage location",
             func=lambda workspace_id, storage_name, prefix: integration.list_workspace_storage_objects(workspace_id, storage_name, prefix),
             args_schema=ListWorkspaceStorageObjectsSchema
         ),
         StructuredTool(
-            name="create_naas_workspace_storage",
+            name="naas_create_workspace_storage",
             description="Create a new storage in a workspace",
             func=lambda workspace_id, storage_name: integration.create_workspace_storage(workspace_id, storage_name),
             args_schema=CreateWorkspaceStorageSchema
         ),
         StructuredTool(
-            name="create_naas_workspace_storage_credentials",
+            name="naas_create_workspace_storage_credentials",
             description="Create credentials for workspace storage",
             func=lambda workspace_id, storage_name: integration.create_workspace_storage_credentials(workspace_id, storage_name),
             args_schema=CreateWorkspaceStorageCredentialsSchema
         ),
         StructuredTool(
-            name="get_naas_storage_credentials",
+            name="naas_get_storage_credentials",
             description="Get or create storage credentials",
             func=lambda **kwargs: integration.get_storage_credentials(**kwargs),
             args_schema=GetStorageCredentialsSchema

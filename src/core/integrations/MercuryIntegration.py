@@ -187,43 +187,43 @@ def as_tools(configuration: MercuryIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="get_mercury_accounts",
+            name="mercury_get_accounts",
             description="Get list of bank accounts",
             func=lambda: integration.get_accounts(),
             args_schema=GetAccountsSchema
         ),
         StructuredTool(
-            name="get_mercury_account_details",
+            name="mercury_get_account_details",
             description="Get detailed information for a specific account",
             func=lambda account_id: integration.get_account_details(account_id),
             args_schema=GetAccountDetailsSchema
         ),
         StructuredTool(
-            name="get_mercury_account_cards",
+            name="mercury_get_account_cards",
             description="Get list of cards associated with an account",
             func=lambda account_id: integration.get_account_cards(account_id),
             args_schema=GetAccountCardsSchema
         ),
         StructuredTool(
-            name="get_mercury_transactions",
+            name="mercury_get_transactions",
             description="Get list of transactions for an account",
             func=lambda account_id, limit, offset, status, start_date, end_date, search: integration.get_transactions(account_id, limit, offset, status, start_date, end_date, search),
             args_schema=GetTransactionsSchema
         ),
         StructuredTool(
-            name="get_mercury_transaction_details",
+            name="mercury_get_transaction_details",
             description="Get detailed information for a specific transaction",
             func=lambda account_id, transaction_id: integration.get_transaction_details(account_id, transaction_id),
             args_schema=GetTransactionDetailsSchema
         ),
         StructuredTool(
-            name="get_mercury_recipients",
+            name="mercury_get_recipients",
             description="Get list of recipients",
             func=lambda: integration.get_recipients(),
             args_schema=GetRecipientsSchema
         ),
         StructuredTool(
-            name="get_mercury_recipient_details",
+            name="mercury_get_recipient_details",
             description="Get detailed information for a specific recipient",
             func=lambda recipient_id: integration.get_recipient_details(recipient_id),
             args_schema=GetRecipientDetailsSchema

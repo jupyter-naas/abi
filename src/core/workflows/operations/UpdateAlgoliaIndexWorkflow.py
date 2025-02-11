@@ -16,6 +16,8 @@ from pathlib import Path
 import hashlib
 import asyncio
 
+LOGO_URL = "https://logo.clearbit.com/algolia.com"
+
 CCO = Namespace("https://www.commoncoreontologies.org/")
 DC = DCTERMS = Namespace("http://purl.org/dc/terms/")
 DC11 = Namespace("http://purl.org/dc/elements/1.1/")
@@ -75,25 +77,6 @@ class UpdateAlgoliaIndex(Workflow):
                     title = (file.stem.replace("Assistant", " ")) + "Assistant"
                     slug = title.lower().replace(" ", "-").replace("_", "-")
                     
-                    # # Get available tools
-                    # tools = []
-                    # # Find create_*_agent function dynamically
-                    # create_agent_funcs = [f for f in dir(module) if f.startswith("create_") and f.endswith("_agent")]
-                    # for create_func in create_agent_funcs:
-                    #     try:
-                    #         agent = getattr(module, create_func)()
-                    #         if hasattr(agent, "tools"):
-                    #             tools = [
-                    #                 {
-                    #                     "name": tool.name,
-                    #                     "description": tool.description
-                    #                 }
-                    #                 for tool in agent.tools
-                    #             ]
-                    #             break  # Use first successful agent creation
-                    #     except Exception as e:
-                    #         logger.warning(f"Could not get tools for {file.stem} using {create_func}: {e}")
-                    
                     results.append({
                         "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
                         "type": "assistant", 
@@ -108,7 +91,6 @@ class UpdateAlgoliaIndex(Workflow):
                         "model": getattr(module, "MODEL", "gpt-4o-mini"), 
                         "temperature": getattr(module, "TEMPERATURE", 0),
                         "system_prompt": getattr(module, "SYSTEM_PROMPT", ""),
-                        # "tools": "\n".join([f"- {tool['name']}: {tool['description']}" for tool in tools])  # Add tools with descriptions
                     })
                 except ImportError as e:
                     logger.error(f"Error importing assistant {file.stem}: {e}")
@@ -123,10 +105,9 @@ class UpdateAlgoliaIndex(Workflow):
         for file in workflows_dir.rglob("*.py"):
             if "__WorkflowTemplate__" in str(file):
                 continue
-            if file.stem.endswith("Workflow"):
+            if "Workflow" in file.stem:
                 logger.info(f"Processing workflow {file}")
                 try:
-                    # Build import path based on file location
                     import_path = "src.core.workflows"
                     relative_path = file.relative_to(workflows_dir)
                     if len(relative_path.parts) > 1:
@@ -137,21 +118,70 @@ class UpdateAlgoliaIndex(Workflow):
                     module = importlib.import_module(import_path)
                     class_name = file.stem
                     if hasattr(module, class_name):
-                        workflow_class = getattr(module, class_name)
-                        doc = inspect.getdoc(workflow_class) or ""
-                        results.append({
-                            "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
-                            "type": "workflow",
-                            "category": file.parent.name,
-                            "title": " ".join(re.findall('[A-Z][^A-Z]*', file.stem.replace("Workflow", ""))).strip(),
-                            "description": doc,
-                            "image_url": "",
-                            "source_title": (file.parent.name).replace("_", " ").capitalize(),
-                            "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/workflows/{relative_path}",
-                            "ranking": 2
-                        })
+                        integration_class = getattr(module, class_name)
+                        doc = inspect.getdoc(integration_class) or ""
+                        logo_url = getattr(module, "LOGO_URL", "")
+                        source_title = file.stem.replace("Workflow", "")
+                        
+                        # Get tools if as_tools function exists
+                        if hasattr(module, "as_tools"):
+                            try:
+                                # Create dummy configuration to get tools
+                                config_class = getattr(module, f"{file.stem}Configuration")
+                                dummy_config = config_class(**{
+                                    field.name: "dummy" if field.type == str else 0
+                                    for field in config_class.__dataclass_fields__.values()
+                                })
+                                
+                                tool_list = module.as_tools(dummy_config)
+                                for tool in tool_list:
+                                    # Create a unique ID for each function
+                                    function_id = hashlib.sha256(f"{file.stem}_{tool.name}".encode()).hexdigest()
+                                    
+                                    # Add function record
+                                    results.append({
+                                        "objectID": function_id,
+                                        "type": "workflow",
+                                        "title": (tool.name).replace("_", " ").capitalize(),
+                                        "category": (file.parent.name).replace("_", " ").capitalize(),
+                                        "description": tool.description,
+                                        "image_url": logo_url,
+                                        "source_title": (file.parent.name).replace("_", " ").capitalize(),
+                                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/workflows/{relative_path}",
+                                        "ranking": 2,
+                                    })
+                            except Exception as e:
+                                logger.warning(f"Could not get tools for {file.stem}: {e}")
                 except ImportError as e:
-                    logger.error(f"Error importing workflow {file.stem}: {e}")
+                    logger.error(f"Error importing integration {file.stem}: {e}")
+
+                # try:
+                #     # Build import path based on file location
+                #     import_path = "src.core.workflows"
+                #     relative_path = file.relative_to(workflows_dir)
+                #     if len(relative_path.parts) > 1:
+                #         # File is in subfolder(s)
+                #         import_path += "." + ".".join(relative_path.parts[:-1])
+                #     import_path += f".{file.stem}"
+                    
+                #     module = importlib.import_module(import_path)
+                #     class_name = file.stem
+                #     if hasattr(module, class_name):
+                #         workflow_class = getattr(module, class_name)
+                #         doc = inspect.getdoc(workflow_class) or ""
+                #         results.append({
+                #             "objectID": hashlib.sha256(file.stem.encode()).hexdigest(),
+                #             "type": "workflow",
+                #             "category": file.parent.name,
+                #             "title": " ".join(re.findall('[A-Z][^A-Z]*', file.stem.replace("Workflow", ""))).strip(),
+                #             "description": doc,
+                #             "image_url": "",
+                #             "source_title": (file.parent.name).replace("_", " ").capitalize(),
+                #             "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/workflows/{relative_path}",
+                #             "ranking": 2
+                #         })
+                # except ImportError as e:
+                #     logger.error(f"Error importing workflow {file.stem}: {e}")
         
         return results
     
@@ -253,24 +283,6 @@ class UpdateAlgoliaIndex(Workflow):
                         doc = inspect.getdoc(integration_class) or ""
                         logo_url = getattr(module, "LOGO_URL", "")
                         source_title = file.stem.replace("Integration", "")
-
-                        # # Add main integration record
-                        # integration_id = hashlib.sha256(file.stem.encode()).hexdigest()
-                        # results.append({
-                        #     "objectID": integration_id,
-                        #     "type": "integration",
-                        #     "title": (file.stem.replace("Integration", " ")) + "Integration",
-                        #     "category": "tool",
-                        #     "description": doc,
-                        #     "image_url": logo_url,
-                        #     "source_title": source_title,
-                        #     "source_url": f"https://github.com/jupyter-naas/abi/src/integrations/{file.name}",
-                        #     "ranking": 1,
-                        #     # "args_schema": "\n".join([
-                        #     #     f"{field.name}: {field.metadata.get('description', '')}"
-                        #     #     for field in (config_class.__dataclass_fields__.values() if config_class and hasattr(config_class, '__dataclass_fields__') else [])
-                        #     # ]) if config_class and hasattr(config_class, '__dataclass_fields__') else ""
-                        # })
                         
                         # Get tools if as_tools function exists
                         if hasattr(module, "as_tools"):
@@ -343,19 +355,6 @@ class UpdateAlgoliaIndex(Workflow):
                         logo_url = getattr(module, "LOGO_URL", "")
                         source_title = file.stem.replace("Analytics", "")
 
-                        # # Add main analytic record
-                        # analytic_id = hashlib.sha256(file.stem.encode()).hexdigest()
-                        # results.append({
-                        #     "objectID": analytic_id,
-                        #     "type": "analytic", 
-                        #     "title": (file.stem.replace("Analytics", "")),
-                        #     "category": "tool",
-                        #     "description": doc,
-                        #     "image_url": logo_url,
-                        #     "source_title": source_title,
-                        #     "source_url": f"https://github.com/jupyter-naas/abi/src/analytics/{relative_path}",
-                        #     "ranking": 1
-                        # })
                         # Get tools if as_tools function exists
                         if hasattr(module, "as_tools"):
                             try:
@@ -735,10 +734,6 @@ if __name__ == "__main__":
     config = UpdateAlgoliaIndexConfiguration(
         algolia_integration_config=algolia_config
     )
-
-    # # Remove records from index
-    # algolia = AlgoliaIntegration(algolia_config)
-    # asyncio.run(algolia.delete_all_records(index_name="workspace-search"))
 
     # Create workflow
     workflow = UpdateAlgoliaIndex(config)

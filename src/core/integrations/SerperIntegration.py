@@ -155,19 +155,19 @@ def as_tools(configuration: SerperIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="google_search",
+            name="serper_search",
             description="Perform a Google search using Serper.dev",
             func=lambda q, num, gl, hl: integration.search(q, num, "search", gl, hl),
             args_schema=SearchSchema
         ),
         StructuredTool(
-            name="google_news_search",
+            name="serper_search_news",
             description="Perform a Google News search using Serper.dev",
             func=lambda q, num, gl, hl: integration.news_search(q, num, gl, hl),
             args_schema=SearchSchema
         ),
         StructuredTool(
-            name="google_image_search",
+            name="serper_search_images",
             description="Perform a Google Image search using Serper.dev",
             func=lambda q, num, gl, hl: integration.image_search(q, num, gl, hl),
             args_schema=SearchSchema

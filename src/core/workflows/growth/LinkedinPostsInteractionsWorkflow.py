@@ -12,6 +12,8 @@ import pytz
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 
+LOGO_URL = "https://logo.clearbit.com/linkedin.com"
+
 @dataclass
 class LinkedinPostsInteractionsWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for LinkedIn Posts Interactions Workflow.
@@ -39,29 +41,6 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__linkedin = LinkedInIntegration(configuration.linkedin_integration_config)
-
-    def as_tools(self) -> list[StructuredTool]:
-        """Returns a list of LangChain tools for this workflow.
-        
-        Returns:
-            list[StructuredTool]: List containing the workflow tool
-        """
-        return [StructuredTool(
-            name="get_linkedin_posts_interactions",
-            description="Get people (linkedin profiles) who interacted (reactions and comments) with one or more LinkedIn posts.",
-            func=lambda **kwargs: self.run(LinkedinPostsInteractionsWorkflowParameters(**kwargs)),
-            args_schema=LinkedinPostsInteractionsWorkflowParameters
-        )]
-
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this workflow to the given router.
-        
-        Args:
-            router (APIRouter): FastAPI router to add endpoints to
-        """
-        @router.post("/linkedin/posts/interactions")
-        def get_posts_interactions(parameters: LinkedinPostsInteractionsWorkflowParameters):
-            return self.run(parameters).to_dict('records')
 
     def handle_time_error(self, df_init, column):
         # Handle NonExistentTimeError
@@ -157,23 +136,22 @@ class LinkedinPostsInteractionsWorkflow(Workflow):
         # Concat df
         df = pd.concat([df1, df2]).reset_index(drop=True)
         
-        return df
+        return df.to_dict('records')
 
-def main():
-    linkedin_urls = ["https://www.linkedin.com/feed/update/urn:li:activity:1234567890"]
-    config = LinkedinPostsInteractionsWorkflowConfiguration(
-        linkedin_integration_config=LinkedInIntegrationConfiguration(
-            li_at=secret.get("LINKEDIN_LI_AT").value,
-            jsessionid=secret.get("LINKEDIN_JSESSIONID").value
-        )
-    )
-    workflow = LinkedinPostsInteractionsWorkflow(config)
-    parameters = LinkedinPostsInteractionsWorkflowParameters(
-        linkedin_urls=linkedin_urls,
-        limit=100
-    )
-    df = workflow.run(parameters)
-    print(df)
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow.
+        
+        Returns:
+            list[StructuredTool]: List containing the workflow tool
+        """
+        return [
+            StructuredTool(
+                name="linkedin_get_posts_interactions",
+                description="Get people (linkedin profiles) who interacted (reactions and comments) with one or more LinkedIn posts.",
+                func=lambda **kwargs: self.run(LinkedinPostsInteractionsWorkflowParameters(**kwargs)),
+                args_schema=LinkedinPostsInteractionsWorkflowParameters
+            )
+        ]
 
-if __name__ == "__main__":
-    main()
+    def as_api(self, router: APIRouter) -> None:
+        pass

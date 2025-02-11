@@ -455,98 +455,97 @@ def as_tools(configuration: GmailIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="list_folders",
+            name="gmail_list_folders",
             description="List folders in Gmail account",
             func=lambda directory, pattern: integration.list_folders(directory, pattern),
             args_schema=ListFoldersSchema
         ),
         StructuredTool(
-            name="list_subscribed_folders",
+            name="gmail_list_subscribed_folders", 
             description="List subscribed folders in Gmail account",
             func=lambda directory, pattern: integration.list_subscribed_folders(directory, pattern),
             args_schema=ListSubscribedFoldersSchema
         ),
         StructuredTool(
-            name="move_messages",
+            name="gmail_move_messages",
             description="Move messages to another folder",
             func=lambda messages, folder: integration.move_messages(messages, folder),
             args_schema=MoveMessagesSchema
         ),
         StructuredTool(
-            name="get_inbox_details",
+            name="gmail_get_inbox_details",
             description="Get the total number of messages in the inbox",
             func=lambda: integration.get_inbox_details(),
             args_schema=GetInboxDetailsSchema
         ),
         StructuredTool(
-            name="get_inbox_count",
+            name="gmail_get_inbox_count",
             description="Get the total number of messages in the inbox",
             func=lambda: integration.get_inbox_count(),
             args_schema=GetInboxDetailsSchema
         ),
         StructuredTool(
-            name="get_inbox_flags",
+            name="gmail_get_inbox_flags",
             description="Get the flags of the inbox",
             func=lambda: integration.get_inbox_flags(),
             args_schema=GetInboxDetailsSchema
         ),
         StructuredTool(
-            name="get_inbox_permanent_flags",
+            name="gmail_get_inbox_permanent_flags",
             description="Get the permanent flags of the inbox",
             func=lambda: integration.get_inbox_permanent_flags(),
             args_schema=GetInboxDetailsSchema
         ),
         StructuredTool(
-            name="get_inbox_recent",
+            name="gmail_get_inbox_recent",
             description="Get the number of recent messages in the inbox",
             func=lambda: integration.get_inbox_recent(),
             args_schema=GetInboxDetailsSchema
         ),
-
         StructuredTool(
-            name="get_all_messages",
+            name="gmail_get_all_messages",
             description="Get all email messages in the inbox",
             func=lambda: integration.get_all_messages(),
             args_schema=GetInboxMessageSchema
         ),
         StructuredTool(
-            name="get_unseen_messages",
+            name="gmail_get_unseen_messages",
             description="Get all unseen/unread email messages in the inbox",
             func=lambda: integration.get_unseen_messages(),
             args_schema=GetInboxMessageSchema
         ),
         StructuredTool(
-            name="get_seen_messages",
+            name="gmail_get_seen_messages",
             description="Get all seen/read email messages in the inbox",
             func=lambda: integration.get_seen_messages(),
             args_schema=GetInboxMessageSchema
         ),
         StructuredTool(
-            name="get_inbox_messages_by_date",
+            name="gmail_get_inbox_messages_by_date",
             description="Get email messages in the inbox by date",
             func=lambda date: integration.get_inbox_messages_by_date(date),
             args_schema=GetInboxMessagesByDateSchema
         ),
         StructuredTool(
-            name="get_inbox_messages_by_sender",
+            name="gmail_get_inbox_messages_by_sender",
             description="Get email messages in the inbox by sender",
             func=lambda email, criteria, date: integration.get_inbox_messages_by_sender(email, criteria, date),
             args_schema=GetInboxMessagesBySenderSchema
         ),
         StructuredTool(
-            name="get_email_content",
+            name="gmail_get_email_content",
             description="Get the content of a specific email message",
             func=lambda message_id: integration.get_email_content(message_id),
             args_schema=GetMessageContentSchema
         ),
         StructuredTool(
-            name="create_draft",
+            name="gmail_create_draft",
             description="Create a draft email in Gmail",
             func=lambda email_to, subject, content, files: integration.create_draft(email_to, subject, content, files),
             args_schema=CreateDraftSchema
         ),
         StructuredTool(
-            name="send_email",
+            name="gmail_send_email",
             description="Send an email using Gmail",
             func=lambda email_to, subject, content, files: integration.send_email(email_to, subject, content, files),
             args_schema=SendEmailSchema

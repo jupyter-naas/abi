@@ -186,34 +186,34 @@ def as_tools(configuration: AirtableIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="list_airtable_records",
-            description="List records from an Airtable table",
+            name="airtable_list_records",
+            description="List records from an Airtable table.",
             func=lambda table_name, max_records, view, formula: integration.list_records(
                 table_name, max_records, view, formula
             ),
             args_schema=ListRecordsSchema
         ),
         StructuredTool(
-            name="get_airtable_record",
-            description="Get a specific record from an Airtable table",
+            name="airtable_get_record",
+            description="Get a specific record from an Airtable table.",
             func=lambda table_name, record_id: integration.get_record(table_name, record_id),
             args_schema=GetRecordSchema
         ),
         StructuredTool(
-            name="create_airtable_records",
-            description="Create new records in an Airtable table",
+            name="airtable_create_records",
+            description="Create new records in an Airtable table.",
             func=lambda table_name, records: integration.create_records(table_name, records),
             args_schema=CreateRecordsSchema
         ),
         StructuredTool(
-            name="update_airtable_records",
-            description="Update existing records in an Airtable table",
+            name="airtable_update_records",
+            description="Update existing records in an Airtable table.",
             func=lambda table_name, records: integration.update_records(table_name, records),
             args_schema=UpdateRecordsSchema
         ),
         StructuredTool(
-            name="delete_airtable_records",
-            description="Delete records from an Airtable table",
+            name="airtable_delete_records",
+            description="Delete records from an Airtable table.",
             func=lambda table_name, record_ids: integration.delete_records(table_name, record_ids),
             args_schema=DeleteRecordsSchema
         )

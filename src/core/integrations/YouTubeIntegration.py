@@ -176,25 +176,25 @@ def as_tools(configuration: YouTubeIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="search_youtube_videos",
+            name="youtube_search_videos",
             description="Search for YouTube videos",
             func=lambda query, max_results, order: integration.search_videos(query, max_results, order),
             args_schema=SearchSchema
         ),
         StructuredTool(
-            name="get_youtube_video_details",
+            name="youtube_get_video_details",
             description="Get detailed information about a specific video",
             func=lambda video_id: integration.get_video_details(video_id),
             args_schema=VideoSchema
         ),
         StructuredTool(
-            name="get_youtube_channel_info",
+            name="youtube_get_channel_info",
             description="Get information about a YouTube channel",
             func=lambda channel_id: integration.get_channel_info(channel_id),
             args_schema=ChannelSchema
         ),
         StructuredTool(
-            name="get_youtube_video_comments",
+            name="youtube_get_video_comments",
             description="Get comments for a specific video",
             func=lambda video_id, max_results: integration.get_video_comments(video_id, max_results),
             args_schema=CommentsSchema
