@@ -31,5 +31,5 @@ class ObjectStorageFactory:
         return ObjectStorageService(ObjectStorageSecondaryAdapterS3(bucket_name, access_key_id, secret_access_key, base_prefix, session_token))
     
     @staticmethod
-    def ObjectStorageServiceNaas(naas_api_key: str, workspace_id: str, storage_name: str) -> ObjectStorageService:
-        return ObjectStorageService(ObjectStorageSecondaryAdapterNaas(naas_api_key, workspace_id, storage_name))
+    def ObjectStorageServiceNaas(naas_api_key: str, workspace_id: str, storage_name: str, base_prefix: str = "") -> ObjectStorageService:
+        return ObjectStorageService(ObjectStorageSecondaryAdapterNaas(naas_api_key, workspace_id, storage_name, base_prefix))
