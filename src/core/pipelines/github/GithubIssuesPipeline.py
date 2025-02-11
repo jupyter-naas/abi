@@ -15,6 +15,8 @@ from fastapi import APIRouter
 from pydantic import Field
 from src import secret, config
 
+LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
+
 @dataclass
 class GithubIssuesPipelineConfiguration(PipelineConfiguration):
     """Configuration for GithubIssuesPipeline.
