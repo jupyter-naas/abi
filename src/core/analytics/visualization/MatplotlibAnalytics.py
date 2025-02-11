@@ -435,67 +435,67 @@ def as_tools(configuration: MatplotlibAnalyticsConfiguration):
     
     return [
         StructuredTool(
-            name="create_line_chart",
+            name="matplotlib_line_chart",
             description="Create a line chart visualization. Perfect for showing trends over time.",
             func=lambda **kwargs: analytics.create_line_chart(**kwargs),
             args_schema=BasicChartSchema
         ),
         StructuredTool(
-            name="create_bar_chart",
+            name="matplotlib_bar_chart",
             description="Create a bar chart visualization. Ideal for comparing categories.",
             func=lambda **kwargs: analytics.create_bar_chart(**kwargs),
             args_schema=BasicChartSchema
         ),
         StructuredTool(
-            name="create_scatter_plot",
+            name="matplotlib_scatter_plot",
             description="Create a scatter plot visualization. Great for showing relationships between variables.",
             func=lambda **kwargs: analytics.create_scatter_plot(**kwargs),
             args_schema=BasicChartSchema
         ),
         StructuredTool(
-            name="create_pie_chart",
+            name="matplotlib_pie_chart",
             description="Create a pie chart visualization. Perfect for showing proportions of a whole.",
             func=lambda **kwargs: analytics.create_pie_chart(**kwargs),
             args_schema=PieChartSchema
         ),
         StructuredTool(
-            name="create_histogram",
+            name="matplotlib_histogram",
             description="Create a histogram visualization. Ideal for showing distribution of data.",
             func=lambda **kwargs: analytics.create_histogram(**kwargs),
             args_schema=HistogramSchema
         ),
         StructuredTool(
-            name="create_box_plot",
+            name="matplotlib_box_plot",
             description="Create a box plot visualization. Shows distribution statistics with quartiles and outliers.",
             func=lambda **kwargs: analytics.create_box_plot(**kwargs),
             args_schema=BoxPlotSchema
         ),
         StructuredTool(
-            name="create_heatmap",
+            name="matplotlib_heatmap",
             description="Create a heatmap visualization. Perfect for showing patterns in 2D data.",
             func=lambda **kwargs: analytics.create_heatmap(**kwargs),
             args_schema=HeatmapSchema
         ),
         StructuredTool(
-            name="create_stacked_bar",
+            name="matplotlib_stacked_bar",
             description="Create a stacked bar chart visualization. Shows composition of categories.",
             func=lambda **kwargs: analytics.create_stacked_bar(**kwargs),
             args_schema=StackedBarSchema
         ),
         StructuredTool(
-            name="create_violin_plot",
+            name="matplotlib_violin_plot",
             description="Create a violin plot visualization. Shows probability density of data.",
             func=lambda **kwargs: analytics.create_violin_plot(**kwargs),
             args_schema=ViolinPlotSchema
         ),
         StructuredTool(
-            name="create_area_chart",
+            name="matplotlib_area_chart",
             description="Create an area chart visualization. Shows cumulative totals over time.",
             func=lambda **kwargs: analytics.create_area_chart(**kwargs),
             args_schema=BasicChartSchema
         ),
         StructuredTool(
-            name="create_wordcloud",
+            name="matplotlib_wordcloud",
             description="Create a word cloud visualization. Ideal for showing word frequencies.",
             func=lambda **kwargs: analytics.create_wordcloud(**kwargs),
             args_schema=WordCloudSchema
