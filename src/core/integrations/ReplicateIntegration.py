@@ -18,9 +18,11 @@ class ReplicateIntegrationConfiguration(IntegrationConfiguration):
     
     Attributes:
         api_key (str): Replicate API key for authentication
+        storage_path (str): Path to storage bucket
+        naas_integration_configuration (NaasIntegrationConfiguration): Naas integration configuration
     """
     api_key: str
-    storage_path: str = "storage/datalake/assets/image"
+    storage_path: str = "datalake/assets/image"
     naas_integration_configuration: NaasIntegrationConfiguration
 
 class ReplicateIntegration(Integration):
