@@ -60,7 +60,7 @@ class OntologyStoreService(IOntologyStoreService):
         
         for s, p, o in added.triples((None, None, None)):
             for ss, sp, so in self.__event_listeners:
-                if (ss is None or ss == s) and (sp is None or sp == p) and (so is None or so == o):
+                if (ss is None or str(ss) == str(s)) and (sp is None or str(sp) == str(p)) and (so is None or str(so) == str(o)):
                     if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
                             callback(OntologyEvent.INSERT, name, (s, p, o))
@@ -78,7 +78,7 @@ class OntologyStoreService(IOntologyStoreService):
 
         for s, p, o in removed.triples((None, None, None)):
             for ss, sp, so in self.__event_listeners:
-                if (ss is None or ss == s) and (sp is None or sp == p) and (so is None or so == o):
+                if (ss is None or str(ss) == str(s)) and (sp is None or str(sp) == str(p)) and (so is None or str(so) == str(o)):
                     if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.DELETE]:
                             callback(OntologyEvent.DELETE, name, (s, p, o))
