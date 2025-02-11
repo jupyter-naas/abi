@@ -5,7 +5,7 @@ from google.oauth2 import service_account
 from google.cloud import bigquery
 from google.api_core import retry
 
-LOGO_URL = "https://cdn.icon-icons.com/icons2/2699/PNG/512/google_bigquery_logo_icon_168150.png"
+LOGO_URL = "https://static.amarello.cloud/img/bigquery.png"
 
 @dataclass
 class GCPBigQueryIntegrationConfiguration(IntegrationConfiguration):
