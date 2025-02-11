@@ -10,6 +10,7 @@ from rdflib import Graph
 from datetime import datetime
 from abi import logger
 
+LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
 
 @dataclass
 class GithubUserDetailsPipelineConfiguration(PipelineConfiguration):
