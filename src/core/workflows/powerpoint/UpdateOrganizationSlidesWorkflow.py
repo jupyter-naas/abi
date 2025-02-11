@@ -14,7 +14,8 @@ import json
 from src import config
 import hashlib
 import uuid
-from src.services import services, ObjectStorageExceptions
+from src.services import services
+from lib.abi.services.object_storage.ObjectStoragePort import Exceptions as ObjectStorageExceptions
 from io import BytesIO
 from datetime import datetime
 import os

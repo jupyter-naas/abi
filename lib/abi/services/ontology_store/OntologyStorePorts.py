@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from rdflib import Graph
-from typing import List
+from typing import List, Callable, Dict
+from enum import Enum
 
 class OntologyNotFoundError(Exception):
     pass
@@ -39,9 +40,26 @@ class IOntologyStorePort(ABC):
     def list_ontologies(self) -> List[str]:
         pass
 
+class OntologyEvent(Enum):
+    INSERT = "insert"
+    DELETE = "delete"
+
 class IOntologyStoreService(ABC):
     
     __ontology_adaptor: IOntologyStorePort
+    
+    __event_listeners: Dict[tuple, Dict[OntologyEvent, List[tuple[str, Callable]]]]
+    
+    @abstractmethod
+    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
+        pass
+    
+    @abstractmethod
+    def unsubscribe(self, subscription_id: str):
+        pass
+    
+    def __filter_ontology(self, ontology: Graph) -> Graph:
+        pass
     
     @abstractmethod
     def store(self, name: str, ontology: Graph, individual_filter: bool = True):

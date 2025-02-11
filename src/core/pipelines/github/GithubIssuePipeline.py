@@ -5,13 +5,13 @@ from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrat
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime, timedelta
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, OntologyEvent
 import pydash as _
 from abi import logger
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional
+from typing import Optional, Any
 from src import secret, config
 
 @dataclass

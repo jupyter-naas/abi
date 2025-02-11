@@ -53,7 +53,7 @@ class OntologyStoreService__SecondaryAdaptor__NaasStorage(IOntologyStorePort):
         return self.get(name).query(query)
     
     def delete(self, name: str):
-        self.__object_storage_service.delete_object(key=name if name.endswith('.ttl') else f"{name}.ttl")
+        self.__object_storage_service.delete_object(prefix="", key=name if name.endswith('.ttl') else f"{name}.ttl")
     
     def list_ontologies(self) -> List[str]:
         return [e if not e.endswith('.ttl') else e[:-4] for e in self.__object_storage_service.list_objects()]
