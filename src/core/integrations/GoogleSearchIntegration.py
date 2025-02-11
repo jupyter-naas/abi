@@ -8,7 +8,7 @@ from abi import logger
 LOGO_URL = "https://www.google.com/favicon.ico"
 
 @dataclass
-class GoogleSearchConfiguration(IntegrationConfiguration):
+class GoogleSearchIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GoogleSearch."""
     pass
 
@@ -18,9 +18,9 @@ class GoogleSearchIntegration(Integration):
     This class provides methods to search Google and get list of urls from search results.
     """
 
-    __configuration: GoogleSearchConfiguration
-
-    def __init__(self, configuration: GoogleSearchConfiguration):
+    __configuration: GoogleSearchIntegrationConfiguration
+    
+    def __init__(self, configuration: GoogleSearchIntegrationConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
 
@@ -94,7 +94,7 @@ class GoogleSearchIntegration(Integration):
         query = profile_name.lower().replace(" ", "+")+"+linkedin"
         return self.search_url(query, pattern)
 
-def as_tools(configuration: GoogleSearchConfiguration):
+def as_tools(configuration: GoogleSearchIntegrationConfiguration):
     """Convert SerpAPI integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
