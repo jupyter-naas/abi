@@ -9,8 +9,7 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
-<http://ontology.naas.ai/abi/EventsOntology> rdf:type owl:Ontology ;
-    owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+<http://ontology.naas.ai/abi/EventOntology> rdf:type owl:Ontology ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/EventsOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for events and occurrences."@en ;
