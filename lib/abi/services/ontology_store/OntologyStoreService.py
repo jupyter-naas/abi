@@ -1,6 +1,8 @@
-from lib.abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, IOntologyStorePort, OntologyNotFoundError
+from lib.abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, IOntologyStorePort, OntologyNotFoundError, OntologyEvent
 from rdflib import Graph, BNode
-from typing import List
+from typing import List, Callable
+import uuid
+import pydash
 
 class OntologyStoreService(IOntologyStoreService):
     """OntologyStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
@@ -22,7 +24,8 @@ class OntologyStoreService(IOntologyStoreService):
     """
     def __init__(self, ontology_adaptor: IOntologyStorePort):
         self.__ontology_adaptor = ontology_adaptor
-
+        self.__event_listeners = {}
+    
     def __filter_ontology(self, ontology: Graph) -> Graph:
         return ontology
         # Create a new graph containing only named individuals and their properties
@@ -35,6 +38,9 @@ class OntologyStoreService(IOntologyStoreService):
                 filtered_graph.add((s, p, o))
                 
         return filtered_graph
+    
+    def diff_graphs(self, graph1: Graph, graph2: Graph) -> Graph:
+        return graph2 - graph1
     
     def store(self, name: str, ontology: Graph, individual_filter: bool = True):
         filtered_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
@@ -50,10 +56,37 @@ class OntologyStoreService(IOntologyStoreService):
         
         filtered_inserted_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
         
-        merged_ontology = existing_ontology + filtered_inserted_ontology
+        added = self.diff_graphs(existing_ontology, filtered_inserted_ontology)
         
+        for s, p, o in added.triples((None, None, None)):
+            for ss, sp, so in self.__event_listeners:
+                if (ss is None or ss == s) and (sp is None or sp == p) and (so is None or so == o):
+                    if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
+                        for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
+                            callback(name, s, p, o)
+                
+        merged_ontology = existing_ontology + filtered_inserted_ontology
+
         self.store(name, merged_ontology, individual_filter=False)
 
+    def remove(self, name: str, ontology: Graph, individual_filter: bool = True):
+        existing_ontology = self.get(name)
+        
+        filtered_removed_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
+        
+        removed = self.diff_graphs(filtered_removed_ontology, existing_ontology)
+
+        for s, p, o in removed.triples((None, None, None)):
+            for ss, sp, so in self.__event_listeners:
+                if (ss is None or ss == s) and (sp is None or sp == p) and (so is None or so == o):
+                    if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
+                        for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.DELETE]:
+                            callback(name, s, p, o)
+        
+        merged_ontology = existing_ontology - filtered_removed_ontology
+        
+        self.store(name, merged_ontology, individual_filter=False)
+        
     def list_ontologies(self) -> List[str]:
         return self.__ontology_adaptor.list_ontologies()
 
@@ -75,6 +108,22 @@ class OntologyStoreService(IOntologyStoreService):
     def delete(self, name: str):
         self.__ontology_adaptor.delete(name)
     
+    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
+        if topic not in self.__event_listeners:
+            self.__event_listeners[topic] = {}
+        if event_type not in self.__event_listeners[topic]:
+            self.__event_listeners[topic][event_type] = []
+            
+        subscription_id = str(uuid.uuid4())
+            
+        self.__event_listeners[topic][event_type].append((subscription_id, callback))
+        
+        return subscription_id
+    
+    def unsubscribe(self, subscription_id: str) -> None:
+        for topic in self.__event_listeners:
+            for event_type in self.__event_listeners[topic]:
+                self.__event_listeners[topic][event_type] = pydash.filter_(self.__event_listeners[topic][event_type], lambda x: x[0] != subscription_id)
 
 def main():
     from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem

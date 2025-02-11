@@ -5,11 +5,12 @@ from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAd
 
 import requests
 import pydash
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 NAAS_API_URL = 'https://api.naas.ai/'
-CREDENTIALS_EXPIRATION_TIME = timedelta(minutes=10)
+CREDENTIALS_EXPIRATION_TIME = timedelta(minutes=20)
 
 @dataclass
 class Credentials:
@@ -29,10 +30,11 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
     __credentials : Credentials
     __s3_adapter : ObjectStorageSecondaryAdapterS3
     
-    def __init__(self, naas_api_key: str, workspace_id: str, storage_name: str):
+    def __init__(self, naas_api_key: str, workspace_id: str, storage_name: str, base_prefix: str = ""):
         self.__naas_api_key = naas_api_key
         self.__workspace_id = workspace_id
         self.__storage_name = storage_name
+        self.__base_prefix = base_prefix
         self.__credentials = None
         self.__s3_adapter = None
 
@@ -41,7 +43,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
             self.__refresh_credentials()
         
         # If credentials are older than 10 minutes, refresh them
-        if self.__credentials.created_at > datetime.now() - CREDENTIALS_EXPIRATION_TIME:
+        if self.__credentials.created_at < datetime.now() - CREDENTIALS_EXPIRATION_TIME:
             self.__refresh_credentials()
         
         return self.__credentials
@@ -73,10 +75,9 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
             bucket_name=self.__credentials.bucket_name,
             access_key_id=self.__credentials.access_key_id,
             secret_access_key=self.__credentials.secret_key,
-            base_prefix=self.__credentials.bucket_prefix,
+            base_prefix=os.path.join(self.__credentials.bucket_prefix, self.__base_prefix),
             session_token=self.__credentials.session_token,
-        )
-        
+        )        
     
     def get_object(self, prefix: str, key: str) -> bytes:
         self.ensure_credentials()
