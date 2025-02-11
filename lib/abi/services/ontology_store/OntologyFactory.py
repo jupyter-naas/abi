@@ -1,6 +1,6 @@
 from lib.abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-from lib.abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from lib.abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__ObjectStorage import OntologyStoreService__SecondaryAdaptor__NaasStorage
+from lib.abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
 
 class OntologyStoreFactory:
@@ -25,3 +25,8 @@ class OntologyStoreFactory:
             base_prefix=base_prefix
         )
         return OntologyStoreService(OntologyStoreService__SecondaryAdaptor__NaasStorage(object_service))
+
+
+    @staticmethod
+    def OntologyStoreServiceFilesystem(path: str) -> OntologyStoreService:
+        return OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(path))   
