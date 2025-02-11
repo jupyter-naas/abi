@@ -57,12 +57,9 @@ class OntologyStoreService(IOntologyStoreService):
         filtered_inserted_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
         
         added = self.diff_graphs(existing_ontology, filtered_inserted_ontology)
-        
-        print(f"Added: {added}")
-        
+                
         for s, p, o in added.triples((None, None, None)):
             for ss, sp, so in self.__event_listeners:
-                print(f"Checking {ss}, {sp}, {so}")
                 if (ss is None or str(ss) == str(s)) and (sp is None or str(sp) == str(p)) and (so is None or str(so) == str(o)):
                     if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
@@ -111,12 +108,7 @@ class OntologyStoreService(IOntologyStoreService):
     def delete(self, name: str):
         self.__ontology_adaptor.delete(name)
     
-    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
-        # Convert each element of the topic to a string
-        topic = tuple(str(t) for t in topic)
-        
-        print(f"Subscribing to {topic} with event type {event_type}")
-        
+    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:        
         if topic not in self.__event_listeners:
             self.__event_listeners[topic] = {}
         if event_type not in self.__event_listeners[topic]:
