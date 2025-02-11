@@ -109,6 +109,9 @@ class OntologyStoreService(IOntologyStoreService):
         self.__ontology_adaptor.delete(name)
     
     def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
+        # Convert each element of the topic to a string
+        topic = tuple(str(t) for t in topic)
+        
         if topic not in self.__event_listeners:
             self.__event_listeners[topic] = {}
         if event_type not in self.__event_listeners[topic]:
