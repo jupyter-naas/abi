@@ -14,6 +14,8 @@ from pydantic import Field
 from typing import Optional
 from src import secret, config
 
+LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
+
 @dataclass
 class GithubIssuePipelineConfiguration(PipelineConfiguration):
     """Configuration for GithubIssuePipeline.

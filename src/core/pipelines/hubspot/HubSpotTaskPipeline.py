@@ -12,6 +12,8 @@ from pydantic import Field
 from typing import Optional, List
 from src import secret, config
 
+LOGO_URL = "https://logo.clearbit.com/hubspot.com"
+
 @dataclass
 class HubSpotTaskPipelineConfiguration(PipelineConfiguration):
     """Configuration for HubSpotTaskPipeline.
