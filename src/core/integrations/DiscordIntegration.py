@@ -128,19 +128,19 @@ def as_tools(configuration: DiscordIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_discord_guilds",
+            name="discord_get_guilds",
             description="Retrieve all guilds (servers) the bot has access to",
             func=lambda: integration.get_guilds(),
             args_schema=GuildSchema
         ),
         StructuredTool(
-            name="get_discord_channels",
+            name="discord_get_channels",
             description="Retrieve all channels in a guild",
             func=lambda guild_id: integration.get_channels(guild_id),
             args_schema=ChannelSchema
         ),
         StructuredTool(
-            name="send_discord_message",
+            name="discord_send_message",
             description="Send a message to a Discord channel",
             func=lambda channel_id, content: integration.send_message(channel_id, content),
             args_schema=MessageSchema

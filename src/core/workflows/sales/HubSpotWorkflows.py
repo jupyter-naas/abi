@@ -8,6 +8,8 @@ from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from datetime import datetime, timedelta
 
+LOGO_URL = "https://logo.clearbit.com/hubspot.com"
+
 @dataclass
 class HubSpotWorkflowsConfiguration(WorkflowConfiguration):
     """Configuration for HubSpotWorkflow.
@@ -355,7 +357,7 @@ class HubSpotWorkflows(Workflow):
             ),
             StructuredTool(
                 name="hubspot_search_contact_by_email",
-                description="Search for HubSpot contacts by email address",
+                description="Search for HubSpot contacts by email address.",
                 func=lambda email: self.search_contacts_by_email(SearchContactByEmailParameters(email=email)),
                 args_schema=SearchContactByEmailParameters
             ),
@@ -367,43 +369,43 @@ class HubSpotWorkflows(Workflow):
             ),
             StructuredTool(
                 name="hubspot_search_deal_by_name",
-                description="Search for deals in HubSpot by name",
+                description="Search for deals in HubSpot by name.",
                 func=lambda dealname: self.search_deals_by_name(SearchDealByNameParameters(dealname=dealname)),
                 args_schema=SearchDealByNameParameters
             ),
             StructuredTool(
                 name="hubspot_search_company_by_name",
-                description="Search for companies in HubSpot by name",
+                description="Search for companies in HubSpot by name.",
                 func=lambda name: self.search_companies_by_name(SearchCompanyByNameParameters(name=name)),
                 args_schema=SearchCompanyByNameParameters
             ),
             StructuredTool(
                 name="hubspot_search_task_by_subject",
-                description="Search for tasks in HubSpot by subject",
+                description="Search for tasks in HubSpot by subject.",
                 func=lambda subject: self.search_tasks_by_subject(SearchTaskBySubjectParameters(subject=subject)),
                 args_schema=SearchTaskBySubjectParameters
             ),
             StructuredTool(
                 name="hubspot_search_task_by_owner",
-                description="Search for tasks in HubSpot by owner ID",
+                description="Search for tasks in HubSpot by owner ID.",
                 func=lambda owner_id: self.search_tasks_by_owner(SearchTaskByOwnerParameters(owner_id=owner_id)),
                 args_schema=SearchTaskByOwnerParameters
             ),
             StructuredTool(
                 name="hubspot_create_task",
-                description="Create a new task in HubSpot",
+                description="Create a new task in HubSpot.",
                 func=lambda **kwargs: self.create_task(CreateTaskParameters(**kwargs)),
                 args_schema=CreateTaskParameters
             ),
             StructuredTool(
                 name="hubspot_update_task",
-                description="Update a task in HubSpot",
+                description="Update a task in HubSpot.",
                 func=lambda **kwargs: self.update_task(**kwargs),
                 args_schema=UpdateTaskParameters
             ),
             StructuredTool(
                 name="hubspot_delete_task",
-                description="Delete a task in HubSpot",
+                description="Delete a task in HubSpot.",
                 func=lambda task_id: self.delete_task(DeleteTaskParameters(task_id=task_id)),
                 args_schema=DeleteTaskParameters
             )

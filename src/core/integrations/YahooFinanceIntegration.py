@@ -137,26 +137,26 @@ def as_tools(configuration: YahooFinanceIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_stock_info",
-            description="Get basic information about a stock",
+            name="yahoofinance_get_stock_info",
+            description="Get basic information about a stock from Yahoo Finance.",
             func=lambda symbol: integration.get_stock_info(symbol),
             args_schema=StockSymbolSchema
         ),
         StructuredTool(
-            name="get_historical_stock_data",
-            description="Get historical price data for a stock",
+            name="yahoofinance_get_historical_stock_data",
+            description="Get historical price data for a stock from Yahoo Finance.",
             func=lambda symbol, period, interval: integration.get_historical_data(symbol, period, interval),
             args_schema=HistoricalDataSchema
         ),
         StructuredTool(
-            name="get_stock_financials",
-            description="Get financial statements for a stock",
+            name="yahoofinance_get_stock_financials",
+            description="Get financial statements for a stock from Yahoo Finance.",
             func=lambda symbol: integration.get_financials(symbol),
             args_schema=StockSymbolSchema
         ),
         StructuredTool(
-            name="get_stock_recommendations",
-            description="Get analyst recommendations for a stock",
+            name="yahoofinance_get_stock_recommendations",
+            description="Get analyst recommendations for a stock from Yahoo Finance.",
             func=lambda symbol: integration.get_recommendations(symbol),
             args_schema=StockSymbolSchema
         )

@@ -595,139 +595,139 @@ def as_tools(configuration: PennylaneIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="list_customers_invoices",
+            name="pennylane_list_customers_invoices",
             description="List customer invoices from Pennylane.",
             func=lambda limit, filter: integration.list_customer_invoices(limit, filter),
             args_schema=ListCustomersInvoicesSchema
         ),
         StructuredTool(
-            name="get_customer_invoice",
+            name="pennylane_get_customer_invoice",
             description="Get a specific customer invoice from Pennylane.",
             func=lambda invoice_id: integration.get_customer_invoice(invoice_id),
             args_schema=GetCustomerInvoiceSchema
         ),
         StructuredTool(
-            name="update_customer_invoice",
+            name="pennylane_update_customer_invoice",
             description="Update a specific customer invoice from Pennylane.",
             func=lambda invoice_id, transaction_reference, categories: integration.update_customer_invoice(invoice_id, transaction_reference, categories),
             args_schema=UpdateCustomerInvoiceSchema
         ),
         StructuredTool(
-            name="list_estimates",
+            name="pennylane_list_estimates",
             description="List customer estimates from Pennylane.",
             func=lambda limit, filter: integration.list_estimates(limit, filter),
             args_schema=ListEstimatesSchema
         ),
         StructuredTool(
-            name="get_estimate",
+            name="pennylane_get_estimate",
             description="Get a specific estimate from Pennylane.",
             func=lambda estimate_id: integration.get_estimate(estimate_id),
             args_schema=GetEstimateSchema
         ),
         StructuredTool(
-            name="update_estimate",
+            name="pennylane_update_estimate",
             description="Update a specific estimate from Pennylane.",
             func=lambda estimate_id, estimate_data: integration.update_estimate(estimate_id, estimate_data),
             args_schema=UpdateEstimateSchema
         ),
         StructuredTool(
-            name="list_customers",
+            name="pennylane_list_customers",
             description="List customers from Pennylane.",
             func=lambda limit, filter: integration.list_customers(limit, filter),
             args_schema=ListCustomersSchema
         ),
         StructuredTool(
-            name="get_customer",
+            name="pennylane_get_customer",
             description="Get a specific customer from Pennylane.",
             func=lambda customer_id: integration.get_customer_details(customer_id),
             args_schema=GetCustomerSchema
         ),
         StructuredTool(
-            name="update_customer",
+            name="pennylane_update_customer",
             description="Update a specific customer from Pennylane.",
             func=lambda customer_id, customer_data: integration.update_customer(customer_id, customer_data),
             args_schema=UpdateCustomerSchema
         ),
         StructuredTool(
-            name="list_products",
+            name="pennylane_list_products",
             description="List products from Pennylane.",
             func=lambda limit, page: integration.list_products(limit, page),
             args_schema=ListProductsSchema
         ),
         StructuredTool(
-            name="get_product",
+            name="pennylane_get_product",
             description="Get a specific product from Pennylane.",
             func=lambda product_id: integration.get_product(product_id),
             args_schema=GetProductSchema
         ),
         StructuredTool(
-            name="update_product",
+            name="pennylane_update_product",
             description="Update a specific product from Pennylane.",
             func=lambda product_id, product_data: integration.update_product(product_id, product_data),
             args_schema=UpdateProductSchema
         ),
         StructuredTool(
-            name="list_categories",
+            name="pennylane_list_categories",
             description="List categories from Pennylane.",
             func=lambda sort, filter, limit: integration.list_categories(sort, filter, limit),
             args_schema=ListCategoriesSchema
         ), 
         StructuredTool(
-            name="get_category",
+            name="pennylane_get_category",
             description="Get a specific category from Pennylane.",
             func=lambda category_id: integration.get_category(category_id),
             args_schema=GetCategorySchema
         ),
         StructuredTool(
-            name="update_category",
+            name="pennylane_update_category",
             description="Update a specific category from Pennylane.",
             func=lambda category_id, category_data: integration.update_category(category_id, category_data),
             args_schema=UpdateCategorySchema
         ),
         StructuredTool(
-            name="list_plan_items",
+            name="pennylane_list_plan_items",
             description="List plan items from Pennylane.",
             func=lambda page, per_page: integration.list_plan_items(page, per_page),
             args_schema=ListPlanItemsSchema
         ),
         StructuredTool(
-            name="get_enum",
+            name="pennylane_get_enum",
             description="Get enum values for a specific identifier from Pennylane.",
             func=lambda enum_id, locale: integration.get_enum(enum_id, locale),
             args_schema=GetEnumSchema
         ),
         StructuredTool(
-            name="list_suppliers",
+            name="pennylane_list_suppliers",
             description="List suppliers from Pennylane.",
             func=lambda page, limit: integration.list_suppliers(page, limit),
             args_schema=ListSuppliersSchema
         ),  
         StructuredTool(
-            name="get_supplier",
+            name="pennylane_get_supplier",
             description="Get a specific supplier from Pennylane.",
             func=lambda supplier_id: integration.get_supplier(supplier_id),
             args_schema=GetSupplierSchema
         ),
         StructuredTool(
-            name="update_supplier",
+            name="pennylane_update_supplier",
             description="Update a specific supplier from Pennylane.",
             func=lambda supplier_id, supplier_data: integration.update_supplier(supplier_id, supplier_data),
             args_schema=UpdateSupplierSchema
         ),
         StructuredTool(
-            name="list_supplier_invoices",
+            name="pennylane_list_supplier_invoices",
             description="List supplier invoices from Pennylane.",
             func=lambda page, per_page, filter: integration.list_supplier_invoices(page, per_page, filter),
             args_schema=ListSupplierInvoicesSchema
         ),
         StructuredTool(
-            name="get_supplier_invoice",
+            name="pennylane_get_supplier_invoice",
             description="Get a specific supplier invoice from Pennylane.",
             func=lambda invoice_id: integration.get_supplier_invoice(invoice_id),
             args_schema=GetSupplierInvoiceSchema
         ),
         StructuredTool(
-            name="update_supplier_invoice",
+            name="pennylane_update_supplier_invoice",
             description="Update a specific supplier invoice from Pennylane.",
             func=lambda invoice_id, invoice_data: integration.update_supplier_invoice(invoice_id, invoice_data),
             args_schema=UpdateSupplierInvoiceSchema

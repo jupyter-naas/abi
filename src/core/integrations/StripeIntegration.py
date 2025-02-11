@@ -380,164 +380,164 @@ def as_tools(configuration: StripeIntegrationConfiguration):
             args_schema=GetCustomerSchema
         ),
         StructuredTool(
-            name="get_stripe_customers",
+            name="stripe_list_customers",
             description="Get list of Stripe customers with optional filters.",
             func=lambda limit=100, start_date=None, hours_ago=None, days_ago=None, end_date=None: 
                 integration.get_customers(limit, start_date, hours_ago, days_ago, end_date),
             args_schema=GetCustomersSchema
         ),
         StructuredTool(
-            name="create_stripe_customer",
+            name="stripe_create_customer",
             description="Create a new Stripe customer",
             func=lambda email, metadata: integration.create_customer(email, metadata),
             args_schema=CreateCustomerSchema
         ),
         StructuredTool(
-            name="update_stripe_customer",
+            name="stripe_update_customer",
             description="Update an existing Stripe customer",
             func=lambda customer_id, data: integration.update_customer(customer_id, data),
             args_schema=UpdateCustomerSchema
         ),
         StructuredTool(
-            name="list_customer_payment_methods",
+            name="stripe_list_customer_payment_methods",
             description="List the payment methods of a specific customer",
             func=lambda customer_id: integration.list_customer_payment_methods(customer_id),
             args_schema=ListCustomerPaymentMethodsSchema
         ),
         StructuredTool(
-            name="get_stripe_products",
+            name="stripe_get_products",
             description="Get the products of the account",
             func=lambda: integration.get_products(),
             args_schema=GetProductsSchema
         ),
         StructuredTool(
-            name="get_stripe_product",
+            name="stripe_get_product",
             description="Get the product of the account",
             func=lambda product_id: integration.get_product(product_id),
             args_schema=GetProductSchema
         ),
         StructuredTool(
-            name="create_stripe_product",
+            name="stripe_create_product",
             description="Create a new Stripe product",
             func=lambda data: integration.create_product(data),
             args_schema=CreateProductSchema
         ),
         StructuredTool(
-            name="update_stripe_product",
+            name="stripe_update_product",
             description="Update an existing Stripe product",
             func=lambda product_id, data: integration.update_product(product_id, data),
             args_schema=UpdateProductSchema
         ),
         StructuredTool(
-            name="delete_stripe_product",
+            name="stripe_delete_product",
             description="Delete an existing Stripe product",
             func=lambda product_id: integration.delete_product(product_id),
             args_schema=DeleteProductSchema
         ),
         StructuredTool(
-            name="get_stripe_subscriptions",
+            name="stripe_get_subscriptions",
             description="Get the subscriptions of the account",
             func=lambda: integration.get_subscriptions(),
             args_schema=GetSubscriptionsSchema
         ),
         StructuredTool( 
-            name="get_stripe_subscription",
+            name="stripe_get_subscription",
             description="Get the subscription of the account",
             func=lambda subscription_id: integration.get_subscription(subscription_id),
             args_schema=GetSubscriptionSchema
         ),      
         StructuredTool(
-            name="create_stripe_subscription",
+            name="stripe_create_subscription",
             description="Create a new Stripe subscription",
             func=lambda data: integration.create_subscription(data),
             args_schema=CreateSubscriptionSchema
         ),
         StructuredTool(
-            name="update_stripe_subscription",
+            name="stripe_update_subscription",
             description="Update an existing Stripe subscription",
             func=lambda subscription_id, data: integration.update_subscription(subscription_id, data),
             args_schema=UpdateSubscriptionSchema
         ),
         StructuredTool(
-            name="delete_stripe_subscription",
+            name="stripe_delete_subscription",
             description="Delete an existing Stripe subscription",
             func=lambda subscription_id: integration.delete_subscription(subscription_id),
             args_schema=DeleteSubscriptionSchema
         ),
         StructuredTool(
-            name="get_stripe_invoices",
+            name="stripe_get_invoices",
             description="Get the invoices of the account",
             func=lambda: integration.get_invoices(),
             args_schema=GetInvoicesSchema
         ),
         StructuredTool(
-            name="get_stripe_invoice",
+            name="stripe_get_invoice",
             description="Get the invoice of the account",
             func=lambda invoice_id: integration.get_invoice(invoice_id),
             args_schema=GetInvoiceSchema
         ),
         StructuredTool(
-            name="create_stripe_invoice",
+            name="stripe_create_invoice",
             description="Create a new Stripe invoice",
             func=lambda data: integration.create_invoice(data),
             args_schema=CreateInvoiceSchema
         ),
         StructuredTool(
-            name="update_stripe_invoice",
+            name="stripe_update_invoice",
             description="Update an existing Stripe invoice",
             func=lambda invoice_id, data: integration.update_invoice(invoice_id, data),
             args_schema=UpdateInvoiceSchema
         ),
         StructuredTool(
-            name="delete_stripe_invoice",
+            name="stripe_delete_invoice",
             description="Delete an existing Stripe invoice",
             func=lambda invoice_id: integration.delete_invoice(invoice_id),
             args_schema=DeleteInvoiceSchema
         ),
         StructuredTool(
-            name="get_stripe_invoice_items",
+            name="stripe_get_invoice_items",
             description="Get the invoice items of the account",
             func=lambda: integration.get_invoice_items(),
             args_schema=GetInvoiceItemsSchema
         ),
         StructuredTool(
-            name="get_stripe_payment_methods",
+            name="stripe_get_payment_methods",
             description="Get the payment methods of the account",
             func=lambda: integration.get_payment_methods(),
             args_schema=GetPaymentMethodsSchema
         ),
         StructuredTool(
-            name="get_stripe_payment_method",
+            name="stripe_get_payment_method",
             description="Get the payment method of the account",
             func=lambda payment_method_id: integration.get_payment_method(payment_method_id),
             args_schema=GetPaymentMethodSchema
         ),
         StructuredTool(
-            name="create_stripe_payment_method",
+            name="stripe_create_payment_method",
             description="Create a new Stripe payment method",
             func=lambda data: integration.create_payment_method(data),
             args_schema=CreatePaymentMethodSchema
         ),
         StructuredTool(
-            name="update_stripe_payment_method",
+            name="stripe_update_payment_method",
             description="Update an existing Stripe payment method",
             func=lambda payment_method_id, data: integration.update_payment_method(payment_method_id, data),
             args_schema=UpdatePaymentMethodSchema
         ),
         StructuredTool(
-            name="delete_stripe_payment_method",
+            name="stripe_delete_payment_method",
             description="Delete an existing Stripe payment method",
             func=lambda payment_method_id: integration.delete_payment_method(payment_method_id),
             args_schema=DeletePaymentMethodSchema
         ),
         StructuredTool(
-            name="get_stripe_customer_payment_methods",
+            name="stripe_get_customer_payment_methods",
             description="Get the payment methods of a specific customer",
             func=lambda customer_id: integration.get_customer_payment_methods(customer_id),
             args_schema=GetCustomerPaymentMethodsSchema
         ),
         StructuredTool(
-            name="get_stripe_payment_method_details",
+            name="stripe_get_payment_method_details",
             description="Get the details of a specific payment method",
             func=lambda customer_id, payment_method_id: integration.get_payment_method_details(customer_id, payment_method_id),
             args_schema=GetPaymentMethodDetailsSchema

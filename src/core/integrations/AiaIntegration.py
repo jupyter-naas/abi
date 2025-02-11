@@ -67,8 +67,8 @@ def as_tools(configuration: AiaIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="create_aia",
-            description="Create AIA assistant and ontology with LinkedIn data to naas workspace",
+            name="aia_create_personal_assistant",
+            description="Create AIA Personal Assistant and ontology with LinkedIn data to naas workspace",
             func=lambda workspace_id, linkedin_urls: 
                 integration.create_aia(workspace_id, linkedin_urls),
             args_schema=CreateAiaOrganizationSchema

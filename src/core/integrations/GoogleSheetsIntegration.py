@@ -251,7 +251,7 @@ def as_tools(configuration: GoogleSheetsIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_sheets_values",
+            name="googlesheets_get_sheets_values",
             description="Get values from a Google Sheets range",
             func=lambda spreadsheet_id, range_name, major_dimension: integration.get_values(
                 spreadsheet_id, range_name, major_dimension
@@ -259,14 +259,14 @@ def as_tools(configuration: GoogleSheetsIntegrationConfiguration):
             args_schema=GetValuesSchema
         ),
         StructuredTool(
-            name="update_sheets_values",
+            name="googlesheets_update_sheets_values",
             description="Update values in a Google Sheets range",
             func=lambda spreadsheet_id, range_name, values, major_dimension, value_input_option: 
                 integration.update_values(spreadsheet_id, range_name, values, major_dimension, value_input_option),
             args_schema=UpdateValuesSchema
         ),
         StructuredTool(
-            name="append_sheets_values",
+            name="googlesheets_append_sheets_values",
             description="Append values to a Google Sheets range",
             func=lambda spreadsheet_id, range_name, values, major_dimension, value_input_option, insert_data_option:
                 integration.append_values(spreadsheet_id, range_name, values, major_dimension, 
@@ -274,13 +274,13 @@ def as_tools(configuration: GoogleSheetsIntegrationConfiguration):
             args_schema=AppendValuesSchema
         ),
         StructuredTool(
-            name="clear_sheets_values",
+            name="googlesheets_clear_sheets_values",
             description="Clear values in a Google Sheets range",
             func=lambda spreadsheet_id, range_name: integration.clear_values(spreadsheet_id, range_name),
             args_schema=ClearValuesSchema
         ),
         StructuredTool(
-            name="create_spreadsheet",
+            name="googlesheets_create_spreadsheet",
             description="Create a new Google Spreadsheet",
             func=lambda title, sheets: integration.create_spreadsheet(title, sheets),
             args_schema=CreateSpreadsheetSchema

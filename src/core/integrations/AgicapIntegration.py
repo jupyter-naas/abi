@@ -468,38 +468,38 @@ def as_tools(configuration: AgicapIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="list_companies",
-            description="List all companies",
+            name="agicap_list_companies",
+            description="List all companies from Agicap.",
             func=lambda: integration.list_companies(),
             args_schema=ListCompaniesSchema
         ),
         StructuredTool(
-            name="get_company_accounts",
-            description="Get all accounts for a company",
+            name="agicap_get_company_accounts",
+            description="Get all accounts for a company from Agicap.",
             func=lambda company_id: integration.get_company_accounts(company_id),
             args_schema=GetCompanyAccountsSchema
         ),
         StructuredTool(
-            name="export_actual",
+            name="agicap_export_actual",
             description="Export actual bank transactions from Agicap",
             func=lambda company_id, account_id, date_start, date_end: integration.export_actual(company_id, account_id, date_start, date_end),
             args_schema=ExportActualSchema
         ),
         StructuredTool(
-            name="export_budget",
+            name="agicap_export_budget",
             description="Export budget vs actual comparison from Agicap",
             func=lambda company_id, account_id, date_start, date_end: integration.export_budget(company_id, account_id, date_start, date_end),
             args_schema=ExportBudgetSchema
         ),
         StructuredTool(
-            name="get_transactions",
-            description="Get all transactions for a specific account",
+            name="agicap_get_transactions",
+            description="Get all transactions for a specific account from Agicap.",
             func=lambda company_id, account_id, limit: integration.get_transactions(company_id, account_id, limit),
             args_schema=GetTransactionsSchema
         ),
         StructuredTool(
-            name="get_debts",
-            description="Get company debts information",
+            name="agicap_get_debts",
+            description="Get company debts information from Agicap.",
             func=lambda company_id: integration.get_debts(company_id),
             args_schema=GetDebtsSchema
         ),

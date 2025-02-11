@@ -1605,295 +1605,295 @@ def as_tools(configuration: BrevoIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_all_contacts",
+            name="brevo_get_all_contacts",
             description="Get all contacts from Brevo.",
             func=lambda limit: integration.get_all_contacts(limit=limit),
             args_schema=GetAllContactsSchema
         ),
         StructuredTool(
-            name="get_contact",
+            name="brevo_get_contact",
             description="Get details for a specific contact.",
             func=lambda identifier, identifier_type: integration.get_contact(identifier, identifier_type),
             args_schema=GetContactSchema
         ),
         StructuredTool(
-            name="create_contact",
+            name="brevo_create_contact",
             description="Create or update a contact.",
             func=lambda email, attributes, list_ids: integration.create_contact(email, attributes, list_ids),
             args_schema=CreateContactSchema
         ),
         StructuredTool(
-            name="update_contact",
+            name="brevo_update_contact",
             description="Update an existing contact.",
             func=lambda contact_id, data: integration.update_contact(contact_id, data),
             args_schema=UpdateContactSchema
         ),
         StructuredTool(
-            name="delete_contact",
+            name="brevo_delete_contact",
             description="Delete a contact.",
             func=lambda contact_id: integration.delete_contact(contact_id),
             args_schema=DeleteContactSchema
         ),
         StructuredTool(
-            name="get_contact_stats",
+            name="brevo_get_contact_stats",
             description="Get stats for a contact.",
             func=lambda contact_id: integration.get_contact_stats(contact_id),
             args_schema=GetContactStatsSchema
         ),
         StructuredTool(
-            name="get_lists",
+            name="brevo_get_lists",
             description="Get all lists.",
             func=lambda limit: integration.get_lists(limit=limit),
             args_schema=GetListsSchema
         ),
         StructuredTool(
-            name="get_list_details",
+            name="brevo_get_list_details",
             description="Get details for a list.",
             func=lambda list_id: integration.get_list_details(list_id),
             args_schema=GetListDetailsSchema
         ),
         StructuredTool(
-            name="create_list",
+            name="brevo_create_list",
             description="Create a new list.",
             func=lambda name, description, contacts: integration.create_list(name, description, contacts),
             args_schema=CreateListSchema
         ),
         StructuredTool(
-            name="update_list",
+            name="brevo_update_list",
             description="Update an existing list.",
             func=lambda list_id, data: integration.update_list(list_id, data),
             args_schema=UpdateListSchema
         ),
         StructuredTool(
-            name="delete_list",
+            name="brevo_delete_list",
             description="Delete a list.",
             func=lambda list_id: integration.delete_list(list_id),
             args_schema=DeleteListSchema
         ),
         StructuredTool(
-            name="get_contacts_in_list",
+            name="brevo_get_contacts_in_list",
             description="Get contacts in a list.",
             func=lambda list_id: integration.get_contacts_in_list(list_id),
             args_schema=GetContactsInListSchema
         ),
         StructuredTool(
-            name="add_contact_to_list",
+            name="brevo_add_contact_to_list",
             description="Add a contact to a list.",
             func=lambda list_id, contact_id: integration.add_contacts_to_list(list_id, contact_id),
             args_schema=AddContactToListSchema
         ),
         StructuredTool(
-            name="remove_contact_from_list",
+            name="brevo_remove_contact_from_list",
             description="Remove a contact from a list.",
             func=lambda list_id, contact_id: integration.remove_contacts_from_list(list_id, contact_id),
             args_schema=RemoveContactFromListSchema
         ),
         StructuredTool(
-            name="get_email_campaigns",
+            name="brevo_get_email_campaigns",
             description="Get all email campaigns.",
             func=lambda limit: integration.get_email_campaigns(limit=limit),
             args_schema=GetEmailCampaignsSchema
         ),
         StructuredTool(
-            name="get_email_campaign_report",
+            name="brevo_get_email_campaign_report",
             description="Get report for an email campaign.",
             func=lambda campaign_id: integration.get_email_campaign_report(campaign_id),
             args_schema=GetEmailCampaignReportSchema
         ),
         StructuredTool(
-            name="get_sms_campaigns",
+            name="brevo_get_sms_campaigns",
             description="Get all SMS campaigns.",
             func=lambda limit: integration.get_sms_campaigns(limit=limit),
             args_schema=GetSmsCampaignsSchema
         ),
         StructuredTool(
-            name="get_sms_campaign_report",
+            name="brevo_get_sms_campaign_report",
             description="Get report for an SMS campaign.",
             func=lambda campaign_id: integration.get_sms_campaign(campaign_id),
             args_schema=GetSmsCampaignReportSchema
         ),
         StructuredTool(
-            name="get_whatsapp_campaigns",
+            name="brevo_get_whatsapp_campaigns",
             description="Get all WhatsApp campaigns.",
             func=lambda limit: integration.get_whatsapp_campaigns(limit=limit),
             args_schema=GetWhatsappCampaignsSchema
         ),
         StructuredTool(
-            name="get_whatsapp_campaign_report",
+            name="brevo_get_whatsapp_campaign_report",
             description="Get report for a WhatsApp campaign.",
             func=lambda campaign_id: integration.get_whatsapp_campaign(campaign_id),
             args_schema=GetWhatsappCampaignReportSchema
         ),
         StructuredTool(
-            name="get_whatsapp_configuration",
+            name="brevo_get_whatsapp_configuration",
             description="Get WhatsApp configuration.",
             func=integration.get_whatsapp_config,
             args_schema=GetWhatsappConfigurationSchema
         ),
         StructuredTool(
-            name="get_whatsapp_templates",
+            name="brevo_get_whatsapp_templates",
             description="Get WhatsApp templates.",
             func=integration.get_whatsapp_templates,
             args_schema=GetWhatsappTemplatesSchema
         ),
         StructuredTool(
-            name="get_senders",
+            name="brevo_get_senders",
             description="Get all senders.",
             func=integration.get_senders,
             args_schema=GetSendersSchema
         ),
         StructuredTool(
-            name="get_domains",
+            name="brevo_get_domains",
             description="Get all domains.",
             func=integration.get_domains,
             args_schema=GetDomainsSchema
         ),
         StructuredTool(
-            name="get_webhooks",
+            name="brevo_get_webhooks",
             description="Get all webhooks.",
             func=integration.get_webhooks,
             args_schema=GetWebhooksSchema
         ),
         StructuredTool(
-            name="get_account",
+            name="brevo_get_account",
             description="Get account details.",
             func=integration.get_account,
             args_schema=GetAccountSchema
         ),
         StructuredTool(
-            name="get_user_activity_logs",
+            name="brevo_get_user_activity_logs",
             description="Get user activity logs.",
             func=lambda start_date, end_date, limit, offset: integration.get_organization_activities(start_date, end_date, limit, offset),
             args_schema=GetUserActivityLogsSchema
         ),
         StructuredTool(
-            name="get_users",
+            name="brevo_get_users",
             description="Get all users in the organization.",
             func=integration.get_organization_users,
             args_schema=GetUsersSchema
         ),
         StructuredTool(
-            name="check_user",
+            name="brevo_check_user",
             description="Check if a user exists.",
             func=lambda email: integration.get_user_permissions(email),
             args_schema=CheckUserSchema
         ),
         StructuredTool(
-            name="revoke_user",
+            name="brevo_revoke_user",
             description="Revoke a user.",
             func=lambda email: integration.revoke_user_invitation(email),
             args_schema=RevokeUserSchema
         ),
         StructuredTool(
-            name="resend_cancel_user_invite",
+            name="brevo_resend_cancel_user_invite",
             description="Resend or cancel a user invite.",
             func=lambda email, action: integration.resend_user_invitation(email) if action == "resend" else integration.cancel_user_invitation(email),
             args_schema=ResendCancelUserInviteSchema
         ),
         StructuredTool(
-            name="send_user_invite",
+            name="brevo_send_user_invite",
             description="Send a user invite.",
             func=lambda email: integration.resend_user_invitation(email),
             args_schema=SendUserInviteSchema
         ),
         StructuredTool(
-            name="update_user_permissions",
+            name="brevo_update_user_permissions",
             description="Update user permissions.",
             func=lambda email, permissions: integration.update_user_permissions(email, permissions),
             args_schema=UpdateUserPermissionsSchema
         ),
         StructuredTool(
-            name="get_all_companies",
+            name="brevo_get_all_companies",
             description="Get all companies.",
             func=lambda limit: integration.get_companies(limit=limit),
             args_schema=GetAllCompaniesSchema
         ),
         StructuredTool(
-            name="get_company",
+            name="brevo_get_company",
             description="Get a company.",
             func=lambda company_id: integration.get_company(company_id),
             args_schema=GetCompanySchema
         ),
         StructuredTool(
-            name="get_all_pipelines",
+            name="brevo_get_all_pipelines",
             description="Get all pipelines.",
             func=lambda limit: integration.get_all_pipelines(limit=limit),
             args_schema=GetAllPipelinesSchema
         ),
         StructuredTool(
-            name="get_pipeline",
+            name="brevo_get_pipeline",
             description="Get a pipeline.",
             func=lambda pipeline_id: integration.get_pipeline(pipeline_id),
             args_schema=GetPipelineSchema
         ),
         StructuredTool(
-            name="get_all_deals",
+            name="brevo_get_all_deals",
             description="Get all deals.",
             func=lambda limit: integration.get_all_deals(limit=limit),
             args_schema=GetAllDealsSchema
         ),
         StructuredTool(
-            name="get_deal",
+            name="brevo_get_deal",
             description="Get a deal.",
             func=lambda deal_id: integration.get_deal(deal_id),
             args_schema=GetDealSchema
         ),
         StructuredTool(
-            name="get_all_tasks",
+            name="brevo_get_all_tasks",
             description="Get all tasks.",
             func=lambda limit: integration.get_all_tasks(limit=limit),
             args_schema=GetAllTasksSchema
         ),
         StructuredTool(
-            name="get_task",
+            name="brevo_get_task",
             description="Get a task.",
             func=lambda task_id: integration.get_task(task_id),
             args_schema=GetTaskSchema
         ),
         StructuredTool(
-            name="create_task",
+            name="brevo_create_task",
             description="Create a new task.",
             func=lambda task_name, task_type, task_due_date, task_status, task_priority, task_description: integration.create_task(task_name, task_type, task_due_date, task_status, task_priority, task_description),
             args_schema=CreateTaskSchema
         ),
         StructuredTool(
-            name="update_task",
+            name="brevo_update_task",
             description="Update an existing task.",
             func=lambda task_id, data: integration.update_task(task_id, data),
             args_schema=UpdateTaskSchema
         ),
         StructuredTool(
-            name="delete_task",
+            name="brevo_delete_task",
             description="Delete a task.",
             func=lambda task_id: integration.delete_task(task_id),
             args_schema=DeleteTaskSchema
         ),
         StructuredTool(
-            name="get_all_notes",
+            name="brevo_get_all_notes",
             description="Get all notes.",
             func=lambda limit: integration.get_all_notes(limit=limit),
             args_schema=GetAllNotesSchema
         ),
         StructuredTool(
-            name="get_note",
+            name="brevo_get_note",
             description="Get a note.",
             func=lambda note_id: integration.get_note(note_id),
             args_schema=GetNoteSchema
         ),
         StructuredTool(
-            name="create_note",
+            name="brevo_create_note",
             description="Create a new note.",
             func=lambda text, contact_ids, deal_ids, company_ids: integration.create_note(text, contact_ids, deal_ids, company_ids),
             args_schema=CreateNoteSchema
         ),
         StructuredTool(
-            name="update_note",
+            name="brevo_update_note",
             description="Update an existing note.",
             func=lambda note_id, data: integration.update_note(note_id, data),
             args_schema=UpdateNoteSchema
         ),
         StructuredTool(
-            name="delete_note",
+            name="brevo_delete_note",
             description="Delete a note.",
             func=lambda note_id: integration.delete_note(note_id),
             args_schema=DeleteNoteSchema

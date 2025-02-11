@@ -216,13 +216,13 @@ def as_tools(configuration: NotionIntegrationConfiguration):
         
     return [
         StructuredTool(
-            name="get_notion_page",
+            name="notion_get_page",
             description="Retrieve a specific page from Notion by its ID",
             func=lambda page_id: integration.get_page(page_id),
             args_schema=GetPageSchema
         ),
         StructuredTool(
-            name="create_notion_page",
+            name="notion_create_page",
             description="Create a new page in a Notion database",
             func=lambda database_id, title: integration.create_page(
                 database_id,
@@ -231,19 +231,19 @@ def as_tools(configuration: NotionIntegrationConfiguration):
             args_schema=CreatePageSchema
         ),
         StructuredTool(
-            name="update_notion_page",
+            name="notion_update_page",
             description="Update an existing Notion page",
             func=lambda page_id, properties: integration.update_page(page_id, properties),
             args_schema=UpdatePageSchema
         ),
         StructuredTool(
-            name="get_notion_database",
+            name="notion_get_database",
             description="Retrieve a specific database from Notion by its ID",
             func=lambda database_id: integration.get_database(database_id),
             args_schema=GetDatabaseSchema
         ),
         StructuredTool(
-            name="search_notion_database",
+            name="notion_search_database",
             description="Search for pages in a Notion database by title",
             func=lambda database_id, title: integration.search_by_title(database_id, title),
             args_schema=SearchDatabaseSchema

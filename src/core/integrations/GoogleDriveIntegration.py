@@ -264,25 +264,25 @@ def as_tools(configuration: GoogleDriveIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="list_drive_files",
+            name="googledrive_list_files",
             description="List files and folders in Google Drive",
             func=lambda query, page_size, fields: integration.list_files(query, page_size, fields),
             args_schema=ListFilesSchema
         ),
         StructuredTool(
-            name="get_drive_file",
+            name="googledrive_get_file",
             description="Get file metadata from Google Drive",
             func=lambda file_id, fields: integration.get_file(file_id, fields),
             args_schema=FileSchema
         ),
         StructuredTool(
-            name="create_drive_folder",
+            name="googledrive_create_folder",
             description="Create a new folder in Google Drive",
             func=lambda name, parent_id: integration.create_folder(name, parent_id),
             args_schema=CreateFolderSchema
         ),
         StructuredTool(
-            name="upload_drive_file",
+            name="googledrive_upload_file",
             description="Upload a file to Google Drive",
             func=lambda name, content, mime_type, parent_id: integration.upload_file(
                 name, content, mime_type, parent_id
@@ -290,13 +290,13 @@ def as_tools(configuration: GoogleDriveIntegrationConfiguration):
             args_schema=UploadFileSchema
         ),
         StructuredTool(
-            name="download_drive_file",
+            name="googledrive_download_file",
             description="Download a file's content from Google Drive",
             func=lambda file_id: integration.download_file(file_id),
             args_schema=FileSchema
         ),
         StructuredTool(
-            name="delete_drive_file",
+            name="googledrive_delete_file",
             description="Delete a file or folder from Google Drive",
             func=lambda file_id: integration.delete_file(file_id),
             args_schema=FileSchema

@@ -554,69 +554,69 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="get_linkedin_profile_view",
+            name="linkedin_get_profile_view",
             description="Get profile view information for a LinkedIn profile",
             func=lambda profile_url: integration.get_profile_view(profile_url),
             args_schema=GetProfileViewSchema
         ),
         StructuredTool(
-            name="get_linkedin_profile_network",
+            name="linkedin_get_profile_network",
             description="Get network information for a LinkedIn profile",
             func=lambda profile_url: integration.get_profile_network(profile_url),
             args_schema=GetProfileNetworkSchema
         ),
         StructuredTool(
-            name="get_linkedin_profile_contact",
+            name="linkedin_get_profile_contact",
             description="Get contact information for a LinkedIn profile",
             func=lambda profile_url: integration.get_profile_contact(profile_url),
             args_schema=GetProfileContactSchema
         ),
         StructuredTool(
-            name="get_linkedin_profile_top_card",
+            name="linkedin_get_profile_top_card",
             description="Get detailed profile information using custom API",
             func=lambda profile_url: integration.get_profile_top_card(profile_url),
             args_schema=GetProfileTopCardSchema
         ),
         StructuredTool(
-            name="get_linkedin_profile_resume",
+            name="linkedin_get_profile_resume",
             description="Get detailed resume information using custom API",
             func=lambda profile_url: integration.get_profile_resume(profile_url),
             args_schema=GetProfileResumeSchema
         ),
         StructuredTool(
-            name="get_linkedin_organization", 
+            name="linkedin_get_organization", 
             description="Get details about a LinkedIn organization/company",
             func=lambda organization_url: integration.get_organization(organization_url),
             args_schema=GetOrganizationSchema
         ),
         StructuredTool(
-            name="get_linkedin_post_comments",
+            name="linkedin_get_post_comments",
             description="Get LinkedIn profiles who commented on a LinkedIn post",
             func=lambda post_url, limit: integration.get_post_comments(post_url, limit=limit),
             args_schema=GetPostCommentsSchema
         ),
         StructuredTool(
-            name="get_linkedin_post_reactions",
+            name="linkedin_get_post_reactions",
             description="Get LinkedIn profiles who reacted on a LinkedIn post", 
             func=lambda post_url, limit: integration.get_post_reactions(post_url, limit=limit),
             args_schema=GetPostReactionsSchema
         ),
         StructuredTool(
-            name="get_linkedin_profile_posts",
+            name="linkedin_get_profile_posts",
             description="Get posts feed for a LinkedIn profile",
             func=lambda profile_url, count=1, limit=10, until=None, pagination_token=None: 
                 integration.get_profile_posts(profile_url, count=count, limit=limit, until=until, pagination_token=pagination_token),
             args_schema=GetProfilePostsSchema
         ),
         StructuredTool(
-            name="get_linkedin_organization_posts",
+            name="linkedin_get_organization_posts",
             description="Get posts feed for a LinkedIn organization/company",
             func=lambda organization_url, count=100, limit=-1: 
                 integration.get_organization_posts(organization_url, count=count, limit=limit),
             args_schema=GetOrganizationPostsSchema
         ),
         StructuredTool(
-            name="get_linkedin_post_stats",
+            name="linkedin_get_post_stats",
             description="Get statistics for a LinkedIn post",
             func=lambda post_url: integration.get_post_stats(post_url),
             args_schema=GetPostStatsSchema

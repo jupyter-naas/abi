@@ -236,32 +236,32 @@ def as_tools(configuration: SupabaseIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="select_from_supabase",
+            name="supabase_select_records_from_table",
             description="Select data from a Supabase table",
             func=lambda table, columns, filters, order, limit, offset:
                 integration.select(table, columns, filters, order, limit, offset),
             args_schema=SelectSchema
         ),
         StructuredTool(
-            name="insert_into_supabase",
+            name="supabase_insert_records_into_table",
             description="Insert data into a Supabase table",
             func=lambda table, data, upsert: integration.insert(table, data, upsert),
             args_schema=InsertSchema
         ),
         StructuredTool(
-            name="update_in_supabase",
+            name="supabase_update_records_in_table",
             description="Update records in a Supabase table",
             func=lambda table, data, filters: integration.update(table, data, filters),
             args_schema=UpdateSchema
         ),
         StructuredTool(
-            name="delete_from_supabase",
+            name="supabase_delete_records_from_table",
             description="Delete records from a Supabase table",
             func=lambda table, filters: integration.delete(table, filters),
             args_schema=DeleteSchema
         ),
         StructuredTool(
-            name="call_supabase_rpc",
+            name="supabase_call_rpc",
             description="Call a Postgres function via RPC",
             func=lambda function, params: integration.rpc(function, params),
             args_schema=RPCSchema

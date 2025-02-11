@@ -15,6 +15,7 @@ from pptx.enum.shapes import MSO_CONNECTOR
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL
 
+LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
 
 @dataclass
 class PowerPointIntegrationConfiguration(IntegrationConfiguration):
@@ -97,11 +98,6 @@ class PowerPointIntegration(Integration):
                     "width": shape.width.cm if hasattr(shape, 'width') else None,
                     "height": shape.height.cm if hasattr(shape, 'height') else None,
                     "rotation": shape.rotation if hasattr(shape, 'rotation') else None,
-                    # "has_chart": shape.has_chart if hasattr(shape, 'has_chart') else None,
-                    # "has_table": shape.has_table if hasattr(shape, 'has_table') else None,
-                    # "has_text_frame": shape.has_text_frame if hasattr(shape, 'has_text_frame') else None,
-                    # "is_placeholder": shape.is_placeholder if hasattr(shape, 'is_placeholder') else None,
-                    # "click_action": str(shape.click_action) if hasattr(shape, 'click_action') else None,
                 }
                 if text and data["text"] == "":
                     continue

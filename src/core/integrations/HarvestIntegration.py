@@ -186,7 +186,7 @@ def as_tools(configuration: HarvestIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="get_harvest_time_entries",
+            name="harvest_get_time_entries",
             description="Get time entries with optional filters",
             func=lambda from_date, to_date, user_id: integration.get_time_entries(
                 from_date, to_date, user_id
@@ -194,25 +194,25 @@ def as_tools(configuration: HarvestIntegrationConfiguration):
             args_schema=TimeEntriesSchema
         ),
         StructuredTool(
-            name="get_harvest_projects",
+            name="harvest_get_projects",
             description="Get list of projects",
             func=lambda is_active: integration.get_projects(is_active),
             args_schema=ActiveFilterSchema
         ),
         StructuredTool(
-            name="get_harvest_clients",
+            name="harvest_get_clients",
             description="Get list of clients",
             func=lambda is_active: integration.get_clients(is_active),
             args_schema=ActiveFilterSchema
         ),
         StructuredTool(
-            name="get_harvest_users",
+            name="harvest_get_users",
             description="Get list of users",
             func=lambda is_active: integration.get_users(is_active),
             args_schema=ActiveFilterSchema
         ),
         StructuredTool(
-            name="create_harvest_time_entry",
+            name="harvest_create_time_entry",
             description="Create a new time entry",
             func=lambda project_id, task_id, spent_date, hours, notes: integration.create_time_entry(
                 project_id, task_id, spent_date, hours, notes
