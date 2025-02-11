@@ -6,9 +6,7 @@ class Exceptions:
     
     class ObjectAlreadyExists(Exception):
         pass
-    
-    class ObjectNotFound(Exception):
-        pass
+
 
 
 class IObjectStorageAdapter(ABC):
