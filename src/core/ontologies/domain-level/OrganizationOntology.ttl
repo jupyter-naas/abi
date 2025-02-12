@@ -413,6 +413,13 @@ abi:hasLegalName a owl:ObjectProperty ;
     rdfs:label "has legal name"@en ;
     skos:definition "Relates an Organization to its legal name, which is a formally registered designation of the organization."@en .
 
+abi:isLegalNameOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00001331 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is legal name of"@en ;
+    skos:definition "Relates a legal name to the organization it belongs to."@en .
+
 abi:hasTickerSymbol a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
     rdfs:domain cco:ont00001180 ;
@@ -420,12 +427,125 @@ abi:hasTickerSymbol a owl:ObjectProperty ;
     rdfs:label "has ticker"@en ;
     skos:definition "Relates an Organization to its ticker, which is a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges."@en .
 
+abi:isTickerSymbolOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:Ticker ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is ticker symbol of"@en ;
+    skos:definition "Relates a ticker symbol to the organization it belongs to."@en .
+
+abi:hasFacility a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00000192 ;
+    rdfs:label "has facility" ;
+    skos:definition "Relates an Organization to its Facility." ;
+    rdfs:comment "This property connects an organization to its facilities." .
+
+abi:isFacilityOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00000192 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is facility of" ;
+    skos:definition "Relates a facility to the organization it belongs to." ;
+    rdfs:comment "This property connects a facility to the organization it belongs to." .
+
 abi:hasAddress a owl:ObjectProperty ;
     rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
     rdfs:domain cco:ont00000192 ;
     rdfs:range abi:Address ;
     rdfs:label "has address"@en ;
     skos:definition "Relates an Organization to its address."@en .
+
+abi:isAddressOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:Address ;
+    rdfs:range cco:ont00000192 ;
+    rdfs:label "is address of"@en ;
+    skos:definition "Relates an address to the organization it belongs to."@en .
+
+abi:hasOrganizationSize a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain cco:ont00001180 ; # Organization
+    rdfs:range abi:OrganizationSize ;
+    rdfs:label "has organization size"@en ;
+    skos:definition "A relation between an organization and its organization size."@en ;
+    rdfs:comment "This property captures the relationship between an organization and the size of its staff, which is crucial for understanding the organizational structure and capacity." .
+
+abi:isOrganizationSizeOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:OrganizationSize ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is organization size of"@en ;
+    skos:definition "Relates an organization size to the organization it belongs to."@en .
+
+abi:hasKPI a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:KPI ;
+    rdfs:label "has indicator"@en ;
+    skos:definition "Relates an Organization to its key performance indicators."@en .
+
+abi:isIndicatorOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:KPI ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is indicator of"@en ;
+    skos:definition "Relates a key performance indicator to the organization it belongs to."@en .
+
+abi:hasPositioning a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000218 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Positioning ;
+    rdfs:label "has_positioning"@en ;
+    skos:definition "Relates an organization to its market positioning."@en ;
+    skos:example "The company has a positioning in the market."@en .
+
+abi:isPositioningOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Positioning ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasPositioning ;
+    rdfs:label "is_positioning_of"@en ;
+    skos:definition "Relates positioning back to its organization."@en ;
+    skos:example "The positioning is of the company."@en .
+
+abi:hasPartnership a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00000958 ;
+    rdfs:label "has_partnership"@en ;
+    skos:definition "Relates an organization to its partnerships with other organizations."@en .
+
+abi:isPartnershipOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00000958 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is_partnership_of"@en ;
+    skos:definition "Relates a partnership to the organization it belongs to."@en .
+
+abi:hasStrategicAlliance a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00000958 ;
+    rdfs:label "has_strategic_alliance"@en ;
+    skos:definition "Relates an organization to its strategic alliances with other organizations."@en .
+
+abi:isStrategicAllianceOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00000958 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is_strategic_alliance_of"@en ;
+    skos:definition "Relates a strategic alliance to the organization it belongs to."@en .
+
+abi:hasBusinessDomain a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000129 ;
+    rdfs:domain cco:ont00001180 ; # Organization
+    rdfs:range abi:BusinessDomain ;
+    rdfs:label "has business domain" ;
+    skos:definition "Relates an Organization to the Business Domain it operates in, indicating the specific areas of expertise or activity within the organization." ;
+    rdfs:comment "This property links an organization to its internal areas of specialization and activity." .
+
 
 #--- CCO Agent Ontology ---#
 
@@ -449,14 +569,7 @@ cco:ont00001815 a owl:ObjectProperty ;
     skos:definition "An Organization o2 is_subsidiary_of Organization o1 iff o1 controls o2 by having the capacity to determine the outcome of decisions about o2's financial and operating policies. "@en ;
     cco:ont00001754 "http://www.austlii.edu.au/legis/cth/consol_act/ca2001172/s50aa.html)" ;
     cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:isPartOfIndustry a owl:ObjectProperty ;
-    rdfs:subPropertyOf cco:ont00001939 ; #is affiliated with
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range abi:Industry ;
-    rdfs:label "is part of industry"@en ;
-    skos:definition "An Organization o1 is_part_of_industry Industry i1 iff o1 is an instance of an Organization and i1 is an instance of an Industry, such that o1 is part of i1."@en .
-
+ 
 # Members
 
 cco:ont00001977 a owl:ObjectProperty ;
@@ -494,6 +607,70 @@ cco:ont00001939 a owl:ObjectProperty ;
     skos:definition "x is_affiliated_with y iff x and y are instances of Agent, such that they have any kind of social or business relationship."@en ;
     cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
 
+abi:hasRole a owl:ObjectProperty ;
+    owl:inverseOf abi:isRoleOf ;
+    rdfs:subPropertyOf cco:ont00001992 ; # has organizational context
+    rdfs:domain cco:ont00000647 ;
+    rdfs:range cco:ont00000175 ;
+    rdfs:label "has role"@en ;
+    skos:definition "An Organization Member o1 has_role Role r1 iff o1 is an instance of an Organization Member and r1 is an instance of an Organization Member Role, such that o1 bears r1."@en .
+
+abi:isRoleOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasRole ;
+    rdfs:subPropertyOf cco:ont00001846 ; # is organizational context of
+    rdfs:domain cco:ont00000175 ;
+    rdfs:range cco:ont00000647 ;
+    rdfs:label "is role of"@en ;
+    skos:definition "A Role r1 is_role_of Organization o1 iff r1 is an instance of an Organization Member Role and o1 is an instance of an Organization, such that r1 is a role of o1."@en .
+
+abi:hasOrganization a owl:ObjectProperty ;
+    owl:inverseOf abi:belongsToIndustry ;
+    rdfs:subPropertyOf cco:ont00001977 ; #has affiliate
+    rdfs:domain abi:Industry ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "has organization"@en ;
+    skos:definition "An Industry i1 has_organization Organization o1 iff i1 is an instance of an Industry and o1 is an instance of an Organization, such that o1 is part of i1."@en .
+
+abi:belongsToIndustry a owl:ObjectProperty ;
+    owl:inverseOf abi:hasOrganization ;
+    rdfs:subPropertyOf cco:ont00001939 ; #is affiliated with
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Industry ;
+    rdfs:label "belongs to industry"@en ;
+    skos:definition "An Organization o1 belongs_to_industry Industry i1 iff o1 is an instance of an Organization and i1 is an instance of an Industry, such that o1 is part of i1."@en .
+
+abi:hasJointVenture a owl:ObjectProperty ;  
+    owl:inverseOf abi:isJointVentureOf ;
+    rdfs:subPropertyOf cco:ont00001977 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:JointVenture ;
+    rdfs:label "has joint venture"@en ;
+    skos:definition "An Organization o1 has_joint_venture Organization o2 iff o1 and o2 are instances of an Organization and o2 is an instance of a Joint Venture, such that o1 and o2 are partners in the joint venture."@en .
+
+abi:isJointVentureOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasJointVenture ;
+    rdfs:subPropertyOf cco:ont00001939 ; #is affiliated with
+    rdfs:domain abi:JointVenture ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is joint venture of"@en ;
+    skos:definition "An Organization o1 is_joint_venture_of Organization o2 iff o1 and o2 are instances of an Organization and o2 is an instance of a Joint Venture, such that o1 and o2 are partners in the joint venture."@en .
+
+abi:hasMergerAndAcquisition a owl:ObjectProperty ;
+    owl:inverseOf abi:isMergerAndAcquisitionOf ;
+    rdfs:subPropertyOf cco:ont00001977 ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:MergerAndAcquisition ;
+    rdfs:label "has merger and acquisition"@en ;
+    skos:definition "An Organization o1 has_merger_and_acquisition Organization o2 iff o1 and o2 are instances of an Organization and o2 is an instance of a Merger And Acquisition, such that o1 and o2 are partners in the merger and acquisition."@en .
+
+abi:isMergerAndAcquisitionOf a owl:ObjectProperty ;
+    owl:inverseOf abi:hasMergerAndAcquisition ;
+    rdfs:subPropertyOf cco:ont00001939 ; #is affiliated with
+    rdfs:domain abi:MergerAndAcquisition ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is merger and acquisition of"@en ;
+    skos:definition "An Organization o1 is_merger_and_acquisition_of Organization o2 iff o1 and o2 are instances of an Organization and o2 is an instance of a Merger And Acquisition, such that o1 and o2 are partners in the merger and acquisition."@en .
+
 # Capabilities
 
 cco:ont00001954 a owl:ObjectProperty ;
@@ -514,147 +691,6 @@ cco:ont00001889 a owl:ObjectProperty ;
     skos:definition "x capability_of y iff y is an instance of Agent and x is an instance of Agent Capability, such that x inheres in y."@en ;
     cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI ;
     skos:example "Developing software (TechnologicalCapabilities) is a capability of the organization."@en .
-
-
-abi:hasKPI a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range abi:KPI ;
-    rdfs:label "has indicator"@en ;
-    skos:definition "Relates an Organization to its key performance indicators."@en .
-
-abi:hasJointVenture a owl:ObjectProperty ;  
-    rdfs:subPropertyOf cco:ont00001977 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range abi:JointVenture ;
-    rdfs:label "has joint venture"@en ;
-    skos:definition "An Organization o1 has_joint_venture Organization o2 iff o1 and o2 are instances of an Organization and o2 is an instance of a Joint Venture, such that o1 and o2 are partners in the joint venture."@en ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:hasMergerAndAcquisition a owl:ObjectProperty ;
-    rdfs:subPropertyOf cco:ont00001977 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range abi:MergerAndAcquisition ;
-    rdfs:label "has merger and acquisition"@en ;
-    skos:definition "An Organization o1 has_merger_and_acquisition Organization o2 iff o1 and o2 are instances of an Organization and o2 is an instance of a Merger And Acquisition, such that o1 and o2 are partners in the merger and acquisition."@en ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:hasOrganizationMember a owl:ObjectProperty ;
-    rdfs:subPropertyOf cco:ont00001977 ; # has affiliate
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range cco:ont00000647 ;
-    rdfs:label "has organization member"@en ;
-    skos:definition "An Organization o1 has_organization_member Person p1 iff p1 is an instance of an Organization Member and o1 is an instance of an Organization, such that p1 is a member of o1."@en ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:isOrganizationMemberOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf cco:ont00001939 ; # is affiliated with
-    rdfs:domain cco:ont00000647 ;
-    rdfs:range cco:ont00001180 ;
-    rdfs:label "is organization member of"@en ;
-    skos:definition "A Person p1 is_organization_member_of Organization o1 iff p1 is an instance of an Organization Member and o1 is an instance of an Organization, such that p1 is a member of o1."@en ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:hasOrganizationMemberRole a owl:ObjectProperty ;
-    rdfs:subPropertyOf cco:ont00001992 ; # has organizational context
-    rdfs:domain cco:ont00000647 ;
-    rdfs:range cco:ont00000175 ;
-    rdfs:label "has organization member role"@en ;
-    skos:definition "An Organization Member o1 has_organization_member_role Role r1 iff o1 is an instance of an Organization Member and r1 is an instance of an Organization Member Role, such that o1 bears r1."@en ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:isOrganizationMemberRoleOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf cco:ont00001846 ; # is organizational context of
-    rdfs:domain cco:ont00000175 ;
-    rdfs:range cco:ont00000647 ;
-    rdfs:label "is organization member role of"@en ;
-    skos:definition "A Role r1 is_organization_member_role_of Organization o1 iff r1 is an instance of an Organization Member Role and o1 is an instance of an Organization, such that r1 is a role of o1."@en ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
-abi:enablesOffering a owl:ObjectProperty ;
-    rdfs:domain cco:ont00000568 ; # Organization Capabilities
-    rdfs:range abi:Offering ;
-    rdfs:label "enables_offering"@en ;
-    skos:definition "Relates capabilities to the offerings they enable or support."@en .
-
-abi:isEnabledBy a owl:ObjectProperty ;
-    rdfs:domain abi:Offering ;
-    rdfs:range cco:ont00000568 ; # Organization Capabilities
-    owl:inverseOf abi:enablesOffering ;
-    rdfs:label "is_enabled_by"@en ;
-    skos:definition "Relates offerings back to the capabilities that enable them."@en .
-
-abi:hasPositioning a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000218 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range abi:Positioning ;
-    rdfs:label "has_positioning"@en ;
-    skos:definition "Relates an organization to its market positioning."@en ;
-    skos:example "The company has a positioning in the market."@en .
-
-abi:isPositioningOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
-    rdfs:domain abi:Positioning ;
-    rdfs:range cco:ont00001180 ;
-    owl:inverseOf abi:hasPositioning ;
-    rdfs:label "is_positioning_of"@en ;
-    skos:definition "Relates positioning back to its organization."@en ;
-    skos:example "The positioning is of the company."@en .
-
-abi:hasCompetitor a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000115 ;
-    rdfs:domain cco:ont00001180 ; # Organization
-    rdfs:range abi:Competitor ;
-    rdfs:label "has competitor"@en ;
-    skos:definition "Relates an organization to its competitors."@en ;
-    skos:example "The company has a competitor."@en .
-
-abi:isCompetitorOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000129 ;
-    rdfs:domain abi:Competitor ;
-    rdfs:range cco:ont00001180 ; # Organization
-    owl:inverseOf abi:hasCompetitor ;
-    rdfs:label "is_competitor_of"@en ;
-    skos:definition "Relates competitors back to their organization."@en ;
-    skos:example "The competitor is of the company."@en .
-
-abi:hasOrganizationSize a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000115 ;
-    rdfs:domain cco:ont00001180 ; # Organization
-    rdfs:range abi:OrganizationSize ;
-    rdfs:label "has organization size"@en ;
-    skos:definition "A relation between an organization and its organization size."@en ;
-    rdfs:comment "This property captures the relationship between an organization and the size of its staff, which is crucial for understanding the organizational structure and capacity." .
-
-abi:hasBusinessDomain a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000129 ;
-    rdfs:domain cco:ont00001180 ; # Organization
-    rdfs:range abi:BusinessDomain ;
-    rdfs:label "has business domain" ;
-    skos:definition "Relates an Organization to the Business Domain it operates in, indicating the specific areas of expertise or activity within the organization." ;
-    rdfs:comment "This property links an organization to its internal areas of specialization and activity." .
-
-abi:hasFacility a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000178 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range cco:ont00000192 ;
-    rdfs:label "has facility" ;
-    skos:definition "Relates an Organization to its Facility." ;
-    rdfs:comment "This property connects an organization to its facilities." .
-
-abi:hasPartnership a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000056 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range cco:ont00000958 ;
-    rdfs:label "has_partnership"@en ;
-    skos:definition "Relates an organization to its partnerships with other organizations."@en .
-
-abi:hasStrategicAlliance a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000056 ;
-    rdfs:domain cco:ont00001180 ;
-    rdfs:range cco:ont00000958 ;
-    rdfs:label "has_strategic_alliance"@en ;
-    skos:definition "Relates an organization to its strategic alliances with other organizations."@en .
 
 #################################################################
 #    Data Properties
@@ -684,6 +720,12 @@ abi:logo a owl:DatatypeProperty ;
     rdfs:label "logo" ;
     skos:definition "The URL of the logo of the organization." ;
     skos:example "https://www.naas.ai/logo.png" .
+
+abi:number_of_employees a owl:DatatypeProperty ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range xsd:integer ;
+    rdfs:label "number of employees" ;
+    skos:definition "The number of employees of the organization." .
 
 abi:source a owl:DatatypeProperty ;
     rdfs:domain cco:ont00001180 ;

@@ -86,11 +86,27 @@ abi:hasRevenue a owl:ObjectProperty ;
     rdfs:domain cco:ont00001180 ;
     rdfs:range abi:Revenue .
 
+abi:isRevenueOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Revenue ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasRevenue ;
+    rdfs:label "is revenue of"@en ;
+    skos:definition "Relates a Revenue to the Organization that it belongs to." .
+
 abi:hasExpenses a owl:ObjectProperty ;
     rdfs:subPropertyOf cco:ont00001773 ;
     rdfs:label "has expenses"@en ;
     rdfs:domain cco:ont00001180 ;
     rdfs:range abi:Expenses .
+
+abi:isExpensesOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Expenses ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasExpenses ;
+    rdfs:label "is expenses of"@en ;
+    skos:definition "Relates an Expenses to the Organization that it belongs to." .
 
 abi:hasProfit a owl:ObjectProperty ;
     rdfs:subPropertyOf cco:ont00001773 ;
@@ -98,11 +114,27 @@ abi:hasProfit a owl:ObjectProperty ;
     rdfs:domain cco:ont00001180 ;
     rdfs:range abi:Profit .
 
+abi:isProfitOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Profit ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasProfit ;
+    rdfs:label "is profit of"@en ;
+    skos:definition "Relates a Profit to the Organization that it belongs to." .
+
 abi:hasEBITDA a owl:ObjectProperty ;
     rdfs:subPropertyOf cco:ont00001773 ;
     rdfs:label "has ebitda"@en ;
     rdfs:domain cco:ont00001180 ;
     rdfs:range abi:EBITDA .
+
+abi:isEBITDAOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:EBITDA ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasEBITDA ;
+    rdfs:label "is ebitda of"@en ;
+    skos:definition "Relates an EBITDA to the Organization that it belongs to." .
 
 #################################################################
 #    Data Properties
