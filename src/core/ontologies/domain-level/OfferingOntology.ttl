@@ -108,14 +108,29 @@ abi:isMarketSegmentOf a owl:ObjectProperty ;
     skos:definition "Relates a Market Segment to the Market that it belongs to." ;
     rdfs:comment "This property connects a market segment to the market that it belongs to." .
 
-abi:isPartOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf bfo:BFO_0000127 ;
+abi:Targets a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000218 ;
     rdfs:domain abi:Offering ;
     rdfs:range abi:Market ;
-    rdfs:label "is part of" ;
-    skos:definition "Relates an Offering to the Market that it belongs to." ;
-    rdfs:comment "This property connects an offering to the market that it belongs to." .
+    rdfs:label "targets" ;
+    skos:definition "Relates an Offering to the Market/MarketSegment that it targets." ;
+    rdfs:comment "This property connects an offering to the market/market segment that it targets." .
+
+abi:isTargetedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Market ;
+    rdfs:range abi:Offering ;
+    owl:inverseOf abi:TargetsMarket ;
+    rdfs:label "is targeted by market" ;
+    skos:definition "Relates a Market to the Offering that it targets." ;
+    rdfs:comment "This property connects a market to the offering that it targets." .
 
 #################################################################
 #    Data Properties
 #################################################################
+
+abi:market_share a owl:DatatypeProperty ;
+    rdfs:domain abi:Offering ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "market share" ;
+    skos:definition "The market share of the offering." .
