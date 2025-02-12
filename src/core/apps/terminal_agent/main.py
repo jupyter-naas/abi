@@ -381,3 +381,12 @@ def run_powerpoint_agent():
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
+
+def run_google_scholar_agent():
+    """Run the Google Scholar agent."""
+    from src.core.assistants.expert.integrations.GoogleScholarAssistant import create_google_scholar_assistant
+    
+    agent = create_google_scholar_assistant()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)

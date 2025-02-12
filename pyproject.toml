@@ -43,10 +43,11 @@ wordcloud = "^1.9.4"
 imapclient = "^3.0.1"
 pynacl = "^1.5.0"
 python-pptx = "^1.0.2"
+scholarly = "^1.7.11"
+langchain-openai = "^0.3.3"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
-langchain-openai = "^0.2.9"
 rich = "^13.9.4"
 
 [tool.poetry.group.dev.dependencies]
@@ -112,6 +113,7 @@ chat-plotly-agent = "src.core.apps.terminal_agent.main:run_plotly_agent"
 chat-matplotlib-agent = "src.core.apps.terminal_agent.main:run_matplotlib_agent"
 abi = "src.cli:main"
 api = "src.api:api"
+chat-google-scholar-agent = "src.core.apps.terminal_agent.main:run_google_scholar_agent"
 
 [build-system]
 requires = ["poetry-core"]
