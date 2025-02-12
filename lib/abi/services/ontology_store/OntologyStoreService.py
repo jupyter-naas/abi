@@ -55,6 +55,10 @@ class OntologyStoreService(IOntologyStoreService):
             existing_ontology = Graph()
         
         filtered_inserted_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
+
+        merged_ontology = existing_ontology + filtered_inserted_ontology
+
+        self.store(name, merged_ontology, individual_filter=False)
         
         added = self.diff_graphs(existing_ontology, filtered_inserted_ontology)
                 
@@ -65,14 +69,14 @@ class OntologyStoreService(IOntologyStoreService):
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
                             callback(OntologyEvent.INSERT, name, (s, p, o))
                 
-        merged_ontology = existing_ontology + filtered_inserted_ontology
-
-        self.store(name, merged_ontology, individual_filter=False)
-
     def remove(self, name: str, ontology: Graph, individual_filter: bool = True):
         existing_ontology = self.get(name)
         
         filtered_removed_ontology = self.__filter_ontology(ontology) if individual_filter else ontology
+
+        merged_ontology = existing_ontology - filtered_removed_ontology
+        
+        self.store(name, merged_ontology, individual_filter=False)
         
         removed = self.diff_graphs(filtered_removed_ontology, existing_ontology)
 
@@ -82,10 +86,6 @@ class OntologyStoreService(IOntologyStoreService):
                     if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
                         for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.DELETE]:
                             callback(OntologyEvent.DELETE, name, (s, p, o))
-        
-        merged_ontology = existing_ontology - filtered_removed_ontology
-        
-        self.store(name, merged_ontology, individual_filter=False)
         
     def list_ontologies(self) -> List[str]:
         return self.__ontology_adaptor.list_ontologies()
