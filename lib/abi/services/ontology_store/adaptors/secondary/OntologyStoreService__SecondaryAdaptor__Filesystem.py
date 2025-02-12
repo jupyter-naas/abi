@@ -78,7 +78,7 @@ class OntologyStoreService__SecondaryAdaptor__Filesystem(IOntologyStorePort):
         import os
         
         file_paths = [os.path.join(self.__store_path, name) for name in os.listdir(self.__store_path)]
-        ontologies = [Graph().parse(file_path, format='turtle') for file_path in file_paths]
+        ontologies = [Graph().parse(file_path, format='turtle') for file_path in file_paths if file_path.endswith('.ttl')]
         
         return self.__merge_graphs(ontologies)
     
