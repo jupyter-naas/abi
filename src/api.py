@@ -14,15 +14,15 @@ from abi import logger
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
 # Foundation assistants
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
-from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
+from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_agent
 # Domain assistants
-from src.core.assistants.domain.OpenDataAssistant import create_open_data_assistant
-from src.core.assistants.domain.ContentAssistant import create_content_assistant
-from src.core.assistants.domain.FinanceAssistant import create_finance_assistant
-from src.core.assistants.domain.GrowthAssistant import create_growth_assistant
-from src.core.assistants.domain.OperationsAssistant import create_operations_assistant
-from src.core.assistants.domain.SalesAssistant import create_sales_assistant
+from src.core.assistants.domain.OpenDataAssistant import create_open_data_agent
+from src.core.assistants.domain.ContentAssistant import create_content_agent
+from src.core.assistants.domain.FinanceAssistant import create_finance_agent
+from src.core.assistants.domain.GrowthAssistant import create_growth_agent
+from src.core.assistants.domain.OperationsAssistant import create_operations_agent
+from src.core.assistants.domain.SalesAssistant import create_sales_agent
 # Integrations
 from src.core.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
 from src.core.assistants.expert.integrations.NaasAssistant import create_naas_agent
@@ -115,28 +115,28 @@ assistants_router = APIRouter(
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
-supervisor_agent = create_supervisor_assistant()
+supervisor_agent = create_supervisor_agent()
 supervisor_agent.as_api(assistants_router)
 
-support_agent = create_support_assistant()
+support_agent = create_support_agent()
 support_agent.as_api(assistants_router)
 
-open_data_agent = create_open_data_assistant()
+open_data_agent = create_open_data_agent()
 open_data_agent.as_api(assistants_router)
 
-content_agent = create_content_assistant()
+content_agent = create_content_agent()
 content_agent.as_api(assistants_router)
 
-growth_agent = create_growth_assistant()
+growth_agent = create_growth_agent()
 growth_agent.as_api(assistants_router)
 
-sales_agent = create_sales_assistant()
+sales_agent = create_sales_agent()
 sales_agent.as_api(assistants_router)
 
-operations_agent = create_operations_assistant()
+operations_agent = create_operations_agent()
 operations_agent.as_api(assistants_router)
 
-finance_agent = create_finance_assistant()
+finance_agent = create_finance_agent()
 finance_agent.as_api(assistants_router)
 
 naas_agent = create_naas_agent()
