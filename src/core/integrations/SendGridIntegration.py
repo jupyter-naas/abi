@@ -135,7 +135,41 @@ class SendGridIntegration(Integration):
         Returns:
             Dict: List of unsubscribe groups
         """
-        return self._make_request("GET", "/asm/groups") 
+        return self._make_request("GET", "/asm/groups")
+
+    def send_email(
+        self, 
+        from_email: str, 
+        to_emails: List[str], 
+        subject: str, 
+        html_content: str, 
+        plain_text_content: Optional[str] = None
+    ) -> Dict:
+        """Send an email using SendGrid.
+        
+        Args:
+            from_email (str): Sender email address
+            to_emails (List[str]): List of recipient email addresses
+            subject (str): Email subject line
+            html_content (str): HTML content of the email
+            plain_text_content (Optional[str]): Plain text version of the email
+            
+        Returns:
+            Dict: API response
+        """
+        data = {
+            "personalizations": [{"to": [{"email": email} for email in to_emails]}],
+            "from": {"email": from_email},
+            "subject": subject,
+            "content": [
+                {"type": "text/html", "value": html_content}
+            ]
+        }
+        
+        if plain_text_content:
+            data["content"].insert(0, {"type": "text/plain", "value": plain_text_content})
+            
+        return self._make_request("POST", "/mail/send", data)
 
 def as_tools(configuration: SendGridIntegrationConfiguration):
     """Convert SendGrid integration into LangChain tools."""
@@ -157,6 +191,13 @@ def as_tools(configuration: SendGridIntegrationConfiguration):
 
     class GetUnsubscribeGroupsSchema(BaseModel):
         pass
+
+    class SendEmailSchema(BaseModel):
+        from_email: str = Field(..., description="Sender email address")
+        to_emails: List[str] = Field(..., description="List of recipient email addresses")
+        subject: str = Field(..., description="Email subject line")
+        html_content: str = Field(..., description="HTML content of the email")
+        plain_text_content: Optional[str] = Field(None, description="Plain text version of the email")
     
     return [
         StructuredTool(
@@ -182,5 +223,11 @@ def as_tools(configuration: SendGridIntegrationConfiguration):
             description="Get all unsubscribe groups.",
             func=lambda: integration.get_unsubscribe_groups(),
             args_schema=GetUnsubscribeGroupsSchema
+        ),
+        StructuredTool(
+            name="sendgrid_send_email",
+            description="Send an email using SendGrid.",
+            func=lambda **kwargs: integration.send_email(**kwargs),
+            args_schema=SendEmailSchema
         )
     ] 
