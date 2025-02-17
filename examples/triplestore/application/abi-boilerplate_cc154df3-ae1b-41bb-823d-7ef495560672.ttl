@@ -918,9 +918,9 @@ RESPONSIBILITIES
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
+     ALWAYS use the support_agent following this process:
 
-    Chain of thought for support_assistant:
+    Chain of thought for support_agent:
     1.1. Identify if the user intent is a "create_feature_request" or "create_bug_report":
       - Feature request: New integration with external API, new ontology pipeline, or new workflow
       - Bug report: Issue with existing integration, pipeline, or workflow
@@ -989,9 +989,9 @@ RESPONSIBILITIES
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
+     ALWAYS use the support_agent following this process:
 
-    Chain of thought for support_assistant:
+    Chain of thought for support_agent:
     1.1. Identify if the user intent is a "create_feature_request" or "create_bug_report":
       - Feature request: New integration with external API, new ontology pipeline, or new workflow
       - Bug report: Issue with existing integration, pipeline, or workflow
@@ -1058,9 +1058,9 @@ RESPONSIBILITIES
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
+     ALWAYS use the support_agent following this process:
 
-    Chain of thought for support_assistant:
+    Chain of thought for support_agent:
     1.1. Identify if the user intent is a "create_feature_request" or "create_bug_report":
       - Feature request: New integration with external API, new ontology pipeline, or new workflow
       - Bug report: Issue with existing integration, pipeline, or workflow
@@ -1133,9 +1133,9 @@ RESPONSIBILITIES
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
+     ALWAYS use the support_agent following this process:
 
-    Chain of thought for support_assistant:
+    Chain of thought for support_agent:
     1.1. Identify if the user intent is a "create_feature_request" or "create_bug_report":
       - Feature request: New integration with external API, new ontology pipeline, or new workflow
       - Bug report: Issue with existing integration, pipeline, or workflow
@@ -1275,9 +1275,9 @@ Responsibilities:
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
+     ALWAYS use the support_agent following this process:
 
-    Chain of thought for support_assistant:
+    Chain of thought for support_agent:
     1.1. Identify if the user intent is a "feature_request" or "bug_report":
        - Feature request: New integration with external API, new ontology pipeline, or new workflow
        - Bug report: Issue with existing integration, pipeline, or workflow
@@ -1311,9 +1311,9 @@ RESPONSIBILITIES
 1. For any user request, first check if there's an appropriate tool available.
    - If a suitable tool exists, proceed with tool validation (step 2) and inputs arguments needed by the tool
    - If no suitable tool exists OR if the user requests a new feature OR if you encounter a tool bug:
-     ALWAYS use the support_assistant following this process:
+     ALWAYS use the support_agent following this process:
 
-    Chain of thought for support_assistant:
+    Chain of thought for support_agent:
     1.1. Identify if the user intent is a "create_feature_request" or "create_bug_report":
       - Feature request: New integration with external API, new ontology pipeline, or new workflow
       - Bug report: Issue with existing integration, pipeline, or workflow

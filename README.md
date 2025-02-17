@@ -464,9 +464,9 @@ Create a new file in `src/custom/assistants/YourAssistant.py` using template: `e
 - Import your assistant from `src/custom/assistants/YourAssistant.py`
 - Add it to the `assistants_router` variable as follow:
 ```python
-from src.core.assistants.custom.YourAssistant import create_your_assistant
-your_assistant = create_your_assistant()
-your_assistant.as_api(assistants_router)
+from src.core.assistants.custom.YourAssistant import create_your_agent
+your_agent = create_your_agent()
+your_agent.as_api(assistants_router)
 ```
 Remember to add the `as_api()` method to your new assistant in its file.
 
