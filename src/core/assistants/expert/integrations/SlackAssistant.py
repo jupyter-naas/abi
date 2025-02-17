@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import SlackIntegration
 from src.core.integrations.SlackIntegration import SlackIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Slack Assistant with access to Slack Integration tools."
@@ -37,11 +37,11 @@ def create_slack_agent():
         tools += SlackIntegration.as_tools(slack_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration).as_tool(
-        name="support_assistant", 
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration).as_tool(
+        name="support_agent", 
         description="Use to get any feedbacks/bugs or needs from user."
     )
-    tools.append(support_assistant)
+    tools.append(support_agent)
     
     return Agent(
         model,

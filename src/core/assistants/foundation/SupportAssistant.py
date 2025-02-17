@@ -9,7 +9,7 @@ from src.core.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_
 
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
-SUPPORT_ASSISTANT_INSTRUCTIONS = f"""
+SUPPORT_agent_INSTRUCTIONS = f"""
 You are a support assistant focusing on answering user requests and creating features requests or reporting bugs.
 
 Be sure to follow the chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
@@ -17,8 +17,18 @@ Be sure to follow the chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
 You MUST be sure to validate all input arguments before executing any tool.
 Be clear and concise in your responses.
 """
+SUGGESTIONS = [
+    {
+        "label": "Feature Request",
+        "value": "As a user, I would like to: [Feature Request]"
+    },
+    {
+        "label": "Report Bug",
+        "value": "Report a bug on: [Bug Description]"
+    }
+]
 
-def create_support_assistant(
+def create_support_agent(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
@@ -42,14 +52,14 @@ def create_support_assistant(
     
     # Use provided configuration or create default one
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SUPPORT_ASSISTANT_INSTRUCTIONS)
+        agent_configuration = AgentConfiguration(system_prompt=SUPPORT_agent_INSTRUCTIONS)
     
     # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
     
     return SupportAssistant(
-        name="support_assistant", 
+        name="support_agent", 
         description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 

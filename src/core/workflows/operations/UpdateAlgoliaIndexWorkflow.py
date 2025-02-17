@@ -46,7 +46,7 @@ class UpdateAlgoliaIndex(Workflow):
         self.__configuration = configuration
         self.__algolia = AlgoliaIntegration(self.__configuration.algolia_integration_config)
 
-    def __scan_assistants(self, branch_name: str) -> List[Dict[str, str]]:
+    def __scan_agents(self, branch_name: str) -> List[Dict[str, str]]:
         """Scan assistants directory and collect metadata."""
         results = []
         assistants_dir = Path("src/core/assistants")
@@ -627,7 +627,7 @@ class UpdateAlgoliaIndex(Workflow):
         all_records = []
 
         # Collect all data with branch_name parameter
-        assistants = self.__scan_assistants(parameters.branch_name)
+        assistants = self.__scan_agents(parameters.branch_name)
         logger.info(f"Found {len(assistants)} assistants")
         all_records.extend(assistants)
 

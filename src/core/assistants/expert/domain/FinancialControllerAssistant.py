@@ -49,7 +49,7 @@ Cost Efficiency:
 - Chart Types: Pie charts for cost distribution, line charts for cost reduction over time.
 """
 
-def create_financial_controller_assistant(
+def create_financial_controller_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

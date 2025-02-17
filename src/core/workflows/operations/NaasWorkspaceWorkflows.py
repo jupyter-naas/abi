@@ -117,7 +117,7 @@ class NaasWorkspaceWorkflows(Workflow):
         """
         return self.__naas.get_personal_workspace()
     
-    def list_assistants(self, parameters: ListAssistantsParameters) -> List[Dict[str, str]]:
+    def list_agents(self, parameters: ListAssistantsParameters) -> List[Dict[str, str]]:
         """Lists the assistants.
         
         Returns:
@@ -126,7 +126,7 @@ class NaasWorkspaceWorkflows(Workflow):
         assistants = self.__naas.get_plugins(parameters.workspace_id).get("workspace_plugins", [])
         return [{"id": assistant["id"], "name": assistant["name"], "description": assistant["description"]} for assistant in assistants]
     
-    def get_assistant(self, parameters: GetAssistantParameters) -> Dict[str, str]:
+    def get_agent(self, parameters: GetAssistantParameters) -> Dict[str, str]:
         """Gets the assistant.
         
         Returns:
@@ -175,15 +175,15 @@ class NaasWorkspaceWorkflows(Workflow):
                 args_schema=GetPersonalWorkspaceParameters
             ),
             StructuredTool(
-                name="naas_list_workspace_assistants",
+                name="naas_list_workspace_agents",
                 description="List the assistants in a given Naas workspace",
-                func=lambda workspace_id: self.list_assistants(ListAssistantsParameters(workspace_id=workspace_id)),
+                func=lambda workspace_id: self.list_agents(ListAssistantsParameters(workspace_id=workspace_id)),
                 args_schema=ListAssistantsParameters
             ),
             StructuredTool(
-                name="naas_get_workspace_assistant",
+                name="naas_get_workspace_agent",
                 description="Get an assistant by its ID",
-                func=lambda workspace_id, assistant_id: self.get_assistant(GetAssistantParameters(workspace_id=workspace_id, assistant_id=assistant_id)),
+                func=lambda workspace_id, assistant_id: self.get_agent(GetAssistantParameters(workspace_id=workspace_id, assistant_id=assistant_id)),
                 args_schema=GetAssistantParameters
             ),
             StructuredTool(

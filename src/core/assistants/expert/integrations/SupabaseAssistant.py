@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import SupabaseIntegration
 from src.core.integrations.SupabaseIntegration import SupabaseIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Supabase Assistant for managing database operations and real-time features."
@@ -40,11 +40,11 @@ def create_supabase_agent():
         tools += SupabaseIntegration.as_tools(integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_agent.as_tools()
     
     return Agent(
-        name="supabase_assistant",
+        name="supabase_agent",
         description="Use to manage Supabase database operations and real-time features",
         chat_model=model,
         tools=tools,

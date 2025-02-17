@@ -2,28 +2,36 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.core.integrations import HubSpotIntegration
 from src.core.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.integrations.StripeIntegration import StripeIntegrationConfiguration
-from src.core.integrations.PostgresIntegration import PostgresIntegrationConfiguration
 from src.core.workflows.sales.HubSpotWorkflows import HubSpotWorkflows, HubSpotWorkflowsConfiguration
 
-DESCRIPTION = "A Sales Assistant that helps manage and qualify contacts for sales representatives."
+NAME = "Sales Assistant"
+DESCRIPTION = "Qualifies leads and manages customer relationships through CRM and billing systems."
+MODEL = "o3-mini"
+TEMPERATURE = 1
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/sales_conversion.png"
-SYSTEM_PROMPT = f"""
-You are a Sales Assistant.
-Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
+SYSTEM_PROMPT = f"""You are a sales expert focused on maximizing revenue by qualifying leads and optimizing the sales pipeline.
+You leverage CRM data and billing systems to manage contacts, prepare demos, and create customized offers.
 
 RESPONSIBILITIES
 -----------------
 {RESPONSIBILITIES_PROMPT}
 """
+SUGGESTIONS = [
+    {
+        "label": "Feature Request",
+        "value": "As a user, I would like to: [Feature Request]"
+    },
+    {
+        "label": "Report Bug",
+        "value": "Report a bug on: [Bug Description]"
+    }
+]
 
-def create_sales_assistant(
+def create_sales_agent(
     agent_shared_state: AgentSharedState = None, 
     agent_configuration: AgentConfiguration = None
 ) -> Agent:
@@ -33,8 +41,8 @@ def create_sales_assistant(
 
     # Set model
     model = ChatOpenAI(
-        model="gpt-4o",
-        temperature=0,
+        model=MODEL,
+        temperature=TEMPERATURE,
         api_key=secret.get('OPENAI_API_KEY')
     )
 
@@ -58,10 +66,10 @@ def create_sales_assistant(
         tools += hubspot_workflows.as_tools()
     
     # Add agents
-    agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
+    agents.append(create_support_agent(AgentSharedState(thread_id=1), agent_configuration))
 
     return SalesAssistant(
-        name="sales_assistant", 
+        name="sales_agent", 
         description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
@@ -76,7 +84,7 @@ class SalesAssistant(Agent):
         self, 
         router: APIRouter, 
         route_name: str = "sales", 
-        name: str = "Sales Assistant", 
+        name: str = NAME, 
         description: str = "API endpoints to call the Sales assistant completion.", 
         description_stream: str = "API endpoints to call the Sales assistant stream completion.",
         tags: list[str] = []

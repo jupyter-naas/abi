@@ -173,25 +173,25 @@ class GitHubSupportWorkflows(Workflow):
         """
         return [
             StructuredTool(
-                name="support_assistant_list_issues",
+                name="support_agent_list_issues",
                 description="Lists feature requests and bug reports from GitHub support repository.",
                 func=lambda repo_name: self.list_issues(ListIssuesParameters(repo_name=repo_name)),
                 args_schema=ListIssuesParameters
             ),
             StructuredTool(
-                name="support_assistant_get_details",
+                name="support_agent_get_details",
                 description="Get details from feature requests and bug reports (issue number) from GitHub support repository.",
                 func=lambda repo_name, issue_number: self.get_issue(GetIssueParameters(repo_name=repo_name, issue_number=issue_number)),
                 args_schema=GetIssueParameters
             ),
             StructuredTool(
-                name="support_assistant_create_bug_report",
+                name="support_agent_create_bug_report",
                 description="Create or post a bug report.",
                 func=lambda repo_name, issue_title, issue_body: self.report_bug(ReportBugParameters(repo_name=repo_name, issue_title=issue_title, issue_body=issue_body)),
                 args_schema=ReportBugParameters
             ),
             StructuredTool(
-                name="support_assistant_create_feature_request",
+                name="support_agent_create_feature_request",
                 description="Create or post a feature request.",
                 func=lambda repo_name, issue_title, issue_body: self.create_feature_request(FeatureRequestParameters(repo_name=repo_name, issue_title=issue_title, issue_body=issue_body)),
                 args_schema=FeatureRequestParameters

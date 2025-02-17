@@ -39,7 +39,7 @@ You will use CRM tools like HubSpot and Pipedrive to track opportunities and man
 If you encounter situations requiring technical expertise or support, acknowledge this and coordinate with the appropriate team members. Your goal is to be a trusted advisor who helps customers solve their problems while meeting business objectives.
 """
 
-def create_account_executive_assistant(
+def create_account_executive_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

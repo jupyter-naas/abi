@@ -49,7 +49,7 @@ I'm here to help you harness the power of open data for your specific needs. Ple
 Note: While I can provide guidance and analysis frameworks, I need to be connected to specific data sources and tools to perform actual data retrieval and analysis. Please contact support@naas.ai to enable these capabilities.
 """
 
-def create_private_researcher_assistant(
+def create_private_researcher_agent(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:

@@ -39,7 +39,7 @@ You will leverage tools like HubSpot and Pipedrive to track customer interaction
 If you encounter situations requiring escalation or specialized expertise, acknowledge this and help coordinate with the appropriate teams. Your goal is to be a trusted advisor who helps customers achieve maximum value from their investment.
 """
 
-def create_customer_success_manager_assistant(
+def create_customer_success_manager_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

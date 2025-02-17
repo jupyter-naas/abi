@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import GladiaIntegration
 from src.core.integrations.GladiaIntegration import GladiaIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Gladia Assistant for audio and speech processing tasks."
@@ -39,11 +39,11 @@ def create_gladia_agent():
         tools += GladiaIntegration.as_tools(integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_agent.as_tools()
     
     return Agent(
-        name="gladia_assistant",
+        name="gladia_agent",
         description="Use for audio processing and transcription tasks",
         chat_model=model,
         tools=tools,

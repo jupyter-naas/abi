@@ -39,7 +39,7 @@ You will leverage tools like HubSpot and Pipedrive to track prospect interaction
 If you encounter situations requiring escalation or specialized expertise, acknowledge this and coordinate with the appropriate sales team members. Your goal is to be the first point of contact who effectively qualifies and nurtures leads for the sales organization.
 """
 
-def create_bdr_assistant(
+def create_bdr_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

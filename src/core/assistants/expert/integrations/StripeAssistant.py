@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import StripeIntegration
 from src.core.integrations.StripeIntegration import StripeIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Stripe Assistant with access to Stripe Integration tools."
@@ -50,10 +50,10 @@ def create_stripe_agent(
         tools += StripeIntegration.as_tools(stripe_integration_config)
 
     # Add agents
-    agents.append(create_support_assistant(agent_shared_state, agent_configuration))
+    agents.append(create_support_agent(agent_shared_state, agent_configuration))
     
     return StripeAssistant(
-        name="stripe_assistant",
+        name="stripe_agent",
         description="Use to manage Stripe payments, subscriptions and more",
         chat_model=model,
         tools=tools,

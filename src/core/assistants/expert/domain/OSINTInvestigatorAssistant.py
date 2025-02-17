@@ -54,7 +54,7 @@ Temporality: Daily, weekly.
 Chart Types: Pie charts for sentiment analysis, line charts for sentiment trends.
 """
 
-def create_osint_investigator_assistant(
+def create_osint_investigator_agent(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
@@ -66,9 +66,9 @@ def create_osint_investigator_assistant(
     tools = []
 
     li_at = secret.get('li_at')
-    jsessionid = secret.get('jsessionid')
-    if li_at and jsessionid:
-        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+    JSESSIONID = secret.get('JSESSIONID')
+    if li_at and JSESSIONID:
+        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
 
     youtube_key = secret.get('YOUTUBE_API_KEY')
     if youtube_key:

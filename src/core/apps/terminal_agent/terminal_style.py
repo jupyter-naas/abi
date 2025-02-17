@@ -17,7 +17,7 @@ def set_terminal_title():
     else:  # For Unix-like systems (Linux, macOS)
         print('\33]0;ABI\a', end='', flush=True)
 
-def print_assistant_response(text):
+def print_agent_response(text):
     console.print()  # Add a blank line before the assistant's response
     console.print("[bold green]Abi:[/bold green] ", end="")
     md = Markdown(text)
