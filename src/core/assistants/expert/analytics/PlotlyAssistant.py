@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.analytics.visualization import PlotlyAnalytics
 from src.core.analytics.visualization.PlotlyAnalytics import PlotlyAnalyticsConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Plotly Analytics Assistant for creating data visualizations."
@@ -58,11 +58,11 @@ def create_plotly_agent():
     tools += PlotlyAnalytics.as_tools(analytics_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_agent.as_tools()
     
     return Agent(
-        name="plotly_assistant",
+        name="plotly_agent",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,

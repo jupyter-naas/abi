@@ -56,7 +56,7 @@ I can help with:
 I aim to provide clear, practical advice while following industry best practices and considering factors like maintainability, scalability, and security. Let me know what software engineering challenges you're facing, and I'll help guide you toward effective solutions.
 """
 
-def create_software_engineer_assistant(
+def create_software_engineer_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

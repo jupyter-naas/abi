@@ -2,7 +2,7 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import PostgresIntegration
@@ -62,10 +62,10 @@ def create_postgres_agent(
         tools += PostgresIntegration.as_tools(integration_config)
 
     # Add agents
-    agents.append(create_support_assistant(agent_shared_state, agent_configuration))
+    agents.append(create_support_agent(agent_shared_state, agent_configuration))
     
     return PostgresAssistant(
-        name="postgres_assistant",
+        name="postgres_agent",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,

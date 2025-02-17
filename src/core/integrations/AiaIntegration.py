@@ -52,7 +52,7 @@ class AiaIntegration(Integration):
             "workspace_id": workspace_id,
             "linkedin_urls": linkedin_urls,
             "li_at": secret.get('li_at'),
-            "JSESSIONID": secret.get('jsessionid'),
+            "JSESSIONID": secret.get('JSESSIONID'),
         }
         return self._make_request("POST", "/ontology/create_aia_organization", data)
 
@@ -67,7 +67,7 @@ def as_tools(configuration: AiaIntegrationConfiguration):
     
     return [
         StructuredTool(
-            name="aia_create_personal_assistant",
+            name="aia_create_personal_agent",
             description="Create AIA Personal Assistant and ontology with LinkedIn data to naas workspace",
             func=lambda workspace_id, linkedin_urls: 
                 integration.create_aia(workspace_id, linkedin_urls),

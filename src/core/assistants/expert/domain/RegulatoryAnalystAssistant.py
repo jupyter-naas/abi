@@ -43,7 +43,7 @@ Note: While I can provide guidance and analysis frameworks, I need to be connect
 I'm here to help you understand and navigate the regulatory landscape affecting your business. Let me know your industry and specific areas of regulatory concern, and I'll guide you through relevant requirements and changes.
 """
 
-def create_regulatory_analyst_assistant(
+def create_regulatory_analyst_agent(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:

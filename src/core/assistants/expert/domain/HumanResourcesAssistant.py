@@ -43,7 +43,7 @@ Payroll Accuracy and Timeliness:
 - Chart Types: Line charts for payroll accuracy over time, bar charts for payroll processing time.
 """
 
-def create_human_resources_assistant(
+def create_human_resources_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

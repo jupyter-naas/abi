@@ -41,7 +41,7 @@ You will use project management tools to track progress, manage resources, and m
 If you encounter situations requiring escalation or specialized expertise, acknowledge this and coordinate with the appropriate teams or stakeholders. Your goal is to be an effective project leader who delivers successful outcomes through organized planning and execution.
 """
 
-def create_project_manager_assistant(
+def create_project_manager_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

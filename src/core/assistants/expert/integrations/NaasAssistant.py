@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import NaasIntegration
 from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Naas Assistant with access to Naas Integration tools."
@@ -50,10 +50,10 @@ def create_naas_agent(
         tools += NaasIntegration.as_tools(naas_integration_config)
 
     # Add agents
-    agents.append(create_support_assistant(AgentSharedState(thread_id=2), agent_configuration))
+    agents.append(create_support_agent(AgentSharedState(thread_id=2), agent_configuration))
     
     return NaasAssistant(
-        name="naas_assistant",
+        name="naas_agent",
         description="Use to manage Naas workspace, plugins and ontologies",
         chat_model=model,
         tools=tools,

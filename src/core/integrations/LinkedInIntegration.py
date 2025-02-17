@@ -16,12 +16,12 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     
     Attributes:
         li_at (str): LinkedIn li_at cookie value for authentication
-        jsessionid (str): LinkedIn JSESSIONID cookie value for authentication
+        JSESSIONID (str): LinkedIn JSESSIONID cookie value for authentication
         base_url (str): Base URL for LinkedIn API
         custom_api_url (str): Custom API URL for enhanced LinkedIn operations
     """
     li_at: str
-    jsessionid: str
+    JSESSIONID: str
     base_url: str = "https://www.linkedin.com/voyager/api"
     custom_api_url: str = "https://3hz1hdpnlf.execute-api.eu-west-1.amazonaws.com/prod"
 
@@ -41,14 +41,14 @@ class LinkedInIntegration(Integration):
         # Initialize cookies and headers
         self.cookies = {
             "li_at": self.__configuration.li_at,
-            "JSESSIONID": f'"{self.__configuration.jsessionid}"'
+            "JSESSIONID": f'"{self.__configuration.JSESSIONID}"'
         }
         
         self.headers = {
             "X-Li-Lang": "en_US",
             "Accept": "application/vnd.linkedin.normalized+json+2.1",
             "Cache-Control": "no-cache", 
-            "csrf-Token": self.__configuration.jsessionid,
+            "csrf-Token": self.__configuration.JSESSIONID,
             "X-Requested-With": "XMLHttpRequest",
             "X-Restli-Protocol-Version": "2.0.0"
         }

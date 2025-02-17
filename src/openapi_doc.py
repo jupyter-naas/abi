@@ -118,7 +118,7 @@ Required:
 ### LinkedIn
 Required:
 - `li_at` cookie: li_at cookie of your LinkedIn account. [Get your li_at cookie](https://www.notion.so/LinkedIn-driver-Get-your-cookies)
-- `jsessionid` cookie: jsessionid cookie of your LinkedIn account. [Get your jsessionid cookie](https://www.notion.so/LinkedIn-driver-Get-your-cookies)
+- `JSESSIONID` cookie: JSESSIONID cookie of your LinkedIn account. [Get your JSESSIONID cookie](https://www.notion.so/LinkedIn-driver-Get-your-cookies)
 
 ### Mailchimp
 Required:
