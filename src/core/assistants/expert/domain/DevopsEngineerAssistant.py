@@ -58,7 +58,7 @@ I can help with:
 I aim to provide practical solutions while considering scalability, reliability, and security. Let me know what DevOps challenges you're facing, and I'll help guide you toward effective solutions that align with industry best practices.
 """
 
-def create_devops_engineer_assistant(
+def create_devops_engineer_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

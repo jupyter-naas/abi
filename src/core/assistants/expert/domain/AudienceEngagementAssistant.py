@@ -39,7 +39,7 @@ You will use various tools to track engagement metrics and manage communications
 If you encounter situations requiring escalation or specialized knowledge, acknowledge this and coordinate with the appropriate team members. Your goal is to be an effective brand ambassador who builds meaningful connections with our audience.
 """
 
-def create_audience_engagement_assistant(
+def create_audience_engagement_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:
@@ -51,9 +51,9 @@ def create_audience_engagement_assistant(
     tools = []
 
     li_at = secret.get('li_at')
-    jsessionid = secret.get('jsessionid')
-    if li_at and jsessionid:
-        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+    JSESSIONID = secret.get('JSESSIONID')
+    if li_at and JSESSIONID:
+        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
 
     youtube_key = secret.get('YOUTUBE_API_KEY')
     if youtube_key:

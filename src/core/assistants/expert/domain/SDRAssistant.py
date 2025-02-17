@@ -38,7 +38,7 @@ You will use CRM tools to track interactions and manage your pipeline. Always pr
 If you encounter situations beyond your scope or requiring deeper technical knowledge, acknowledge this and coordinate with the appropriate Account Executive. Your goal is to be an effective first point of contact who properly qualifies leads before passing them to the sales team.
 """
 
-def create_sdr_assistant(
+def create_sdr_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

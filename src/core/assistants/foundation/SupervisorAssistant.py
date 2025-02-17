@@ -4,45 +4,59 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from abi import logger
 from fastapi import APIRouter
-from src.core.assistants.domain.OpenDataAssistant import create_open_data_assistant
-from src.core.assistants.domain.ContentAssistant import create_content_assistant
-from src.core.assistants.domain.GrowthAssistant import create_growth_assistant
-from src.core.assistants.domain.SalesAssistant import create_sales_assistant
-from src.core.assistants.domain.OperationsAssistant import create_operations_assistant
-from src.core.assistants.domain.FinanceAssistant import create_finance_assistant 
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.domain.OpenDataAssistant import create_open_data_agent
+from src.core.assistants.domain.ContentAssistant import create_content_agent
+from src.core.assistants.domain.GrowthAssistant import create_growth_agent
+from src.core.assistants.domain.SalesAssistant import create_sales_agent
+from src.core.assistants.domain.OperationsAssistant import create_operations_agent
+from src.core.assistants.domain.FinanceAssistant import create_finance_agent 
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 
+NAME = "Supervisor Assistant"
+MODEL = "o3-mini"
+TEMPERATURE = 1
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-DESCRIPTION = "A Supervisor Assistant that helps to supervise the other domain assistants."
-SUPERVISOR_AGENT_INSTRUCTIONS = f"""
-You are ABI a super-assistant.
-Present yourself as a super-assistant and by listing all the assistants you have access to.
+DESCRIPTION = "Coordinates and manages specialized domain agents. It provides seamless access to various business functions including open data, content, growth, sales, operations, finance, and support services."
+SYSTEM_PROMPT = f"""You are ABI, an advanced orchestrator assistant designed to coordinate multiple specialized agents.
+Your primary role is to understand user requests and direct them to the most appropriate specialized agent.
+While you can't offer professional advice or make specific recommendations, you excel at coordinating agents to help users.
 
-ASSISTANTS
-----------
-For assistants tools, make sure to validate input arguments mandatory fields (not optional) with the user in human readable terms according to the provided schema before proceeding.
-You have access to the following assistants:
-[ASSISTANTS]
+When users inquire about your capabilities, provide a clear, structured overview of all available agents
+and their tools, organized by domain and function.
 
 RESPONSIBILITIES
------------------
+----------------
 {RESPONSIBILITIES_PROMPT}
+
+AGENTS
+------
+[AGENTS]
 """
 
-def create_supervisor_assistant(
+SUGGESTIONS = [
+    {
+        "label": "Feature Request",
+        "value": "As a user, I would like to: [Feature Request]"
+    },
+    {
+        "label": "Report Bug",
+        "value": "Report a bug on: [Bug Description]"
+    }
+]
+def create_supervisor_agent(
     agent_shared_state: AgentSharedState = None, 
     agent_configuration: AgentConfiguration = None
 ) -> Agent:
     # Init
     tools = []
     agents = []
+    system_prompt = SYSTEM_PROMPT # Create a local copy of the system prompt
 
     # Set model
     model = ChatOpenAI(
-        model="gpt-4o", 
-        temperature=0, 
+        model=MODEL,
+        temperature=TEMPERATURE, 
         api_key=secret.get('OPENAI_API_KEY')
     )
 
@@ -57,38 +71,40 @@ def create_supervisor_assistant(
 
     # Add agents
     agents = [
-        create_open_data_assistant(AgentSharedState(thread_id=2), agent_configuration),
-        create_content_assistant(AgentSharedState(thread_id=3), agent_configuration),
-        create_growth_assistant(AgentSharedState(thread_id=4), agent_configuration),
-        create_sales_assistant(AgentSharedState(thread_id=5), agent_configuration),
-        create_operations_assistant(AgentSharedState(thread_id=6), agent_configuration),
-        create_finance_assistant(AgentSharedState(thread_id=7), agent_configuration),
-        create_support_assistant(AgentSharedState(thread_id=8), agent_configuration)
+        create_open_data_agent(AgentSharedState(thread_id=2), agent_configuration),
+        create_content_agent(AgentSharedState(thread_id=3), agent_configuration),
+        create_growth_agent(AgentSharedState(thread_id=4), agent_configuration),
+        create_sales_agent(AgentSharedState(thread_id=5), agent_configuration),
+        create_operations_agent(AgentSharedState(thread_id=6), agent_configuration),
+        create_finance_agent(AgentSharedState(thread_id=7), agent_configuration),
+        create_support_agent(AgentSharedState(thread_id=8), agent_configuration)
     ]
 
     # Get tools info from each assistant
-    assistants_info = []
-    for assistant in agents[:-1]:  # Exclude support assistant
-        assistant_info = {
-            "name": assistant.name,
-            "description": assistant.description,
+    agents_info = []
+    for agent in agents: 
+        agent_info = {
+            "name": agent.name,
+            "description": agent.description,
             "tools": [
                 {"name": t.name, "description": t.description}
-                for t in assistant.tools  # Access the private tools attribute
+                for t in agent.tools  # Access the private tools attribute
+                if t.name != "support_agent" and t.name != "get_current_datetime"
             ]
-        }        
-        assistants_info.append(assistant_info)
+        }
+        agents_info.append(agent_info)
 
     # Transform assistants_info into formatted string
-    assistants_info_str = ""
-    for assistant in assistants_info:
-        assistants_info_str += f"-{assistant['name']}: {assistant['description']}\n"
-        for tool in assistant['tools']:
-            assistants_info_str += f"   • {tool['name']}: {tool['description']}\n"
-        assistants_info_str += "\n"
+    agents_info_str = ""
+    for agent in agents_info:
+        agents_info_str += f"-{agent['name']}: {agent['description']}\n"
+        for tool in agent['tools']:
+            agents_info_str += f"   • {tool['name']}: {tool['description']}\n"
+        agents_info_str += "\n"
 
-    # Replace the {{ASSISTANTS}} placeholder in the system prompt with the assistants_info
-    agent_configuration.system_prompt=SUPERVISOR_AGENT_INSTRUCTIONS.replace("[ASSISTANTS]", assistants_info_str)
+    # Replace the [AGENTS] placeholder in the system prompt with the agents_info
+    system_prompt = system_prompt.replace("[AGENTS]", agents_info_str)
+    agent_configuration.system_prompt = system_prompt
 
     return SupervisorAssistant(
         name="supervisor_agent",
@@ -103,12 +119,12 @@ def create_supervisor_assistant(
 
 class SupervisorAssistant(Agent):
     def as_api(
-            self, 
-            router: APIRouter, 
-            route_name: str = "supervisor", 
-            name: str = "Supervisor Assistant", 
-            description: str = "API endpoints to call the Supervisor assistant completion.", 
-            description_stream: str = "API endpoints to call the Supervisor assistant stream completion.",
-            tags: list[str] = []
-        ):
+        self, 
+        router: APIRouter, 
+        route_name: str = "supervisor", 
+        name: str = NAME, 
+        description: str = "API endpoints to call the Supervisor assistant completion.", 
+        description_stream: str = "API endpoints to call the Supervisor assistant stream completion.",
+        tags: list[str] = []
+    ):
         return super().as_api(router, route_name, name, description, description_stream, tags)

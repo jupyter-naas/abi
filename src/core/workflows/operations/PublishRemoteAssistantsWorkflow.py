@@ -46,13 +46,13 @@ class PublishRemoteAssistantsWorkflow(Workflow):
 
         # Get workspace plugins to check for existing ones
         workspace_plugins = self.__naas.get_plugins(self.__configuration.workspace_id).get('workspace_plugins', [])
-        logger.debug(f"Workspace plugins: {len(workspace_plugins)}")
+        logger.info(f"Workspace plugins: {len(workspace_plugins)}")
 
         # Init
         api_path = Path("src/api.py")
         registry_name = f"{self.__configuration.space_name}-api"
         api_base_url = f"https://{registry_name}.default.space.naas.ai"
-        logger.debug(f"API base URL: {api_base_url}")
+        logger.info(f"API base URL: {api_base_url}")
         api_key = secret.get("ABI_API_KEY")
 
         # Read the content of the api.py file
@@ -60,7 +60,7 @@ class PublishRemoteAssistantsWorkflow(Workflow):
             content = file.read()
 
         # Get full import paths and run functions
-        import_matches = re.findall(r'from (src\.assistants(?:\.\w+)*\.\w+Assistant) import .*', content)
+        import_matches = [match[0] for match in re.findall(r'from (src\.(core|custom)\.assistants(?:\.\w+)*\.\w+Assistant) import .*', content)]
 
         # Extract run functions from imports
         for import_path in import_matches:
@@ -87,15 +87,18 @@ class PublishRemoteAssistantsWorkflow(Workflow):
                     description = getattr(module, "DESCRIPTION", "")
                     prompt = getattr(module, "SYSTEM_PROMPT", "")
                     avatar = getattr(module, "AVATAR_URL", "")
+                    suggestions = getattr(module, "SUGGESTIONS", [])
                     route_name = file_stem.lower().replace("assistant", "")
+                    type = "CUSTOM"
                     if "foundation" in import_path:
                         type = "CORE"
                     elif "domain" in import_path:
-                        type = "DOMAIN"
-                    else:
-                        type = "CUSTOM"
+                        type = "DOMAIN"                        
+                    id = "remote-" + slug
+                    if "SupervisorAssistant" in import_path:
+                        id = "aia"
                     plugin_data = {
-                        "id": "remote-" + slug, 
+                        "id": id, 
                         "name": title, 
                         "slug": slug, 
                         "avatar": avatar, 
@@ -107,38 +110,40 @@ class PublishRemoteAssistantsWorkflow(Workflow):
                         "type": type, 
                         "include_ontology": "true",
                         "include_date": "true",
-                        "remote": {"url": f"{api_base_url}/assistants/{route_name}/stream-completion?token={api_key}"}
+                        "remote": {"url": f"{api_base_url}/assistants/{route_name}/stream-completion?token={api_key}"},
+                        "suggestions": suggestions
                     }
-                    # Check if plugin already exists
-                    existing_plugin_id = self.__naas.search_plugin(key='id', value=plugin_data['id'], plugins=workspace_plugins)
-                    if existing_plugin_id:
-                        self.__naas.update_plugin(
-                            workspace_id=self.__configuration.workspace_id,
-                            plugin_id=existing_plugin_id,
-                            data=plugin_data
-                        )
-                        message = f"Plugin '{plugin_data['name']}' updated in workspace '{self.__configuration.workspace_id}'"
-                    else:
-                        self.__naas.create_plugin(
-                            workspace_id=self.__configuration.workspace_id,
-                            data=plugin_data
-                        )
-                        message = f"Plugin '{plugin_data['name']}' created in workspace '{self.__configuration.workspace_id}'"
-                    logger.debug(message)
-                    results.append(message)
                 else:
                     logger.warning(f"File not found: {file_path}")
             except Exception as e:
                 logger.warning(f"Could not import module {import_path}: {str(e)}")
+
+            # Check if plugin already exists
+            existing_plugin_id = self.__naas.search_plugin(key='id', value=plugin_data['id'], plugins=workspace_plugins)
+            if existing_plugin_id:
+                self.__naas.update_plugin(
+                    workspace_id=self.__configuration.workspace_id,
+                    plugin_id=existing_plugin_id,
+                    data=plugin_data
+                )
+                message = f"Plugin '{plugin_data['name']}' updated in workspace '{self.__configuration.workspace_id}'"
+            else:
+                self.__naas.create_plugin(
+                    workspace_id=self.__configuration.workspace_id,
+                    data=plugin_data
+                )
+                message = f"Plugin '{plugin_data['name']}' created in workspace '{self.__configuration.workspace_id}'"
+            logger.info(message)
+            results.append(message)
         return results
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
-                name="publish_remote_assistants",
+                name="publish_remote_agents",
                 description="Publish remote assistants to a Naas workspace",
-                func=self.publish_remote_assistants,
+                func=self.publish_remote_agents,
                 args_schema=None
             )
         ]

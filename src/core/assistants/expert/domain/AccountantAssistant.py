@@ -47,7 +47,7 @@ Accounts Payable/Receivable:
 - Chart Types: Bar charts for payables and receivables, pie charts for overdue payments.
 """
 
-def create_accountant_assistant(
+def create_accountant_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import NewsAPIIntegration
 from src.core.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A NewsAPI Assistant for retrieving news articles and headlines."
@@ -45,11 +45,11 @@ def create_news_api_agent():
         tools += NewsAPIIntegration.as_tools(integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_agent.as_tools()
     
     return Agent(
-        name="news_api_assistant",
+        name="news_api_agent",
         description="Use to search and retrieve news articles and headlines",
         chat_model=model,
         tools=tools,

@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import HubSpotIntegration
 from src.core.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A HubSpot Assistant with access to HubSpot Integration tools."
@@ -50,10 +50,10 @@ def create_hubspot_agent(
         tools += HubSpotIntegration.as_tools(hubspot_integration_config)
 
     # Add agents
-    agents.append(create_support_assistant(AgentSharedState(thread_id=2), agent_configuration))
+    agents.append(create_support_agent(AgentSharedState(thread_id=2), agent_configuration))
     
     return HubSpotAssistant(
-        name="hubspot_assistant",
+        name="hubspot_agent",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools, 

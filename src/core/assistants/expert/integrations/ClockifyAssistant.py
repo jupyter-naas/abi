@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import ClockifyIntegration
 from src.core.integrations.ClockifyIntegration import ClockifyIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A Clockify Assistant with access to Clockify Integration tools."
@@ -37,11 +37,11 @@ def create_clockify_agent():
         tools += ClockifyIntegration.as_tools(clockify_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_agent.as_tools()
     
     return Agent(
-        name="clockify_assistant",
+        name="clockify_agent",
         description="Use to manage Clockify workspace, projects and tasks",
         chat_model=model,
         tools=tools,

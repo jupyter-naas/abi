@@ -2,39 +2,36 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.core.integrations import HubSpotIntegration
-from src.core.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 from src.core.workflows.growth.LinkedinPostsInteractionsWorkflow import LinkedinPostsInteractionsWorkflow, LinkedinPostsInteractionsWorkflowConfiguration
 
-DESCRIPTION = "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."
+NAME = "Growth Assistant"
+DESCRIPTION = "Qualifies marketing leads and optimizes sales pipeline through content interaction analysis."
+MODEL = "o3-mini"
+TEMPERATURE = 1
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_marketing.png"
-SYSTEM_PROMPT = f"""
-You are a Growth Assistant with access to a list of interactions from content that enable users to get marketing qualified contacts.
-Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
-
-Start each conversation by:
-1. Introducing yourself
-2. Providing a brief analysis of 'Abi' new interactions (max 3 bullet points)
-3. Displaying this image showing contacts reached over weeks:
-   ![Contacts Reached](https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/growth_trend.png)
-
-Always:
-1. Use LinkedIn to get insights from LinkedIn posts, profiles and organizations.
-2. Use HubSpot data for contact management and qualification
-3. Provide structured, markdown-formatted responses
-4. Include metrics and performance indicators in your analysis
-5. Be casual but professional in your communication
+SYSTEM_PROMPT = f"""You are a growth expert who analyzes content interactions to identify and qualify the most promising marketing leads for sales teams.
 
 RESPONSIBILITIES
 -----------------
 {RESPONSIBILITIES_PROMPT}
 """
+SUGGESTIONS = [
+    {
+        "label": "Feature Request",
+        "value": "As a user, I would like to: [Feature Request]"
+    },
+    {
+        "label": "Report Bug",
+        "value": "Report a bug on: [Bug Description]"
+    }
+]
 
-def create_growth_assistant(
+def create_growth_agent(
     agent_shared_state: AgentSharedState = None, 
     agent_configuration: AgentConfiguration = None
 ) -> Agent:
@@ -44,8 +41,8 @@ def create_growth_assistant(
 
     # Set model 
     model = ChatOpenAI(
-        model="gpt-4o-mini", 
-        temperature=0, 
+        model=MODEL, 
+        temperature=TEMPERATURE, 
         api_key=secret.get('OPENAI_API_KEY')
     )
 
@@ -60,22 +57,30 @@ def create_growth_assistant(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
+    # Init secrets
+    naas_api_key = secret.get('NAAS_API_KEY')
+    li_at = None
+    JSESSIONID = None
+    
+    # Get LK secrets
+    if naas_api_key:
+        naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
+        li_at = NaasIntegration(naas_integration_config).get_secret('li_at').get('secret').get('value')
+        JSESSIONID = NaasIntegration(naas_integration_config).get_secret('JSESSIONID').get('secret').get('value')
+
     # Add tools
-    if (li_at := secret.get('li_at')) and (jsessionid := secret.get('jsessionid')):
-        linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid)
+    if li_at and JSESSIONID:
+        linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
         linkedin_posts_interactions_workflow = LinkedinPostsInteractionsWorkflow(LinkedinPostsInteractionsWorkflowConfiguration(
             linkedin_integration_config=linkedin_integration_config
         ))
         tools += linkedin_posts_interactions_workflow.as_tools()
     
-    if hubspot_access_token := secret.get('HUBSPOT_ACCESS_TOKEN'):
-        tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(access_token=hubspot_access_token))
-    
     # Add agents
-    agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
+    agents.append(create_support_agent(AgentSharedState(thread_id=1), agent_configuration))
     
     return GrowthAssistant(
-        name="growth_assistant", 
+        name="growth_agent", 
         description=DESCRIPTION,
         chat_model=model, 
         tools=tools, 
@@ -90,7 +95,7 @@ class GrowthAssistant(Agent):
         self, 
         router: APIRouter, 
         route_name: str = "growth", 
-        name: str = "Growth Assistant", 
+        name: str = NAME, 
         description: str = "API endpoints to call the Growth assistant completion.", 
         description_stream: str = "API endpoints to call the Growth assistant stream completion.",
         tags: list[str] = []

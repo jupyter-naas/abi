@@ -51,7 +51,7 @@ Remember to:
 - Optimize based on feedback
 """
 
-def create_lead_generation_assistant(
+def create_lead_generation_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:
@@ -67,9 +67,9 @@ def create_lead_generation_assistant(
         tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(access_token=hubspot_access_token))
 
     li_at = secret.get('li_at')
-    jsessionid = secret.get('jsessionid')
-    if li_at and jsessionid:
-        tools += LinkedInIntegration.as_tools(LinkedInIntegrationConfiguration(li_at=li_at, jsessionid=jsessionid))
+    JSESSIONID = secret.get('JSESSIONID')
+    if li_at and JSESSIONID:
+        tools += LinkedInIntegration.as_tools(LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
 
     pipedrive_api_key = secret.get('PIPEDRIVE_API_KEY')
     if pipedrive_api_key:

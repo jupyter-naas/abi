@@ -947,31 +947,31 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             args_schema=DeleteWorkspaceSchema
         ),
         StructuredTool(
-            name="naas_create_assistant",
+            name="naas_create_agent",
             description="Create a new plugin or assistant from workspace",
             func=lambda workspace_id, data: integration.create_plugin(workspace_id, data),
             args_schema=CreatePluginSchema
         ),
         StructuredTool(
-            name="naas_get_assistant",
+            name="naas_get_agent",
             description="Get plugin detail or assistant from workspace",
             func=lambda workspace_id, plugin_id: integration.get_plugin(workspace_id, plugin_id),
             args_schema=GetPluginSchema
         ),
         StructuredTool(
-            name="naas_get_assistants",
+            name="naas_get_agents",
             description="Get all plugins or assistants from workspace",
             func=lambda workspace_id: integration.get_plugins(workspace_id),
             args_schema=GetPluginsSchema
         ),
         StructuredTool(
-            name="naas_update_assistant",
+            name="naas_update_agent",
             description="Update an existing plugin or assistant from workspace",
             func=lambda workspace_id, plugin_id, data: integration.update_plugin(workspace_id, plugin_id, data),
             args_schema=UpdatePluginSchema
         ),
         StructuredTool(
-            name="naas_delete_assistant",
+            name="naas_delete_agent",
             description="Delete an existing plugin or assistant from workspace",
             func=lambda workspace_id, plugin_id: integration.delete_plugin(workspace_id, plugin_id),
             args_schema=DeletePluginSchema

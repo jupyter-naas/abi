@@ -6,7 +6,7 @@ from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_
 from src.core.integrations import GithubIntegration, GithubGraphqlIntegration
 from src.core.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A GitHub Assistant with access to GitHub Integration tools."
@@ -54,10 +54,10 @@ def create_github_agent(
         tools += GithubGraphqlIntegration.as_tools(github_graphql_integration_config)
 
     # Add agents
-    agents.append(create_support_assistant(AgentSharedState(thread_id=1), agent_configuration))
+    agents.append(create_support_agent(AgentSharedState(thread_id=1), agent_configuration))
         
     return GithubAssistant(
-        name="github_assistant",
+        name="github_agent",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools, 

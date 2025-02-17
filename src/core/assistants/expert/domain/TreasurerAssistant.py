@@ -49,7 +49,7 @@ Investment Performance:
 - Chart Types: Pie charts for portfolio composition, line charts for investment returns over time.
 """
 
-def create_treasurer_assistant(
+def create_treasurer_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:

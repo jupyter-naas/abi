@@ -189,16 +189,16 @@ class AbiApplicationPipeline(Pipeline):
             except Exception as e:
                 logger.error(f"Error processing ontology {file}: {e}")
 
-    def scan_assistants(self, graph: Graph) -> None:
+    def scan_agents(self, graph: Graph) -> None:
         """Scan assistants directory and add to graph, excluding experts/integrations."""
         assistants_dir = Path("src/assistants")
-        nb_assistants = len(glob.glob("src/assistants/domain/*.py", recursive=True)) + len(glob.glob("src/assistants/foundation/*.py", recursive=True))
-        logger.debug(f"---> Found {nb_assistants} assistants.")
-        coordinates = self.__generate_coordinates(200, nb_assistants - 2) # Exclude supervisor assistant
+        nb_agents = len(glob.glob("src/assistants/domain/*.py", recursive=True)) + len(glob.glob("src/assistants/foundation/*.py", recursive=True))
+        logger.debug(f"---> Found {nb_agents} assistants.")
+        coordinates = self.__generate_coordinates(200, nb_agents - 2) # Exclude supervisor assistant
         i = 0
 
         for file in assistants_dir.rglob("*.py"):
-            if "__AssistantTemplate__" in str(file) or "expert" in str(file).lower() or "integration" in str(file).lower():
+            if "__agentTemplate__" in str(file) or "expert" in str(file).lower() or "integration" in str(file).lower():
                 continue
             if file.stem.endswith("Assistant"):
                 try:
@@ -212,7 +212,7 @@ class AbiApplicationPipeline(Pipeline):
                     
                     module = importlib.import_module(import_path)
 
-                    def get_assistant_metadata(file_stem: str, module, coordinates: list):
+                    def get_agent_metadata(file_stem: str, module, coordinates: list):
                         """Get the coordinates and avatar for an assistant based on its type.
                         
                         Args:
@@ -243,7 +243,7 @@ class AbiApplicationPipeline(Pipeline):
                     # Create assistant if it doesn't exist
                     assistant = URIRef(str(ABI.Assistant) + "#" + file.stem)
                     if (assistant, RDF.type, OWL.NamedIndividual) not in graph:
-                        title, slug, description, prompt, avatar, x, y = get_assistant_metadata(file.stem, module, coordinates)
+                        title, slug, description, prompt, avatar, x, y = get_agent_metadata(file.stem, module, coordinates)
                         assistant = graph.add_individual_to_prefix(
                             prefix=ABI,
                             uid=str(file.stem),
@@ -271,7 +271,7 @@ class AbiApplicationPipeline(Pipeline):
                             assistant_uri = URIRef(str(ABI.Assistant) + "#" + uid)
                             if (assistant_uri, RDF.type, OWL.NamedIndividual) not in graph:
                                 module = importlib.import_module(a)
-                                title, slug, description, prompt, avatar, x, y = get_assistant_metadata(uid, module, coordinates)
+                                title, slug, description, prompt, avatar, x, y = get_agent_metadata(uid, module, coordinates)
                                 assistant_uri = graph.add_individual_to_prefix(
                                     prefix=ABI,
                                     uid=uid,
@@ -335,14 +335,14 @@ class AbiApplicationPipeline(Pipeline):
                     graph.add((pipeline, ABI.usesOntology, platform_ontology))
 
                     # Add assistants relations
-                    operations_assistant = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
-                    graph.add((operations_assistant, ABI.processesPipeline, pipeline))
+                    operations_agent = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
+                    graph.add((operations_agent, ABI.processesPipeline, pipeline))
                 except Exception as e:
                     logger.error(f"Error processing pipeline {file}: {e}")
 
     def scan_workflows(self, graph: Graph) -> None:
         """Scan workflows directory and add to graph."""
-        workflows_dir = Path("src/workflows/operations_assistant")
+        workflows_dir = Path("src/workflows/operations_agent")
         nb_workflows = len(list(workflows_dir.glob("*.py")))
         logger.debug(f"---> Found {nb_workflows} workflows.")
         coordinates = self.__generate_coordinates(350, nb_workflows, 25)
@@ -374,8 +374,8 @@ class AbiApplicationPipeline(Pipeline):
                     graph.add((workflow, ABI.usesOntology, task_ontology))
 
                     # Add assistants relations
-                    operations_assistant = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
-                    graph.add((operations_assistant, ABI.executesWorkflow, workflow))
+                    operations_agent = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
+                    graph.add((operations_agent, ABI.executesWorkflow, workflow))
                 except Exception as e:
                     logger.error(f"Error processing workflow {file}: {e}")
 
@@ -397,7 +397,7 @@ class AbiApplicationPipeline(Pipeline):
         logger.debug(f"-----> Scanning ontologies")
         self.scan_ontologies(graph)
         logger.debug(f"-----> Scanning assistants")
-        self.scan_assistants(graph)
+        self.scan_agents(graph)
         logger.debug(f"-----> Scanning pipelines")
         self.scan_pipelines(graph)
         logger.debug(f"-----> Scanning workflows")

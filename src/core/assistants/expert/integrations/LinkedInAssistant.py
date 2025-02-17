@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations import LinkedInIntegration
 from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A LinkedIn Assistant with access to LinkedIn Integration tools."
@@ -32,16 +32,16 @@ def create_linkedin_agent():
     tools = []
     
     # Add integration based on available credentials
-    if secret.get('li_at') and secret.get('jsessionid'):    
-        linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=secret.get('li_at'), jsessionid=secret.get('jsessionid'))
+    if secret.get('li_at') and secret.get('JSESSIONID'):    
+        linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=secret.get('li_at'), JSESSIONID=secret.get('JSESSIONID'))
         tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
     # Add support assistant
-    support_assistant = create_support_assistant(AgentSharedState(thread_id=2), agent_configuration)
-    tools += support_assistant.as_tools()
+    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    tools += support_agent.as_tools()
     
     return Agent(
-        name="linkedin_assistant",
+        name="linkedin_agent",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools, 

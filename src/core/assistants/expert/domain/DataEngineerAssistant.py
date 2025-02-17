@@ -56,7 +56,7 @@ I can help with:
 I aim to provide practical solutions while considering scalability, reliability, and maintainability. Let me know what data engineering challenges you're facing, and I'll help guide you toward effective solutions.
 """
 
-def create_data_engineer_assistant(
+def create_data_engineer_agent(
     agent_configuration: AgentConfiguration = None,
     agent_shared_state: AgentSharedState = None
 ) -> Agent:
