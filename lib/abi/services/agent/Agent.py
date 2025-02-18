@@ -396,7 +396,7 @@ class Agent(Expose):
             new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
                 new_agent.stream_invoke(query.prompt),
-                media_type='text/event-stream'
+                media_type='text/event-stream; charset=utf-8'
             )
 
     def stream_invoke(self, prompt: str):
@@ -429,12 +429,12 @@ class Agent(Expose):
                 if isinstance(message, ToolUsageEvent):
                     yield {
                         "event": "tool_usage",
-                        "data": message.payload.tool_calls[0]['name']
+                        "data": str(message.payload.tool_calls[0]['name'])
                     }
                 elif isinstance(message, ToolResponseEvent):
                     yield {
                         "event": "tool_response",
-                        "data": message.payload.content
+                        "data": str(message.payload.content)
                     }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload
@@ -454,11 +454,11 @@ class Agent(Expose):
         for char in response:
             buffer += char
             if char in ['\n', '\r']:
-                if buffer.strip():  # Only send non-empty lines
-                    yield {
-                        "event": "message",
-                        "data": buffer.rstrip()
-                    }
+                # if buffer.strip():  # Only send non-empty lines
+                yield {
+                    "event": "message",
+                    "data": buffer.rstrip()
+                }
                 buffer = ""
         
         # Don't forget remaining text
