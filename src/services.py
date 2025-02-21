@@ -1,12 +1,13 @@
 import os
 
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory, ObjectStorageService
-from lib.abi.services.object_storage.ObjectStoragePort import Exceptions as ObjectStorageExceptions
+from lib.abi.services.ontology_store.OntologyFactory import OntologyStoreFactory, OntologyStoreService
 
 class Services:
     _instance = None
     
     storage_service: ObjectStorageService
+    ontology_store_service: OntologyStoreService
     
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -24,9 +25,15 @@ class Services:
     
     def __init_dev(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
+        self.ontology_store_service = OntologyStoreFactory.OntologyStoreServiceFilesystem(self.config.ontology_store_path)
     
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
+            naas_api_key=self.secret.get('NAAS_API_KEY'),
+            workspace_id=self.config.workspace_id,
+            storage_name=self.config.storage_name
+        )
+        self.ontology_store_service = OntologyStoreFactory.OntologyStoreServiceNaas(
             naas_api_key=self.secret.get('NAAS_API_KEY'),
             workspace_id=self.config.workspace_id,
             storage_name=self.config.storage_name

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.utils import get_openapi
@@ -14,29 +14,30 @@ from abi import logger
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
 # Foundation assistants
-from src.assistants.foundation.SupportAssistant import create_support_assistant
-from src.assistants.foundation.SupervisorAssistant import create_supervisor_assistant
+from src.core.assistants.foundation.SupportAssistant import create_support_agent
+from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_agent
 # Domain assistants
-from src.assistants.domain.OpenDataAssistant import create_open_data_assistant
-from src.assistants.domain.ContentAssistant import create_content_assistant
-from src.assistants.domain.FinanceAssistant import create_finance_assistant
-from src.assistants.domain.GrowthAssistant import create_growth_assistant
-from src.assistants.domain.OperationsAssistant import create_operations_assistant
-from src.assistants.domain.SalesAssistant import create_sales_assistant
+from src.core.assistants.domain.OpenDataAssistant import create_open_data_agent
+from src.core.assistants.domain.ContentAssistant import create_content_agent
+from src.core.assistants.domain.FinanceAssistant import create_finance_agent
+from src.core.assistants.domain.GrowthAssistant import create_growth_agent
+from src.core.assistants.domain.OperationsAssistant import create_operations_agent
+from src.core.assistants.domain.SalesAssistant import create_sales_agent
 # Integrations
-from src.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
-from src.assistants.expert.integrations.NaasAssistant import create_naas_agent
+from src.core.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
+from src.core.assistants.expert.integrations.NaasAssistant import create_naas_agent
 # Pipelines
-from src.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
-from src.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
-from src.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
-from src.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.core.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
+from src.core.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
+from src.core.pipelines.github.GithubUserDetailsPipeline import GithubUserDetailsPipeline, GithubUserDetailsPipelineConfiguration
+from src.core.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.core.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
+import requests
 
 # Init API
 TITLE = config.api_title
@@ -114,28 +115,28 @@ assistants_router = APIRouter(
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
 
-supervisor_agent = create_supervisor_assistant()
+supervisor_agent = create_supervisor_agent()
 supervisor_agent.as_api(assistants_router)
 
-support_agent = create_support_assistant()
+support_agent = create_support_agent()
 support_agent.as_api(assistants_router)
 
-open_data_agent = create_open_data_assistant()
+open_data_agent = create_open_data_agent()
 open_data_agent.as_api(assistants_router)
 
-content_agent = create_content_assistant()
+content_agent = create_content_agent()
 content_agent.as_api(assistants_router)
 
-growth_agent = create_growth_assistant()
+growth_agent = create_growth_agent()
 growth_agent.as_api(assistants_router)
 
-sales_agent = create_sales_assistant()
+sales_agent = create_sales_agent()
 sales_agent.as_api(assistants_router)
 
-operations_agent = create_operations_assistant()
+operations_agent = create_operations_agent()
 operations_agent.as_api(assistants_router)
 
-finance_agent = create_finance_assistant()
+finance_agent = create_finance_agent()
 finance_agent.as_api(assistants_router)
 
 naas_agent = create_naas_agent()
@@ -224,6 +225,16 @@ def overridden_redoc():
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
+
+# @app.post("/telegram")
+# async def telegram(req: Request):
+#     data = await req.json()
+#     chat_id = data['message']['chat']['id']
+#     text = data['message']['text']
+    
+#     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
+
+#     return data
 
 def api():
     import uvicorn

@@ -205,13 +205,13 @@ For example, **"What are my top priorities?"**
 Map your business problem to ontological concepts:
 
 1. Identify Domain Concepts
-   - Use `src/ontologies/domain-level` ontology
+   - Use `src/core/ontologies/domain-level` ontology
    - Example for "What are my top priorities?":
      - Task (core concept)
      - Properties: assignee, creator, due date, status, priority, labels
 
 2. Map to Application Concepts 
-   - Use `src/ontologies/application-level` ontology
+   - Use `src/core/ontologies/application-level` ontology
    - Map domain concepts to your tools:
      - Tasks → GitHub Issues, CRM Tasks, Marketing Campaigns
    - Create subclasses that inherit from domain classes:
@@ -220,7 +220,7 @@ Map your business problem to ontological concepts:
      - abi:GithubProject ⊂ abi:Project
 
 3. Write SPARQL Query
-   - Create query from `src/ontologies/ConsolidatedOntology.ttl`
+   - Create query from `src/core/ontologies/ConsolidatedOntology.ttl`
    - Use schema to retrieve data from all relevant subclasses
    - Ensures solution remains tool-agnostic and reusable
 
@@ -229,20 +229,20 @@ Map your business problem to ontological concepts:
 Once you have your ontological concepts, build your solution in three steps:
 
 1. **Integration**
-   Create or update integrations in `src/integrations` to connect with required data sources.
-   Please checkout `src/integrations/GithubIntegration` or `src/integrations/GithubGraphqlIntegration` for more details.
+   Create or update integrations in `src/custom/integrations` to connect with required data sources.
+   Please checkout `src/core/integrations/GithubIntegration` or `src/core/integrations/GithubGraphqlIntegration` for more details.
 
 2. **Pipeline**
    Create a pipeline to map data from integrations to ontological concepts. Keep mapping logic modular by:
    - Building small pipelines for specific data transformations
    - Combining smaller pipelines into larger ones as needed
    You will be able to use function to easily create mapping to ontology. 
-   Please checkout `src/data/pipelines/GithubIssuePipeline` for more details.
+   Please checkout `src/core/pipelines/operations/GithubIssuePipeline` for more details.
 
 3. **Workflow**
    Create a workflow that uses pipeline results via SPARQL queries. 
    Workflows should focus on business logic rather than data transformation.
-   Please checkout `src/workflows/operations_assistant/GetTopPrioritiesWorkflow` for more details.
+   Please checkout `src/core/workflows/operations/GetTopPrioritiesWorkflow` for more details.
 
 #### Assistant Configuration
 1. [Create or use an existing assistant](#create-assistant-single-agent) in `src/assistants`.
@@ -315,7 +315,7 @@ Here is an example of how to run a pipeline in your terminal:
 # src/data/pipelines/YourPipeline.py
 if __name__ == "__main__":
       from src import secret
-      from src.integrations import YourIntegration
+      from src.core.integrations import YourIntegration
       from abi.services.ontology_store import OntologyStoreService
       
       # Setup dependencies
@@ -341,7 +341,7 @@ if __name__ == "__main__":
 
 Terminal command:
 ```bash
-poetry run python src/data/pipelines/YourPipeline.py
+poetry run python src/pipelines/YourPipeline.py
 ```
 
 ### Managing Dependencies
@@ -370,7 +370,7 @@ make abi-add dep=<library-name>
 To create a new integration, follow these steps:
 
 1. **Create Integration File**
-   Create a new file in `src/integrations/YourIntegration.py` using template: `src/integrations/__IntegrationTemplate__.py`.
+   Create a new file in `src/custom/integrations/YourIntegration.py` using template: `examples/integrations/__IntegrationTemplate__.py`.
 
 2. **Add Required Methods**
    Implement the necessary methods for your integration. Common patterns include:
@@ -393,7 +393,7 @@ For more detailed examples, check the existing integrations in the `src/integrat
 Pipelines in ABI are used to process and transform data. Here's how to create a new pipeline:
 
 1. **Create Pipeline File**
-   Create a new file in `src/data/pipelines/YourPipeline.py` using template: `src/data/pipelines/__PipelineTemplate__.py`.
+   Create a new file in `src/custom/pipelines/YourPipeline.py` using template: `examples/pipelines/__PipelineTemplate__.py`.
    
 3. **Implement Pipeline Logic**
    - Add your data processing logic in the `run()` method
@@ -407,14 +407,14 @@ Pipelines in ABI are used to process and transform data. Here's how to create a 
    - Test integration with ontology store
    - Test error handling
 
-For examples, see existing pipelines in the `src/data/pipelines/` directory.
+For examples, see existing pipelines in the `src/core/pipelines/` directory.
 
 ### Create new Workflows
 
 To create a new workflow in ABI, follow these steps:
 
 1. **Create Workflow File**
-   Create a new file in `src/workflows/YourWorkflow.py` using template: `src/workflows/__WorkflowTemplate__.py`.
+   Create a new file in `src/custom/workflows/YourWorkflow.py` using template: `examples/workflows/__WorkflowTemplate__.py`.
 
 2. **Implement Workflow Logic**
    - Add your business logic in the `run()` method
@@ -431,7 +431,7 @@ To create a new workflow in ABI, follow these steps:
 
 4. **Use the Workflow**
    The workflow can be used in multiple ways:
-   - As a standalone script: `python -m src.workflows.YourWorkflow`
+   - As a standalone script: `python -m src.core.workflows.YourWorkflow`
    - As an API endpoint: Import and use the `api()` function
    - As a LangChain tool: Import and use the `as_tool()` function
 
@@ -442,7 +442,7 @@ For examples, see existing workflows in the `src/workflows/` directory.
 To create a new assistant, follow these steps:
 
 #### Create Assistant File
-Create a new file in `src/assistants/custom/YourAssistant.py` using template: `src/assistants/custom/__TemplateAssistant__.py`.
+Create a new file in `src/custom/assistants/YourAssistant.py` using template: `examples/assistants/__TemplateAssistant__.py`.
 
 #### Add Integrations, Workflows and Pipelines as tools
 - Import necessary integrations, pipelines and workflows
@@ -450,8 +450,8 @@ Create a new file in `src/assistants/custom/YourAssistant.py` using template: `s
 - Add tools using the `as_tools()` method (Class.as_tools(Configuration))
 
 #### Chat with Assistant in Terminal
-- Create function to run new assistant in `src/apps/terminal_agent/main.py` following the pattern of existing assistants
-- Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.apps.terminal_agent.main:run_<assistant-name>-agent"`
+- Create function to run new assistant in `src/core/apps/terminal_agent/main.py` following the pattern of existing assistants
+- Set function in pyproject.toml: `chat-<assistant-name>-agent = "src.core.apps.terminal_agent.main:run_<assistant-name>-agent"`
 - Add new function in Makefile: `make chat-<assistant-name>-agent`
 - Run new assistant: `make chat-<assistant-name>-agent`
 
@@ -461,12 +461,12 @@ Create a new file in `src/assistants/custom/YourAssistant.py` using template: `s
 
 - Add route handlers in `src/api.py`
 - Example: Adding a new assistant
-- Import your assistant from `src/assistants/custom/YourAssistant.py`
+- Import your assistant from `src/custom/assistants/YourAssistant.py`
 - Add it to the `assistants_router` variable as follow:
 ```python
-from src.assistants.custom.YourAssistant import create_your_assistant
-your_assistant = create_your_assistant()
-your_assistant.as_api(assistants_router)
+from src.core.assistants.custom.YourAssistant import create_your_agent
+your_agent = create_your_agent()
+your_agent.as_api(assistants_router)
 ```
 Remember to add the `as_api()` method to your new assistant in its file.
 
