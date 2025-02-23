@@ -38,7 +38,24 @@ class ReplicateIntegration(Integration):
         """Initialize Replicate client with API key."""
         super().__init__(configuration)
         self.__configuration = configuration
+<<<<<<< HEAD
         self.__naas_integration = NaasIntegration(configuration.naas_integration_configuration)
+=======
+        os.environ["REPLICATE_API_TOKEN"] = self.__configuration.api_key
+        
+        # Test connection
+        try:
+            # Simple test prediction to verify connection
+            replicate.Client(api_token=self.__configuration.api_key)
+        except Exception as e:
+            raise IntegrationConnectionError(f"Failed to connect to Replicate: {str(e)}")
+
+    def _ensure_image_directory(self) -> Path:
+        """Ensure the images directory exists and return its path."""
+        image_dir = Path("storage/datalake/assets/image")
+        image_dir.mkdir(parents=True, exist_ok=True)
+        return image_dir
+>>>>>>> 5dbb81b919528dc7103fba9be3ad0b0f9bbb6655
 
     def _download_image(self, url: str, filename: str) -> str:
         """Download image from URL and save to file."""

@@ -30,7 +30,7 @@ class GenerateSlidesWorkflowConfiguration(WorkflowConfiguration):
     """
     powerpoint_integration_config: PowerPointIntegrationConfiguration
     naas_integration_config: NaasIntegrationConfiguration
-    template_path: str = "assets/PresentationTemplate.pptx"
+    template_path: str = "assets/PresentationTemplate_FM.pptx"
     output_dir: str = "datalake/powerpoint-store/generate-slides"
     model_id: str = "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"
     temperature: float = 0.3
