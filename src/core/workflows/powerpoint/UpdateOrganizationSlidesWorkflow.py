@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration, Presentation
-from src.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration, Presentation
+from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
@@ -13,7 +13,8 @@ import json
 from src import config
 import hashlib
 import uuid
-from src.services import services, ObjectStorageExceptions
+from src.services import services
+from lib.abi.services.object_storage.ObjectStoragePort import Exceptions as ObjectStorageExceptions
 from io import BytesIO
 from datetime import datetime
 import os
@@ -230,19 +231,14 @@ class UpdateOrganizationSlidesWorkflow(Workflow):
         """
 
         # Generate new structure of the presentation
-<<<<<<< HEAD
-        completion_json = self.convert_input_to_json(parameters.text, self.__configuration.output_dir, prompt, system_prompt, template_slides, parameters.use_cache)
-=======
         completion_json = self.convert_input_to_json(
             parameters.text, 
             self.__configuration.output_dir, 
             prompt, 
             system_prompt, 
             shapes, 
-            response_format={"type": "json_object"}, 
             use_cache=parameters.use_cache
         )
->>>>>>> 5dbb81b919528dc7103fba9be3ad0b0f9bbb6655
 
         # Update slides in presentation
         logger.info("-----> Updating slides in presentation")
