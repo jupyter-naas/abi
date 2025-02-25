@@ -52,7 +52,8 @@ def print_welcome_message():
         ("Available commands:\n", "yellow"),
         ("- ", "dim"), ("'exit' ", "cyan"), ("to end the conversation\n", "dim"),
         ("- ", "dim"), ("'reset' ", "cyan"), ("to start a new conversation\n", "dim"),
-        ("- ", "dim"), ("'help' ", "cyan"), ("to see these commands again", "dim")
+        ("- ", "dim"), ("'help' ", "cyan"), ("to see these commands again\n", "dim"),
+        ("- ", "dim"), ("'test' ", "cyan"), ("to run tests and coverage", "dim")
     )
     console.print(Panel(welcome_text, expand=False))
     console.print()

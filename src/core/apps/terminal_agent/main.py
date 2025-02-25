@@ -1,4 +1,9 @@
-from src.core.apps.terminal_agent.terminal_style import clear_screen, print_welcome_message, print_divider, get_user_input, print_tool_usage, print_agent_response, print_tool_response, print_image
+from src.core.apps.terminal_agent.terminal_style import (
+    clear_screen, print_welcome_message, print_divider, 
+    get_user_input, print_tool_usage, print_agent_response, 
+    print_tool_response, print_image
+)
+from test.test_runner import run_mock_tests
 from abi.services.agent.Agent import Agent
 # Foundation assistants
 from src.core.assistants.foundation.SupportAssistant import create_support_agent
@@ -83,6 +88,9 @@ def run_agent(agent: Agent):
         elif user_input == 'reset':
             agent.reset()
             clear_screen()
+            continue
+        elif user_input == 'test':
+            run_mock_tests()
             continue
             
         print_divider()
