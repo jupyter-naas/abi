@@ -1,7 +1,7 @@
 from lib.abi.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 
@@ -24,11 +24,28 @@ class TalentFinderParameters(BaseModel):
     """
     skill_name: str = Field(..., description="Name of the skill to search for")
 
+class SchemaParameters(BaseModel):
+    """Parameters for getting the ontology schema.
+    Currently empty as we don't need parameters, but can be extended if needed.
+    """
+    pass
+
+class QueryParameters(BaseModel):
+    """Parameters for executing a SPARQL query.
+    
+    Attributes:
+        query (str): The SPARQL query to execute
+        format (str, optional): The format to return results in. Defaults to "turtle" for CONSTRUCT/DESCRIBE queries
+    """
+    query: str = Field(..., description="The SPARQL query to execute")
+    format: str = Field("turtle", description="Format for results (turtle, json, etc). Only applies to CONSTRUCT/DESCRIBE queries")
+
 class HRTalentWorkflow(Workflow):
     """Workflow for managing HR talent-related operations.
     
     This workflow handles various HR talent management tasks including:
     - Talent finding
+    - Schema retrieval
     """
     
     __configuration: HRTalentWorkflowConfiguration
@@ -73,6 +90,43 @@ class HRTalentWorkflow(Workflow):
         
         return {"results": rows}
         
+    def get_schema(self, parameters: SchemaParameters) -> str:
+        """Gets the ontology schema.
+        
+        Args:
+            parameters: Schema parameters (currently unused)
+            
+        Returns:
+            str: The ontology schema in turtle format
+        """
+
+        with open("src/core/ontologies/application-level/LinkedInOntology.ttl", "r") as file:
+            return file.read()
+
+    def execute_query(self, parameters: QueryParameters) -> Union[str, Dict[str, Any]]:
+        """Executes an arbitrary SPARQL query.
+        
+        Args:
+            parameters: Query parameters containing the SPARQL query to execute
+            
+        Returns:
+            Union[str, Dict[str, Any]]: For CONSTRUCT/DESCRIBE queries, returns serialized graph.
+                                      For SELECT queries, returns dict with results.
+        """
+        from lib.abi.utils.Graph import ABIGraph as Graph
+        from lib.abi.services.ontology_store.OntologyFactory import OntologyStoreFactory
+        from lib.abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+        
+        triplestore : IOntologyStoreService = OntologyStoreFactory.OntologyStoreServiceFilesystem("storage/triplestore/People")
+        
+        print(f"Executing query: {parameters.query}")
+        
+        results : Graph = triplestore.query(parameters.query)
+        
+        rows = [row for row in results]
+        
+        # For CONSTRUCT/DESCRIBE queries, return serialized graph
+        return {"results": rows}
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow.
@@ -86,6 +140,18 @@ class HRTalentWorkflow(Workflow):
                 description="Find talent based on specific skills",
                 func=lambda **kwargs: self.talent_finder(TalentFinderParameters(**kwargs)),
                 args_schema=TalentFinderParameters
+            ),
+            StructuredTool(
+                name="get_schema",
+                description="Get the ontology schema in turtle format",
+                func=lambda **kwargs: self.get_schema(SchemaParameters(**kwargs)),
+                args_schema=SchemaParameters
+            ),
+            StructuredTool(
+                name="execute_query",
+                description="Execute an arbitrary SPARQL query against the ontology store",
+                func=lambda **kwargs: self.execute_query(QueryParameters(**kwargs)),
+                args_schema=QueryParameters
             )
         ]
 
@@ -98,6 +164,14 @@ class HRTalentWorkflow(Workflow):
         @router.post("/talent-finder")
         def find_talent(parameters: TalentFinderParameters):
             return self.talent_finder(parameters)
+            
+        @router.post("/schema")
+        def get_schema(parameters: SchemaParameters):
+            return self.get_schema(parameters)
+            
+        @router.post("/query")
+        def execute_query(parameters: QueryParameters):
+            return self.execute_query(parameters)
 
 if __name__ == "__main__":
     workflow = HRTalentWorkflow(HRTalentWorkflowConfiguration())
