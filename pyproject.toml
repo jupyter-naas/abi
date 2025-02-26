@@ -57,6 +57,7 @@ ipykernel = "^6.29.5"
 # Foundation agents
 chat-supervisor-agent = "src.core.apps.terminal_agent.main:run_supervisor_agent"
 chat-support-agent = "src.core.apps.terminal_agent.main:run_support_agent"
+chat-hr-agent = "src.core.apps.terminal_agent.main:run_hr_agent"
 
 # Domain agents
 chat-content-agent = "src.core.apps.terminal_agent.main:run_content_agent"

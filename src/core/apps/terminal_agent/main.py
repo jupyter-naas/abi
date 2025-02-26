@@ -3,6 +3,7 @@ from abi.services.agent.Agent import Agent
 # Foundation assistants
 from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_agent
+from src.custom.assistants.HRAssistant import create_hr_agent
 # Domain assistants
 from src.core.assistants.domain.ContentAssistant import create_content_agent
 from src.core.assistants.domain.FinanceAssistant import create_finance_agent
@@ -378,6 +379,12 @@ def run_glassdoor_agent():
 
 def run_powerpoint_agent():
     agent = create_powerpoint_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_hr_agent():
+    agent = create_hr_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)
