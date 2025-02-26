@@ -149,7 +149,7 @@ class HRTalentWorkflow(Workflow):
             ),
             StructuredTool(
                 name="execute_query",
-                description="Execute an arbitrary SPARQL query against the ontology store",
+                description="Execute an arbitrary SPARQL query against the ontology store. CALL get_schema FIRST TO WRITE A VALID QUERY.",
                 func=lambda **kwargs: self.execute_query(QueryParameters(**kwargs)),
                 args_schema=QueryParameters
             )
