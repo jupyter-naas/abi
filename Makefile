@@ -200,6 +200,15 @@ chat-glassdoor-agent: .venv
 chat-powerpoint-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-powerpoint-agent'
 
+chat-bitcoin-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-bitcoin-agent'
+
+test-bitcoin-price: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.custom.bitcoin.tests.run_price_validation --save'
+
+test-bitcoin-consensus: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.custom.bitcoin.tests.test_price_providers'
+
 .DEFAULT_GOAL := chat-supervisor-agent
 
-.PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
+.PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent chat-bitcoin-agent api sh lock add abi-add

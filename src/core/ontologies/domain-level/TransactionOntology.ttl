@@ -12,74 +12,170 @@
 <http://ontology.naas.ai/abi/TransactionOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/TransactionOntology.ttl> ;
-    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Domain ontology for financial transactions."@en ;
-    dc:license "" ;
-    dc:title "Transaction Ontology" .
+    dc11:contributor "Jeremy Ravenel"^^xsd:string , "Maxime Jublou"^^xsd:string , "Florent Ravenel"^^xsd:string ;
+    dc:description "Domain ontology for transactions, including both cash and non-cash transactions."^^xsd:string ;
+    dc:license ""^^xsd:string ;
+    dc:title "Transaction Ontology"^^xsd:string .
 
 #################################################################
 #    Classes
 #################################################################   
 
-abi:Transaction a owl:Class ;
-    rdfs:label "Transaction"@en ;
+abi:Transaction rdf:type owl:Class ;
+    rdfs:label "Transaction"^^xsd:string ;
     rdfs:subClassOf bfo:BFO_0000015 ; # Process
-    skos:definition "A financial transaction with associated metadata"@en ;
-    skos:example """A transaction is a financial transaction with associated metadata"""@en .
+    skos:definition "A financial or economic transaction with associated metadata, encompassing both monetary and non-monetary exchanges of value"^^xsd:string ;
+    skos:example "A transaction can be a financial transaction with associated metadata or a non-monetary exchange of value"^^xsd:string .
 
-abi:TransactionStatus a owl:Class ;
-    rdfs:label "Transaction Status"@en ;
-    skos:definition "The status of a transaction"@en ;
-    skos:example "The status of a transaction is pending, completed, or failed"@en .
+abi:CashTransaction rdf:type owl:Class ;
+    rdfs:label "Cash Transaction"^^xsd:string ;
+    rdfs:subClassOf abi:Transaction ;
+    skos:definition "A transaction involving monetary exchange"^^xsd:string ;
+    skos:example "Payment for goods or services using money, digital currency, or other monetary instruments"^^xsd:string .
+
+abi:NonCashTransaction rdf:type owl:Class ;
+    rdfs:label "Non-Cash Transaction"^^xsd:string ;
+    rdfs:subClassOf abi:Transaction ;
+    skos:definition "A transaction involving the exchange of value without direct monetary payment"^^xsd:string ;
+    skos:example "Bartering goods, exchanging services, asset swaps, or in-kind contributions"^^xsd:string .
+
+abi:BarterTransaction rdf:type owl:Class ;
+    rdfs:label "Barter Transaction"^^xsd:string ;
+    rdfs:subClassOf abi:NonCashTransaction ;
+    skos:definition "A direct exchange of goods or services without using money"^^xsd:string ;
+    skos:example "Trading consultancy hours for office space"^^xsd:string .
+
+abi:AssetSwapTransaction rdf:type owl:Class ;
+    rdfs:label "Asset Swap Transaction"^^xsd:string ;
+    rdfs:subClassOf abi:NonCashTransaction ;
+    skos:definition "An exchange where assets are transferred between parties without monetary compensation"^^xsd:string ;
+    skos:example "Exchanging real estate properties, swapping securities, or transferring ownership rights"^^xsd:string .
+
+abi:InKindContribution rdf:type owl:Class ;
+    rdfs:label "In-Kind Contribution"^^xsd:string ;
+    rdfs:subClassOf abi:NonCashTransaction ;
+    skos:definition "A contribution of goods, services, or other non-monetary assets instead of cash"^^xsd:string ;
+    skos:example "Donating equipment to a non-profit organization, providing pro bono services"^^xsd:string .
+
+abi:TransactionStatus rdf:type owl:Class ;
+    rdfs:label "Transaction Status"^^xsd:string ;
+    skos:definition "The status of a transaction"^^xsd:string ;
+    skos:example "The status of a transaction is pending, completed, or failed"^^xsd:string .
+
+abi:TransactionType rdf:type owl:Class ;
+    rdfs:label "Transaction Type"^^xsd:string ;
+    skos:definition "The classification of a transaction as cash or non-cash"^^xsd:string .
+
+abi:Cash rdf:type owl:Class ;
+    rdfs:label "Cash"^^xsd:string ;
+    rdfs:subClassOf abi:TransactionType ;
+    skos:definition "Indicates a transaction involving monetary exchange"^^xsd:string .
+
+abi:NonCash rdf:type owl:Class ;
+    rdfs:label "Non-Cash"^^xsd:string ;
+    rdfs:subClassOf abi:TransactionType ;
+    skos:definition "Indicates a transaction not involving direct monetary exchange"^^xsd:string .
 
 #################################################################
 #    Object Properties
 #################################################################
 
-abi:hasAsset a owl:ObjectProperty ;
+abi:hasTransactionType rdf:type owl:ObjectProperty ;
+    rdfs:label "has transaction type"^^xsd:string ;
+    rdfs:domain abi:Transaction ;
+    rdfs:range abi:TransactionType ;
+    skos:definition "Specifies whether the transaction is cash or non-cash"^^xsd:string .
+
+abi:hasAsset rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Asset .
 
-abi:hasContract a owl:ObjectProperty ;
+abi:hasContract rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Contract .
 
-abi:hasSender a owl:ObjectProperty ;
+abi:hasSender rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Contact .
 
-abi:hasRecipient a owl:ObjectProperty ;
+abi:hasRecipient rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Contact .
 
-abi:hasOrganization a owl:ObjectProperty ;
+abi:hasOrganization rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Organization .
 
-abi:hasCurrency a owl:ObjectProperty ;
-    rdfs:domain abi:Transaction ;
+abi:hasCurrency rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:CashTransaction ;
     rdfs:range abi:Currency .
 
-abi:hasStatus a owl:ObjectProperty ;
+abi:hasStatus rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:TransactionStatus .
 
-abi:hasCategory a owl:ObjectProperty ;
+abi:hasCategory rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:TransactionCategory .
 
-abi:hasPaymentMethod a owl:ObjectProperty ;
-    rdfs:domain abi:Transaction ;
+abi:hasPaymentMethod rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:CashTransaction ;
     rdfs:range abi:PaymentMethod .
 
-abi:hasInvoice a owl:ObjectProperty ;
+abi:hasInvoice rdf:type owl:ObjectProperty ;
     rdfs:domain abi:Transaction ;
     rdfs:range abi:Invoice .
+
+abi:involvesExchangedService rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:NonCashTransaction ;
+    rdfs:range abi:Service ;
+    skos:definition "Specifies the service exchanged in a non-cash transaction"^^xsd:string .
+
+abi:involvesExchangedAsset rdf:type owl:ObjectProperty ;
+    rdfs:domain abi:NonCashTransaction ;
+    rdfs:range abi:Asset ;
+    skos:definition "Specifies the asset exchanged in a non-cash transaction"^^xsd:string .
 
 #################################################################
 #    Data Properties
 #################################################################
 
-abi:amount a owl:DatatypeProperty ;
+abi:amount rdf:type owl:DatatypeProperty ;
+    rdfs:domain abi:CashTransaction ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The monetary amount involved in a cash transaction"^^xsd:string ;
+    skos:example "100.50"^^xsd:decimal .
+
+abi:estimatedMonetaryValue rdf:type owl:DatatypeProperty ;
+    rdfs:domain abi:NonCashTransaction ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The estimated monetary value of a non-cash transaction"^^xsd:string ;
+    skos:example "1500.00"^^xsd:decimal .
+
+abi:description rdf:type owl:DatatypeProperty ;
     rdfs:domain abi:Transaction ;
-    rdfs:range xsd:decimal .
+    rdfs:range xsd:string ;
+    skos:definition "A textual description of the transaction"^^xsd:string ;
+    skos:example "Payment for consulting services - Q1 2024"^^xsd:string .
+
+#################################################################
+#    Individuals
+#################################################################
+
+abi:PendingStatus rdf:type owl:NamedIndividual, abi:TransactionStatus ;
+    rdfs:label "Pending Status"^^xsd:string ;
+    skos:definition "Indicates a transaction that has been initiated but not yet completed"^^xsd:string .
+
+abi:CompletedStatus rdf:type owl:NamedIndividual, abi:TransactionStatus ;
+    rdfs:label "Completed Status"^^xsd:string ;
+    skos:definition "Indicates a transaction that has been successfully completed"^^xsd:string .
+
+abi:FailedStatus rdf:type owl:NamedIndividual, abi:TransactionStatus ;
+    rdfs:label "Failed Status"^^xsd:string ;
+    skos:definition "Indicates a transaction that could not be completed successfully"^^xsd:string .
+
+abi:CashType rdf:type owl:NamedIndividual, abi:Cash ;
+    rdfs:label "Cash Type"^^xsd:string .
+
+abi:NonCashType rdf:type owl:NamedIndividual, abi:NonCash ;
+    rdfs:label "Non-Cash Type"^^xsd:string .

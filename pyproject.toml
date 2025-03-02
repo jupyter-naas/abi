@@ -59,6 +59,7 @@ chat-supervisor-agent = "src.core.apps.terminal_agent.main:run_supervisor_agent"
 chat-support-agent = "src.core.apps.terminal_agent.main:run_support_agent"
 
 # Domain agents
+chat-bitcoin-agent = "src.core.apps.terminal_agent.main:run_bitcoin_agent"
 chat-content-agent = "src.core.apps.terminal_agent.main:run_content_agent"
 chat-finance-agent = "src.core.apps.terminal_agent.main:run_finance_agent"
 chat-growth-agent = "src.core.apps.terminal_agent.main:run_growth_agent"
