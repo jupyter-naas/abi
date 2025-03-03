@@ -3,7 +3,7 @@ from abi.services.agent.Agent import Agent
 # Foundation assistants
 from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_agent
-from src.custom.assistants.HRAssistant import create_hr_agent
+from src.custom.People.agent.HRAssistant import create_hr_agent
 # Domain assistants
 from src.core.assistants.domain.ContentAssistant import create_content_agent
 from src.core.assistants.domain.FinanceAssistant import create_finance_agent

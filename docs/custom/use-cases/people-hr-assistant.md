@@ -8,7 +8,7 @@ The People HR Assistant is an intelligent agent designed to provide comprehensiv
 
 To use the People HR Assistant, there are two modes available:
 
-Dev: Start with make chat-hr-agent from your terminal
+Dev: Start with 'make chat-hr-agent' from your terminal
 Prod: Use @people-hr-assistant from naas.ai
 
 ## Features

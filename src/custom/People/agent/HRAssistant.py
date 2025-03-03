@@ -4,7 +4,7 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from langgraph.checkpoint.memory import MemorySaver
 from src import secret
-from src.custom.workflows.HRTalentWorkflow import HRTalentWorkflow, HRTalentWorkflowConfiguration
+from src.custom.People.workflows.HRTalentWorkflow import HRTalentWorkflow, HRTalentWorkflowConfiguration
 
 # Constants
 NAME = "HR Assistant"
