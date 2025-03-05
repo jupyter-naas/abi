@@ -5,15 +5,15 @@ from fastapi import APIRouter
 from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.custom.bitcoin.integration import BitcoinIntegration, BitcoinIntegrationConfiguration, as_tools as bitcoin_as_tools
-from src.custom.bitcoin.pipeline import BitcoinTransactionPipeline, BitcoinTransactionPipelineConfiguration
-from src.custom.bitcoin.workflow import (
+from src.custom.bitcoin_agent.integration import BitcoinIntegration, BitcoinIntegrationConfiguration, as_tools as bitcoin_as_tools
+from src.custom.bitcoin_agent.pipeline import BitcoinTransactionPipeline, BitcoinTransactionPipelineConfiguration
+from src.custom.bitcoin_agent.workflow import (
     ChatBitcoinAgentWorkflow, 
     ChatBitcoinAgentWorkflowConfiguration, 
     ChatBitcoinAgentWorkflowParameters
 )
-from src.custom.bitcoin.models import get_model, ModelConfig, ModelProvider
-from src.custom.bitcoin.analytics import generate_price_chart, generate_price_history_chart
+from src.custom.bitcoin_agent.models import get_model, ModelConfig, ModelProvider
+from src.custom.bitcoin_agent.analytics import generate_price_chart, generate_price_history_chart
 from langchain_core.tools import StructuredTool
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field

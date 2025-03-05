@@ -4,7 +4,7 @@ Bitcoin Workflow Module
 Provides workflows for generating simulated Bitcoin transaction data and executing queries.
 """
 
-from src.custom.bitcoin.workflow.ChatBitcoinAgentWorkflow import (
+from src.custom.bitcoin_agent.workflow.ChatBitcoinAgentWorkflow import (
     ChatBitcoinAgentWorkflow,
     ChatBitcoinAgentWorkflowConfiguration,
     ChatBitcoinAgentWorkflowParameters,
@@ -13,7 +13,7 @@ from src.custom.bitcoin.workflow.ChatBitcoinAgentWorkflow import (
     NaturalLanguageQueryParameters
 )
 
-from src.custom.bitcoin.workflow.BitcoinTransactionWorkflow import (
+from src.custom.bitcoin_agent.workflow.BitcoinTransactionWorkflow import (
     BitcoinTransactionWorkflow,
     BitcoinTransactionWorkflowConfiguration,
     BitcoinTransactionWorkflowParameters

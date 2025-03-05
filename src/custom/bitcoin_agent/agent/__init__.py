@@ -4,7 +4,7 @@ Bitcoin Agent Module
 Contains the BitcoinAgent for interacting with Bitcoin transactions in a conversational manner.
 """
 
-from src.custom.bitcoin.agent.BitcoinAgent import (
+from src.custom.bitcoin_agent.agent.BitcoinAgent import (
     BitcoinAgent,
     create_bitcoin_agent,
     NAME,

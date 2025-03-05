@@ -1,6 +1,6 @@
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from dataclasses import dataclass
-from src.custom.bitcoin.integration import BitcoinIntegration
+from src.custom.bitcoin_agent.integration import BitcoinIntegration
 from abi.utils.Graph import ABIGraph
 from rdflib import Graph, Literal, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, XSD

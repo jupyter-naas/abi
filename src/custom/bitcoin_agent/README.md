@@ -10,7 +10,7 @@ This module provides Bitcoin-related functionality for the ABI platform, includi
 ## Directory Structure
 
 ```
-/src/custom/bitcoin/
+/src/custom/bitcoin_agent/
 ├── agent/              # Bitcoin agent implementation
 ├── analytics/          # Bitcoin price analytics and charts
 ├── integration/        # Bitcoin blockchain integration 
@@ -25,8 +25,8 @@ This module provides Bitcoin-related functionality for the ABI platform, includi
 ### Bitcoin Agent
 
 ```python
-from src.custom.bitcoin.agent import create_bitcoin_agent
-from src.custom.bitcoin.models import ModelConfig, ModelProvider
+from src.custom.bitcoin_agent.agent import create_bitcoin_agent
+from src.custom.bitcoin_agent.models import ModelConfig, ModelProvider
 
 # Create a Bitcoin agent with default settings
 agent = create_bitcoin_agent()
@@ -46,7 +46,7 @@ response = agent.invoke("What's the current Bitcoin price?")
 ### Transaction Simulation
 
 ```python
-from src.custom.bitcoin.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
+from src.custom.bitcoin_agent.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
 
 # Create a Bitcoin integration
 config = BitcoinIntegrationConfiguration(
@@ -72,8 +72,8 @@ transactions = integration.generate_simulated_transaction_batch(
 ### Natural Language Queries
 
 ```python
-from src.custom.bitcoin.workflow import ChatBitcoinAgentWorkflow, ChatBitcoinAgentWorkflowConfiguration
-from src.custom.bitcoin.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
+from src.custom.bitcoin_agent.workflow import ChatBitcoinAgentWorkflow, ChatBitcoinAgentWorkflowConfiguration
+from src.custom.bitcoin_agent.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
 
 # Setup the workflow
 integration = BitcoinIntegration(BitcoinIntegrationConfiguration())
@@ -90,8 +90,8 @@ result = workflow.natural_language_query("What's the current Bitcoin price?")
 ### SPARQL Queries
 
 ```python
-from src.custom.bitcoin.workflow import ChatBitcoinAgentWorkflow, ChatBitcoinAgentWorkflowConfiguration
-from src.custom.bitcoin.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
+from src.custom.bitcoin_agent.workflow import ChatBitcoinAgentWorkflow, ChatBitcoinAgentWorkflowConfiguration
+from src.custom.bitcoin_agent.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
 
 # Setup the workflow
 integration = BitcoinIntegration(BitcoinIntegrationConfiguration())
@@ -120,7 +120,7 @@ result = workflow.execute_sparql(sparql_query)
 ### Price Queries and Charts
 
 ```python
-from src.custom.bitcoin.analytics import generate_price_chart, generate_price_history_chart
+from src.custom.bitcoin_agent.analytics import generate_price_chart, generate_price_history_chart
 
 # Generate a 24-hour price chart
 price_data = generate_price_chart(save_path="bitcoin_price_24h.png")
@@ -200,9 +200,9 @@ The validation framework includes robust error handling:
 You can also run validation tests programmatically:
 
 ```python
-from src.custom.bitcoin.tests.test_price_validation import validate_bitcoin_price
-from src.custom.bitcoin.tests.test_price_providers import validate_agent_against_consensus
-from src.custom.bitcoin.agent import create_bitcoin_agent
+from src.custom.bitcoin_agent.tests.test_price_validation import validate_bitcoin_price
+from src.custom.bitcoin_agent.tests.test_price_providers import validate_agent_against_consensus
+from src.custom.bitcoin_agent.agent import create_bitcoin_agent
 
 # Create agent and get price response
 agent = create_bitcoin_agent()

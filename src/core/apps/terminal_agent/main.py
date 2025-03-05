@@ -4,8 +4,7 @@ from abi.services.agent.Agent import Agent
 from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.foundation.SupervisorAssistant import create_supervisor_agent
 # Domain assistants
-from src.custom.bitcoin.agent import create_bitcoin_agent
-from src.custom.bitcoin.agent.BitcoinAgent import NAME as BITCOIN_AGENT_NAME
+from src.custom.bitcoin_agent.agent import create_bitcoin_agent, NAME as BITCOIN_AGENT_NAME
 from src.core.assistants.domain.ContentAssistant import create_content_agent
 from src.core.assistants.domain.FinanceAssistant import create_finance_agent
 from src.core.assistants.domain.GrowthAssistant import create_growth_agent

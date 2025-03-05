@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Union, List, Tuple
 from pydantic import BaseModel, Field, model_validator
 import pytest
-from src.custom.bitcoin.agent import create_bitcoin_agent
-from src.custom.bitcoin.models import ModelConfig, ModelProvider
+from src.custom.bitcoin_agent.agent import create_bitcoin_agent
+from src.custom.bitcoin_agent.models import ModelConfig, ModelProvider
 
 # Pydantic models for price validation
 class PriceData(BaseModel):

@@ -10,13 +10,13 @@ import argparse
 from datetime import datetime
 import json
 import os
-from src.custom.bitcoin.tests.test_price_validation import (
+from src.custom.bitcoin_agent.tests.test_price_validation import (
     validate_bitcoin_price,
     test_bitcoin_agent_price_accuracy,
     get_bitcoin_price,
     extract_price_from_llm_response
 )
-from src.custom.bitcoin.agent import create_bitcoin_agent
+from src.custom.bitcoin_agent.agent import create_bitcoin_agent
 
 def run_standalone_test(tolerance: float = 5.0, save_results: bool = False, output_dir: str = None):
     """Run a standalone price validation test and optionally save results"""

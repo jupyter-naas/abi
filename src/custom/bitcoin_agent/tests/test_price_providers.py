@@ -12,8 +12,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field, model_validator
 import statistics
-from src.custom.bitcoin.agent import create_bitcoin_agent
-from src.custom.bitcoin.tests.test_price_validation import (
+from src.custom.bitcoin_agent.agent import create_bitcoin_agent
+from src.custom.bitcoin_agent.tests.test_price_validation import (
     extract_price_from_llm_response,
     PriceData,
     get_yahoo_bitcoin_price,
