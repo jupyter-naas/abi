@@ -1,4 +1,4 @@
-# Bitcoin Module
+# Bitcoin Agent Module
 
 This module provides Bitcoin-related functionality for the ABI platform, including:
 
@@ -6,6 +6,7 @@ This module provides Bitcoin-related functionality for the ABI platform, includi
 - Bitcoin price data and charts
 - Natural language and SPARQL query processing for Bitcoin data
 - Integration with Bitcoin blockchain data
+- Bitcoin ontology for semantic data representation
 
 ## Directory Structure
 
@@ -15,6 +16,7 @@ This module provides Bitcoin-related functionality for the ABI platform, includi
 ├── analytics/          # Bitcoin price analytics and charts
 ├── integration/        # Bitcoin blockchain integration 
 ├── models/             # Model provider for Bitcoin NLP
+├── ontologies/         # Bitcoin domain ontology
 ├── pipeline/           # Data pipelines for Bitcoin transactions
 ├── tests/              # Testing and validation tools
 └── workflow/           # Bitcoin agent workflows
@@ -131,6 +133,44 @@ history_data = generate_price_history_chart(
     vs_currency="usd",
     save_path="bitcoin_price_30d.png"
 )
+```
+
+### Using the Bitcoin Ontology
+
+The Bitcoin Agent module includes a comprehensive ontology for Bitcoin transactions and blockchain data located in the `ontologies/BitcoinOntology.ttl` file. This ontology defines:
+
+- Bitcoin transaction types (on-chain, Lightning Network)
+- Bitcoin address types (legacy, SegWit, Bech32)
+- Blockchain components (blocks, networks)
+- Properties for transactions (hash, fee, confirmations)
+- Value units (BTC, Satoshi)
+
+You can use this ontology in your RDF applications:
+
+```python
+from rdflib import Graph
+from pathlib import Path
+
+# Load the Bitcoin ontology
+ontology_path = Path("src/custom/bitcoin_agent/ontologies/BitcoinOntology.ttl")
+g = Graph()
+g.parse(ontology_path, format="turtle")
+
+# Query the ontology
+query = """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?class ?label ?definition
+WHERE {
+  ?class rdfs:subClassOf abi:BitcoinTransaction ;
+         rdfs:label ?label ;
+         skos:definition ?definition .
+}
+"""
+results = g.query(query)
+for row in results:
+    print(f"{row.label}: {row.definition}")
 ```
 
 ## Testing and Validation Framework
