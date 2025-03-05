@@ -1,10 +1,19 @@
 FROM python:3.9
 WORKDIR /app
 
+# Install CA certificates
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
+
 COPY . .
 
 RUN pip install poetry
 RUN poetry config virtualenvs.in-project true
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+RUN . "$HOME/.cargo/env"
+RUN pip install maturin[patchelf]
+
 
 # Add build argument for architecture
 ARG TARGETARCH
