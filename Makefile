@@ -212,7 +212,7 @@ chat-powerpoint-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-powerpoint-agent'
 
 chat-osint-investigator-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m poetry run python3 -m src.core.apps.terminal_agent.main generic_run_agent OSINTInvestigatorAssistant'
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OSINTInvestigatorAssistant'
 
 
 .DEFAULT_GOAL := chat-supervisor-agent
