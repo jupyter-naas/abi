@@ -11,4 +11,10 @@ from src.custom.bitcoin.workflow.ChatBitcoinAgentWorkflow import (
     BalanceQueryParameters,
     SparqlQueryParameters,
     NaturalLanguageQueryParameters
+)
+
+from src.custom.bitcoin.workflow.BitcoinTransactionWorkflow import (
+    BitcoinTransactionWorkflow,
+    BitcoinTransactionWorkflowConfiguration,
+    BitcoinTransactionWorkflowParameters
 ) 

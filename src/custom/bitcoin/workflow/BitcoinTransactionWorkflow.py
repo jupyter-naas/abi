@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.integrations.BitcoinIntegration import BitcoinIntegration, BitcoinIntegrationConfiguration
-from src.core.pipelines.BitcoinTransactionPipeline import BitcoinTransactionPipeline, BitcoinTransactionPipelineConfiguration
+from src.custom.bitcoin.integration import BitcoinIntegration, BitcoinIntegrationConfiguration
+from src.custom.bitcoin.pipeline import BitcoinTransactionPipeline, BitcoinTransactionPipelineConfiguration
 from src import secret, config
 from dataclasses import dataclass
 from pydantic import BaseModel, Field

@@ -6,8 +6,8 @@ from src.core.assistants.foundation.SupportAssistant import create_support_agent
 from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.integrations.BitcoinIntegration import BitcoinIntegration, BitcoinIntegrationConfiguration, as_tools as bitcoin_as_tools
-from src.core.pipelines.BitcoinTransactionPipeline import BitcoinTransactionPipeline, BitcoinTransactionPipelineConfiguration
-from src.workflows.ChatBitcoinAgentWorkflow import ChatBitcoinAgentWorkflow, ChatBitcoinAgentWorkflowConfiguration, ChatBitcoinAgentWorkflowParameters
+from src.custom.bitcoin.pipeline import BitcoinTransactionPipeline, BitcoinTransactionPipelineConfiguration
+from src.custom.bitcoin.workflow import ChatBitcoinAgentWorkflow, ChatBitcoinAgentWorkflowConfiguration, ChatBitcoinAgentWorkflowParameters
 
 NAME = "Bitcoin Agent"
 DESCRIPTION = "Analyzes Bitcoin transactions and provides insights on the blockchain. Generates simulated transaction data for testing and development purposes."
