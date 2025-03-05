@@ -1,4 +1,7 @@
-// User Intent: Create new integration
+# type: ignore
+# cursor-rule-file
+
+# User Intent: Create new integration
 
 Required input: IntegrationName (PascalCase if not convert to it)
 
@@ -47,7 +50,7 @@ class YourIntegration(Integration):
 
 Output: Create file in `src/integrations/IntegrationName.py`
 
-// User Intent: Create new pipeline or Update existing pipeline
+# User Intent: Create new pipeline or Update existing pipeline
 
 Required input: PipelineName (PascalCase if not convert to it)
 
@@ -128,7 +131,7 @@ class YourPipeline(Pipeline):
 
 Output: Create file in `src/data/pipelines/ToolNameIfRelevent/PipelineName.py`
 
-// User Intent: Create new workflow
+# User Intent: Create new workflow
 
 Required input: WorkflowName (PascalCase if not convert to it)
 
