@@ -18,7 +18,7 @@ class OntologyYaml:
     @staticmethod
     def rdf_to_yaml(
         graph,
-        ontology_schemas: list = ["src/ontologies/ConsolidatedOntology.ttl"],
+        ontology_schemas: list = ["src/core/ontologies/ConsolidatedOntology.ttl"],
         class_colors_mapping: dict = {},
         top_level_class: str = 'http://purl.obolibrary.org/obo/BFO_0000001',
         display_relations_names: bool = True,
