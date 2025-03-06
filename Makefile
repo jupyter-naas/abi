@@ -1,8 +1,7 @@
-
 DEPENDENCIES = src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
 
 src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl:
-	@ make -C src/core/integrations/siteanalyzer release
+	docker compose run --workdir /app/src/core/integrations/siteanalyzer abi bash -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && export PATH="$$HOME/.cargo/bin:$$PATH" && pip install maturin[patchelf] && maturin build --release'
 
 .venv: $(DEPENDENCIES)
 	#@ make src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
