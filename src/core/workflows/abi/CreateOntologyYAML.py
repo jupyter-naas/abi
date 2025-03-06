@@ -2,7 +2,7 @@ from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
 from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
 from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
-from src import secret, config
+from src import secret, config, services
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -55,19 +55,37 @@ class CreateOntologyYAML(Workflow):
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
 
-    def graph_to_yaml(self, parameters: CreateOntologyYAMLParameters) -> Any:
-        # Push ontology to workspace if API key provided
-        try:
-            # Init graph
-            graph = self.__configuration.ontology_store.get(parameters.ontology_name)
+    def graph_to_yaml(self, parameters: CreateOntologyYAMLParameters) -> str:
+        # Initialize parameters
+        yaml_data = None
+        graph = self.__configuration.ontology_store.get(parameters.ontology_name)
 
-            # Convert to YAML
+        # Upload asset to Naas
+        asset = self.__naas_integration.upload_asset(
+            data=graph.serialize(format="turtle").encode('utf-8'),  # Convert to bytes
+            workspace_id=config.workspace_id,
+            storage_name=config.storage_name,
+            prefix="assets",
+            object_name=str(parameters.ontology_name + ".ttl"),
+            visibility="public"
+        )
+        # Save asset URL to JSON
+        asset_url = asset.get("asset").get("url")
+        if asset_url.endswith("/"):
+            asset_url = asset_url[:-1]
+
+        # Convert to YAML
+        try:
             yaml_data = OntologyYaml.rdf_to_yaml(
                 graph, 
                 display_relations_names=parameters.display_relations_names,
                 class_colors_mapping=parameters.class_colors_mapping
             )
-            # Initialize parameters
+        except Exception as e:
+            message = f"Error converting ontology to YAML: {e}"
+
+        # Initialize parameters
+        if yaml_data is not None:
             workspace_id = parameters.workspace_id
             onto_label = parameters.label
             onto_description = parameters.description
@@ -90,11 +108,11 @@ class CreateOntologyYAML(Workflow):
                     source=yaml.dump(yaml_data, Dumper=Dumper),
                     level=onto_level,
                     description=onto_description,
+                    download_url=asset_url,
                     logo_url=onto_logo_url,
                 )
                 ontology_id = _.get(res, "ontology.id")
                 message = f"✅ Ontology '{ontology_id}' successfully created."
-                logger.info(message)
             else:
                 # Update existing ontology
                 res = self.__naas_integration.update_ontology(
@@ -103,15 +121,12 @@ class CreateOntologyYAML(Workflow):
                     source=yaml.dump(yaml_data, Dumper=Dumper),
                     level=onto_level,
                     description=onto_description,
+                    download_url=asset_url,
                     logo_url=onto_logo_url,
                 )
                 message = f"✅ Ontology '{ontology_id}' successfully updated."
-                logger.info(message)
-
-        except Exception as e:
-            message = f"Error pushing ontology to workspace: {e}"
-            logger.error(message)
-        return message
+        logger.info(message)
+        return ontology_id
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""

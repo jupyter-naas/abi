@@ -115,6 +115,8 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
             organization_class = CCO.ont00000564 # Educational Organization
         elif organization_type == "government_organization":
             organization_class = CCO.ont00000408 # Government Organization
+        else:
+            raise ValueError(f"Organization type {organization_type} not supported")
         try:
             number_of_employee_value = int(organization_number_of_employee.get("value"))
         except:
@@ -731,9 +733,9 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
             }}
         """
         results = self.__configuration.ontology_store.query(query)
-        organization_logo_url = None
+        organization_logo_url = ""
         for result in results:
-            organization_logo_url = result.get("logo", None)
+            organization_logo_url = result.get("logo", "")
             logger.info(f"Organization logo URL: {organization_logo_url}")
             break
 
