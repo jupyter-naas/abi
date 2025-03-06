@@ -67,6 +67,9 @@ chat-opendata-agent = "src.core.apps.terminal_agent.main:run_opendata_agent"
 chat-operations-agent = "src.core.apps.terminal_agent.main:run_operations_agent"
 chat-sales-agent = "src.core.apps.terminal_agent.main:run_sales_agent"
 
+# Custom assistants
+chat-hr-agent = "src.core.apps.terminal_agent.main:run_hr_agent"
+
 # Integration agents
 chat-airtable-agent = "src.core.apps.terminal_agent.main:run_airtable_agent"
 chat-algolia-agent = "src.core.apps.terminal_agent.main:run_algolia_agent"

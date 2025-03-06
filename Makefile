@@ -1,20 +1,9 @@
-
-DEPENDENCIES = src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
-
-src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl:
-	@ make -C src/core/integrations/siteanalyzer release
-
-.venv: $(DEPENDENCIES)
-	#@ make src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
-	@ docker compose run --rm --remove-orphans abi poetry install
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pip install --force-reinstall /app/src/core/integrations/siteanalyzer/target/wheels/*.whl'
-
-dev-build:
-	@ docker compose build
+.venv:
+	@ docker compose run --rm abi poetry install
 
 install:
-	@ docker compose run --rm --remove-orphans abi poetry install
-	@ docker compose run --rm --remove-orphans abi poetry update abi
+	@ docker compose run --rm abi poetry install
+	@ docker compose run --rm abi poetry update abi
 
 abi-add: .venv
 	@ docker compose run --rm abi bash -c 'cd lib && poetry add $(dep) && poetry lock'
@@ -23,27 +12,27 @@ add:
 	@ docker compose run --rm abi bash -c 'poetry add $(dep) && poetry lock'
 
 lock:
-	@ docker compose run --rm --remove-orphans abi poetry lock
+	@ docker compose run --rm abi poetry lock --no-update
 
 path=tests/
 test:
-	@ docker compose run --rm --remove-orphans abi poetry run pytest $(path)
+	@ docker compose run --rm abi poetry run pytest $(path)
 
 sh: .venv
-	@ docker compose run --rm --remove-orphans -it abi bash
+	@ docker compose run --rm -it abi bash
   
 api: .venv
-	@ docker compose run --rm --remove-orphans -p 9879:9879 abi poetry run api
+	@ docker compose run --rm -p 9879:9879 abi poetry run api
 
 
 dvc-login: .venv
-	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/setup_dvc.py | sh'
+	@ docker compose run --rm  abi bash -c 'poetry run python scripts/setup_dvc.py | sh'
 
 storage-pull: .venv
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/storage_pull.py | sh'
+	@ docker compose run --rm abi bash -c 'poetry run python scripts/storage_pull.py | sh'
 
 storage-push: .venv
-	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
+	@ docker compose run --rm  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
 # Docker Build Commands
 # -------------------
@@ -211,10 +200,18 @@ chat-glassdoor-agent: .venv
 chat-powerpoint-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run chat-powerpoint-agent'
 
-chat-osint-investigator-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OSINTInvestigatorAssistant'
+chat-bitcoin-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-bitcoin-agent'
 
+test-bitcoin-price: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.custom.bitcoin.tests.run_price_validation --save'
+
+test-bitcoin-consensus: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.custom.bitcoin.tests.test_price_providers'
+
+chat-hr-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-hr-agent'
 
 .DEFAULT_GOAL := chat-supervisor-agent
 
-.PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
+.PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent chat-bitcoin-agent api sh lock add abi-add

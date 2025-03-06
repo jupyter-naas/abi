@@ -10,6 +10,9 @@ from src.core.assistants.domain.GrowthAssistant import create_growth_agent
 from src.core.assistants.domain.OpenDataAssistant import create_open_data_agent
 from src.core.assistants.domain.OperationsAssistant import create_operations_agent
 from src.core.assistants.domain.SalesAssistant import create_sales_agent
+
+# Custom assistants
+from src.modules.People.agent.HRAssistant import create_hr_agent
 # Expert integrations assistants
 from src.core.assistants.expert.integrations.AWSS3Assistant import create_aws_s3_agent
 from src.core.assistants.expert.integrations.AgicapAssistant import create_agicap_agent
@@ -378,6 +381,12 @@ def run_glassdoor_agent():
 
 def run_powerpoint_agent():
     agent = create_powerpoint_agent()
+    agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
+    agent.on_tool_response(on_tool_response)
+    run_agent(agent)
+
+def run_hr_agent():
+    agent = create_hr_agent()
     agent.on_tool_usage(lambda message: print_tool_usage(message.tool_calls[0]['name']))
     agent.on_tool_response(on_tool_response)
     run_agent(agent)

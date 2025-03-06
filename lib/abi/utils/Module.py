@@ -33,9 +33,25 @@ class IModule(ABC):
         
     
     def __load_agents(self):
-        for file in os.listdir(os.path.join(self.module_path, 'assistants')):
-            if file.endswith('.py'):
-                assistant_path = self.module_import_path + '.assistants.' + file[:-3]
-                module = importlib.import_module(assistant_path)
-                if hasattr(module, 'create_agent'):
-                    self.agents.append(module.create_agent())
+        # Check if assistants directory exists and load agents from there
+        assistants_path = os.path.join(self.module_path, 'assistants')
+        if os.path.exists(assistants_path) and os.path.isdir(assistants_path):
+            for file in os.listdir(assistants_path):
+                if file.endswith('.py'):
+                    assistant_path = self.module_import_path + '.assistants.' + file[:-3]
+                    module = importlib.import_module(assistant_path)
+                    if hasattr(module, 'create_agent'):
+                        self.agents.append(module.create_agent())
+
+        # Also check if agent directory exists and load agents from there
+        agent_path = os.path.join(self.module_path, 'agent')
+        if os.path.exists(agent_path) and os.path.isdir(agent_path):
+            for file in os.listdir(agent_path):
+                if file.endswith('.py'):
+                    agent_module_path = self.module_import_path + '.agent.' + file[:-3]
+                    module = importlib.import_module(agent_module_path)
+                    if hasattr(module, 'create_agent'):
+                        self.agents.append(module.create_agent())
+                    # Additionally check for create_hr_agent or other specific creation functions
+                    elif hasattr(module, 'create_hr_agent'):
+                        self.agents.append(module.create_hr_agent())
