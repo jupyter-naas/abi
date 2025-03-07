@@ -26,6 +26,8 @@ from src.core.assistants.domain.SalesAssistant import create_sales_agent
 # Integrations
 from src.core.assistants.expert.integrations.PowerPointAssistant import create_powerpoint_agent
 from src.core.assistants.expert.integrations.NaasAssistant import create_naas_agent
+# Custom assistants
+from src.custom.People.agent.HRAssistant import create_hr_agent
 # Pipelines
 from src.core.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration
 from src.core.pipelines.github.GithubIssuesPipeline import GithubIssuesPipeline, GithubIssuesPipelineConfiguration
@@ -144,6 +146,9 @@ naas_agent.as_api(assistants_router)
 
 powerpoint_agent = create_powerpoint_agent()
 powerpoint_agent.as_api(assistants_router)
+
+hr_agent = create_hr_agent()
+hr_agent.as_api(assistants_router)
 
 # Create Pipelines API Router
 pipelines_router = APIRouter(
