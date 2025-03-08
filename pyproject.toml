@@ -43,6 +43,7 @@ wordcloud = "^1.9.4"
 imapclient = "^3.0.1"
 pynacl = "^1.5.0"
 python-pptx = "^1.0.2"
+mistralai = "^1.5.1"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
@@ -58,6 +59,7 @@ ipykernel = "^6.29.5"
 chat-supervisor-agent = "src.core.apps.terminal_agent.main:run_supervisor_agent"
 chat-support-agent = "src.core.apps.terminal_agent.main:run_support_agent"
 chat-hr-agent = "src.core.apps.terminal_agent.main:run_hr_agent"
+chat-documentocr-agent = "src.core.apps.terminal_agent.main:run_documentocr_agent"
 
 # Domain agents
 chat-content-agent = "src.core.apps.terminal_agent.main:run_content_agent"
