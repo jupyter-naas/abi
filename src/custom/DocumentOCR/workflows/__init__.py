@@ -4,5 +4,6 @@ from .DocumentOCRWorkflow import (
     DocumentOCRWorkflowConfiguration,
     ProcessDocumentParameters,
     DocumentUnderstandingParameters,
-    BatchProcessDocumentsParameters
+    BatchProcessDocumentsParameters,
+    ExtractTablesParameters
 ) 

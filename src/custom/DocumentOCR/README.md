@@ -6,6 +6,8 @@ This module provides document processing capabilities using Mistral OCR and docu
 
 - **OCR Processing**: Extract text from PDF documents and images while preserving formatting
 - **Document Understanding**: Ask questions about document content using natural language
+- **Table Extraction**: Extract tables from documents and save them as CSV files
+- **Table Consolidation**: Consolidate tables with the same headers into a single CSV file
 - **Batch Processing**: Process multiple documents at once
 - **Integration with Storage**: Works with files in your storage directories
 - **Structured Output**: Returns results in a structured format for easy parsing
@@ -71,6 +73,7 @@ This will start an interactive terminal where you can:
 - Provide document paths to process (relative to the storage directory)
 - Ask questions about document content
 - Process batches of documents
+- Extract tables from documents as CSV files
 
 The agent will handle the OCR processing and save results in the same directory as the input files.
 
@@ -93,6 +96,9 @@ response = agent.run("Read /storage/datastore/contracts/agreement.pdf and tell m
 
 # Batch process documents
 response = agent.run("Process all PDF documents in the /storage/datastore/invoices directory")
+
+# Extract tables from a document
+response = agent.run("Extract tables from /storage/datastore/reports/quarterly_report.md")
 ```
 
 ### Advanced Usage
@@ -105,7 +111,8 @@ from src.custom.DocumentOCR import (
     MistralOCRIntegrationConfiguration,
     DocumentOCRWorkflow, 
     DocumentOCRWorkflowConfiguration, 
-    ProcessDocumentParameters
+    ProcessDocumentParameters,
+    ExtractTablesParameters
 )
 
 # Configure the integration
@@ -138,6 +145,85 @@ result = workflow.process_document(
         output_path="processed/financial_report_ocr.txt"
     )
 )
+
+# Extract tables from a document and save as CSV files
+result = workflow.extract_tables(
+    ExtractTablesParameters(
+        file_path="reports/financial_report.md",
+        output_directory="reports/csv_exports",
+        consolidate_tables=True
+    )
+)
+
+# CSV files will be saved in a folder named "OCR_financial_report" inside the output directory
+print(f"CSV files are stored in: {result['output_directory']}")
+print(f"Original markdown file copied to: {result['markdown_file']}")
+```
+
+## Table Extraction
+
+The module can extract tables from documents and save them as CSV files. This feature provides:
+
+- Automatic detection of tables in markdown content
+- Extraction of tables with their headers and data
+- Save individual tables as CSV files in a dedicated folder
+- Consolidation of tables with the same headers into a single CSV file
+
+### Output Organization
+
+When you extract tables from a document, the output is organized as follows:
+
+1. A dedicated folder is created with the prefix `OCR_` followed by the source document name
+   - Example: For a document named `financial_report.md`, the folder would be `OCR_financial_report`
+
+2. Inside this folder:
+   - The original markdown file is copied to keep all related files together
+   - Each table is saved as a separate CSV file named after the table title
+   - Consolidated tables (with the same headers) are saved with a suffix `_consolidated`
+
+This organization helps keep the extracted data well-structured and easy to locate, with all files related to a document stored in one place.
+
+### Using Table Extraction
+
+To extract tables from a document:
+
+```python
+from src.custom.DocumentOCR import (
+    DocumentOCRWorkflow, 
+    DocumentOCRWorkflowConfiguration,
+    ExtractTablesParameters
+)
+
+# Set up workflow
+workflow_config = DocumentOCRWorkflowConfiguration(
+    integration_config=integration_config,
+    storage_path="/storage/datastore"
+)
+workflow = DocumentOCRWorkflow(workflow_config)
+
+# Extract tables
+result = workflow.extract_tables(
+    ExtractTablesParameters(
+        file_path="reports/financial_report.md",
+        output_directory="reports/csv_exports",  # Tables will be in reports/csv_exports/OCR_financial_report/
+        consolidate_tables=True  # Enable table consolidation
+    )
+)
+
+# Access the output directory
+print(f"Tables extracted to: {result['output_directory']}")
+
+# Access the markdown file in the output directory
+print(f"Original markdown file: {result['markdown_file']}")
+
+# Access the resulting CSV files
+for csv_file in result["csv_files"]:
+    print(f"Exported CSV file: {csv_file}")
+
+# Access the consolidated CSV files (if any)
+if "consolidated_csv_files" in result:
+    for csv_file in result["consolidated_csv_files"]:
+        print(f"Consolidated CSV file: {csv_file}")
 ```
 
 ## Running the Demo
@@ -146,6 +232,12 @@ To try out the module, run the included demo script:
 
 ```bash
 python -m src.custom.DocumentOCR.demo
+```
+
+To test the table extraction functionality:
+
+```bash
+python extract_tables_demo.py
 ```
 
 ## Requirements
@@ -158,6 +250,7 @@ python -m src.custom.DocumentOCR.demo
 
 - PDF documents
 - Images (JPG, PNG, GIF, BMP, TIFF)
+- For table extraction: Markdown files (.md)
 
 ## Configuration
 

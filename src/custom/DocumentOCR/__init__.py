@@ -12,7 +12,8 @@ from .pipelines import (
     DocumentOCRPipeline, 
     DocumentOCRPipelineConfiguration, 
     DocumentOCRPipelineParameters,
-    BatchDocumentOCRPipelineParameters
+    BatchDocumentOCRPipelineParameters,
+    TableExtractionParameters
 )
 
 # Import from workflows
@@ -21,5 +22,6 @@ from .workflows import (
     DocumentOCRWorkflowConfiguration,
     ProcessDocumentParameters,
     DocumentUnderstandingParameters,
-    BatchProcessDocumentsParameters
+    BatchProcessDocumentsParameters,
+    ExtractTablesParameters
 ) 

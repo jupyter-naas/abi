@@ -13,6 +13,7 @@ from pathlib import Path
 import os
 import json
 from pydantic import Field
+import shutil
 
 # Define document ontology namespace
 DOC = Namespace("http://abi.ai/ontologies/document#")
@@ -62,6 +63,19 @@ class BatchDocumentOCRPipelineParameters(PipelineParameters):
     output_directory: Optional[str] = Field(None, description="Directory to save OCR results")
 
 
+class TableExtractionParameters(PipelineParameters):
+    """Parameters for table extraction from documents.
+    
+    Attributes:
+        file_path (str): Path to the markdown file containing tables
+        output_directory (Optional[str]): Directory to save CSV files, defaults to same directory as input file
+        consolidate_tables (bool): Whether to consolidate tables with the same headers
+    """
+    file_path: str = Field(..., description="Path to the markdown file containing tables")
+    output_directory: Optional[str] = Field(None, description="Directory to save CSV files, defaults to same directory as input file")
+    consolidate_tables: bool = Field(True, description="Whether to consolidate tables with the same headers")
+
+
 class DocumentOCRPipeline(Pipeline):
     """Pipeline for processing documents with OCR capabilities.
     
@@ -94,6 +108,12 @@ class DocumentOCRPipeline(Pipeline):
                 description="Process multiple document files in a directory with OCR",
                 func=lambda **kwargs: self.run_batch(BatchDocumentOCRPipelineParameters(**kwargs)),
                 args_schema=BatchDocumentOCRPipelineParameters
+            ),
+            StructuredTool(
+                name="extract_tables_from_document",
+                description="Extract tables from a document and save them as CSV files",
+                func=lambda **kwargs: self.extract_tables(TableExtractionParameters(**kwargs)),
+                args_schema=TableExtractionParameters
             )
         ]
 
@@ -110,6 +130,10 @@ class DocumentOCRPipeline(Pipeline):
         @router.post("/document/ocr/batch")
         def run_batch_document_ocr(parameters: BatchDocumentOCRPipelineParameters):
             return self.run_batch(parameters).serialize(format="turtle")
+        
+        @router.post("/document/extract-tables")
+        def extract_tables(parameters: TableExtractionParameters):
+            return self.extract_tables(parameters)
 
     def run(self, parameters: DocumentOCRPipelineParameters) -> Graph:
         """Run the document OCR pipeline with the given parameters.
@@ -246,4 +270,173 @@ class DocumentOCRPipeline(Pipeline):
         # Store the graph in the ontology store
         self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
         
-        return graph 
+        return graph
+    
+    def extract_tables(self, parameters: TableExtractionParameters) -> Dict[str, Any]:
+        """Extract tables from a document and save them as CSV files.
+        
+        If consolidate_tables is True, tables with the same headers will be
+        consolidated into a single CSV file with suffix "_consolidated".
+        
+        Args:
+            parameters (TableExtractionParameters): Parameters for table extraction
+            
+        Returns:
+            Dict[str, Any]: Result of table extraction including paths to CSV files
+        """
+        import re
+        import csv
+        
+        try:
+            # Normalize the file path
+            file_path = os.path.join(self.__configuration.storage_path, parameters.file_path)
+            
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return {
+                    "status": "error",
+                    "message": f"File not found: {parameters.file_path}"
+                }
+            
+            # Determine base output directory
+            if parameters.output_directory:
+                base_output_dir = os.path.join(self.__configuration.storage_path, parameters.output_directory)
+            else:
+                base_output_dir = os.path.dirname(file_path)
+                
+            # Get the base filename without extension for creating the OCR_ folder
+            base_filename = os.path.splitext(os.path.basename(file_path))[0]
+            file_extension = os.path.splitext(os.path.basename(file_path))[1]
+            
+            # Create a dedicated output folder with prefix OCR_
+            output_dir = os.path.join(base_output_dir, f"OCR_{base_filename}")
+            
+            # Ensure output directory exists
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Read the markdown content
+            with open(file_path, 'r') as f:
+                markdown_content = f.read()
+            
+            # Copy the original markdown file to the OCR_ folder
+            markdown_dest_path = os.path.join(output_dir, f"{base_filename}{file_extension}")
+            shutil.copy2(file_path, markdown_dest_path)
+            
+            # Regular expression to find tables in markdown
+            table_pattern = r'(?:#+ *(.*?)\s*\n\n?)?(?:\|.*\|\n\|[-:\| ]+\|\n)(\|.*\|\n)+'
+            
+            # Find all tables
+            tables_found = re.finditer(table_pattern, markdown_content, re.MULTILINE)
+            
+            csv_files = []
+            table_counter = 1
+            
+            # Store tables by headers for consolidation
+            tables_by_headers = {}
+            
+            # Process each table found
+            for table_match in tables_found:
+                # Try to get the table name (heading before the table)
+                table_name = table_match.group(1)
+                if not table_name:
+                    # Use the document name and table number if no name is found
+                    table_name = f"Table_{table_counter}"
+                else:
+                    # Clean up the table name for use as a filename
+                    table_name = re.sub(r'[^\w\s-]', '', table_name).strip().replace(' ', '_')
+                    
+                # Ensure we have a valid filename
+                if not table_name:
+                    table_name = f"Table_{table_counter}"
+                
+                # Extract table rows
+                table_content = table_match.group(0)
+                rows = []
+                
+                # Process each row of the table
+                for line in table_content.strip().split('\n'):
+                    if line.startswith('|') and not all(c in '| -:' for c in line):
+                        # Parse cells, removing leading/trailing | and whitespace
+                        cells = [cell.strip() for cell in line.split('|')[1:-1]]
+                        rows.append(cells)
+                
+                if len(rows) > 1:  # Ensure we have header and at least one data row
+                    # Create CSV file in the OCR_ folder
+                    csv_file_path = os.path.join(output_dir, f"{table_name}.csv")
+                    
+                    try:
+                        with open(csv_file_path, 'w', newline='') as csv_file:
+                            writer = csv.writer(csv_file)
+                            # Write all rows to the CSV
+                            for row in rows:
+                                writer.writerow(row)
+                        
+                        csv_files.append(csv_file_path)
+                        
+                        # Store table for potential consolidation if requested
+                        if parameters.consolidate_tables:
+                            # Use header row as a key (tuple for immutability)
+                            header_tuple = tuple(rows[0])
+                            if header_tuple not in tables_by_headers:
+                                tables_by_headers[header_tuple] = []
+                            tables_by_headers[header_tuple].append(rows[1:])  # Store data rows only
+                            
+                    except Exception as e:
+                        return {
+                            "status": "error",
+                            "message": f"Error saving CSV file: {str(e)}"
+                        }
+                
+                table_counter += 1
+            
+            # Create consolidated CSVs for tables with the same headers if requested
+            consolidated_files = []
+            if parameters.consolidate_tables:
+                for header_tuple, table_data_list in tables_by_headers.items():
+                    if len(table_data_list) > 1:  # Only consolidate if we have multiple tables with same headers
+                        # Create a consolidated table with all data rows
+                        header = list(header_tuple)
+                        all_data_rows = []
+                        for data_rows in table_data_list:
+                            all_data_rows.extend(data_rows)
+                        
+                        # Generate a name based on the headers
+                        header_name = "_".join([h.replace(' ', '_') for h in header if h])[:30]  # Limit length
+                        consolidated_csv_path = os.path.join(output_dir, f"{header_name}_consolidated.csv")
+                        
+                        try:
+                            with open(consolidated_csv_path, 'w', newline='') as csv_file:
+                                writer = csv.writer(csv_file)
+                                # Write the header
+                                writer.writerow(header)
+                                # Write all data rows
+                                for row in all_data_rows:
+                                    writer.writerow(row)
+                            
+                            consolidated_files.append(consolidated_csv_path)
+                        except Exception as e:
+                            return {
+                                "status": "error",
+                                "message": f"Error saving consolidated CSV file: {str(e)}"
+                            }
+            
+            # Create response
+            response = {
+                "status": "success",
+                "file_processed": parameters.file_path,
+                "tables_found": table_counter - 1,
+                "output_directory": os.path.relpath(output_dir, self.__configuration.storage_path),
+                "markdown_file": os.path.relpath(markdown_dest_path, self.__configuration.storage_path),
+                "csv_files": [os.path.relpath(path, self.__configuration.storage_path) for path in csv_files]
+            }
+            
+            if consolidated_files:
+                response["consolidated_csv_files"] = [os.path.relpath(path, self.__configuration.storage_path) for path in consolidated_files]
+                
+            return response
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error extracting tables: {str(e)}"
+            } 

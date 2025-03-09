@@ -60,6 +60,19 @@ class BatchProcessDocumentsParameters(WorkflowParameters):
     output_directory: Optional[str] = Field(None, description="Directory to save OCR results")
 
 
+class ExtractTablesParameters(WorkflowParameters):
+    """Parameters for extracting tables from a document.
+    
+    Attributes:
+        file_path (str): Path to the document file containing tables
+        output_directory (Optional[str]): Directory to save CSV files, defaults to same directory as input file
+        consolidate_tables (bool): Whether to consolidate tables with the same headers
+    """
+    file_path: str = Field(..., description="Path to the document file containing tables")
+    output_directory: Optional[str] = Field(None, description="Directory to save CSV files, defaults to same directory as input file")
+    consolidate_tables: bool = Field(True, description="Whether to consolidate tables with the same headers")
+
+
 class DocumentOCRWorkflow(Workflow):
     """Workflow for processing documents with OCR and document understanding.
     
@@ -143,6 +156,15 @@ class DocumentOCRWorkflow(Workflow):
             # Add content if available
             if hasattr(result, 'text'):
                 response["text_content"] = result.text
+                
+            # Check for CSV files that were exported from tables
+            base_dir = os.path.dirname(self.__normalize_path(output_path))
+            base_filename = os.path.splitext(os.path.basename(output_path))[0]
+            csv_files = [f for f in os.listdir(base_dir) if f.startswith(base_filename) and f.endswith('.csv')]
+            
+            if csv_files:
+                response["exported_csv_files"] = [os.path.join(base_dir, f) for f in csv_files]
+                logger.info(f"Exported {len(csv_files)} tables as CSV files")
             
             return response
         except Exception as e:
@@ -235,18 +257,130 @@ class DocumentOCRWorkflow(Workflow):
                 "error": str(e)
             }
     
-    def run(self, parameters: ProcessDocumentParameters) -> Dict[str, Any]:
-        """Run the document OCR workflow with the given parameters.
+    def extract_tables(self, parameters: ExtractTablesParameters) -> Dict[str, Any]:
+        """Extract tables from a document and save them as CSV files.
         
-        This is the main entry point for the workflow.
+        This method uses the DocumentOCR pipeline to extract tables from markdown files
+        and save them as CSV files. If consolidate_tables is True, tables with the same 
+        headers will be consolidated into a single CSV file.
+        
+        Args:
+            parameters (ExtractTablesParameters): Parameters for table extraction
+            
+        Returns:
+            Dict[str, Any]: Result of table extraction
+        """
+        from src.custom.DocumentOCR.pipelines.DocumentOCRPipeline import TableExtractionParameters, DocumentOCRPipeline, DocumentOCRPipelineConfiguration
+        
+        # Configure the OCR pipeline
+        pipeline_config = DocumentOCRPipelineConfiguration(
+            integration=self.__integration,
+            ontology_store=None,  # Not needed for table extraction
+            storage_path=self.__configuration.storage_path
+        )
+        
+        # Create pipeline
+        pipeline = DocumentOCRPipeline(pipeline_config)
+        
+        # Create pipeline parameters
+        pipeline_params = TableExtractionParameters(
+            file_path=parameters.file_path,
+            output_directory=parameters.output_directory,
+            consolidate_tables=parameters.consolidate_tables
+        )
+        
+        # Run the pipeline
+        result = pipeline.extract_tables(pipeline_params)
+        
+        return result
+    
+    def run(self, parameters: ProcessDocumentParameters) -> Dict[str, Any]:
+        """Run document processing.
         
         Args:
             parameters (ProcessDocumentParameters): Parameters for document processing
             
         Returns:
-            Dict[str, Any]: OCR processing results
+            Dict[str, Any]: Processing results
         """
         return self.process_document(parameters)
+    
+    def fix_ocr_file(self, file_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
+        """Fix an existing OCR output file that contains raw OCR response objects.
+        
+        This method extracts the actual markdown content from files that were incorrectly
+        generated and converts them to proper markdown.
+        
+        Args:
+            file_path (str): Path to the OCR file to fix
+            output_path (Optional[str]): Path to save the fixed result. If not provided,
+                                        overwrites the original file.
+            
+        Returns:
+            Dict[str, Any]: Result of the operation
+        """
+        try:
+            # Normalize paths
+            abs_file_path = self.__normalize_path(file_path)
+            
+            # If no output path is specified, overwrite the original file
+            if not output_path:
+                output_path = file_path
+            
+            abs_output_path = self.__normalize_path(output_path)
+            
+            # Check if file exists
+            if not os.path.exists(abs_file_path):
+                return {"status": "error", "message": f"File not found: {file_path}"}
+            
+            # Read the file content
+            with open(abs_file_path, 'r') as f:
+                content = f.read()
+            
+            # Check if this is an OCR result file with pages/markdown structure
+            if "pages=[" in content and "markdown='" in content:
+                # Extract markdown content
+                markdown_content = ""
+                
+                # Add title from the original filename
+                if os.path.basename(abs_file_path).endswith('.pdf.md'):
+                    title = os.path.basename(abs_file_path)[:-7]  # Remove .pdf.md
+                else:
+                    title = os.path.basename(abs_file_path)
+                
+                markdown_content += f"# {title}\n\n"
+                
+                # Extract all markdown sections
+                parts = content.split("markdown='")
+                for i in range(1, len(parts)):
+                    end_index = parts[i].find("'")
+                    if end_index != -1:
+                        extracted_markdown = parts[i][:end_index]
+                        markdown_content += extracted_markdown
+                        markdown_content += "\n\n"
+                
+                # Write the extracted markdown content
+                with open(abs_output_path, 'w') as f:
+                    f.write(markdown_content)
+                
+                return {
+                    "status": "success",
+                    "file_processed": file_path,
+                    "result": "OCR file fixed successfully",
+                    "output_location": output_path
+                }
+            else:
+                return {
+                    "status": "info",
+                    "message": "File does not appear to be a raw OCR result. No changes made."
+                }
+                
+        except Exception as e:
+            logger.error(f"Error fixing OCR file: {e}")
+            return {
+                "status": "error",
+                "message": f"Failed to fix OCR file: {str(e)}"
+            }
     
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow.
@@ -254,26 +388,52 @@ class DocumentOCRWorkflow(Workflow):
         Returns:
             list[StructuredTool]: List containing the workflow tools
         """
-        return [
-            StructuredTool(
-                name="document_ocr_process",
-                description="Process a document with OCR to extract text and structure. Results are saved as a markdown file by default.",
-                func=lambda **kwargs: self.process_document(ProcessDocumentParameters(**kwargs)),
-                args_schema=ProcessDocumentParameters
-            ),
-            StructuredTool(
-                name="document_understanding",
-                description="Process a document and get answers to questions about its content",
-                func=lambda **kwargs: self.document_understanding(DocumentUnderstandingParameters(**kwargs)),
-                args_schema=DocumentUnderstandingParameters
-            ),
-            StructuredTool(
-                name="document_ocr_batch_process",
-                description="Process multiple documents in a directory with OCR",
-                func=lambda **kwargs: self.batch_process_documents(BatchProcessDocumentsParameters(**kwargs)),
-                args_schema=BatchProcessDocumentsParameters
-            )
-        ]
+        # Create document processing tool
+        process_tool = StructuredTool(
+            name="document_ocr_process",
+            description="Process a document with OCR to extract text and structure",
+            func=lambda **kwargs: self.process_document(ProcessDocumentParameters(**kwargs)),
+            args_schema=ProcessDocumentParameters
+        )
+        
+        # Create document understanding tool
+        understanding_tool = StructuredTool(
+            name="document_ocr_understanding",
+            description="Answer questions about a document using OCR and document understanding",
+            func=lambda **kwargs: self.document_understanding(DocumentUnderstandingParameters(**kwargs)),
+            args_schema=DocumentUnderstandingParameters
+        )
+        
+        # Create batch processing tool
+        batch_tool = StructuredTool(
+            name="document_ocr_batch_process",
+            description="Process multiple documents with OCR",
+            func=lambda **kwargs: self.batch_process_documents(BatchProcessDocumentsParameters(**kwargs)),
+            args_schema=BatchProcessDocumentsParameters
+        )
+        
+        # Create fix OCR file tool
+        class FixOCRFileParameters(BaseModel):
+            """Parameters for fixing OCR file format."""
+            file_path: str = Field(..., description="Path to the OCR file to fix")
+            output_path: Optional[str] = Field(None, description="Path to save the fixed result. If not provided, overwrites the original file.")
+        
+        fix_tool = StructuredTool(
+            name="document_ocr_fix_file",
+            description="Fix an existing OCR output file that contains raw OCR response objects",
+            func=lambda **kwargs: self.fix_ocr_file(**kwargs),
+            args_schema=FixOCRFileParameters
+        )
+        
+        # Create extract tables tool
+        extract_tables_tool = StructuredTool(
+            name="document_ocr_extract_tables",
+            description="Extract tables from a document and save them as CSV files",
+            func=lambda **kwargs: self.extract_tables(ExtractTablesParameters(**kwargs)),
+            args_schema=ExtractTablesParameters
+        )
+        
+        return [process_tool, understanding_tool, batch_tool, fix_tool, extract_tables_tool]
     
     def as_api(self, router: APIRouter) -> None:
         """Adds API endpoints for this workflow to the given router.
@@ -291,4 +451,19 @@ class DocumentOCRWorkflow(Workflow):
         
         @router.post("/document/ocr/batch")
         def batch_process_documents(parameters: BatchProcessDocumentsParameters):
-            return self.batch_process_documents(parameters) 
+            return self.batch_process_documents(parameters)
+        
+        # Add API endpoint for fixing OCR files
+        class FixOCRFileParameters(BaseModel):
+            """Parameters for fixing OCR file format."""
+            file_path: str = Field(..., description="Path to the OCR file to fix")
+            output_path: Optional[str] = Field(None, description="Path to save the fixed result. If not provided, overwrites the original file.")
+            
+        @router.post("/document/ocr/fix")
+        def fix_ocr_file(parameters: FixOCRFileParameters):
+            return self.fix_ocr_file(**parameters.dict())
+        
+        # Add API endpoint for extracting tables
+        @router.post("/document/ocr/extract-tables")
+        def extract_tables(parameters: ExtractTablesParameters):
+            return self.extract_tables(parameters) 

@@ -10,6 +10,8 @@ import os
 import base64
 from pathlib import Path
 import json
+import re
+import csv
 
 LOGO_URL = "https://logo.clearbit.com/mistral.ai"
 
@@ -156,13 +158,38 @@ class MistralOCRIntegration(Integration):
                         # Add the title as first-level heading
                         f.write(f"# {os.path.basename(abs_file_path)}\n\n")
                         
-                        # Add document text as content
-                        if hasattr(ocr_response, 'text'):
+                        # Extract and format the markdown content properly
+                        markdown_content = ""
+                        if hasattr(ocr_response, 'pages') and ocr_response.pages:
+                            # Combine markdown content from all pages
+                            for page in ocr_response.pages:
+                                if hasattr(page, 'markdown') and page.markdown:
+                                    markdown_content += page.markdown + "\n\n"
+                                    f.write(page.markdown)
+                                    f.write("\n\n")
+                        elif isinstance(ocr_response, dict) and 'pages' in ocr_response:
+                            # Handle dict format
+                            for page in ocr_response['pages']:
+                                if 'markdown' in page:
+                                    markdown_content += page['markdown'] + "\n\n"
+                                    f.write(page['markdown'])
+                                    f.write("\n\n")
+                        elif hasattr(ocr_response, 'text'):
+                            # Fallback to text if available
+                            markdown_content = ocr_response.text
                             f.write(ocr_response.text)
                         elif isinstance(ocr_response, dict) and 'text' in ocr_response:
+                            # Fallback to text if available in dict format
+                            markdown_content = ocr_response['text']
                             f.write(ocr_response['text'])
                         else:
+                            # Last resort: write the raw response
+                            markdown_content = str(ocr_response)
                             f.write(str(ocr_response))
+                    
+                    # Extract tables and save as CSV files
+                    self.__extract_tables_to_csv(markdown_content, abs_output_path)
+                    
                 else:
                     # Write results to file as is
                     with open(abs_output_path, 'w') as f:
@@ -340,6 +367,113 @@ class MistralOCRIntegration(Integration):
         
         # Now join with the storage path
         return os.path.join(self.__configuration.storage_path, path)
+
+    def __extract_tables_to_csv(self, markdown_content: str, markdown_file_path: str) -> List[str]:
+        """Extract tables from markdown content and save them as CSV files.
+        
+        Args:
+            markdown_content (str): The markdown content containing tables
+            markdown_file_path (str): Path to the markdown file (used to determine CSV output location)
+            
+        Returns:
+            List[str]: List of paths to created CSV files
+        """
+        # Get the directory and base filename for the output
+        base_dir = os.path.dirname(markdown_file_path)
+        base_filename = os.path.splitext(os.path.basename(markdown_file_path))[0]
+        
+        # Regular expression to find tables in markdown
+        table_pattern = r'(?:#+ *(.*?)\s*\n\n?)?(?:\|.*\|\n\|[-:\| ]+\|\n)(\|.*\|\n)+'
+        
+        # Find all tables
+        tables_found = re.finditer(table_pattern, markdown_content, re.MULTILINE)
+        
+        csv_files = []
+        table_counter = 1
+        
+        # Store tables by headers for consolidation
+        tables_by_headers = {}
+        
+        for table_match in tables_found:
+            # Try to get the table name (heading before the table)
+            table_name = table_match.group(1)
+            if not table_name:
+                # Use the document name and table number if no name is found
+                table_name = f"Table_{table_counter}"
+            else:
+                # Clean up the table name for use as a filename
+                table_name = re.sub(r'[^\w\s-]', '', table_name).strip().replace(' ', '_')
+                
+            # Ensure we have a valid filename
+            if not table_name:
+                table_name = f"Table_{table_counter}"
+            
+            # Extract table rows
+            table_content = table_match.group(0)
+            rows = []
+            
+            # Process each row of the table
+            for line in table_content.strip().split('\n'):
+                if line.startswith('|') and not all(c in '| -:' for c in line):
+                    # Parse cells, removing leading/trailing | and whitespace
+                    cells = [cell.strip() for cell in line.split('|')[1:-1]]
+                    rows.append(cells)
+            
+            if len(rows) > 1:  # Ensure we have header and at least one data row
+                # Create CSV file
+                csv_file_path = os.path.join(base_dir, f"{base_filename}_{table_name}.csv")
+                
+                try:
+                    with open(csv_file_path, 'w', newline='') as csv_file:
+                        writer = csv.writer(csv_file)
+                        # Write all rows to the CSV
+                        for row in rows:
+                            writer.writerow(row)
+                    
+                    csv_files.append(csv_file_path)
+                    logger.info(f"Exported table as CSV: {csv_file_path}")
+                    
+                    # Store table for potential consolidation
+                    # Use header row as a key (tuple for immutability)
+                    if len(rows) > 1:
+                        header_tuple = tuple(rows[0])
+                        if header_tuple not in tables_by_headers:
+                            tables_by_headers[header_tuple] = []
+                        tables_by_headers[header_tuple].append(rows[1:])  # Store data rows only
+                        
+                except Exception as e:
+                    logger.error(f"Error saving table as CSV: {e}")
+            
+            table_counter += 1
+        
+        # Create consolidated CSVs for tables with the same headers
+        for header_tuple, table_data_list in tables_by_headers.items():
+            if len(table_data_list) > 1:  # Only consolidate if we have multiple tables with same headers
+                # Create a consolidated table with all data rows
+                header = list(header_tuple)
+                all_data_rows = []
+                for data_rows in table_data_list:
+                    all_data_rows.extend(data_rows)
+                
+                # Generate a name based on the headers
+                header_name = "_".join([h.replace(' ', '_') for h in header if h])[:30]  # Limit length
+                consolidated_csv_path = os.path.join(base_dir, f"{base_filename}_{header_name}_consolidated.csv")
+                
+                try:
+                    with open(consolidated_csv_path, 'w', newline='') as csv_file:
+                        writer = csv.writer(csv_file)
+                        # Write the header
+                        writer.writerow(header)
+                        # Write all data rows
+                        for row in all_data_rows:
+                            writer.writerow(row)
+                    
+                    csv_files.append(consolidated_csv_path)
+                    logger.info(f"Exported consolidated CSV: {consolidated_csv_path}")
+                except Exception as e:
+                    logger.error(f"Error saving consolidated CSV: {e}")
+        
+        return csv_files
 
 def as_tools(configuration: MistralOCRIntegrationConfiguration):
     """Convert Mistral OCR integration into LangChain tools."""
