@@ -1,7 +1,11 @@
-.venv:
+clean-orphans:
+	@ echo "Cleaning orphaned Docker containers..."
+	@ docker compose down --remove-orphans
+
+.venv: clean-orphans
 	@ docker compose run --rm abi poetry install
 
-install:
+install: clean-orphans
 	@ docker compose run --rm abi poetry install
 	@ docker compose run --rm abi poetry update abi
 
