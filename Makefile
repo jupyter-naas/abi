@@ -68,7 +68,7 @@ build: build.linux.x86_64
 #   - Image name: abi
 #   - Dockerfile: Dockerfile.linux.x86_64
 #   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
-build.linux.x86_64:
+build.linux.x86_64: .venv
 	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
 
 # -------------------------------------------------------------------------------------------------
