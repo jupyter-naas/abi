@@ -228,7 +228,7 @@
 ###  http://purl.obolibrary.org/obo/BFO_0000200
 <http://purl.obolibrary.org/obo/BFO_0000200> rdf:type owl:ObjectProperty ,
                                                       owl:FunctionalProperty ;
-                                <             rdfs:domain [ rdf:type owl:Class ;
+                                             rdfs:domain [ rdf:type owl:Class ;
                                                            owl:unionOf ( <http://purl.obolibrary.org/obo/BFO_0000015>
                                                                          <http://purl.obolibrary.org/obo/BFO_0000035>
                                                                        )
