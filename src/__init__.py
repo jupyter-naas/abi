@@ -2,6 +2,7 @@ from abi.services.secret.Secret import Secret
 from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import DotenvSecretSecondaryAdaptor
 from src.services import init_services
 from src import cli
+from src.__modules__ import get_modules
 import yaml
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
@@ -77,6 +78,9 @@ secret = Secret(DotenvSecretSecondaryAdaptor())
 config = Config.from_yaml()
 
 services = init_services(config, secret)
+
+# Loading Modules
+modules = get_modules()
 
 if __name__ == "__main__":
     cli()
