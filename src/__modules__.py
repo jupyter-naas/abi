@@ -4,7 +4,7 @@ import importlib
 import os
 from pathlib import Path
 
-MODULE_PATH = 'src/modules'
+MODULE_PATH = ['src/core/modules', 'src/custom/modules']
 
 __modules : List[IModule] = []
 __loaded : bool = False
@@ -24,21 +24,22 @@ def get_modules():
     """
     global __modules, __loaded
     if not __loaded:
-        for module in Path(MODULE_PATH).glob('*/'):
-            if module.is_dir() and module.name != '__pycache__' and "disabled" not in module.name:
-                module_relative_path = '.'.join(MODULE_PATH.split('/') + [module.name])
-                
-                # We import the module for it to be initialized.
-                importlib.import_module(module_relative_path)
-                
-                
-                module_path = os.path.join(MODULE_PATH, module.name)
-                module_import_path = '.'.join(module_path.split('/'))
-                
-                mod = IModule(module_path, module_import_path)
-                mod.load()
-                
-                __modules.append(mod)
+        for modulepath in MODULE_PATH:
+            for module in Path(modulepath).glob('*/'):
+                if module.is_dir() and module.name != '__pycache__' and "disabled" not in module.name:
+                    module_relative_path = '.'.join(modulepath.split('/') + [module.name])
+                    
+                    # We import the module for it to be initialized.
+                    importlib.import_module(module_relative_path)
+                    
+                    
+                    module_path = os.path.join(modulepath, module.name)
+                    module_import_path = '.'.join(module_path.split('/'))
+                    
+                    mod = IModule(module_path, module_import_path)
+                    mod.load()
+                    
+                    __modules.append(mod)
         
         __loaded = True
     
