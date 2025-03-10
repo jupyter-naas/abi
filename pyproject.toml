@@ -43,6 +43,7 @@ wordcloud = "^1.9.4"
 imapclient = "^3.0.1"
 pynacl = "^1.5.0"
 python-pptx = "^1.0.2"
+#siteanalyzer = { path = "./src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-0.1.0-py3-none-any.whl", develop = true }
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
