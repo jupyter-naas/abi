@@ -553,13 +553,13 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
 
         # Add strategic alliances to graph
         logger.info(f"---> Mapping organization strategic alliances")
-        organization_strategic_alliances = response["organization_strategic_alliances"]
-        organization_partnerships = organization_strategic_alliances["partnerships"]
-        organization_joint_ventures = organization_strategic_alliances["joint_ventures"]
-        organization_marketing_alliances = organization_strategic_alliances["marketing_alliances"]
-        organization_research_collaborations = organization_strategic_alliances["research_collaborations"]
-        organization_technology_licensing = organization_strategic_alliances["technology_licensing"]
-        organization_distribution_agreements = organization_strategic_alliances["distribution_agreements"]
+        organization_strategic_alliances = response.get("organization_strategic_alliances", {})
+        organization_partnerships = organization_strategic_alliances.get("partnerships", [])
+        organization_joint_ventures = organization_strategic_alliances.get("joint_ventures", [])
+        organization_marketing_alliances = organization_strategic_alliances.get("marketing_alliances", [])
+        organization_research_collaborations = organization_strategic_alliances.get("research_collaborations", [])
+        organization_technology_licensing = organization_strategic_alliances.get("technology_licensing", [])
+        organization_distribution_agreements = organization_strategic_alliances.get("distribution_agreements", [])
 
         # Add strategic alliances to graph
         def add_strategic_alliances(

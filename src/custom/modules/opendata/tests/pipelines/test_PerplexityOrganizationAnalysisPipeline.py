@@ -2,8 +2,8 @@ from src import secret, config, services
 from src.core.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
 from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.core.workflows.abi.CreateOntologyYAML import CreateOntologyYAMLConfiguration
-from src.custom.pipelines.opendata.PerplexityOrganizationAnalysisPipeline import PerplexityOrganizationAnalysisPipeline, PerplexityOrganizationAnalysisPipelineConfiguration, PerplexityOrganizationAnalysisPipelineParameters
-from src.custom.workflows.opendata.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflowsConfiguration
+from src.custom.modules.opendata.pipelines.PerplexityOrganizationAnalysisPipeline import PerplexityOrganizationAnalysisPipeline, PerplexityOrganizationAnalysisPipelineConfiguration, PerplexityOrganizationAnalysisPipelineParameters
+from src.custom.modules.opendata.workflows.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflowsConfiguration
 
 # Initialize ontology store
 ontology_store = services.ontology_store_service
@@ -28,8 +28,8 @@ pipeline = PerplexityOrganizationAnalysisPipeline(PerplexityOrganizationAnalysis
     create_ontology_yaml_config=create_ontology_yaml_config,
 ))
 
-organization_name = "Softbank"
-website = "https://www.softbank.jp/"
+organization_name = "Michelin"
+website = "https://www.michelin.com/"
 
 pipeline.run(PerplexityOrganizationAnalysisPipelineParameters(
     organization_name=organization_name,
