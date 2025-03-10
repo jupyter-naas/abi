@@ -265,6 +265,7 @@ class NaasIntegration(Integration):
         source: str,
         level: str,
         description: str = None,
+        download_url: str = None,
         logo_url: str = None,
         is_public: bool = False
     ) -> Dict:
@@ -276,6 +277,7 @@ class NaasIntegration(Integration):
             source (str): Ontology source/content
             level (str): Level of the ontology - one of: USE_CASE, DOMAIN, MID, TOP
             description (str, optional): Description of the ontology
+            download_url (str, optional): Download URL for the ontology
             logo_url (str, optional): Logo URL for the ontology
             is_public (bool, optional): Whether the ontology is public
         """
@@ -285,6 +287,7 @@ class NaasIntegration(Integration):
             "workspace_id": workspace_id,
             "level": level,
             "description": description,
+            "download_url": download_url,
             "logo_url": logo_url,
             "is_public": is_public
         }}
