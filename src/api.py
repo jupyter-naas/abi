@@ -121,8 +121,8 @@ supervisor_agent.as_api(assistants_router)
 support_agent = create_support_agent()
 support_agent.as_api(assistants_router)
 
-open_data_agent = create_open_data_agent()
-open_data_agent.as_api(assistants_router)
+# open_data_agent = create_open_data_agent()
+# open_data_agent.as_api(assistants_router)
 
 content_agent = create_content_agent()
 content_agent.as_api(assistants_router)
@@ -184,9 +184,6 @@ github_user_details_pipeline = GithubUserDetailsPipeline(
 )
 github_user_details_pipeline.as_api(pipelines_router)
 
-# Include routers
-app.include_router(assistants_router)
-app.include_router(pipelines_router)
 
 def get_git_tag():
     try:
@@ -235,6 +232,17 @@ def root():
 #     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
 
 #     return data
+
+# Automatic loading of agents from modules
+from src.__modules__ import get_modules
+
+for module in get_modules():
+    for agent in module.agents:
+        agent.as_api(assistants_router)
+
+# Include routers
+app.include_router(assistants_router)
+app.include_router(pipelines_router)
 
 def api():
     import uvicorn
