@@ -45,6 +45,15 @@ storage-pull: .venv
 storage-push: .venv
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
+clean:
+	docker compose down
+	docker compose rm -f
+	rm -rf src/core/integrations/siteanalyzer/target
+	rm -rf .venv
+	rm -rf dist
+	rm -rf lib/.venv
+	docker compose build --no-cache
+
 # Docker Build Commands
 # -------------------
 # These commands are used to build the Docker image for the ABI project
