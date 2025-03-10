@@ -10,8 +10,8 @@ RUN pip install poetry
 RUN poetry config virtualenvs.in-project true
 
 # Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+RUN . "$HOME/.cargo/env"
 RUN pip install maturin[patchelf]
 
 
