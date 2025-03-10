@@ -1,8 +1,6 @@
 services:
   abi:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     ports:
       - 9879:9879
       - 8501:8501
@@ -12,7 +10,6 @@ services:
     environment:
       - PYTHONPATH=/app
       - ENV=dev
-      - PATH=/root/.cargo/bin:${PATH}
     command: ["poetry", "run"]
 
 volumes:
