@@ -15,4 +15,7 @@ ADD ./.git /app/.git
 RUN pip install poetry
 RUN poetry install
 
+# Install siteanalyzer integration
+RUN poetry run python -m pip install --force-reinstall /app/src/core/integrations/siteanalyzer/target/wheels/*.whl
+
 CMD ["poetry", "run", "api" ]
