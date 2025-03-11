@@ -1,8 +1,8 @@
 from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
 from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-from src.core.workflows.abi.mappings import COLORS_NODES
-from src.core.workflows.abi.CreateOntologyYAML import CreateOntologyYAML, CreateOntologyYAMLConfiguration, CreateOntologyYAMLParameters
-from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.core.modules.common.workflows.abi.mappings import COLORS_NODES
+from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAML, CreateOntologyYAMLConfiguration, CreateOntologyYAMLParameters
+from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src import config, secret
 
 # Initialize configurations

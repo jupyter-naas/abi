@@ -1,4 +1,4 @@
-from src.core.integrations.OpenAIIntegration import OpenAIIntegration, OpenAIIntegrationConfiguration
+from src.core.modules.common.integrations.OpenAIIntegration import OpenAIIntegration, OpenAIIntegrationConfiguration
 from src import secret
 from abi import logger
 from pydantic import BaseModel, Field
