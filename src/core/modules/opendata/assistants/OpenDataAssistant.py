@@ -2,16 +2,14 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, services
 from fastapi import APIRouter
-from src.core.assistants.foundation.SupportAssistant import create_support_agent
-from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.core.integrations import PerplexityIntegration, GoogleSearchIntegration
-from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
-from src.core.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
-from src.core.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
-from src.core.workflows.abi.CreateOntologyYAML import CreateOntologyYAMLConfiguration
-
+from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.common.integrations import PerplexityIntegration, GoogleSearchIntegration
+from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
+from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAMLConfiguration
 from ..workflows.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflowsConfiguration
 from ..pipelines.PerplexityOrganizationAnalysisPipeline import PerplexityOrganizationAnalysisPipeline, PerplexityOrganizationAnalysisPipelineConfiguration
 
@@ -44,7 +42,7 @@ SUGGESTIONS = [
     }
 ]
 
-def create_open_data_agent(
+def create_agent(
     agent_shared_state: AgentSharedState = None, 
     agent_configuration: AgentConfiguration = None
 ) -> Agent:
@@ -62,8 +60,6 @@ def create_open_data_agent(
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
-            on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
             system_prompt=SYSTEM_PROMPT
         )
     
@@ -160,8 +156,6 @@ def create_open_data_agent(
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
-
-create_agent = create_open_data_agent
 
 class OpenDataAssistant(Agent):
     def as_api(
