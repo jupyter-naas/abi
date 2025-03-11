@@ -99,13 +99,7 @@ def create_osint_investigator_agent(
             create_ontology_yaml_config=create_ontology_yaml_config,
         ))
         tools += pipeline.as_tools()
-    else:
-        print("No perplexity API key or naas API key or li_at or JSESSIONID")
-        print(f"perplexity_api_key: {perplexity_api_key}")
-        print(f"naas_api_key: {naas_api_key}")
-        print(f"li_at: {li_at}")
-        print(f"JSESSIONID: {JSESSIONID}")
-        exit()
+
 
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
