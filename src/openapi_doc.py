@@ -254,25 +254,7 @@ API endpoints for interacting with ABI's pipelines.
         "description": """
 API endpoints for interacting with ABI's workflows.
         """
-    },
-    {
-        "name": "Integrations",
-        "description": """
-API endpoints for interacting with ABI's integrations.
-        """
-    },
-    {
-        "name": "Ontology",
-        "description": """
-API endpoints for interacting with ABI's ontology.
-        """
-    },
-    {
-        "name": "Analytics",
-        "description": """
-API endpoints for interacting with ABI's analytics.
-        """
-    },
+    }
 ]
 
 API_LANDING_HTML = """
