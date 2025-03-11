@@ -72,7 +72,7 @@ class YourPipeline(Pipeline):
 if __name__ == "__main__":
     from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
     from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
-    from src.core.integrations import YourIntegration, YourIntegrationConfiguration
+    from src.core.modules.common.integrations import YourIntegration, YourIntegrationConfiguration
     
     # Init store
     ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
