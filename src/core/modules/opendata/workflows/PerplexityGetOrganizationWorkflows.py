@@ -3,7 +3,7 @@ from abi.workflow.workflow import WorkflowParameters
 from dataclasses import dataclass
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
-from src.core.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
 from abi import logger
 from pydantic import Field, BaseModel
 from typing import Optional, List, Dict, Tuple
@@ -93,7 +93,7 @@ class PerplexityOrganizationWorkflows(Workflow):
             system_prompt = """You are an experimented OSINT investigator. 
             Your goal is to extract information about a given organization.
             Rules: 
-            1. Provide only the final answer. It is important that you do not include any explanation on the steps below. 
+            1. Provide only the final answer in JSON format as follow: ```json <JSON>```
             2. Do not show the intermediate steps information.
             3. Be precise and exhaustive.
             4. Do not include any information that is not related to the question.

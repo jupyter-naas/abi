@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.core.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
-from src.core.integrations.GoogleSearchIntegration import GoogleSearchIntegration, GoogleSearchIntegrationConfiguration
-from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
+from src.core.modules.common.integrations.GoogleSearchIntegration import GoogleSearchIntegration, GoogleSearchIntegrationConfiguration
+from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from dataclasses import dataclass
 from pydantic import Field
 from datetime import datetime, date, timedelta

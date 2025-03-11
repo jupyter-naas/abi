@@ -43,7 +43,7 @@ wordcloud = "^1.9.4"
 imapclient = "^3.0.1"
 pynacl = "^1.5.0"
 python-pptx = "^1.0.2"
-#siteanalyzer = { path = "./src/core/integrations/siteanalyzer/target/wheels/siteanalyzer-0.1.0-py3-none-any.whl", develop = true }
+#siteanalyzer = { path = "./src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-0.1.0-py3-none-any.whl", develop = true }
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
@@ -55,62 +55,6 @@ pytest = "^8.3.4"
 ipykernel = "^6.29.5"
 
 [tool.poetry.scripts]
-# Foundation agents
-chat-supervisor-agent = "src.core.apps.terminal_agent.main:run_supervisor_agent"
-chat-support-agent = "src.core.apps.terminal_agent.main:run_support_agent"
-
-# Domain agents
-chat-content-agent = "src.core.apps.terminal_agent.main:run_content_agent"
-chat-finance-agent = "src.core.apps.terminal_agent.main:run_finance_agent"
-chat-growth-agent = "src.core.apps.terminal_agent.main:run_growth_agent"
-chat-opendata-agent = "src.core.apps.terminal_agent.main:run_opendata_agent"
-chat-operations-agent = "src.core.apps.terminal_agent.main:run_operations_agent"
-chat-sales-agent = "src.core.apps.terminal_agent.main:run_sales_agent"
-
-# Integration agents
-chat-airtable-agent = "src.core.apps.terminal_agent.main:run_airtable_agent"
-chat-algolia-agent = "src.core.apps.terminal_agent.main:run_algolia_agent"
-chat-aws-s3-agent = "src.core.apps.terminal_agent.main:run_aws_s3_agent"
-chat-clockify-agent = "src.core.apps.terminal_agent.main:run_clockify_agent"
-chat-discord-agent = "src.core.apps.terminal_agent.main:run_discord_agent"
-chat-github-agent = "src.core.apps.terminal_agent.main:run_github_agent"
-chat-gladia-agent = "src.core.apps.terminal_agent.main:run_gladia_agent"
-chat-gmail-agent = "src.core.apps.terminal_agent.main:run_gmail_agent"
-chat-google-analytics-agent = "src.core.apps.terminal_agent.main:run_google_analytics_agent"
-chat-google-calendar-agent = "src.core.apps.terminal_agent.main:run_google_calendar_agent"
-chat-google-drive-agent = "src.core.apps.terminal_agent.main:run_google_drive_agent"
-chat-google-sheets-agent = "src.core.apps.terminal_agent.main:run_google_sheets_agent"
-chat-harvest-agent = "src.core.apps.terminal_agent.main:run_harvest_agent"
-chat-hubspot-agent = "src.core.apps.terminal_agent.main:run_hubspot_agent"
-chat-linkedin-agent = "src.core.apps.terminal_agent.main:run_linkedin_agent"
-chat-naas-agent = "src.core.apps.terminal_agent.main:run_naas_agent"
-chat-news-api-agent = "src.core.apps.terminal_agent.main:run_news_api_agent"
-chat-notion-agent = "src.core.apps.terminal_agent.main:run_notion_agent"
-chat-onedrive-agent = "src.core.apps.terminal_agent.main:run_onedrive_agent"
-chat-pennylane-agent = "src.core.apps.terminal_agent.main:run_pennylane_agent"
-chat-pipedrive-agent = "src.core.apps.terminal_agent.main:run_pipedrive_agent"
-chat-postgres-agent = "src.core.apps.terminal_agent.main:run_postgres_agent"
-chat-qonto-agent = "src.core.apps.terminal_agent.main:run_qonto_agent"
-chat-serper-agent = "src.core.apps.terminal_agent.main:run_serper_agent"
-chat-slack-agent = "src.core.apps.terminal_agent.main:run_slack_agent"
-chat-stripe-agent = "src.core.apps.terminal_agent.main:run_stripe_agent"
-chat-supabase-agent = "src.core.apps.terminal_agent.main:run_supabase_agent"
-chat-yahoo-finance-agent = "src.core.apps.terminal_agent.main:run_yahoo_finance_agent"
-chat-youtube-agent = "src.core.apps.terminal_agent.main:run_youtube_agent"
-chat-zerobounce-agent = "src.core.apps.terminal_agent.main:run_zerobounce_agent"
-chat-sendgrid-agent = "src.core.apps.terminal_agent.main:run_sendgrid_agent"
-chat-mailchimp-agent = "src.core.apps.terminal_agent.main:run_mailchimp_agent"
-chat-mercury-agent = "src.core.apps.terminal_agent.main:run_mercury_agent"
-chat-agicap-agent = "src.core.apps.terminal_agent.main:run_agicap_agent"
-chat-brevo-agent = "src.core.apps.terminal_agent.main:run_brevo_agent"
-chat-whatsapp-agent = "src.core.apps.terminal_agent.main:run_whatsapp_agent"
-chat-instagram-agent = "src.core.apps.terminal_agent.main:run_instagram_agent"
-chat-glassdoor-agent = "src.core.apps.terminal_agent.main:run_glassdoor_agent"
-chat-powerpoint-agent = "src.core.apps.terminal_agent.main:run_powerpoint_agent"
-
-# Analytics agents
-chat-plotly-agent = "src.core.apps.terminal_agent.main:run_plotly_agent"
-chat-matplotlib-agent = "src.core.apps.terminal_agent.main:run_matplotlib_agent"
 abi = "src.cli:main"
 api = "src.api:api"
 

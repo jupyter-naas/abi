@@ -230,7 +230,7 @@ Once you have your ontological concepts, build your solution in three steps:
 
 1. **Integration**
    Create or update integrations in `src/custom/integrations` to connect with required data sources.
-   Please checkout `src/core/integrations/GithubIntegration` or `src/core/integrations/GithubGraphqlIntegration` for more details.
+   Please checkout `src/core/modules/common/integrations/GithubIntegration` or `src/core/modules/common/integrations/GithubGraphqlIntegration` for more details.
 
 2. **Pipeline**
    Create a pipeline to map data from integrations to ontological concepts. Keep mapping logic modular by:
@@ -315,7 +315,7 @@ Here is an example of how to run a pipeline in your terminal:
 # src/data/pipelines/YourPipeline.py
 if __name__ == "__main__":
       from src import secret
-      from src.core.integrations import YourIntegration
+      from src.core.modules.common.integrations import YourIntegration
       from abi.services.ontology_store import OntologyStoreService
       
       # Setup dependencies
@@ -431,7 +431,7 @@ To create a new workflow in ABI, follow these steps:
 
 4. **Use the Workflow**
    The workflow can be used in multiple ways:
-   - As a standalone script: `python -m src.core.workflows.YourWorkflow`
+   - As a standalone script: `python -m src.core.modules.common.workflows.YourWorkflow`
    - As an API endpoint: Import and use the `api()` function
    - As a LangChain tool: Import and use the `as_tool()` function
 
@@ -464,7 +464,7 @@ Create a new file in `src/custom/assistants/YourAssistant.py` using template: `e
 - Import your assistant from `src/custom/assistants/YourAssistant.py`
 - Add it to the `assistants_router` variable as follow:
 ```python
-from src.core.assistants.custom.YourAssistant import create_your_agent
+from src.core.modules.common.assistants.custom.YourAssistant import create_your_agent
 your_agent = create_your_agent()
 your_agent.as_api(assistants_router)
 ```
