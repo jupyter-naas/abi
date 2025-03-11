@@ -28,11 +28,46 @@ Welcome to the ABI (Agent-Based Intelligence) documentation. This repository con
   - [Advanced Usage: Trigger Patterns](./modules.triggers.md#advanced-usage-trigger-patterns)
   - [Conclusion](./modules.triggers.md#conclusion)
 
+- [Module Workflows](./modules.workflows.md) - Business logic implementation through workflows
+  - [Overview](./modules.workflows.md#overview)
+  - [Purpose and Benefits](./modules.workflows.md#purpose-and-benefits)
+  - [How Workflows Work](./modules.workflows.md#how-workflows-work)
+  - [Workflow Architecture](./modules.workflows.md#workflow-architecture)
+  - [Use Cases](./modules.workflows.md#use-cases)
+  - [Creating a New Workflow](./modules.workflows.md#creating-a-new-workflow)
+  - [Workflow Implementation Guidelines](./modules.workflows.md#workflow-implementation-guidelines)
+  - [Best Practices](./modules.workflows.md#best-practices)
+  - [Examples](./modules.workflows.md#examples)
+  - [Conclusion](./modules.workflows.md#conclusion)
+
+- [Module Pipelines](./modules.pipelines.md) - Data transformation and knowledge graph population
+  - [Overview](./modules.pipelines.md#overview)
+  - [Purpose and Benefits](./modules.pipelines.md#purpose-and-benefits)
+  - [How Pipelines Work](./modules.pipelines.md#how-pipelines-work)
+  - [Pipeline Architecture](./modules.pipelines.md#pipeline-architecture)
+  - [Use Cases](./modules.pipelines.md#use-cases)
+  - [Creating a New Pipeline](./modules.pipelines.md#creating-a-new-pipeline)
+  - [Pipeline Implementation Guidelines](./modules.pipelines.md#pipeline-implementation-guidelines)
+  - [Best Practices](./modules.pipelines.md#best-practices)
+  - [Conclusion](./modules.pipelines.md#conclusion)
+
+- [Module Integrations](./modules.integrations.md) - External service communication
+  - [Overview](./modules.integrations.md#overview)
+  - [Purpose and Benefits](./modules.integrations.md#purpose-and-benefits)
+  - [Architecture](./modules.integrations.md#architecture)
+  - [Use Cases](./modules.integrations.md#use-cases)
+  - [Creating a New Integration](./modules.integrations.md#creating-a-new-integration)
+  - [Best Practices](./modules.integrations.md#best-practices)
+  - [Conclusion](./modules.integrations.md#conclusion)
+
 ## How to Use This Documentation
 
 1. **New to ABI?** Start with the [Modules](./modules.md) documentation to understand the core architecture.
 2. **Building a reactive system?** Learn about [Module Triggers](./modules.triggers.md) to create event-driven workflows.
-3. **Looking for specific information?** Use the table of contents above to navigate directly to the relevant section.
+3. **Implementing business logic?** Check out [Module Workflows](./modules.workflows.md) to create intent-focused components.
+4. **Transforming data?** Explore [Module Pipelines](./modules.pipelines.md) to learn how to populate the knowledge graph.
+5. **Connecting to external services?** See [Module Integrations](./modules.integrations.md) for standardized API communication.
+6. **Looking for specific information?** Use the table of contents above to navigate directly to the relevant section.
 
 ## Contributing to Documentation
 
