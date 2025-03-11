@@ -27,6 +27,7 @@ class IModule(ABC):
     def __init__(self, module_path: str, module_import_path: str):
         self.module_path = module_path
         self.module_import_path = module_import_path
+        self.triggers = []
         
         self.agents = []
     
