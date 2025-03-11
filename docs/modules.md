@@ -2,7 +2,12 @@
 
 ## What is a Module?
 
-A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Each module resides in its own directory under `src/modules/`.
+A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are now organized into two categories:
+
+1. **Core Modules**: Located in `src/core/modules/` - These are essential modules that provide the core functionality of the ABI system.
+2. **Custom Modules**: Located in `src/custom/modules/` - These are user-created modules that extend the system with additional capabilities.
+
+This separation makes the system architecture easier to understand and maintain, with a clear distinction between core functionality and custom extensions.
 
 Modules provide a way to organize and structure your code in a modular fashion, making it easier to maintain, extend, and reuse functionality. They can contain various components such as:
 
@@ -17,21 +22,35 @@ Modules provide a way to organize and structure your code in a modular fashion, 
 
 The ABI system automatically discovers and loads modules at runtime. Here's how the process works:
 
-1. The system scans the `src/modules/` directory for subdirectories
+1. The system scans both the `src/core/modules/` and `src/custom/modules/` directories for subdirectories
 2. Each subdirectory (except `__pycache__` and those containing "disabled" in their name) is considered a module
 3. The module is imported using Python's import system
 4. An `IModule` instance is created for the module
 5. The module's components (assistants, workflows, pipelines) are loaded
 6. The loaded module is added to the system's registry
 
-This automatic loading mechanism means that you can add new functionality to the system simply by creating a new module directory with the appropriate structure.
+This automatic loading mechanism means that you can add new functionality to the system simply by creating a new module directory with the appropriate structure in either the core or custom modules directory.
 
 ### Module Structure
 
 A typical module has the following directory structure:
 
 ```
-src/modules/your_module_name/
+src/core/modules/your_core_module_name/
+├── assistants/           # Contains AI agents
+│   └── YourAssistant.py  # An agent implementation
+├── workflows/            # Contains workflow implementations
+│   └── YourWorkflow.py   # A workflow implementation
+├── pipelines/            # Contains pipeline implementations
+│   └── YourPipeline.py   # A pipeline implementation
+└── tests/                # Contains tests for the module
+    └── test_module.py    # Test implementations
+```
+
+Or for custom modules:
+
+```
+src/custom/modules/your_custom_module_name/
 ├── assistants/           # Contains AI agents
 │   └── YourAssistant.py  # An agent implementation
 ├── workflows/            # Contains workflow implementations
@@ -51,21 +70,30 @@ src/modules/your_module_name/
 
 To create a new module, follow these steps:
 
-1. Create a new directory under `src/modules/` with your module name (use a descriptive name in snake_case)
-2. Set up the standard directory structure (assistants, workflows, pipelines, tests)
-3. Implement your components following the appropriate patterns
+1. Decide whether your module should be a core module or a custom module:
+   - Core modules (`src/core/modules/`) are for essential system functionality
+   - Custom modules (`src/custom/modules/`) are for extensions and user-specific functionality
+2. Create a new directory under the appropriate path with your module name (use a descriptive name in snake_case)
+3. Set up the standard directory structure (assistants, workflows, pipelines, tests)
+4. Implement your components following the appropriate patterns
 
 ### Step-by-Step Guide
 
 #### 1. Create the Module Directory
 
+For a core module:
 ```bash
-mkdir -p src/modules/your_module_name/{assistants,workflows,pipelines,tests}
+mkdir -p src/core/modules/your_module_name/{assistants,workflows,pipelines,tests}
+```
+
+For a custom module:
+```bash
+mkdir -p src/custom/modules/your_module_name/{assistants,workflows,pipelines,tests}
 ```
 
 #### 2. Create an Assistant
 
-Create a file `src/modules/your_module_name/assistants/YourAssistant.py`:
+Create a file `src/[core|custom]/modules/your_module_name/assistants/YourAssistant.py`:
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -102,7 +130,7 @@ def create_agent(
 
 #### 3. Create a Workflow
 
-Create a file `src/modules/your_module_name/workflows/YourWorkflow.py`:
+Create a file `src/[core|custom]/modules/your_module_name/workflows/YourWorkflow.py`:
 
 ```python
 from abi.workflow import Workflow, WorkflowConfiguration
@@ -152,7 +180,7 @@ class YourWorkflow(Workflow):
 
 #### 4. Create a Pipeline
 
-Create a file `src/modules/your_module_name/pipelines/YourPipeline.py`:
+Create a file `src/[core|custom]/modules/your_module_name/pipelines/YourPipeline.py`:
 
 ```python
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
@@ -204,7 +232,7 @@ class YourPipeline(Pipeline):
 
 #### 5. Add Tests
 
-Create a file `src/modules/your_module_name/tests/test_module.py`:
+Create a file `src/[core|custom]/modules/your_module_name/tests/test_module.py`:
 
 ```python
 import unittest
@@ -235,24 +263,29 @@ if __name__ == "__main__":
 To disable a module without removing it from the codebase, simply add "disabled" to the module directory name:
 
 ```bash
-mv src/modules/your_module_name src/modules/your_module_name_disabled
+# For core modules
+mv src/core/modules/your_module_name src/core/modules/your_module_name_disabled
+
+# For custom modules
+mv src/custom/modules/your_module_name src/custom/modules/your_module_name_disabled
 ```
 
 The system will automatically skip loading modules with "disabled" in their name.
 
 ## Best Practices
 
-1. **Keep modules focused**: Each module should have a clear, specific purpose
-2. **Maintain independence**: Minimize dependencies between modules
-3. **Document your components**: Provide clear documentation for your assistants, workflows, and pipelines
-4. **Write tests**: Include comprehensive tests for your module's components
-5. **Follow naming conventions**: Use descriptive names for your module and its components
+1. **Choose the right location**: Place essential system functionality in core modules and extensions in custom modules
+2. **Keep modules focused**: Each module should have a clear, specific purpose
+3. **Maintain independence**: Minimize dependencies between modules
+4. **Document your components**: Provide clear documentation for your assistants, workflows, and pipelines
+5. **Write tests**: Include comprehensive tests for your module's components
+6. **Follow naming conventions**: Use descriptive names for your module and its components
 
 ## Troubleshooting
 
 If your module is not being loaded correctly, check the following:
 
-1. Ensure your module directory is directly under `src/modules/`
+1. Ensure your module directory is directly under either `src/core/modules/` or `src/custom/modules/`
 2. Verify that your module name doesn't contain "disabled"
 3. Check that your assistants have a `create_agent()` function
 4. Ensure your workflows and pipelines follow the correct class structure
