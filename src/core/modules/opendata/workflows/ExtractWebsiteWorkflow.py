@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.integrations.SiteDownloader import SiteDownloader, SiteDownloaderConfiguration
+from src.core.modules.common.integrations.SiteDownloader import SiteDownloader, SiteDownloaderConfiguration
 from src import secret, config
 from dataclasses import dataclass
 from pydantic import Field
@@ -11,7 +11,7 @@ from langchain_core.tools import StructuredTool
 import json
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from src.core.integrations.LocalObjectStoreIntegration import LocalObjectStoreIntegration, LocalObjectStoreConfiguration
+from src.core.modules.common.integrations.LocalObjectStoreIntegration import LocalObjectStoreIntegration, LocalObjectStoreConfiguration
 
 from tqdm import tqdm
 from queue import Queue, Empty
