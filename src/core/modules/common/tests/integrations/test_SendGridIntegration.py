@@ -1,4 +1,4 @@
-from src.core.integrations.SendGridIntegration import SendGridIntegration, SendGridIntegrationConfiguration
+from src.core.modules.common.integrations.SendGridIntegration import SendGridIntegration, SendGridIntegrationConfiguration
 from abi import logger
 from src import secret
 
