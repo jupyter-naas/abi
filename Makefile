@@ -5,7 +5,6 @@ src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.w
 	@ make -C src/core/modules/common/integrations/siteanalyzer release
 
 .venv: $(DEPENDENCIES)
-	#@ make src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
 	@ docker compose run --rm --remove-orphans abi poetry install
 	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pip install --force-reinstall /app/src/core/modules/common/integrations/siteanalyzer/target/wheels/*.whl'
 
