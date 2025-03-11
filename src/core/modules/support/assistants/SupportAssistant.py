@@ -4,12 +4,12 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
 from src.core.modules.common.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.core.modules.common.workflows.support.GitHubSupportWorkflows import GitHubSupportWorkflows, GitHubSupportWorkflowsConfiguration
-from src.core.modules.common.assistants.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
+from src.core.modules.support.workflows.GitHubSupportWorkflows import GitHubSupportWorkflows, GitHubSupportWorkflowsConfiguration
+from src.core.modules.common.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
 
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
-SUPPORT_agent_INSTRUCTIONS = f"""
+SYSTEM_PROMPT = f"""
 You are a support assistant focusing on answering user requests and creating features requests or reporting bugs.
 
 Be sure to follow the chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
@@ -28,7 +28,7 @@ SUGGESTIONS = [
     }
 ]
 
-def create_support_agent(
+def create_agent(
         agent_shared_state: AgentSharedState = None, 
         agent_configuration: AgentConfiguration = None
     ) -> Agent:
@@ -52,7 +52,7 @@ def create_support_agent(
     
     # Use provided configuration or create default one
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SUPPORT_agent_INSTRUCTIONS)
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
     
     # Use provided shared state or create new one
     if agent_shared_state is None:
