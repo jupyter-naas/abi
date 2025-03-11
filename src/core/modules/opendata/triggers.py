@@ -27,9 +27,9 @@ from abi import logger
 # Register organization logo update trigger
 def register_organization_logo_update_trigger():
     from src import secret, config
-    from src.core.common.integrations.NaasIntegration import NaasIntegrationConfiguration
-    from src.core.common.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
-    from src.core.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+    from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
+    from src.core.modules.common.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
+    from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
     from src.core.modules.opendata.workflows.LinkedInOrganizationsWorkflows import LinkedInOrganizationWorkflowsConfiguration
     from src.core.modules.opendata.pipelines.LinkedInGetOrganizationLogoPipeline import LinkedInGetOrganizationLogoPipeline, LinkedInGetOrganizationLogoPipelineConfiguration
 
