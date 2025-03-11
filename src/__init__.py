@@ -82,5 +82,10 @@ services = init_services(config, secret)
 # Loading Modules
 modules = get_modules()
 
+for module in modules:
+    for trigger in module.triggers:
+        topic, event_type, callback = trigger
+        services.ontology_store.subscribe(topic, event_type, callback)
+
 if __name__ == "__main__":
     cli()
