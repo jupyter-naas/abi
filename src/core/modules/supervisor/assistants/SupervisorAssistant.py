@@ -1,17 +1,16 @@
 from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from abi import logger
 from fastapi import APIRouter
 from src.core.modules.opendata.assistants.OpenDataAssistant import create_agent as create_open_data_agent
-from src.core.modules.common.assistants.domain.ContentAssistant import create_agent as create_content_agent
-from src.core.modules.common.assistants.domain.GrowthAssistant import create_agent as create_growth_agent
-from src.core.modules.common.assistants.domain.SalesAssistant import create_agent as create_sales_agent
-from src.core.modules.common.assistants.domain.OperationsAssistant import create_agent as create_operations_agent
-from src.core.modules.common.assistants.domain.FinanceAssistant import create_agent as create_finance_agent 
-from src.core.modules.common.assistants.foundation.SupportAssistant import create_agent as create_support_agent
-from src.core.modules.common.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.content.assistants.ContentAssistant import create_agent as create_content_agent
+from src.core.modules.growth.assistants.GrowthAssistant import create_agent as create_growth_agent
+from src.core.modules.sales.assistants.SalesAssistant import create_agent as create_sales_agent
+from src.core.modules.operations.assistants.OperationsAssistant import create_agent as create_operations_agent
+from src.core.modules.finance.assistants.FinanceAssistant import create_agent as create_finance_agent 
+from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 NAME = "Supervisor Assistant"
 MODEL = "o3-mini"
@@ -44,6 +43,7 @@ SUGGESTIONS = [
         "value": "Report a bug on: [Bug Description]"
     }
 ]
+
 def create_agent(
     agent_shared_state: AgentSharedState = None, 
     agent_configuration: AgentConfiguration = None

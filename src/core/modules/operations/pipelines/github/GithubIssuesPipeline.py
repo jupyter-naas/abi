@@ -4,7 +4,7 @@ from src.core.modules.common.integrations.GithubIntegration import GithubIntegra
 from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
 from abi.pipeline import Pipeline
 from abi.utils.Graph import ABIGraph
-from src.core.modules.common.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration, GithubIssuePipelineParameters
+from src.core.modules.operations.pipelines.github.GithubIssuePipeline import GithubIssuePipeline, GithubIssuePipelineConfiguration, GithubIssuePipelineParameters
 from dataclasses import dataclass
 from rdflib import Graph
 from abi import logger

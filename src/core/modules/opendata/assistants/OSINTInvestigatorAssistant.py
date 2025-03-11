@@ -8,7 +8,7 @@ from src.core.modules.common.integrations.PerplexityIntegration import Perplexit
 from src.core.modules.common.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
 from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
 from src.core.modules.common.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
-from src.core.modules.common.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAMLConfiguration
 
 from ..workflows.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflowsConfiguration
