@@ -1,15 +1,15 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config, services
 from langchain_openai import ChatOpenAI
-from src.core.integrations import LinkedInIntegration, GoogleSearchIntegration, NewsAPIIntegration, PerplexityIntegration, OpenAIIntegration
-from src.core.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
-from src.core.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
-from src.core.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
-from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
-from src.core.workflows.abi.CreateOntologyYAML import CreateOntologyYAMLConfiguration
+from src.core.modules.common.integrations import LinkedInIntegration, GoogleSearchIntegration, NewsAPIIntegration, PerplexityIntegration, OpenAIIntegration
+from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
+from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
+from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
+from src.core.modules.common.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
+from src.core.modules.common.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAMLConfiguration
 
 from ..workflows.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflowsConfiguration
 from ..pipelines.PerplexityOrganizationAnalysisPipeline import PerplexityOrganizationAnalysisPipeline, PerplexityOrganizationAnalysisPipelineConfiguration

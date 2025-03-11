@@ -3,7 +3,7 @@ from abi.workflow.workflow import WorkflowParameters
 from dataclasses import dataclass
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
-from src.core.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
 from abi import logger
 from pydantic import Field, BaseModel
 from typing import Optional, List, Dict

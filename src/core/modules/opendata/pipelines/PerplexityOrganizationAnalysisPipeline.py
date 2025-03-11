@@ -9,11 +9,11 @@ from abi.utils.Graph import ABIGraph, ABI, BFO, CCO, XSD, TIME
 from abi.utils.String import create_id_from_string
 from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
 from src import config, secret
-from src.core.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
-from src.core.workflows.abi.CreateOntologyYAML import CreateOntologyYAML, CreateOntologyYAMLConfiguration, CreateOntologyYAMLParameters
+from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAML, CreateOntologyYAMLConfiguration, CreateOntologyYAMLParameters
 from ..workflows.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflows, PerplexityOrganizationWorkflowsConfiguration, PerplexityOrganizationParameters
 import json
-from src.core.mappings import COLORS_NODES
+from src.core.modules.common.mappings import COLORS_NODES
 
 @dataclass
 class PerplexityOrganizationAnalysisPipelineConfiguration(PipelineConfiguration):
