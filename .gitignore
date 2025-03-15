@@ -51,23 +51,8 @@ wheels/
 thread_id.txt
 agentic-director/
 
-# Data layers
-l1_bronze/
-l1_raw/
-l2_silver/
-l2_prepared/
-l3_gold/
-l3_trusted/
-data/ontology-store/
+# Storage
 storage/
-
-# Ignore all contents but keep the directories
-!l1_bronze/.gitkeep
-!l1_raw/.gitkeep
-!l2_silver/.gitkeep
-!l2_prepared/.gitkeep
-!l3_gold/.gitkeep
-!l3_trusted/.gitkeep
 
 # Ignore data files in any directory
 *.csv
