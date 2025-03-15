@@ -51,10 +51,21 @@ wheels/
 thread_id.txt
 agentic-director/
 
-# Storage
-storage/
+# Storage - ignore everything in storage except example directories and README files
+storage/*
+!storage/README.md
+!storage/*/README.md
+!storage/datastore/
+!storage/triplestore/
+!storage/vectorstore/
+storage/datastore/*
+storage/triplestore/*
+storage/vectorstore/*
+!storage/datastore/example/
+!storage/triplestore/example/
+!storage/vectorstore/example/
 
-# Ignore data files in any directory
+# Ignore data files in any directory except in example directories
 *.csv
 *.parquet
 *.json
@@ -63,3 +74,11 @@ storage/
 *.db
 *.sqlite
 *.sqlite3
+!storage/*/example/**/*.csv
+!storage/*/example/**/*.parquet
+!storage/*/example/**/*.json
+!storage/*/example/**/*.xlsx
+!storage/*/example/**/*.xls
+!storage/*/example/**/*.db
+!storage/*/example/**/*.sqlite
+!storage/*/example/**/*.sqlite3
