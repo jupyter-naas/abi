@@ -46,6 +46,9 @@ jobs:
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
 
+      - name: Set lowercase repository name
+        run: echo "REPO_LOWERCASE=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV # docker image reference is lowercase
+
       - name: Push latest abi container
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
@@ -53,13 +56,13 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
           ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
         run: |
-          docker pull ghcr.io/${{ github.repository }}/abi:latest
+          docker pull ghcr.io/${{ env.REPO_LOWERCASE }}/abi:latest
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
 
-          docker tag ghcr.io/${{ github.repository }}/abi:latest $URI:$TIMESTAMP
+          docker tag ghcr.io/${{ env.REPO_LOWERCASE }}/abi:latest $URI:$TIMESTAMP
 
           naas-python registry docker-login -n ${{ env.REGISTRY_NAME }}
 
