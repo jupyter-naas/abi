@@ -2,10 +2,10 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.core.integrations import YourIntegration  # Import relevant integrations
-from src.core.integrations.YourIntegration import YourIntegrationConfiguration
-from src.core.assistants.foundation.SupportAssistant import create_support_agent
-from src.core.assistants.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.common.integrations import YourIntegration  # Import relevant integrations
+from src.core.modules.common.integrations.YourIntegration import YourIntegrationConfiguration
+from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "Description of your assistant and its capabilities."
 AVATAR_URL = "URL to assistant's avatar image"
