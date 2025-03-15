@@ -1,4 +1,3 @@
-
 DEPENDENCIES = src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
 
 src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl:
@@ -45,7 +44,10 @@ storage-push: .venv
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
 clean:
-	docker compose down
+	@echo "Cleaning orphaned Docker containers and networks..."
+	docker container prune -f
+	docker network prune -f
+	docker compose down --remove-orphans
 	docker compose rm -f
 	rm -rf src/core/modules/common/integrations/siteanalyzer/target
 	rm -rf .venv
@@ -105,3 +107,15 @@ chat-powerpoint-agent: .venv
 .DEFAULT_GOAL := chat-supervisor-agent
 
 .PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
+
+# Clean orphans target as a separate command if needed
+clean-orphans:
+	@echo "Cleaning orphaned Docker containers and networks..."
+	docker container prune -f
+	docker network prune -f
+	docker compose down --remove-orphans
+
+# Clean all Docker resources
+clean-orphans-all:
+	@echo "Cleaning all orphaned Docker resources..."
+	docker system prune -f
