@@ -104,6 +104,9 @@ chat-finance-agent: .venv
 chat-powerpoint-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent PowerPointAssistant'
 
+chat-arxiv-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run chat-arxiv-agent'
+
 .DEFAULT_GOAL := chat-supervisor-agent
 
 .PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
