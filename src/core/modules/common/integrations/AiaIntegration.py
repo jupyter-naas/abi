@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
-from src import secret
+from src import config
 import requests
 
 LOGO_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_AIA.png"
@@ -16,6 +16,8 @@ class AiaIntegrationConfiguration(IntegrationConfiguration):
         base_url (str): Base URL for AIA API
     """
     api_key: str
+    li_at: str
+    JSESSIONID: str
     base_url: str = "https://naas-abi-space.default.space.naas.ai"  # Replace with actual base URL
 
 class AiaIntegration(Integration):
@@ -45,14 +47,14 @@ class AiaIntegration(Integration):
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"AIA API request failed: {str(e)}")
 
-    def create_aia(self, workspace_id: str, linkedin_urls: List[str]) -> Dict:
+    def create_aia(self, linkedin_urls: List[str]) -> Dict:
         """Create an AIA organization with the specified parameters."""
         data = {
             "api_key": self.__configuration.api_key,
-            "workspace_id": workspace_id,
+            "workspace_id": config.workspace_id,
             "linkedin_urls": linkedin_urls,
-            "li_at": secret.get('li_at'),
-            "JSESSIONID": secret.get('JSESSIONID'),
+            "li_at": self.__configuration.li_at,
+            "JSESSIONID": self.__configuration.JSESSIONID,
         }
         return self._make_request("POST", "/ontology/create_aia_organization", data)
 
@@ -62,15 +64,13 @@ def as_tools(configuration: AiaIntegrationConfiguration):
     integration: AiaIntegration = AiaIntegration(configuration)
 
     class CreateAiaOrganizationSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID for the organization")
-        linkedin_urls: List[str] = Field(..., description="List of LinkedIn URLs to process")
+        linkedin_urls: List[str] = Field(..., description="LinkedIn URL(s) to process. It can be one or multiple URLs. URLs must be in the format: https://.+\.linkedin\.[^/]+/in/[^?]+")
     
     return [
         StructuredTool(
             name="aia_create_personal_agent",
-            description="Create AIA Personal Assistant and ontology with LinkedIn data to naas workspace",
-            func=lambda workspace_id, linkedin_urls: 
-                integration.create_aia(workspace_id, linkedin_urls),
+            description="Create AIA Personal Assistant/Agent based on LinkedIn URL.",
+            func=lambda linkedin_urls: integration.create_aia(linkedin_urls),
             args_schema=CreateAiaOrganizationSchema
         )
     ]

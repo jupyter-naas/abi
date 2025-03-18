@@ -86,7 +86,7 @@ def create_agent(
         tools += naas_workspace_workflows.as_tools()
 
     if naas_api_key and li_at and JSESSIONID:
-        aia_integration_config = AiaIntegrationConfiguration(api_key=naas_api_key)
+        aia_integration_config = AiaIntegrationConfiguration(api_key=naas_api_key, li_at=li_at, JSESSIONID=JSESSIONID)
         tools += AiaIntegration.as_tools(aia_integration_config)
 
     if github_access_token:
