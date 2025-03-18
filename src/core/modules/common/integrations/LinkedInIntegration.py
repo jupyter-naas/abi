@@ -254,7 +254,7 @@ class LinkedInIntegration(Integration):
 
         return df.reset_index(drop=True)
     
-    def get_organization_id(url: str) -> str:
+    def get_organization_id(self, url: str) -> str:
         """Extract organization ID from LinkedIn URL.
         
         Handles company, school and showcase pages.
