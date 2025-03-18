@@ -79,33 +79,36 @@ class LinkedInOrganizationWorkflows(Workflow):
                 linkedin_url = self.__google_search_integration.search_linkedin_organization_url(parameters.organization_name)
                 logger.debug(f"LinkedIn URL: {linkedin_url}")
 
-            logger.info(f"Extracting organization data from LinkedInIntegration for '{parameters.organization_name}'")
-            df = self.__linkedin_integration.get_organization_details(linkedin_url)
-            if len(df) > 0:
-                data = {
-                    "organization_name": parameters.organization_name,
-                    "organization_id": create_id_from_string(parameters.organization_name),
-                    "linkedin_url": linkedin_url,
-                    "data": df.to_dict('records'),
-                    "output_dir": str(output_dir),
-                    "date_extracted": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
-                logger.info(f"Data successfully extracted: {data}")
-            else:
-                logger.error(f"No data found for '{parameters.organization_name}'")
+            if linkedin_url is not None:
+                logger.info(f"Extracting organization data from LinkedInIntegration for '{parameters.organization_name}'")
+                df = self.__linkedin_integration.get_organization_details(linkedin_url)
+                if len(df) > 0:
+                    data = {
+                        "organization_name": parameters.organization_name,
+                        "organization_id": create_id_from_string(parameters.organization_name),
+                        "linkedin_url": linkedin_url,
+                        "data": df.to_dict('records'),
+                        "output_dir": str(output_dir),
+                        "date_extracted": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    logger.info(f"Data successfully extracted: {data}")
+                else:
+                    logger.error(f"No data found for '{parameters.organization_name}'")
 
-            # Save data to storage
-            services.storage_service.put_object(
-                prefix=output_dir,
-                key=file_name,
-                content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
-            )
+                # Save data to storage
+                services.storage_service.put_object(
+                    prefix=output_dir,
+                    key=file_name,
+                    content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
+                )
         return data
     
     def get_organization_logo_url(self, parameters: LinkedInOrganizationParameters) -> str:
         """Get organization logo URL from the OpenData store."""
         # Initialize storage
         data = self.get_organization_info(parameters)
+        if data is None:
+            return None
         logo_url = data.get("data", [{}])[0].get("LOGO_URL")
         output_dir = data.get("output_dir")
         organization_id = data.get("organization_id")
