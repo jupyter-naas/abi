@@ -1,16 +1,15 @@
 # ABI
-
-**An API-driven organizational AI system backend offering assistants, ontology, integrations, workflows, and analytics in a unified framework.**
+*Agent Based Intelligence*
 
 <img src="./assets/abi-flywheel.png" width="100%" height="100%">
 
 ## Overview
 
-The **ABI** (Agentic Builder Interface) project is a Python-based backend framework designed to serve as the core infrastructure for building an Organizational AI System. This system empowers businesses to integrate, manage, and scale AI-driven operations with a focus on ontology, assistant-driven workflows, and analytics. Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
+The **ABI** (Agent Based Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Agentic AI Ontology Engine. This system empowers organizations to integrate, manage, and scale AI-driven operations with a focus on ontology, agent-driven workflows, and analytics. Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
 
-### Key Features
+## Key Features
 
-- **Assistants**: Configurable AI assistants to handle specific organizational tasks and interact with users.
+- **Assistants**: Configurable AI assistants (also named agents) to handle specific organizational tasks and interact with users.
 - **Ontology Management**: Define and manage data relationships, structures, and semantic elements.
 - **Integrations**: Seamlessly connect to external data sources and APIs for unified data access.
 - **Pipelines**: Define data processing pipelines to handle and transform data efficiently into the ontological layer.
@@ -18,6 +17,54 @@ The **ABI** (Agentic Builder Interface) project is a Python-based backend framew
 - **Analytics**: Access insights through integrated analytics and real-time data processing.
 - **Data**: Handle diverse datasets and manage schema, versioning, deduplication, and change data capture.
 
-### License
-ABI Framework is open-source and available for non-production use under the [AGPL license](https://opensource.org/licenses/AGPL). For production deployments, a commercial license is required. Please contact us at support@naas.ai for details on licensing options.
+## Quick Start
+
+### Step 1: Clone the repository
+
+```bash
+git clone https://github.com/jupyter-naas/abi.git
+```
+
+### Step 2: Setup environment variables
+
+```bash
+cp .env.example .env
+```
+
+### Step 3: Run the project
+
+```bash
+make
+```
+This will run the supervisor agent and the agentic engine.
+
+For specific agents, you can run them directly with the following command:
+
+```bash
+make chat-[name]-agent
+```
+
+### Step 4: Build and run the API
+
+You need to build the API before running it. Find out more about the API in the [API documentation](./docs/api/deploy-api.md).
+
+```bash
+make api
+```
+
+### Step 5: Build your own agent
+
+```bash
+make build-agent
+```
+
+This will build the agent and save it in the `/src/custom/modules` directory.
+
+
+## Contributing
+
+We welcome contributions! Please read the [contributing guidelines](./CONTRIBUTING.md) for more information.
+
+## License
+ABI Framework is open-source and available for use under the [MIT license](https://opensource.org/licenses/MIT). Professionals and enterprises are encouraged to contact our support for custom services as this project evolves rapidly at support@naas.ai
 
