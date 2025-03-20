@@ -22,19 +22,19 @@ The **ABI** project aims to provide a open alternative to Palantir by offering a
 
 ## Quick Start
 
-### Step 1: Clone the repository
+Step 1: Clone the repository
 
 ```bash
 git clone https://github.com/jupyter-naas/abi.git
 ```
 
-### Step 2: Setup environment variables
+Step 2: Setup environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-### Step 3: Run the project
+Step 3: Run the project
 
 ```bash
 make
@@ -47,7 +47,7 @@ For specific agents, you can run them directly with the following command:
 make chat-[name]-agent
 ```
 
-### Step 4: Build and run the API
+Step 4: Build and run the API
 
 You need to build the API before running it. Find out more about the API in the [API documentation](./docs/api/deploy-api.md).
 
@@ -55,7 +55,7 @@ You need to build the API before running it. Find out more about the API in the 
 make api
 ```
 
-### Step 5: Build your own agent
+Step 5: Build your own agent
 
 ```bash
 make build-agent
