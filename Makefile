@@ -142,3 +142,17 @@ clean:
 	find . -name "__pycache__" -delete
 
 .PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
+
+# Build module - copies components to the module directory
+build-module:
+	@read -p "Enter module name: " MODULE_NAME && \
+	mkdir -p src/custom/modules/$$MODULE_NAME/integrations && \
+	mkdir -p src/custom/modules/$$MODULE_NAME/pipelines && \
+	mkdir -p src/custom/modules/$$MODULE_NAME/workflows && \
+	echo "Copying integrations..." && \
+	cp -r src/integrations/* src/custom/modules/$$MODULE_NAME/integrations/ 2>/dev/null || true && \
+	echo "Copying pipelines..." && \
+	cp -r src/data/pipelines/* src/custom/modules/$$MODULE_NAME/pipelines/ 2>/dev/null || true && \
+	echo "Copying workflows..." && \
+	cp -r src/workflows/* src/custom/modules/$$MODULE_NAME/workflows/ 2>/dev/null || true && \
+	echo "Module '$$MODULE_NAME' built successfully in src/custom/modules/$$MODULE_NAME/"
