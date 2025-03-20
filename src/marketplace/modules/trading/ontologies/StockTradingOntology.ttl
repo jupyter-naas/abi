@@ -1,0 +1,305 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/StockTradingOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/EventOntology>,
+                <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/marketplace/modules/trading/ontologies/StockTradingOntology.ttl> ;
+    dc11:contributor "ABI Team" ;
+    dc:description "Domain ontology for stock trading activities and financial instruments."@en ;
+    dc:title "Stock Trading Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+# Financial Instruments
+abi:FinancialInstrument a owl:Class ;
+    rdfs:label "Financial Instrument"@en ;
+    rdfs:subClassOf abi:Asset ;
+    skos:definition "A tradable asset or contractual agreement that has monetary value" .
+
+abi:Stock a owl:Class ;
+    rdfs:label "Stock"@en ;
+    rdfs:subClassOf abi:FinancialInstrument ;
+    skos:definition "A security that represents ownership of a fraction of a corporation" .
+
+abi:Bond a owl:Class ;
+    rdfs:label "Bond"@en ;
+    rdfs:subClassOf abi:FinancialInstrument ;
+    skos:definition "A fixed income instrument that represents a loan made by an investor to a borrower" .
+
+abi:ETF a owl:Class ;
+    rdfs:label "Exchange-Traded Fund"@en ;
+    rdfs:subClassOf abi:FinancialInstrument ;
+    skos:definition "A type of investment fund that is traded on stock exchanges" .
+
+abi:Option a owl:Class ;
+    rdfs:label "Option"@en ;
+    rdfs:subClassOf abi:FinancialInstrument ;
+    skos:definition "A contract giving the buyer the right, but not the obligation, to buy or sell an underlying asset" .
+
+abi:Future a owl:Class ;
+    rdfs:label "Future"@en ;
+    rdfs:subClassOf abi:FinancialInstrument ;
+    skos:definition "A legal agreement to buy or sell a particular commodity asset, or security at a predetermined price at a specified time in the future" .
+
+# Market Entities
+abi:Market a owl:Class ;
+    rdfs:label "Market"@en ;
+    skos:definition "A medium that allows buyers and sellers of financial instruments to interact and trade" .
+
+abi:StockExchange a owl:Class ;
+    rdfs:label "Stock Exchange"@en ;
+    rdfs:subClassOf abi:Market ;
+    skos:definition "An exchange where stock brokers and traders can buy and sell securities" .
+
+# Trading Activities
+abi:Trade a owl:Class ;
+    rdfs:label "Trade"@en ;
+    rdfs:subClassOf abi:Transaction ;
+    skos:definition "The buying or selling of a financial instrument" .
+
+abi:Order a owl:Class ;
+    rdfs:label "Order"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "An instruction to buy or sell a financial instrument on a trading venue" .
+
+abi:MarketOrder a owl:Class ;
+    rdfs:label "Market Order"@en ;
+    rdfs:subClassOf abi:Order ;
+    skos:definition "An order to buy or sell a security at the current market price" .
+
+abi:LimitOrder a owl:Class ;
+    rdfs:label "Limit Order"@en ;
+    rdfs:subClassOf abi:Order ;
+    skos:definition "An order to buy or sell a security at a specified price or better" .
+
+abi:StopOrder a owl:Class ;
+    rdfs:label "Stop Order"@en ;
+    rdfs:subClassOf abi:Order ;
+    skos:definition "An order to buy or sell a security once the price reaches a specified level" .
+
+# Portfolio and Analysis
+abi:Portfolio a owl:Class ;
+    rdfs:label "Portfolio"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    skos:definition "A collection of financial investments held by an individual or entity" .
+
+abi:TradingStrategy a owl:Class ;
+    rdfs:label "Trading Strategy"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A systematic plan to trade financial instruments with the goal of generating profits" .
+
+abi:TechnicalAnalysis a owl:Class ;
+    rdfs:label "Technical Analysis"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A trading discipline that evaluates investments and identifies trading opportunities by analyzing statistical trends from trading activity" .
+
+abi:FundamentalAnalysis a owl:Class ;
+    rdfs:label "Fundamental Analysis"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    skos:definition "A method of evaluating a security by measuring its intrinsic value through examining related economic, financial, and other qualitative and quantitative factors" .
+
+# Market Data
+abi:MarketData a owl:Class ;
+    rdfs:label "Market Data"@en ;
+    rdfs:subClassOf cco:InformationContent ;
+    skos:definition "Information about the prices, trades, and quotes of financial instruments" .
+
+abi:PriceData a owl:Class ;
+    rdfs:label "Price Data"@en ;
+    rdfs:subClassOf abi:MarketData ;
+    skos:definition "Information about the price of a financial instrument" .
+
+abi:VolumeData a owl:Class ;
+    rdfs:label "Volume Data"@en ;
+    rdfs:subClassOf abi:MarketData ;
+    skos:definition "Information about the trading volume of a financial instrument" .
+
+# Risk and Performance
+abi:Risk a owl:Class ;
+    rdfs:label "Risk"@en ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    skos:definition "The potential for uncontrolled loss of value in an investment" .
+
+abi:Performance a owl:Class ;
+    rdfs:label "Performance"@en ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    skos:definition "The measurement of results achieved by an investment or portfolio over time" .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasInstrument a owl:ObjectProperty ;
+    rdfs:label "has instrument"@en ;
+    rdfs:domain abi:Trade ;
+    rdfs:range abi:FinancialInstrument .
+
+abi:hasMarket a owl:ObjectProperty ;
+    rdfs:label "has market"@en ;
+    rdfs:domain abi:Trade ;
+    rdfs:range abi:Market .
+
+abi:hasOrder a owl:ObjectProperty ;
+    rdfs:label "has order"@en ;
+    rdfs:domain abi:Trade ;
+    rdfs:range abi:Order .
+
+abi:hasTrade a owl:ObjectProperty ;
+    rdfs:label "has trade"@en ;
+    rdfs:domain abi:Portfolio ;
+    rdfs:range abi:Trade .
+
+abi:hasRisk a owl:ObjectProperty ;
+    rdfs:label "has risk"@en ;
+    rdfs:domain abi:Portfolio ;
+    rdfs:range abi:Risk .
+
+abi:hasPerformance a owl:ObjectProperty ;
+    rdfs:label "has performance"@en ;
+    rdfs:domain abi:Portfolio ;
+    rdfs:range abi:Performance .
+
+abi:hasStrategy a owl:ObjectProperty ;
+    rdfs:label "has strategy"@en ;
+    rdfs:domain abi:Portfolio ;
+    rdfs:range abi:TradingStrategy .
+
+abi:hasMarketData a owl:ObjectProperty ;
+    rdfs:label "has market data"@en ;
+    rdfs:domain abi:FinancialInstrument ;
+    rdfs:range abi:MarketData .
+
+abi:isListedOn a owl:ObjectProperty ;
+    rdfs:label "is listed on"@en ;
+    rdfs:domain abi:FinancialInstrument ;
+    rdfs:range abi:StockExchange .
+
+abi:isIssuedBy a owl:ObjectProperty ;
+    rdfs:label "is issued by"@en ;
+    rdfs:domain abi:Stock ;
+    rdfs:range abi:Organization .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:symbol a owl:DatatypeProperty ;
+    rdfs:label "symbol"@en ;
+    rdfs:domain abi:FinancialInstrument ;
+    rdfs:range xsd:string .
+
+abi:isin a owl:DatatypeProperty ;
+    rdfs:label "ISIN"@en ;
+    rdfs:domain abi:FinancialInstrument ;
+    rdfs:range xsd:string .
+
+abi:price a owl:DatatypeProperty ;
+    rdfs:label "price"@en ;
+    rdfs:domain abi:FinancialInstrument ;
+    rdfs:range xsd:decimal .
+
+abi:volume a owl:DatatypeProperty ;
+    rdfs:label "volume"@en ;
+    rdfs:domain abi:Trade ;
+    rdfs:range xsd:integer .
+
+abi:openPrice a owl:DatatypeProperty ;
+    rdfs:label "open price"@en ;
+    rdfs:domain abi:PriceData ;
+    rdfs:range xsd:decimal .
+
+abi:highPrice a owl:DatatypeProperty ;
+    rdfs:label "high price"@en ;
+    rdfs:domain abi:PriceData ;
+    rdfs:range xsd:decimal .
+
+abi:lowPrice a owl:DatatypeProperty ;
+    rdfs:label "low price"@en ;
+    rdfs:domain abi:PriceData ;
+    rdfs:range xsd:decimal .
+
+abi:closePrice a owl:DatatypeProperty ;
+    rdfs:label "close price"@en ;
+    rdfs:domain abi:PriceData ;
+    rdfs:range xsd:decimal .
+
+abi:orderType a owl:DatatypeProperty ;
+    rdfs:label "order type"@en ;
+    rdfs:domain abi:Order ;
+    rdfs:range xsd:string .
+
+abi:orderStatus a owl:DatatypeProperty ;
+    rdfs:label "order status"@en ;
+    rdfs:domain abi:Order ;
+    rdfs:range xsd:string .
+
+abi:limitPrice a owl:DatatypeProperty ;
+    rdfs:label "limit price"@en ;
+    rdfs:domain abi:LimitOrder ;
+    rdfs:range xsd:decimal .
+
+abi:stopPrice a owl:DatatypeProperty ;
+    rdfs:label "stop price"@en ;
+    rdfs:domain abi:StopOrder ;
+    rdfs:range xsd:decimal .
+
+abi:tradeDate a owl:DatatypeProperty ;
+    rdfs:label "trade date"@en ;
+    rdfs:domain abi:Trade ;
+    rdfs:range xsd:dateTime .
+
+abi:settlementDate a owl:DatatypeProperty ;
+    rdfs:label "settlement date"@en ;
+    rdfs:domain abi:Trade ;
+    rdfs:range xsd:dateTime .
+
+abi:riskLevel a owl:DatatypeProperty ;
+    rdfs:label "risk level"@en ;
+    rdfs:domain abi:Risk ;
+    rdfs:range xsd:string .
+
+abi:returnRate a owl:DatatypeProperty ;
+    rdfs:label "return rate"@en ;
+    rdfs:domain abi:Performance ;
+    rdfs:range xsd:decimal .
+
+abi:sharpeRatio a owl:DatatypeProperty ;
+    rdfs:label "sharpe ratio"@en ;
+    rdfs:domain abi:Performance ;
+    rdfs:range xsd:decimal .
+
+abi:beta a owl:DatatypeProperty ;
+    rdfs:label "beta"@en ;
+    rdfs:domain abi:FinancialInstrument ;
+    rdfs:range xsd:decimal .
+
+abi:dividendYield a owl:DatatypeProperty ;
+    rdfs:label "dividend yield"@en ;
+    rdfs:domain abi:Stock ;
+    rdfs:range xsd:decimal .
+
+abi:marketCap a owl:DatatypeProperty ;
+    rdfs:label "market capitalization"@en ;
+    rdfs:domain abi:Stock ;
+    rdfs:range xsd:decimal .
+
+abi:peRatio a owl:DatatypeProperty ;
+    rdfs:label "price earnings ratio"@en ;
+    rdfs:domain abi:Stock ;
+    rdfs:range xsd:decimal .
+
+abi:earningsPerShare a owl:DatatypeProperty ;
+    rdfs:label "earnings per share"@en ;
+    rdfs:domain abi:Stock ;
+    rdfs:range xsd:decimal .
