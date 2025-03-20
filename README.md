@@ -55,10 +55,10 @@ You need to build the API before running it. Find out more about the API in the 
 make api
 ```
 
-**Step 5: Build your own agent**
+**Step 5: Build your own module**
 
 ```bash
-make build-agent
+make build-module
 ```
 
 This will build the agent and save it in the `/src/custom/modules` directory.
