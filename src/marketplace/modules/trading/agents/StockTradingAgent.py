@@ -4,7 +4,9 @@ from src import secret, services
 from langchain_openai import ChatOpenAI
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from ..integrations.YahooFinanceIntegration import YahooFinanceIntegration, YahooFinanceIntegrationConfiguration
+from ..pipelines.YahooFinanceEarningsCallPipeline import YahooFinanceEarningsCallPipelineConfiguration, YahooFinanceEarningsCallPipeline
 from ..workflows.StockPriceAnalysisWorkflow import StockPriceAnalysisWorkflow, StockPriceAnalysisWorkflowConfiguration
+from ..workflows.GetEarningsCallWorkflow import GetEarningsCallWorkflow, GetEarningsCallWorkflowConfiguration
 
 NAME = "Stock Trading Agent"
 DESCRIPTION = "AI-powered stock trading assistant that helps analyze market data, trends, and make informed trading decisions."
@@ -17,6 +19,7 @@ If users provide insufficient information, proactively ask clarifying questions 
 Draw from your knowledge of financial markets when no specific tool applies.
 
 General Rules:
+- You MUST use the tool `get_current_datetime` to be aware of the current datetime.
 - You MUST always include the tool used at the beginning of the report in human readable format without changing the tool name as follow: '> {{Tool Name}}' + 2 blank lines (e.g. '> Trading Stock Price Analysis\n\n' for tool: trading_stock_price_analysis)
 - You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french.
 - Include sources with url used at the end of the report as follow:
@@ -68,15 +71,31 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Add tools
+    # Setup Ontology Store
+    ontology_store = services.ontology_store_service
+
+    # Setup Yahoo Finance Integration Configuration
+    yahoo_finance_integration_configuration = YahooFinanceIntegrationConfiguration()
+
+    # Add Trading Agent Workflow
+    ontology_store = services.ontology_store_service
+    get_earnings_call_workflow_configuration = GetEarningsCallWorkflowConfiguration(
+        yahoo_finance_integration_config=yahoo_finance_integration_configuration,
+        yahoo_finance_earnings_call_pipeline_config=YahooFinanceEarningsCallPipelineConfiguration(
+            ontology_store=ontology_store
+        ),
+        ontology_store=ontology_store
+    )
+    get_earnings_call_workflow = GetEarningsCallWorkflow(get_earnings_call_workflow_configuration)
+    tools += get_earnings_call_workflow.as_tools()
+
+    # Add Stock Price Analysis  
     naas_api_key = secret.get('NAAS_API_KEY')
     if naas_api_key:
         # Setup Naas Integration Configuration
         naas_integration_configuration = NaasIntegrationConfiguration(
             api_key=naas_api_key
         )
-        # Setup Yahoo Finance Integration Configuration
-        yahoo_finance_integration_configuration = YahooFinanceIntegrationConfiguration()
 
         # Setup Stock Price Analysis Workflow Configuration
         stock_price_analysis_workflow_configuration = StockPriceAnalysisWorkflowConfiguration(
