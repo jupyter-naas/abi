@@ -6,10 +6,9 @@ This document provides an overview of the implementation of the local storage sy
 
 The local storage system provides a filesystem-based storage layer that serves as the foundation for several data storage types:
 
-- **Document Storage**: For handling PDF, Word, PowerPoint, and other document formats
-- **Data Lake**: For raw and processed data from various sources
-- **TripleStore**: For semantic data in RDF/Turtle format 
-- **VectorStore**: For embedding vectors used in machine learning and retrieval systems
+- **Datastore**: For unstructured data, raw documents and files
+- **Triplestore**: For semantic data in RDF/Turtle format 
+- **Vectorstore**: For embedding vectors used in machine learning and retrieval systems
 
 The local storage implementation uses a clean abstraction layer that allows consistent access patterns regardless of whether the data is stored locally or remotely.
 
@@ -17,15 +16,12 @@ The local storage implementation uses a clean abstraction layer that allows cons
 
 The standard local storage directory structure is organized as follows:
 
-```
 storage/
-├── documents/                # Document storage
+├── datastore/                # Combined storage for documents and structured/unstructured data
 │   ├── pdf/                  # PDF documents
 │   ├── docx/                 # Word documents
 │   ├── presentations/        # PowerPoint files
-│   └── images/               # Image files
-│
-├── data_lake/                # Structured and unstructured data
+│   ├── images/               # Image files
 │   ├── raw/                  # Unprocessed data
 │   ├── processed/            # Transformed data
 │   ├── intermediate/         # Temporary processing results
@@ -39,7 +35,6 @@ storage/
     ├── embeddings/           # Raw vector data
     ├── indexes/              # Vector search indexes
     └── metadata/             # Associated metadata
-```
 
 ### Triple Store Structure
 
@@ -71,43 +66,9 @@ The `vector_store/` directory is optimized for machine learning applications:
 
 The local storage is implemented by the `ObjectStorageSecondaryAdapterFS` class which provides a filesystem adapter that conforms to the `IObjectStorageAdapter` interface:
 
-```python
-class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
-    def __init__(self, base_path: str):
-        self.base_path = base_path
-        
-    def get_object(self, prefix: str, key: str) -> bytes:
-        # Read file from filesystem at base_path/prefix/key
-        with open(os.path.join(self.base_path, prefix, key), "rb") as f:
-            return f.read()
-    
-    def put_object(self, prefix: str, key: str, content: bytes) -> None:
-        # Ensure directory exists
-        os.makedirs(os.path.join(self.base_path, prefix), exist_ok=True)
-        
-        # Write content to file
-        with open(os.path.join(self.base_path, prefix, key), "wb") as f:
-            f.write(content)
-    
-    # Other methods for delete_object and list_objects
-```
-
 ### Auto-Discovery
 
-The system automatically discovers the storage directory by looking for a directory named "storage" starting from the current working directory and traversing up to the root:
-
-```python
-def find_storage_folder(base_path: str) -> str:
-    if os.path.exists(os.path.join(base_path, 'storage')):
-        return os.path.join(base_path, 'storage')
-    
-    if base_path == '/':
-        raise Exception("No storage folder found")
-    
-    return find_storage_folder(os.path.dirname(base_path))
-```
-
-This makes it convenient to access the storage directory from any location in the project.
+The system automatically discovers the storage directory by looking for a directory named "storage" starting from the current working directory and traversing up to the root. This makes it convenient to access the storage directory from any location in the project.
 
 ## Usage
 
