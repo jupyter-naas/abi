@@ -1,12 +1,5 @@
-
-DEPENDENCIES = src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
-
-src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl:
-	@ make -C src/core/modules/common/integrations/siteanalyzer release
-
 .venv: $(DEPENDENCIES)
 	@ docker compose run --rm --remove-orphans abi poetry install
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pip install --force-reinstall /app/src/core/modules/common/integrations/siteanalyzer/target/wheels/*.whl'
 
 dev-build:
 	@ docker compose build
@@ -101,6 +94,9 @@ chat-finance-agent: .venv
 
 chat-powerpoint-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent PowerPointAssistant'
+
+chat-trading-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent StockTradingAgent'
 
 .DEFAULT_GOAL := chat-supervisor-agent
 
