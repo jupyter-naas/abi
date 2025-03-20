@@ -1,4 +1,3 @@
-
 DEPENDENCIES = src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
 
 src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl:
@@ -25,8 +24,12 @@ lock:
 	@ docker compose run --rm --remove-orphans abi poetry lock
 
 path=tests/
-test:
-	@ docker compose run --rm --remove-orphans abi poetry run pytest $(path)
+test: unit-tests integration-tests
+	@echo "All tests completed successfully!"
+
+# Add a separate target for tests with linting
+test-with-lint: lint unit-tests integration-tests
+	@echo "All tests and linting completed successfully!"
 
 sh: .venv
 	@ docker compose run --rm --remove-orphans -it abi bash
@@ -103,5 +106,39 @@ chat-powerpoint-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent PowerPointAssistant'
 
 .DEFAULT_GOAL := chat-supervisor-agent
+
+.PHONY: all test unit-tests integration-tests lint clean
+
+# Default target - runs tests when you type just 'make'
+all: test
+
+# Unit tests
+unit-tests:
+	@echo "Running unit tests..."
+	python -m pytest tests/unit --verbose
+
+# Integration tests
+integration-tests:
+	@echo "Running integration tests..."
+	python -m pytest tests/integration --verbose
+
+# Code linting
+lint:
+	@echo "Running basic linters..."
+	flake8 src tests --select=F,E7 --ignore=E501,W291,W293
+	black --check src tests
+
+# Add after the lint command
+fix-lint:
+	@echo "Auto-fixing linting issues..."
+	black src tests
+	isort src tests
+
+# Clean build artifacts
+clean:
+	@echo "Cleaning up build artifacts..."
+	rm -rf __pycache__ .pytest_cache build dist *.egg-info
+	find . -name "*.pyc" -delete
+	find . -name "__pycache__" -delete
 
 .PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
