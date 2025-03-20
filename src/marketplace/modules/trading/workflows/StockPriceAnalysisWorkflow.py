@@ -35,7 +35,8 @@ class StockPriceAnalysisWorkflowParameters(WorkflowParameters):
         end_date (str): End date for earnings calendar in YYYY-MM-DD format. Defaults to 7 days from start_date.
         ticker (Optional[str]): Optional specific stock ticker to filter for (e.g., 'AAPL')
     """
-    symbol: str = Field(description="The stock symbol to analyze, e.g. 'AAPL'. Use your internal knowledge to find the correct symbol.")
+    symbol: str = Field(..., description="The stock symbol to analyze, e.g. 'AAPL'.")
+    currency: str = Field("USD", description="The currency of the stock, e.g. 'USD'.")
 
 class StockPriceAnalysisWorkflow(Workflow):
     """Workflow for retrieving company earnings calendar from Yahoo Finance.
@@ -148,7 +149,8 @@ class StockPriceAnalysisWorkflow(Workflow):
             df: pd.DataFrame, 
             earnings_df_chart: pd.DataFrame, 
             title: str, 
-            period_variations: dict[str, tuple[str, str]]
+            period_variations: dict[str, tuple[str, str]],
+            currency: str
         ) -> go.Figure:        
         # Create chart
         fig = go.Figure()
@@ -227,7 +229,7 @@ class StockPriceAnalysisWorkflow(Workflow):
                 }
             ],
             xaxis_title="Date",
-            yaxis_title="Price ($)",
+            yaxis_title=f"Price ({currency})",
             hovermode='x unified',
             margin=dict(b=120),
             plot_bgcolor='white',
@@ -270,7 +272,7 @@ class StockPriceAnalysisWorkflow(Workflow):
         
         # Create and save chart
         earnings_df_chart = stock_df[stock_df['Date'].isin(earnings_df['Earnings Date'])].reset_index(drop=True)
-        fig = self.__create_analysis_chart(stock_df, earnings_df_chart, title, period_variations)
+        fig = self.__create_analysis_chart(stock_df, earnings_df_chart, title, period_variations, parameters.currency)
         
         # Save stock data
         services.storage_service.put_object(
@@ -308,7 +310,7 @@ class StockPriceAnalysisWorkflow(Workflow):
         return {
             "symbol": parameters.symbol,
             "company_name": company_name,
-            "chart_url": asset_url,
+            "graph_url": asset_url,
             "stock_data": stock_df.to_dict(orient="records"),
             "earnings_data": earnings_df.to_dict(orient="records")
         }
@@ -321,8 +323,8 @@ class StockPriceAnalysisWorkflow(Workflow):
         """
         return [
             StructuredTool(
-                name="trading-get_stock_price_analysis",
-                description="Get stock price data with a chart with the next earnings call date and price variations and the data used to generate the chart from Yahoo Finance.",
+                name="trading_stock_price_analysis",
+                description="Get stock price data + moving average 20 and 50 days, earning call dates and chart with combine analysis and price variations.",
                 func=lambda **kwargs: self.get_stock_price_analysis(StockPriceAnalysisWorkflowParameters(**kwargs)),
                 args_schema=StockPriceAnalysisWorkflowParameters
             )

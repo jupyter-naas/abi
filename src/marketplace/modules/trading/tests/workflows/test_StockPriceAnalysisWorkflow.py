@@ -14,7 +14,7 @@ workflow = StockPriceAnalysisWorkflow(
 )
 
 # Get stock price analysis
-symbol = "NVDA"
+symbol = "TSMC34.SA"
 
 # Run workflow
 workflow.get_stock_price_analysis(
