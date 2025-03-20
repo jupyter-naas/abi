@@ -1,7 +1,9 @@
 ### Deploy API
 
-The API deployment is automated through GitHub Actions.
-Every time you push to the main branch with last commit message as `feat:` or `fix:`, the API will be deployed as follow:
+One of the main features of ABI is the ability to deploy an Agentic Based API.
+
+The API deployment is automated through GitHub Actions. Every time you push to the main branch with last commit message as `feat:` or `fix:`, the API will be deployed as follow:
+
 1. A new container is built (via the "Build ABI Container" workflow)
 2. The deployment workflow creates/updates a NAAS space with the latest container image
 3. The API will be accessible through the NAAS platform once deployment is complete as the following URL: `https://<github_project_repository.name>-api.default.space.naas.ai/`
