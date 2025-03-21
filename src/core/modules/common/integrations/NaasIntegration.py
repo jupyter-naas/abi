@@ -61,7 +61,6 @@ class NaasIntegration(Integration):
                 json=data if method != "POST" else None,
                 data=json.dumps(data) if method == "POST" else None,
                 params=params,
-                verify=False
             )
             response.raise_for_status()
             return response.json()
