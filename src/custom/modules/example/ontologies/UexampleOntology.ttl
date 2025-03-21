@@ -1,0 +1,40 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix example: <http://ontology.naas.ai/example/> .
+
+# Ontology metadata
+<http://ontology.naas.ai/example/UexampleOntology> rdf:type owl:Ontology ;
+    dc:title "Uexample Ontology" ;
+    dc:description "An ontology for the Uexample module" .
+
+# Classes
+example:UexampleEntity rdf:type owl:Class ;
+    rdfs:label "Uexample Entity"@en ;
+    rdfs:subClassOf bfo:BFO_0000001 ;
+    skos:definition "A primary entity in the Uexample domain" .
+
+# Object Properties
+example:hasRelatedEntity rdf:type owl:ObjectProperty ;
+    rdfs:label "has related entity"@en ;
+    rdfs:domain example:UexampleEntity ;
+    rdfs:range example:UexampleEntity ;
+    skos:definition "Relates a Uexample entity to another related entity" .
+
+# Data Properties
+example:hasAttribute rdf:type owl:DatatypeProperty ;
+    rdfs:label "has attribute"@en ;
+    rdfs:domain example:UexampleEntity ;
+    rdfs:range xsd:string ;
+    skos:definition "An attribute of a Uexample entity" .
+
+# Individuals (Examples)
+example:exampleEntity rdf:type example:UexampleEntity ;
+    rdfs:label "Example Entity"@en ;
+    example:hasAttribute "Example value" .
+
