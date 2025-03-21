@@ -15,7 +15,7 @@ ABI uses RDF (Resource Description Framework) and OWL (Web Ontology Language) to
 
 Ontologies in ABI are organized in a layered approach:
 
-1. **Foundation Ontologies**: Basic concepts like space, time, and objects (e.g., BFO - Basic Formal Ontology)
+1. **Foundation or Top-Level Ontologies**: Basic concepts like space, time, and objects (e.g., BFO - Basic Formal Ontology)
 2. **Mid-Level Ontologies**: Concepts common across domains (e.g., Common Core Ontologies)
 3. **Domain Ontologies**: Concepts specific to particular domains (e.g., Finance, Healthcare)
 4. **Application Ontologies**: Concepts specific to applications

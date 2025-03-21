@@ -10,4 +10,3 @@ Pipelines are designed to be:
 3. **Ontology-aware**: Understand the semantic model and triplet structure
 4. **Deterministic**: Produce consistent output for the same input
 
-## Pipeline Structure
