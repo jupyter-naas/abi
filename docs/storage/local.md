@@ -27,18 +27,18 @@ storage/
 │   ├── intermediate/         # Temporary processing results
 │   └── output/               # Final data products
 │
-├── triple_store/             # Semantic data storage
+├── triplestore/             # Semantic data storage
 │   ├── ontologies/           # Ontology definitions (.owl, .rdf)
 │   └── triples/              # RDF triple data (.ttl)
 │
-└── vector_store/             # Vector embeddings
+└── vectorstore/             # Vector embeddings
     ├── embeddings/           # Raw vector data
     ├── indexes/              # Vector search indexes
     └── metadata/             # Associated metadata
 
 ### Triple Store Structure
 
-The `triple_store/` directory follows semantic web standards:
+The `triplestore/` directory follows semantic web standards:
 
 - **ontologies/**: Contains schema definitions and ontology models
   - `.owl` files define formal ontologies with classes, properties, and rules
@@ -86,7 +86,7 @@ storage_service = ObjectStorageFactory.ObjectStorageServiceFS("/path/to/storage"
 
 # Basic operations
 # Store a file
-storage_service.put_object("triple_store/triples", "people.ttl", ttl_content)
+storage_service.put_object("triplestore/triples", "people.ttl", ttl_content)
 
 # Retrieve a file
 content = storage_service.get_object("data_lake/processed", "customers.json")
@@ -117,11 +117,11 @@ These commands automatically handle the authentication and execute the AWS S3 sy
 1. **Follow the standard directory structure** to ensure consistency and compatibility with other system components.
 
 2. **Use appropriate directories** for different types of data:
-   - Document files → `documents/`
-   - Raw data → `data_lake/raw/`
-   - Processed data → `data_lake/processed/`
-   - RDF triples → `triple_store/triples/`
-   - Vector embeddings → `vector_store/embeddings/`
+   - Document files → `datastore/documents/`
+   - Raw data → `datastore/[module_name]/raw/`
+   - Processed data → `datastore/[module_name]/processed/`
+   - RDF triples → `triplestore/[module_name]/triples/`
+   - Vector embeddings → `vector_store/[module_name]/embeddings/`
 
 3. **Use consistent naming conventions**:
    - Use lowercase for directories and filenames
@@ -136,5 +136,5 @@ These commands automatically handle the authentication and execute the AWS S3 sy
 ## Related Documentation
 
 - [Remote Storage](./remote.md)
-- [Triple Store Architecture](../architecture/triple_store.md)
+- [Triple Store Architecture](../architecture/triplestore.md)
 - [Vector Embeddings](../machine_learning/embeddings.md)
