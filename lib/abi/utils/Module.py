@@ -38,6 +38,11 @@ class IModule(ABC):
     
     
     def __load_agents(self):
+        """Loads all agents defined in the module."""
+        # Skip modules with a .skip file
+        if os.path.exists(os.path.join(self.module_path, '.skip')):
+            return
+        
         for file in os.listdir(os.path.join(self.module_path, 'assistants')):
             if file.endswith('.py'):
                 assistant_path = self.module_import_path + '.assistants.' + file[:-3]
