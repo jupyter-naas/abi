@@ -50,7 +50,7 @@ The `triplestore/` directory follows semantic web standards:
 
 ### Vector Store Structure
 
-The `vector_store/` directory is optimized for machine learning applications:
+The `vectorstore/` directory is optimized for machine learning applications:
 
 - **embeddings/**: Contains raw vector data, typically in binary formats
   - Organized by model and dimension (e.g., `bert-base-768d/`)
@@ -95,7 +95,7 @@ content = storage_service.get_object("data_lake/processed", "customers.json")
 files = storage_service.list_objects("documents/pdf")
 
 # Delete a file
-storage_service.delete_object("vector_store/embeddings", "temp_vectors.bin")
+storage_service.delete_object("vectorstore/embeddings", "temp_vectors.bin")
 ```
 
 ## Synchronization with Remote Storage
@@ -121,7 +121,7 @@ These commands automatically handle the authentication and execute the AWS S3 sy
    - Raw data → `datastore/[module_name]/raw/`
    - Processed data → `datastore/[module_name]/processed/`
    - RDF triples → `triplestore/[module_name]/triples/`
-   - Vector embeddings → `vector_store/[module_name]/embeddings/`
+   - Vector embeddings → `vectorstore/[module_name]/embeddings/`
 
 3. **Use consistent naming conventions**:
    - Use lowercase for directories and filenames
@@ -132,9 +132,3 @@ These commands automatically handle the authentication and execute the AWS S3 sy
 4. **Regularly synchronize** with remote storage to ensure data persistence and backup.
 
 5. **Clean up temporary files** to prevent storage bloat and keep the system organized.
-
-## Related Documentation
-
-- [Remote Storage](./remote.md)
-- [Triple Store Architecture](../architecture/triplestore.md)
-- [Vector Embeddings](../machine_learning/embeddings.md)
