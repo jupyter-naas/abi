@@ -1,0 +1,223 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/BitcoinOntology> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/TransactionOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/ontologies/application-level/BitcoinOntology.ttl> ;
+    dc11:contributor "ABI Team" ;
+    dc:description "Application-level ontology for Bitcoin blockchain data and transactions."@en ;
+    dc:title "Bitcoin Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+# Bitcoin Transaction Types
+abi:BitcoinTransaction rdf:type owl:Class ;
+    rdfs:label "Bitcoin Transaction"@en ;
+    rdfs:subClassOf abi:CashTransaction ;
+    skos:definition "A transaction on the Bitcoin blockchain that transfers value between Bitcoin addresses"@en ;
+    skos:example "A payment from one Bitcoin address to another"@en .
+
+abi:OnChainTransaction rdf:type owl:Class ;
+    rdfs:label "On-Chain Transaction"@en ;
+    rdfs:subClassOf abi:BitcoinTransaction ;
+    skos:definition "A Bitcoin transaction that is recorded directly on the Bitcoin blockchain"@en .
+
+abi:LightningTransaction rdf:type owl:Class ;
+    rdfs:label "Lightning Transaction"@en ;
+    rdfs:subClassOf abi:BitcoinTransaction ;
+    skos:definition "A Bitcoin transaction that occurs off-chain using the Lightning Network"@en ;
+    skos:example "A micro-payment made using Lightning Network channels"@en .
+
+# Bitcoin Address Types
+abi:BitcoinAddress rdf:type owl:Class ;
+    rdfs:label "Bitcoin Address"@en ;
+    rdfs:subClassOf abi:Contact ;
+    skos:definition "An identifier that represents a destination for a Bitcoin payment"@en .
+
+abi:LegacyAddress rdf:type owl:Class ;
+    rdfs:label "Legacy Address"@en ;
+    rdfs:subClassOf abi:BitcoinAddress ;
+    skos:definition "A traditional Bitcoin address starting with '1'"@en ;
+    skos:example "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa (Satoshi's address)"@en .
+
+abi:SegWitAddress rdf:type owl:Class ;
+    rdfs:label "SegWit Address"@en ;
+    rdfs:subClassOf abi:BitcoinAddress ;
+    skos:definition "A Segregated Witness address that starts with '3' or 'bc1'"@en .
+
+abi:Bech32Address rdf:type owl:Class ;
+    rdfs:label "Bech32 Address"@en ;
+    rdfs:subClassOf abi:SegWitAddress ;
+    skos:definition "A native SegWit address that starts with 'bc1'"@en .
+
+# Bitcoin Block and Network
+abi:BitcoinBlock rdf:type owl:Class ;
+    rdfs:label "Bitcoin Block"@en ;
+    skos:definition "A collection of transactions that have been verified and added to the Bitcoin blockchain"@en .
+
+abi:BitcoinNetwork rdf:type owl:Class ;
+    rdfs:label "Bitcoin Network"@en ;
+    skos:definition "A network where Bitcoin transactions are processed and verified"@en .
+
+abi:BitcoinNetworkType rdf:type owl:Class ;
+    rdfs:label "Bitcoin Network Type"@en ;
+    skos:definition "The type of Bitcoin network (mainnet, testnet, etc.)"@en .
+
+# Bitcoin Transaction Components
+abi:BitcoinTransactionInput rdf:type owl:Class ;
+    rdfs:label "Bitcoin Transaction Input"@en ;
+    skos:definition "An input to a Bitcoin transaction, referencing a previous transaction output"@en .
+
+abi:BitcoinTransactionOutput rdf:type owl:Class ;
+    rdfs:label "Bitcoin Transaction Output"@en ;
+    skos:definition "An output from a Bitcoin transaction, specifying an amount and recipient address"@en .
+
+# Bitcoin Value Units
+abi:BitcoinUnit rdf:type owl:Class ;
+    rdfs:label "Bitcoin Unit"@en ;
+    rdfs:subClassOf abi:Currency ;
+    skos:definition "A unit of value in the Bitcoin system"@en .
+
+#################################################################
+#    Individuals
+#################################################################
+
+# Network Types
+abi:BitcoinMainnet rdf:type owl:NamedIndividual, abi:BitcoinNetworkType ;
+    rdfs:label "Bitcoin Mainnet"@en ;
+    skos:definition "The main Bitcoin network where real transactions take place"@en .
+
+abi:BitcoinTestnet rdf:type owl:NamedIndividual, abi:BitcoinNetworkType ;
+    rdfs:label "Bitcoin Testnet"@en ;
+    skos:definition "A testing network for Bitcoin where coins have no real value"@en .
+
+# Value Units
+abi:Bitcoin rdf:type owl:NamedIndividual, abi:BitcoinUnit ;
+    rdfs:label "Bitcoin"@en ;
+    skos:altLabel "BTC"@en ;
+    skos:definition "The primary unit of currency in the Bitcoin system"@en .
+
+abi:Satoshi rdf:type owl:NamedIndividual, abi:BitcoinUnit ;
+    rdfs:label "Satoshi"@en ;
+    skos:definition "The smallest unit of Bitcoin, equal to 0.00000001 BTC"@en ;
+    abi:conversionRate "0.00000001"^^xsd:decimal .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasTransactionInput rdf:type owl:ObjectProperty ;
+    rdfs:label "has transaction input"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range abi:BitcoinTransactionInput ;
+    skos:definition "Relates a Bitcoin transaction to its inputs"@en .
+
+abi:hasTransactionOutput rdf:type owl:ObjectProperty ;
+    rdfs:label "has transaction output"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range abi:BitcoinTransactionOutput ;
+    skos:definition "Relates a Bitcoin transaction to its outputs"@en .
+
+abi:inBlock rdf:type owl:ObjectProperty ;
+    rdfs:label "in block"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range abi:BitcoinBlock ;
+    skos:definition "Indicates which block a Bitcoin transaction is included in"@en .
+
+abi:onNetwork rdf:type owl:ObjectProperty ;
+    rdfs:label "on network"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range abi:BitcoinNetworkType ;
+    skos:definition "Indicates which Bitcoin network a transaction is on"@en .
+
+abi:prevOutput rdf:type owl:ObjectProperty ;
+    rdfs:label "previous output"@en ;
+    rdfs:domain abi:BitcoinTransactionInput ;
+    rdfs:range abi:BitcoinTransactionOutput ;
+    skos:definition "References the previous transaction output that an input spends"@en .
+
+abi:sentToAddress rdf:type owl:ObjectProperty ;
+    rdfs:label "sent to address"@en ;
+    rdfs:domain abi:BitcoinTransactionOutput ;
+    rdfs:range abi:BitcoinAddress ;
+    skos:definition "Indicates which Bitcoin address a transaction output is sent to"@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:transactionHash rdf:type owl:DatatypeProperty ;
+    rdfs:label "transaction hash"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier (hash) of a Bitcoin transaction"@en .
+
+abi:blockHeight rdf:type owl:DatatypeProperty ;
+    rdfs:label "block height"@en ;
+    rdfs:domain abi:BitcoinBlock ;
+    rdfs:range xsd:integer ;
+    skos:definition "The position of a block in the blockchain"@en .
+
+abi:blockHash rdf:type owl:DatatypeProperty ;
+    rdfs:label "block hash"@en ;
+    rdfs:domain abi:BitcoinBlock ;
+    rdfs:range xsd:string ;
+    skos:definition "The unique identifier (hash) of a Bitcoin block"@en .
+
+abi:confirmations rdf:type owl:DatatypeProperty ;
+    rdfs:label "confirmations"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range xsd:integer ;
+    skos:definition "The number of confirmations a Bitcoin transaction has received"@en .
+
+abi:transactionFee rdf:type owl:DatatypeProperty ;
+    rdfs:label "transaction fee"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The fee paid for a Bitcoin transaction, in BTC"@en .
+
+abi:outputValue rdf:type owl:DatatypeProperty ;
+    rdfs:label "output value"@en ;
+    rdfs:domain abi:BitcoinTransactionOutput ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The amount of Bitcoin in a transaction output"@en .
+
+abi:scriptPubKey rdf:type owl:DatatypeProperty ;
+    rdfs:label "script public key"@en ;
+    rdfs:domain abi:BitcoinTransactionOutput ;
+    rdfs:range xsd:string ;
+    skos:definition "The locking script of a Bitcoin transaction output"@en .
+
+abi:scriptSig rdf:type owl:DatatypeProperty ;
+    rdfs:label "script signature"@en ;
+    rdfs:domain abi:BitcoinTransactionInput ;
+    rdfs:range xsd:string ;
+    skos:definition "The unlocking script of a Bitcoin transaction input"@en .
+
+abi:addressString rdf:type owl:DatatypeProperty ;
+    rdfs:label "address string"@en ;
+    rdfs:domain abi:BitcoinAddress ;
+    rdfs:range xsd:string ;
+    skos:definition "The string representation of a Bitcoin address"@en .
+
+abi:mempoolTime rdf:type owl:DatatypeProperty ;
+    rdfs:label "mempool time"@en ;
+    rdfs:domain abi:BitcoinTransaction ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The time when a transaction entered the mempool"@en .
+
+abi:blockTime rdf:type owl:DatatypeProperty ;
+    rdfs:label "block time"@en ;
+    rdfs:domain abi:BitcoinBlock ;
+    rdfs:range xsd:dateTime ;
+    skos:definition "The timestamp of when a block was mined"@en . 
