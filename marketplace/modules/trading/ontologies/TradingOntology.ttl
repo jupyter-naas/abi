@@ -1,0 +1,151 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/StockTradingOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/EventOntology>,
+                <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/marketplace/modules/trading/ontologies/StockTradingOntology.ttl> ;
+    dc11:contributor "ABI Team" ;
+    dc:description "Domain ontology for stock trading activities and financial instruments."@en ;
+    dc:title "Stock Trading Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:EarningsCall a owl:Class ;
+    rdfs:label "Earnings Call"@en ;
+    rdfs:subClassOf cco:ont00000402 ;
+    skos:definition "A conference call between corporate management and investors to discuss financial results for a specific period, typically held quarterly after the release of financial results." ;
+    skos:example "Apple Inc. Q1 2023 Earnings Call where CEO Tim Cook and CFO Luca Maestri discussed the company's quarterly performance with analysts and investors." ;
+    rdfs:comment "Earnings calls typically include a presentation of financial results by management followed by a question and answer session with financial analysts and institutional investors." .
+
+abi:EarningsPerShare a owl:Class ;
+    rdfs:label "Earnings Per Share"@en ;
+    rdfs:subClassOf cco:ont00000608 ; # Financial Value
+    skos:definition "Financial information representing a company's profit allocated to each outstanding share of common stock." ;
+    skos:example "Apple Inc. reported EPS of $1.52 for Q1 2023, exceeding analyst estimates of $1.43 by 6.3%." ;
+    rdfs:comment "EPS is one of the most important indicators of a company's financial health and is closely watched by investors and analysts during earnings calls." .
+
+cco:ont00000443 a owl:Class ;
+    rdfs:subClassOf cco:ont00001180 ;
+    rdfs:label "Commercial Organization"@en ;
+    skos:definition "An Organization that is the bearer of a Commercial Role and whose primary objective is to make a profit from the provision of goods or services."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
+
+cco:ont00001331 rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00001014 ;
+    rdfs:label "Legal Name"@en ;
+    skos:definition "A Proper Name that is an official name for the designated entity as determined by a Government or court of law."@en ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/InformationEntityOntology"^^xsd:anyURI .
+
+abi:Ticker a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "Ticker" ;
+    skos:definition "Represents a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges." ;
+    skos:example "AAPL, GOOGL, AMZN, etc." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasLegalName a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001331 ;
+    rdfs:label "has legal name"@en ;
+    skos:definition "Relates an Organization to its legal name, which is a formally registered designation of the organization."@en .
+
+abi:isLegalNameOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00001331 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is legal name of"@en ;
+    skos:definition "Relates a legal name to the organization it belongs to."@en .
+
+abi:hasTickerSymbol a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Ticker ;
+    rdfs:label "has ticker"@en ;
+    skos:definition "Relates an Organization to its ticker, which is a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges."@en .
+
+abi:isTickerSymbolOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:Ticker ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is ticker symbol of"@en ;
+    skos:definition "Relates a ticker symbol to the organization it belongs to."@en .
+
+abi:hostedByOrganization a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ; # has participant
+    rdfs:domain abi:EarningsCall ;
+    rdfs:range cco:ont00000443 ; # Commercial Organization
+    rdfs:label "hosted by organization"@en ;
+    skos:definition "Relates an earnings call to the commercial organization that hosts it."@en ;
+    skos:example "Apple Inc. Q1 2023 Earnings Call is hosted by Apple Inc." .
+
+abi:hostsEarningsCall a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ; # participates in
+    rdfs:domain cco:ont00000443 ; # Commercial Organization
+    rdfs:range abi:EarningsCall ;
+    rdfs:label "hosts earnings call"@en ;
+    skos:definition "Relates a commercial organization to an earnings call it hosts."@en ;
+    skos:example "Apple Inc. hosts the Apple Inc. Q1 2023 Earnings Call." .
+
+abi:occursAtTime a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000199 ; # occupies temporal region
+    rdfs:domain abi:EarningsCall ;
+    rdfs:range cco:ont00001185 ; # TemporalRegion
+    rdfs:label "occurs at time"@en ;
+    skos:definition "Relates an earnings call to the temporal region it occupies."@en ;
+    skos:example "Apple Inc. Q1 2023 Earnings Call occurs at February 2, 2023, 2:00 PM EST." .
+
+abi:hasEarningsPerShareData a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000059 ; # concretizes
+    rdfs:domain abi:EarningsCall ;
+    rdfs:range abi:EarningsPerShare ;
+    rdfs:label "has earnings per share data"@en ;
+    skos:definition "Relates an earnings call to the earnings per share data discussed during the call."@en ;
+    skos:example "Apple Inc. Q1 2023 Earnings Call has earnings per share data showing $1.52 actual EPS vs $1.43 estimated EPS." .
+
+abi:isEarningsPerShareDataFor a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000058 ; # is concretized by
+    rdfs:domain abi:EarningsPerShare ;
+    rdfs:range abi:EarningsCall ;
+    rdfs:label "is earnings per share data for"@en ;
+    skos:definition "Relates earnings per share data to the earnings call in which it is discussed."@en ;
+    skos:example "The EPS data showing $1.52 actual vs $1.43 estimated is earnings per share data for Apple Inc. Q1 2023 Earnings Call." .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:estimated_earnings_per_share a owl:DatatypeProperty ;
+    rdfs:label "Estimated Earnings Per Share"@en ;
+    rdfs:domain abi:EarningsPerShare ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The earnings per share value expected by analysts before the actual results are announced."@en ;
+    skos:example "Analysts estimated that Apple would report an EPS of $1.43 for Q1 2023." .
+
+abi:reported_earnings_per_share a owl:DatatypeProperty ;
+    rdfs:label "Reported Earnings Per Share"@en ;
+    rdfs:domain abi:EarningsPerShare ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The actual earnings per share value reported by the company."@en ;
+    skos:example "Apple reported an actual EPS of $1.52 for Q1 2023." .
+
+abi:earnings_per_share_surprise_percentage a owl:DatatypeProperty ;
+    rdfs:label "Earnings Per Share Surprise Percentage"@en ;
+    rdfs:domain abi:EarningsPerShare ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The percentage difference between the estimated EPS and the reported EPS."@en ;
+    skos:example "Apple's reported EPS was 6.3% higher than analyst estimates for Q1 2023." .
