@@ -27,18 +27,18 @@ storage/
 │   ├── intermediate/         # Temporary processing results
 │   └── output/               # Final data products
 │
-├── triple_store/             # Semantic data storage
+├── triplestore/             # Semantic data storage
 │   ├── ontologies/           # Ontology definitions (.owl, .rdf)
 │   └── triples/              # RDF triple data (.ttl)
 │
-└── vector_store/             # Vector embeddings
+└── vectorstore/             # Vector embeddings
     ├── embeddings/           # Raw vector data
     ├── indexes/              # Vector search indexes
     └── metadata/             # Associated metadata
 
 ### Triple Store Structure
 
-The `triple_store/` directory follows semantic web standards:
+The `triplestore/` directory follows semantic web standards:
 
 - **ontologies/**: Contains schema definitions and ontology models
   - `.owl` files define formal ontologies with classes, properties, and rules
@@ -50,7 +50,7 @@ The `triple_store/` directory follows semantic web standards:
 
 ### Vector Store Structure
 
-The `vector_store/` directory is optimized for machine learning applications:
+The `vectorstore/` directory is optimized for machine learning applications:
 
 - **embeddings/**: Contains raw vector data, typically in binary formats
   - Organized by model and dimension (e.g., `bert-base-768d/`)
@@ -86,7 +86,7 @@ storage_service = ObjectStorageFactory.ObjectStorageServiceFS("/path/to/storage"
 
 # Basic operations
 # Store a file
-storage_service.put_object("triple_store/triples", "people.ttl", ttl_content)
+storage_service.put_object("triplestore/triples", "people.ttl", ttl_content)
 
 # Retrieve a file
 content = storage_service.get_object("data_lake/processed", "customers.json")
@@ -95,7 +95,7 @@ content = storage_service.get_object("data_lake/processed", "customers.json")
 files = storage_service.list_objects("documents/pdf")
 
 # Delete a file
-storage_service.delete_object("vector_store/embeddings", "temp_vectors.bin")
+storage_service.delete_object("vectorstore/embeddings", "temp_vectors.bin")
 ```
 
 ## Synchronization with Remote Storage
@@ -117,11 +117,11 @@ These commands automatically handle the authentication and execute the AWS S3 sy
 1. **Follow the standard directory structure** to ensure consistency and compatibility with other system components.
 
 2. **Use appropriate directories** for different types of data:
-   - Document files → `documents/`
-   - Raw data → `data_lake/raw/`
-   - Processed data → `data_lake/processed/`
-   - RDF triples → `triple_store/triples/`
-   - Vector embeddings → `vector_store/embeddings/`
+   - Document files → `datastore/documents/`
+   - Raw data → `datastore/[module_name]/raw/`
+   - Processed data → `datastore/[module_name]/processed/`
+   - RDF triples → `triplestore/[module_name]/triples/`
+   - Vector embeddings → `vectorstore/[module_name]/embeddings/`
 
 3. **Use consistent naming conventions**:
    - Use lowercase for directories and filenames
@@ -132,9 +132,3 @@ These commands automatically handle the authentication and execute the AWS S3 sy
 4. **Regularly synchronize** with remote storage to ensure data persistence and backup.
 
 5. **Clean up temporary files** to prevent storage bloat and keep the system organized.
-
-## Related Documentation
-
-- [Remote Storage](./remote.md)
-- [Triple Store Architecture](../architecture/triple_store.md)
-- [Vector Embeddings](../machine_learning/embeddings.md)

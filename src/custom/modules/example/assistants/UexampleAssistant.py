@@ -7,7 +7,7 @@ DESCRIPTION = "A brief description of what your assistant does."
 MODEL = "o3-mini"  # Or another appropriate model
 TEMPERATURE = 1
 AVATAR_URL = "https://example.com/avatar.png"
-SYSTEM_PROMPT = """You are the Uexample Assistant. Your role is to help users with tasks related to example.
+SYSTEM_PROMPT = """You are the Uexample Assistant. Your role is to help users with tasks related to uexample.
 
 You can perform the following tasks:
 - Task 1
@@ -22,7 +22,7 @@ def create_agent(shared_state: AgentSharedState = None) -> Agent:
     llm = ChatOpenAI(
         model=MODEL,
         temperature=TEMPERATURE,
-        api_key=secret.get_openai_api_key()
+        api_key=secret.get('OPENAI_API_KEY')
     )
     
     # Configure the agent
@@ -48,5 +48,5 @@ def create_agent(shared_state: AgentSharedState = None) -> Agent:
 # For testing purposes
 if __name__ == "__main__":
     agent = create_agent()
-    agent.run("Hello, I need help with example")
+    agent.run("Hello, I need help with uexample")
 
