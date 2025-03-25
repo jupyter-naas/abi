@@ -1,0 +1,171 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/AccountingOntology> rdf:type owl:Ontology ;
+    owl:imports <http://www.w3.org/2004/02/skos/core> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AccountingOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for accounting and financial transactions."@en ;
+    dc:title "Accounting Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:GeneralLedgerEntry a owl:Class ;
+    rdfs:label "General Ledger Entry"@en ;
+    skos:definition "An accounting entry in the general ledger" .
+
+abi:Account a owl:Class ;
+    rdfs:label "Account"@en ;
+    skos:definition "An accounting account in the chart of accounts." .
+
+abi:Invoice a owl:Class ;
+    rdfs:label "Invoice"@en ;
+    skos:definition "An invoice is a financial document that records a transaction between a buyer and a seller" .
+
+abi:Revenue a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Revenue"@en ;
+    skos:definition "Represents the income generated from normal business operations and includes discounts and deductions for returned merchandise." .
+
+abi:Expenses a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Expenses"@en ;
+    skos:definition "Represents the costs incurred in the process of earning revenue, which could include costs such as salaries, rent, and utilities." .
+
+abi:Profit a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Profit"@en ;
+    skos:definition "Represents the financial gain, calculated as the difference between revenue and expenses." .
+
+abi:EBITDA a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "EBITDA"@en ;
+    skos:definition "Represents earnings before interest, taxes, depreciation, and amortization, providing a view of operating profitability." .
+
+abi:Interest a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Interest"@en ;
+    skos:definition "Represents the cost of borrowing money or the income earned from lending money, including interest expenses on loans and debt instruments." .
+
+abi:Taxes a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Taxes"@en ;
+    skos:definition "Represents mandatory financial charges and levies imposed by governmental authorities, including income taxes, property taxes, and other tax obligations." .
+
+abi:Depreciation a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Depreciation"@en ;
+    skos:definition "Represents the systematic allocation of the cost of tangible assets over their useful life, reflecting the decrease in value of physical assets over time." .
+
+abi:Amortization a owl:Class ;
+    rdfs:subClassOf cco:ont00001163 ;
+    rdfs:label "Amortization"@en ;
+    skos:definition "Represents the systematic allocation of the cost of intangible assets over their useful life, including items such as patents, trademarks, and goodwill." .
+
+abi:Transaction a owl:Class ;
+    rdfs:label "Transaction"@en ;
+    skos:definition "A financial transaction that can have one or more journal entries." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasRevenue a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001773 ;
+    rdfs:label "has revenue"@en ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Revenue .
+
+abi:isRevenueOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Revenue ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasRevenue ;
+    rdfs:label "is revenue of"@en ;
+    skos:definition "Relates a Revenue to the Organization that it belongs to." .
+
+abi:hasExpenses a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001773 ;
+    rdfs:label "has expenses"@en ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Expenses .
+
+abi:isExpensesOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Expenses ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasExpenses ;
+    rdfs:label "is expenses of"@en ;
+    skos:definition "Relates an Expenses to the Organization that it belongs to." .
+
+abi:hasProfit a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001773 ;
+    rdfs:label "has profit"@en ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Profit .
+
+abi:isProfitOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:Profit ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasProfit ;
+    rdfs:label "is profit of"@en ;
+    skos:definition "Relates a Profit to the Organization that it belongs to." .
+
+abi:hasEBITDA a owl:ObjectProperty ;
+    rdfs:subPropertyOf cco:ont00001773 ;
+    rdfs:label "has ebitda"@en ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:EBITDA .
+
+abi:isEBITDAOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    rdfs:domain abi:EBITDA ;
+    rdfs:range cco:ont00001180 ;
+    owl:inverseOf abi:hasEBITDA ;
+    rdfs:label "is ebitda of"@en ;
+    skos:definition "Relates an EBITDA to the Organization that it belongs to." .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:credit_amount a owl:DatatypeProperty ;
+    rdfs:label "credit amount"@en ;
+    rdfs:domain cco:ont00001163 ;
+    rdfs:range xsd:decimal .
+
+abi:debit_amount a owl:DatatypeProperty ;
+    rdfs:label "debit amount"@en ;
+    rdfs:domain cco:ont00001163 ;
+    rdfs:range xsd:decimal .
+
+abi:amount a owl:DatatypeProperty ;
+    rdfs:label "amount"@en ;
+    rdfs:domain cco:ont00001163 ;
+    rdfs:range xsd:decimal .
+
+abi:amount_before_tax a owl:DatatypeProperty ;
+    rdfs:label "amount before tax"@en ;
+    rdfs:domain cco:ont00001163 ;
+    rdfs:range xsd:decimal .
+
+abi:tax_amount a owl:DatatypeProperty ;
+    rdfs:label "tax amount"@en ;
+    rdfs:domain cco:ont00001163 ;
+    rdfs:range xsd:decimal .
+
+abi:tax_rate a owl:DatatypeProperty ;
+    rdfs:label "tax rate"@en ;
+    rdfs:domain cco:ont00001163 ;
+    rdfs:range xsd:decimal .

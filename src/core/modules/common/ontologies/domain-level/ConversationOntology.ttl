@@ -1,0 +1,72 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/ConversationOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ConversationOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for conversations and communications."@en ;
+    dc:license "" ;
+    dc:title "Conversation Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Conversation a owl:Class ;
+    rdfs:label "Conversation"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    skos:definition "A recorded communication interaction between participants" .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasParticipants a owl:ObjectProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range abi:Person .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:hasScenario a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasSource a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasCreatedDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:dateTime .
+
+abi:hasID a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasLength a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:decimal .
+
+abi:hasLengthUnit a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:string .
+
+abi:hasURL a owl:DatatypeProperty ;
+    rdfs:domain abi:Conversation ;
+    rdfs:range xsd:anyURI .
+ 
