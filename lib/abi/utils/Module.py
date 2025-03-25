@@ -38,9 +38,12 @@ class IModule(ABC):
     
     
     def __load_agents(self):
-        for file in os.listdir(os.path.join(self.module_path, 'assistants')):
-            if file.endswith('.py'):
-                assistant_path = self.module_import_path + '.assistants.' + file[:-3]
+        # Load agents
+        agents_path = os.path.join(self.module_path, 'agents')
+        if os.path.exists(agents_path):
+            for file in os.listdir(agents_path):
+                if file.endswith('.py'):
+                    assistant_path = self.module_import_path + '.agents.' + file[:-3]
                 module = importlib.import_module(assistant_path)
                 if hasattr(module, 'create_agent'):
                     self.agents.append(module.create_agent())
