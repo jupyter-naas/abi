@@ -2,7 +2,8 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 from src import secret
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.ontology.agents.OntologyAgent import create_agent as create_ontology_agent
+from src.core.modules.support.agents.SupportAgent import create_agent as create_support_agent
 
 NAME = "Supervisor Agent"
 MODEL = "o3-mini"
@@ -22,12 +23,24 @@ General Rules:
 
 SUGGESTIONS = [
     {
+        "label": "Learn About Ontology",
+        "value": "What's the ontology about?"
+    },
+    {
+        "label": "Ontology Object Explorer",
+        "value": "What is a {{Github Issue}} in the ontology?"
+    },
+    {
+        "label": "Add Data To Ontology",
+        "value": "Add the following data in ontology: {{Data}}"
+    },
+    {
         "label": "Feature Request",
-        "value": "As a user, I would like to: [Feature Request]"
+        "value": "As a user, I would like to: {{Feature Request}}"
     },
     {
         "label": "Report Bug",
-        "value": "Report a bug on: [Bug Description]"
+        "value": "Report a bug on: {{Bug Description}}"
     }
 ]
 
@@ -52,17 +65,22 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=1)
 
-    # Add agents
-    agents = [
-        create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
-    ]
+    # Add ontology agent
+    ontology_agent = create_ontology_agent(AgentSharedState(thread_id=1), agent_configuration)
+    agents.append(ontology_agent)
+
+    # Add support agent
+    github_api_token = secret.get('GITHUB_ACCESS_TOKEN')
+    if github_api_token is not None:
+        support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+        agents.append(support_agent)
 
     return SupervisorAgent(
         name="supervisor_agent",
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
-        agents=agents, # Agents will be loaded as tools.
+        agents=agents,
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=MemorySaver()
