@@ -1,12 +1,5 @@
-
-DEPENDENCIES = src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl
-
-src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-*.whl:
-	@ make -C src/core/modules/common/integrations/siteanalyzer release
-
-.venv: $(DEPENDENCIES)
+.venv:
 	@ docker compose run --rm --remove-orphans abi poetry install
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pip install --force-reinstall /app/src/core/modules/common/integrations/siteanalyzer/target/wheels/*.whl'
 
 dev-build:
 	@ docker compose build
@@ -78,30 +71,6 @@ chat-supervisor-agent: .venv
 chat-support-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAssistant'
 
-chat-opendata-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OpenDataAssistant'
-
-chat-osint-investigator-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OSINTInvestigatorAssistant'
-
-chat-content-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent ContentAssistant'
-
-chat-growth-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent GrowthAssistant'
-
-chat-sales-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SalesAssistant'
-
-chat-operations-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OperationsAssistant'
-
-chat-finance-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent FinanceAssistant'
-
-chat-powerpoint-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent PowerPointAssistant'
-
 .DEFAULT_GOAL := chat-supervisor-agent
 
-.PHONY: test chat-supervisor-agent chat-support-agent chat-content-agent chat-finance-agent chat-growth-agent chat-opendata-agent chat-operations-agent chat-sales-agent api sh lock add abi-add
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add
