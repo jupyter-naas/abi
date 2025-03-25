@@ -1,36 +1,23 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
-from src import secret
-from abi import logger
 from fastapi import APIRouter
-from src.core.modules.opendata.assistants.OpenDataAssistant import create_agent as create_open_data_agent
-from src.core.modules.content.assistants.ContentAssistant import create_agent as create_content_agent
-from src.core.modules.growth.assistants.GrowthAssistant import create_agent as create_growth_agent
-from src.core.modules.sales.assistants.SalesAssistant import create_agent as create_sales_agent
-from src.core.modules.operations.assistants.OperationsAssistant import create_agent as create_operations_agent
-from src.core.modules.finance.assistants.FinanceAssistant import create_agent as create_finance_agent 
+from langchain_openai import ChatOpenAI
+from src import secret
 from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
-from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
-NAME = "Supervisor Assistant"
+NAME = "Supervisor Agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-DESCRIPTION = "Coordinates and manages specialized domain agents. It provides seamless access to various business functions including open data, content, growth, sales, operations, finance, and support services."
-SYSTEM_PROMPT = f"""You are ABI, an advanced orchestrator assistant designed to coordinate multiple specialized agents.
-Your primary role is to understand user requests and direct them to the most appropriate specialized agent.
-While you can't offer professional advice or make specific recommendations, you excel at coordinating agents to help users.
+DESCRIPTION = "Coordinates and manages specialized agents."
+SYSTEM_PROMPT = f"""You are ABI, an advanced orchestrator agent designed to coordinate multiple specialized agents.
 
-When users inquire about your capabilities, provide a clear, structured overview of all available agents
-and their tools, organized by domain and function.
-
-RESPONSIBILITIES
-----------------
-{RESPONSIBILITIES_PROMPT}
-
-AGENTS
-------
-[AGENTS]
+General Rules:
+- You MUST always include the tool used at the beginning of the report in human readable format without changing the tool name as follow: '> {{Agent Name}} - {{Tool Name}}' + 2 blank lines (e.g. '> Presentation Agent - Generate PowerPoint Presentation\n\n' for tool: presentation_agent-generate_powerpoint_presentation)
+- If you can't delegate the task, you can create a feature request using the 'support_agent_create_feature_request' tool. You MUST validate the need of the user request before creating a feature request. Return the issue html URL in the response.
+- If an error occurs, you MUST use the 'support_agent_create_bug_report' tool to create a bug report. Return the issue html URL in the response.
+- Return URL links as follow: [Link](https://www.google.com)
+- Return Images as follow: ![Image](https://www.google.com/image.png)
+- You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french.
 """
 
 SUGGESTIONS = [
@@ -51,7 +38,6 @@ def create_agent(
     # Init
     tools = []
     agents = []
-    system_prompt = SYSTEM_PROMPT # Create a local copy of the system prompt
 
     # Set model
     model = ChatOpenAI(
@@ -62,48 +48,16 @@ def create_agent(
 
     # Set configuration
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration()
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=1)
 
     # Add agents
     agents = [
-        create_open_data_agent(AgentSharedState(thread_id=2), agent_configuration),
-        create_content_agent(AgentSharedState(thread_id=3), agent_configuration),
-        create_growth_agent(AgentSharedState(thread_id=4), agent_configuration),
-        create_sales_agent(AgentSharedState(thread_id=5), agent_configuration),
-        create_operations_agent(AgentSharedState(thread_id=6), agent_configuration),
-        create_finance_agent(AgentSharedState(thread_id=7), agent_configuration),
-        create_support_agent(AgentSharedState(thread_id=8), agent_configuration)
+        create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
     ]
 
-    # Get tools info from each assistant
-    agents_info = []
-    for agent in agents: 
-        agent_info = {
-            "name": agent.name,
-            "description": agent.description,
-            "tools": [
-                {"name": t.name, "description": t.description}
-                for t in agent.tools  # Access the private tools attribute
-                if t.name != "support_agent" and t.name != "get_current_datetime"
-            ]
-        }
-        agents_info.append(agent_info)
-
-    # Transform assistants_info into formatted string
-    agents_info_str = ""
-    for agent in agents_info:
-        agents_info_str += f"-{agent['name']}: {agent['description']}\n"
-        for tool in agent['tools']:
-            agents_info_str += f"   • {tool['name']}: {tool['description']}\n"
-        agents_info_str += "\n"
-
-    # Replace the [AGENTS] placeholder in the system prompt with the agents_info
-    system_prompt = system_prompt.replace("[AGENTS]", agents_info_str)
-    agent_configuration.system_prompt = system_prompt
-
-    return SupervisorAssistant(
+    return SupervisorAgent(
         name="supervisor_agent",
         description=DESCRIPTION,
         chat_model=model,
@@ -114,14 +68,14 @@ def create_agent(
         memory=MemorySaver()
     )
 
-class SupervisorAssistant(Agent):
+class SupervisorAgent(Agent):
     def as_api(
         self, 
         router: APIRouter, 
         route_name: str = "supervisor", 
         name: str = NAME, 
-        description: str = "API endpoints to call the Supervisor assistant completion.", 
-        description_stream: str = "API endpoints to call the Supervisor assistant stream completion.",
+        description: str = "API endpoints to call the Supervisor agent completion.", 
+        description_stream: str = "API endpoints to call the Supervisor agent stream completion.",
         tags: list[str] = []
     ):
         return super().as_api(router, route_name, name, description, description_stream, tags)
