@@ -70,10 +70,13 @@ build.linux.x86_64: .venv
 # -------------------------------------------------------------------------------------------------
 
 chat-supervisor-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAssistant'
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent'
+
+chat-ontology-agent: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent'
 
 chat-support-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAssistant'
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent'
 
 .DEFAULT_GOAL := chat-supervisor-agent
 
