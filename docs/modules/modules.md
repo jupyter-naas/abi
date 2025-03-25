@@ -292,3 +292,7 @@ If your module is not being loaded correctly, check the following:
 5. Check for import errors or exceptions during the loading process
 
 By following this guide, you should be able to create and integrate new modules into the ABI system effectively.
+
+## Additional Resources
+
+For a detailed, step-by-step guide on how to create a new module from scratch, see the [Creating Modules](./creating-modules.md) documentation.

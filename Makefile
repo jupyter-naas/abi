@@ -18,8 +18,12 @@ lock:
 	@ docker compose run --rm --remove-orphans abi poetry lock
 
 path=tests/
-test:
-	@ docker compose run --rm --remove-orphans abi poetry run pytest $(path)
+test: unit-tests integration-tests
+	@echo "All tests completed successfully!"
+
+# Add a separate target for tests with linting
+test-with-lint: lint unit-tests integration-tests
+	@echo "All tests and linting completed successfully!"
 
 sh: .venv
 	@ docker compose run --rm --remove-orphans -it abi bash
@@ -38,13 +42,13 @@ storage-push: .venv
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
 clean:
+	@echo "Cleaning up build artifacts..."
+	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
+	find . -name "*.pyc" -delete
+	find . -name "__pycache__" -delete
 	docker compose down
 	docker compose rm -f
 	rm -rf src/core/modules/common/integrations/siteanalyzer/target
-	rm -rf .venv
-	rm -rf dist
-	rm -rf lib/.venv
-	docker compose build --no-cache
 
 # Docker Build Commands
 # -------------------
