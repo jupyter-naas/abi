@@ -1,0 +1,126 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/ContractOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/ContractOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for contracts and agreements."@en ;
+    dc:license "" ;
+    dc:title "Contract Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Contract a owl:Class ;
+    rdfs:label "Contract"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
+    skos:definition "A formal agreement defining terms, conditions, and financial obligations" .
+
+abi:ContractStatus a owl:Class ;
+    rdfs:label "Contract Status"@en .
+
+abi:ContractUnit a owl:Class ;
+    rdfs:label "Contract Unit"@en .
+
+abi:ContractType a owl:Class ;
+    rdfs:label "Contract Type"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasStatus a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractStatus .
+
+abi:hasUnit a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractUnit .
+
+abi:hasContractType a owl:ObjectProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range abi:ContractType .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:hasScenario a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasSource a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasTerms a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasDomain a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasPLCategory a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+abi:hasStartDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:date .
+
+abi:hasEndDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:date .
+
+abi:hasUnitPrice a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:decimal .
+
+abi:hasQuantity a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:integer .
+
+abi:hasAmount a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:decimal .
+
+abi:hasCurrency a owl:DatatypeProperty ;
+    rdfs:domain abi:Contract ;
+    rdfs:range xsd:string .
+
+#################################################################
+#    Individuals
+#################################################################
+
+abi:Live a abi:ContractStatus .
+abi:Paused a abi:ContractStatus .
+abi:Completed a abi:ContractStatus .
+abi:Cancelled a abi:ContractStatus .
+
+abi:HourlyRate a abi:ContractUnit .
+abi:Annual a abi:ContractUnit .
+abi:MonthlyRate a abi:ContractUnit .
+abi:Fixed a abi:ContractUnit .
+
+abi:ServiceAgreement a abi:ContractType .
+abi:SubscriptionAgreement a abi:ContractType .
+abi:EnterpriseAgreement a abi:ContractType .

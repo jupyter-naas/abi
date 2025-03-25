@@ -1,0 +1,104 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/TaskOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/TaskOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for tasks."@en ;
+    dc:title "Task Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:TaskCompletion a owl:Class ;
+    rdfs:label "Task Completion"@en ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    skos:definition "A defined unit of work with timeline, ownership and metrics" ;
+    skos:example "Completing a report, cleaning a room, or conducting a meeting." .
+
+abi:Task rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Task"@en ;
+    rdfs:comment "A defined unit of work that needs to be accomplished within a certain period of time."@en ;
+    skos:definition "A Task is a planned activity with a specific objective, timeline, and measurable outcome."@en ;
+    skos:example "Writing documentation, fixing a bug, or implementing a new feature."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasAssignee a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain bfo:TaskCompletion ;
+    rdfs:range abi:User ;
+    rdfs:label "has assignee" ;
+    rdfs:comment "This property relates a task to an individual who is assigned to perform the task." ;
+    owl:inverseOf abi:assignedIn .
+
+abi:assignedIn a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ;
+    rdfs:domain abi:User ;
+    rdfs:range bfo:TaskCompletion ;
+    rdfs:label "assigned in" ;
+    rdfs:comment "This property relates an individual to a task they are assigned to perform." .
+
+abi:hasCreator a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000057 ;
+    rdfs:domain bfo:TaskCompletion ;
+    rdfs:range abi:User ;
+    rdfs:label "has creator" ;
+    rdfs:comment "This property relates a task to the individual who created it." ;
+    owl:inverseOf abi:created .
+
+abi:created a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000056 ;
+    rdfs:domain abi:User ;
+    rdfs:range bfo:TaskCompletion ;
+    rdfs:label "created" ;
+    rdfs:comment "This property relates an individual to tasks they have created." .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:description a owl:DatatypeProperty ;
+    rdfs:label "description" ;
+    rdfs:range xsd:string .
+
+abi:url a owl:DatatypeProperty ;
+    rdfs:label "HTML URL to access the entity" ;
+    rdfs:range xsd:string .
+
+abi:status a owl:DatatypeProperty ;
+    rdfs:label "status" ;
+    rdfs:range xsd:string .
+
+abi:priority a owl:DatatypeProperty ;
+    rdfs:label "priority" ;
+    rdfs:range xsd:string .
+
+abi:tags a owl:DatatypeProperty ;
+    rdfs:label "tags" ;
+    rdfs:range xsd:string .
+
+abi:estimate a owl:DatatypeProperty ;
+    rdfs:label "estimate" ;
+    rdfs:range xsd:integer .
+
+abi:state a owl:DatatypeProperty ;
+    rdfs:label "state" ;
+    rdfs:range xsd:string .
+
+abi:due_date a owl:DatatypeProperty ;
+    rdfs:label "due date" ;
+    rdfs:range xsd:date .

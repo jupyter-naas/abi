@@ -1,0 +1,60 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/GrowthOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/GrowthOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for growth metrics and cohort analysis."@en ;
+    dc:license "" ;
+    dc:title "Growth Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Growth a owl:Class ;
+    rdfs:label "Growth"@en ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    skos:definition "A measurement of user engagement and interaction growth over time"@en .
+
+abi:Cohort a owl:Class ;
+    rdfs:label "Cohort"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
+    skos:definition "A group of users classified by their joining period"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasProfile a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Person .
+
+abi:hasCohort a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Cohort .
+
+abi:hasLastInteraction a owl:ObjectProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range abi:Interaction .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:hasInteractionScore a owl:DatatypeProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range xsd:integer .
+
+abi:hasLastInteractionDate a owl:DatatypeProperty ;
+    rdfs:domain abi:Growth ;
+    rdfs:range xsd:dateTime . 
