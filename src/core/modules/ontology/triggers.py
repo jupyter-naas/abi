@@ -48,7 +48,7 @@ def push_ontology_to_naas_workspace():
     workflow = CreateClassOntologyYAML(create_class_ontology_yaml_config)
 
     # Subscribe to the trigger
-    return ((None, None, URIRef("http://www.w3.org/2002/07/owl#NamedIndividual")), OntologyEvent.INSERT, workflow.trigger)
+    return ((None, None, None), OntologyEvent.INSERT, workflow.trigger)
 
 triggers = [
     push_ontology_to_naas_workspace(),

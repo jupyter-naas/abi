@@ -59,7 +59,7 @@ class CreateClassOntologyYAML(Workflow):
     def trigger(self, event: OntologyEvent, ontology_name:str, triple: tuple[Any, Any, Any]) -> Graph:
         s, p, o = triple
         logger.info(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}, 'ontology_name': {ontology_name}")
-        if str(event) == str(OntologyEvent.INSERT):
+        if str(event) == str(OntologyEvent.INSERT) and (str(o) == "http://www.w3.org/2002/07/owl#NamedIndividual" or str(p) == "http://ontology.naas.ai/abi/isSkillOf" or str(p) == "http://ontology.naas.ai/abi/hasSkill"):
             label = " ".join(ontology_name.split("_")[:-1]).capitalize()
             description = f"Ontology for {label}"
             return self.graph_to_yaml(CreateClassOntologyYAMLParameters(
