@@ -20,8 +20,8 @@ class AddSkilltoPersonPipelineConfiguration(PipelineConfiguration):
     ontology_store: IOntologyStoreService
 
 class AddSkilltoPersonPipelineParameters(PipelineParameters):
-    person_name: str = Field(..., description="Person name")
-    skill_name: str = Field(..., description="Skill name")
+    person_uri: str = Field(..., description="Person URI. It must be start with 'http://ontology.naas.ai/abi/'.")
+    skill_uri: str = Field(..., description="Skill URI. It must be start with 'http://ontology.naas.ai/abi/'.")
 
 class AddSkilltoPersonPipeline(Pipeline):
     """Pipeline for adding a skill to a person."""
@@ -33,13 +33,11 @@ class AddSkilltoPersonPipeline(Pipeline):
 
     def run(self, parameters: AddSkilltoPersonPipelineParameters) -> Graph:
         # Init URI
-        person_id = quote(parameters.person_name.lower(), safe=":/#")
-        person_uri = ABI[person_id]
-        skill_id = quote(parameters.skill_name.lower(), safe=":/#")
-        skill_uri = ABI[skill_id]
+        person_uri = URIRef(parameters.person_uri)
+        skill_uri = URIRef(parameters.skill_uri)
         
         # Init person graph
-        person_graph_name = "ont00001262_person"
+        person_graph_name = "person_ont00001262"
         person_graph = ABIGraph()
         try:
             person_graph = self.__configuration.ontology_store.get(person_graph_name)
@@ -53,7 +51,7 @@ class AddSkilltoPersonPipeline(Pipeline):
         self.__configuration.ontology_store.store(person_graph_name, person_graph)
 
         # Init skill graph
-        skill_graph_name = "ont00000089_skill"
+        skill_graph_name = "skill_ont00000089"
         skill_graph = ABIGraph()
         try:
             skill_graph = self.__configuration.ontology_store.get(skill_graph_name)
@@ -70,8 +68,8 @@ class AddSkilltoPersonPipeline(Pipeline):
         return [
             StructuredTool(
                 name="ontology_add_skill_to_person",
-                description="Adds a skill to a person",
-                func=lambda person_name, skill_name: self.run(AddSkilltoPersonPipelineParameters(person_name=person_name, skill_name=skill_name)),
+                description="Adds a skill to a person. Search for the person URI (class: https://www.commoncoreontologies.org/ont00001262) and skill URI (class: https://www.commoncoreontologies.org/ont00000089) using the `ontology_search_individual` tool before calling this tool.",
+                func=lambda person_uri, skill_uri: self.run(AddSkilltoPersonPipelineParameters(person_uri=person_uri, skill_uri=skill_uri)),
                 args_schema=AddSkilltoPersonPipelineParameters
             )   
         ]
