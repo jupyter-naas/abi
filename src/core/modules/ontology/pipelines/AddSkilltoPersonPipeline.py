@@ -33,8 +33,8 @@ class AddSkilltoPersonPipeline(Pipeline):
 
     def run(self, parameters: AddSkilltoPersonPipelineParameters) -> Graph:
         # Init URI
-        person_uri = URIRef(parameters.person_uri)
-        skill_uri = URIRef(parameters.skill_uri)
+        person_uri = URIRef(str(parameters.person_uri))
+        skill_uri = URIRef(str(parameters.skill_uri))
         
         # Init person graph
         person_graph_name = "person_ont00001262"
@@ -44,11 +44,8 @@ class AddSkilltoPersonPipeline(Pipeline):
         except Exception as e:
             logger.info(f"Error getting person graph: {e}")
 
-        person_graph.add((person_uri, RDF.type, OWL.NamedIndividual))
-        person_graph.add((person_uri, RDF.type, CCO.ont00001262))
-        person_graph.add((person_uri, RDFS.label, Literal(parameters.person_name)))
         person_graph.add((person_uri, ABI.hasSkill, skill_uri))
-        self.__configuration.ontology_store.store(person_graph_name, person_graph)
+        self.__configuration.ontology_store.insert(person_graph_name, person_graph)
 
         # Init skill graph
         skill_graph_name = "skill_ont00000089"
@@ -58,11 +55,8 @@ class AddSkilltoPersonPipeline(Pipeline):
         except Exception as e:
             logger.info(f"Error getting skill graph: {e}")
 
-        skill_graph.add((skill_uri, RDF.type, OWL.NamedIndividual))
-        skill_graph.add((skill_uri, RDF.type, CCO.ont00000089)) 
-        skill_graph.add((skill_uri, RDFS.label, Literal(parameters.skill_name)))
         skill_graph.add((skill_uri, ABI.isSkillOf, person_uri))
-        self.__configuration.ontology_store.store(skill_graph_name, skill_graph)
+        self.__configuration.ontology_store.insert(skill_graph_name, skill_graph)
     
     def as_tools(self) -> list[StructuredTool]:
         return [
