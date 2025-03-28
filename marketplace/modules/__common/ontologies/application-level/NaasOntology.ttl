@@ -1,0 +1,211 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+
+<http://ontology.naas.ai/abi/naas.ttl> a owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/naas.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for Naas."@en ;
+                                    dc:license "" ;
+                                    dc:title "Naas Application Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:NaasSite a owl:Class ;
+    rdfs:subClassOf abi:SitePlatform ;
+    rdfs:label "Naas Site"@en ;
+    skos:definition "A Naas platform instance where users can create, manage, and automate data workflows and notebooks."@en ;
+    skos:example "A data team's Naas workspace where they create and schedule automated data pipelines."@en .
+
+abi:NaasUser a owl:Class ;
+    rdfs:subClassOf abi:User ;
+    rdfs:label "Naas User"@en ;
+    skos:definition "An individual who uses Naas's platform to create and manage data workflows and automated processes."@en ;
+    skos:example "A data analyst creating automated reports using Naas notebooks."@en .
+
+abi:NaasWorkspace a owl:Class ;
+    rdfs:subClassOf abi:DigitalWorkspace ;
+    rdfs:label "Naas Workspace"@en ;
+    skos:definition "A workspace that encompasses various components such as chats, workflows, data, analytics, assistants, ontologies."@en ;
+    skos:example "My organization's workspace integrating multiple assistants and ontologies."@en .
+
+abi:NaasWorkspaceObject a owl:Class ;
+    rdfs:subClassOf abi:DigitalWorkspaceObject ;
+    rdfs:label "Naas Workspace Object"@en ;
+    skos:definition "An entity that can be a component of a Naas workspace, including assistants, ontologies, chats, workflows, analytics, data, and integrations."@en ;
+    skos:example "A software module for data analytics or an AI assistant for service management in a Naas workspace."@en .
+
+abi:Ontology a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Ontology"@en ;
+    skos:definition "A structured framework used by an assistant to understand and organize information."@en ;
+    skos:example "Basic Format Ontology, Common Core Ontology, etc."@en .
+
+abi:Assistant a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Assistant"@en ;
+    skos:definition "An entity that provides expertise or services in a specific domain."@en ;
+    skos:example "A content assistant that can generate content based on a specific ontology."@en .
+
+abi:Chat a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Chat"@en ;
+    skos:definition "A communication interface for real-time text-based conversation within a Naas workspace."@en ;
+    skos:example "A customer support chat interface."@en .
+
+abi:Workflow a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Workflow"@en ;
+    skos:definition "A series of automated steps or processes designed to achieve a specific goal within a Naas workspace."@en ;
+    skos:example "An automated onboarding workflow for new users."@en .
+
+abi:Analytics a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Analytics"@en ;
+    skos:definition "Tools or processes used to analyze data and extract insights within a Naas workspace."@en ;
+    skos:example "A dashboard for monitoring network performance metrics, graph analysis, etc."@en .
+
+abi:Pipeline a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Pipeline"@en ;
+    skos:definition "A series of automated steps or processes designed to transform data to ontology."@en ;
+    skos:example "A pipeline that transforms Github issues to ontology as Task."@en .
+
+abi:Integration a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "Integration"@en ;
+    skos:definition "A function that allows a Naas workspace to interact with an external system or service using its API."@en ;
+    skos:example "Get issues from Github."@en .
+
+abi:AIModel a owl:Class ;
+    rdfs:subClassOf abi:NaasWorkspaceObject ;
+    rdfs:label "AI Model"@en ;
+    skos:definition "An artificial intelligence model that is used to perform specific tasks within a Naas workspace."@en ;
+    skos:example "Anthropic Claude, OpenAI GPT-4, etc."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:attachedToDomain a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:BusinessDomain ;
+    rdfs:label "attached to domain"@en ;
+    skos:definition "A relation between an assistant and its domain of expertise."@en .
+
+abi:usesOntology a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Ontology ;
+    rdfs:label "uses ontology"@en ;
+    skos:definition "A relation between an assistant and the ontology it uses."@en .
+
+abi:partOfWorkspace a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range abi:NaasWorkspace ;
+    rdfs:label "part of workspace"@en ;
+    skos:definition "A relation indicating that an assistant or ontology is part of a workspace."@en .
+
+abi:utilizesAIModel a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:AIModel ;
+    rdfs:label "utilizes AI model"@en ;
+    skos:definition "A relation between an assistant and the AI model it utilizes for performing tasks."@en .
+
+abi:executesWorkflow a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Workflow ;
+    rdfs:label "executes workflow"@en ;
+    skos:definition "A relation between an assistant and a workflow it executes."@en .
+
+abi:processesPipeline a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Pipeline ;
+    rdfs:label "processes pipeline"@en ;
+    skos:definition "A relation between an assistant and the pipeline it processes."@en .
+
+abi:utilizesAnalytics a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Analytics ;
+    rdfs:label "utilizes analytics"@en ;
+    skos:definition "A relation between an assistant and the analytics it utilizes for decision making."@en .
+
+abi:integratesWith a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range abi:Integration ;
+    rdfs:label "integrates with"@en ;
+    skos:definition "A relation between a naas workspace object and the integration systems."@en ;
+    skos:example "The Opendata assistant integrates with Perplexity Integration."@en .
+
+abi:communicatesWithAssistant a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115 ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range abi:Assistant ;
+    rdfs:label "communicates with assistant"@en ;
+    skos:definition "A relation between an assistant and the assistant it communicates with."@en .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:slug a owl:DatatypeProperty ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range xsd:string ;
+    rdfs:label "slug"@en ;
+    skos:definition "A slug is a short label for a naas workspace object."@en .
+
+abi:avatar a owl:DatatypeProperty ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range xsd:string ;
+    rdfs:label "avatar"@en ;
+    skos:definition "An avatar is an image for a naas workspace object."@en .
+
+abi:prompt a owl:DatatypeProperty ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range xsd:string ;
+    rdfs:label "prompt"@en ;
+    skos:definition "A prompt is a text for an assistant."@en .
+
+abi:prompt_type a owl:DatatypeProperty ;
+    rdfs:domain abi:Assistant ;
+    rdfs:range xsd:string ;
+    rdfs:label "prompt type"@en ;
+    skos:definition "A prompt type is a type of prompt for an assistant. It can be a system prompt or a user prompt."@en .
+
+abi:ontology_group a owl:DatatypeProperty ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range xsd:string ;
+    rdfs:label "ontology group"@en ;
+    skos:definition "Group to be displayed in the ontology network."@en .
+
+abi:x a owl:DatatypeProperty ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range xsd:integer ;
+    rdfs:label "x"@en ;
+    skos:definition "X coordinate to be displayed in the ontology network."@en .
+
+abi:y a owl:DatatypeProperty ;
+    rdfs:domain abi:NaasWorkspaceObject ;
+    rdfs:range xsd:integer ;
+    rdfs:label "y"@en ;
+    skos:definition "Y coordinate to be displayed in the ontology network."@en .

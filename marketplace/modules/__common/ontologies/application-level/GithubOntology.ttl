@@ -1,0 +1,70 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/Github> rdf:type owl:Ontology ;
+    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> , <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/platform.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/github.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Application ontology for GitHub."@en ;
+    dc:license "" ;
+    dc:title "GitHub Application Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:GitHubIssue rdf:type owl:Class ;
+    rdfs:subClassOf abi:Task ;
+    rdfs:label "GitHub Issue"@en ;
+    rdfs:comment "A Directive Information Content Entity on the GitHub platform that describes a task, enhancement, or bug report and the steps to address it."@en ;
+    skos:definition "A GitHub Issue is a task, enhancement, or bug report on the GitHub platform."@en ;
+    skos:example "An issue created to track a bug in a software project."@en .
+
+abi:GitHubPullRequest rdf:type owl:Class ;
+    rdfs:subClassOf abi:Task ;
+    rdfs:label "GitHub Pull Request"@en ;
+    rdfs:comment "A Directive Information Content Entity on the GitHub platform that proposes changes to a repository's codebase and facilitates code review."@en ;
+    skos:definition "A GitHub Pull Request is a task that proposes changes to a repository and enables collaborative code review."@en ;
+    skos:example "A pull request that adds a new feature to a software project."@en .
+
+abi:GitHubRepository rdf:type owl:Class ;
+    rdfs:subClassOf abi:Platform ;
+    rdfs:label "GitHub Repository"@en ;
+    skos:definition "A GitHub Repository is a site on the GitHub platform where code, documentation, issues, and collaborative work are managed."@en ;
+    skos:example "The 'jupyter-naas/awesome-notebooks' repository on GitHub."@en .
+
+abi:GitHubUser a owl:Class ;
+    rdfs:subClassOf abi:User ; # Agent: has creator / has assignee
+    rdfs:label "GitHub User"@en ;
+    skos:definition "An individual who interacts with GitHub repositories, such as creating, modifying, or managing them."@en ;
+    skos:example "A developer with access to a GitHub repository."@en .
+
+abi:GitHubProject rdf:type owl:Class ;
+    rdfs:subClassOf abi:Project ;
+    rdfs:label "GitHub Project"@en ;
+    rdfs:comment "A project management tool on the GitHub platform used to organize and track work."@en ;
+    skos:definition "A GitHub Project is a customizable spreadsheet integrated with GitHub issues and pull requests that helps track and organize work."@en ;
+    skos:example "A GitHub Project board used to track development tasks across multiple repositories."@en .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:public_repos a owl:DatatypeProperty ;
+    rdfs:label "public repos" ;
+    rdfs:range xsd:integer .
+
+abi:public_gists a owl:DatatypeProperty ;
+    rdfs:label "public gists" ;
+    rdfs:range xsd:integer .
+
+#################################################################
+#    Object Properties
+#################################################################
+

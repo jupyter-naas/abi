@@ -1,0 +1,132 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Platform Ontology
+<http://ontology.naas.ai/abi/PlatformOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/Agent>, <https://www.commoncoreontologies.org/EventOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/PlatformOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for the platform."@en ;
+    dc:license "" ;
+    dc:title "Platform Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Platform rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00000509 ; # Service Provider
+    rdfs:label "Platform"@en ;
+    skos:definition "A platform that provides online services and hosts content through a website interface."@en ;
+    skos:example "Platforms like GitHub, GitLab, or Bitbucket that host repositories and provide collaboration services."@en .
+
+abi:User a owl:Class ;
+    rdfs:subClassOf cco:ont00001017 ; # Agent: has creator / has assignee
+    rdfs:label "User"@en ;
+    skos:definition "An individual who interacts with a system or platform, such as creating, modifying, or managing content."@en ;
+    skos:example "A user with access to a platform or service."@en .
+
+abi:EmailAddress a owl:Class ;
+    rdfs:subClassOf cco:ont00000649 ; # Non-Name Identifier
+    rdfs:label "Email Address" ;
+    skos:definition "An Email Address is a Non-Name Identifier that consists of a string of characters formatted according to the syntax of an email, which includes a local part, an '@' symbol, and a domain part. It designates a communication endpoint for an agent." ;
+    skos:example "jeremy@naas.ai"@en .
+
+abi:DigitalWorkspace a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Digital Workspace" ;
+    skos:definition "A Digital Workspace is an Information Bearing Entity that provides an online environment for individuals or groups to perform tasks and collaborate on projects. It typically includes tools and resources necessary for communication, file sharing, and task management." ;
+    skos:example "A workspace for a data team to collaborate on projects."@en ;
+    rdfs:comment "A Digital Workspace is fundamentally an Information Bearing Entity because it is a structured environment that supports the creation, manipulation, and sharing of information. It serves as a medium through which information processes are carried out in a digital format." .
+
+abi:DigitalWorkspaceObject a owl:Class ;
+    rdfs:label "Digital Workspace Object"@en ;
+    rdfs:subClassOf bfo:BFO_0000024 ; # Specifically dependent continuant
+    skos:definition "An entity that can be a component of a Digital Workspace."@en ;
+    skos:example "A software module for data analytics or an AI assistant for service management in a Digital Workspace."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:usesEmail a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ;  # is carrier of
+    rdfs:domain cco:Agent ;               # domain is agent
+    rdfs:range abi:EmailAddress ;         # range is email address
+    rdfs:label "uses email" ;
+    skos:definition "Relates an agent to their email address." ;
+    rdfs:comment "A subproperty that relates an agent to their email address." .
+
+abi:isEmailUsedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000102 ;  # is carried by
+    rdfs:domain abi:EmailAddress ;        # range is email address
+    rdfs:range cco:Agent ;                # domain is agent
+    rdfs:label "is email used by" ;
+    owl:inverseOf abi:usesEmail ;
+    skos:definition "Relates an email address to the agent who owns it." ;
+    rdfs:comment "A subproperty that relates an email address to the agent who owns it." .
+
+abi:isOperatedOnPlatform a owl:ObjectProperty ;
+    rdfs:domain abi:DigitalWorkspace ;
+    rdfs:range abi:Platform ;
+    rdfs:label "is operated on platform" ;
+    skos:definition "Relates a Digital Workspace to the Platform on which it operates, indicating the technological or infrastructural basis that supports the digital environment." ;
+    rdfs:comment "This property captures the dependency of a Digital Workspace on a specific technological platform, which is crucial for its operation and functionality." .
+
+abi:isOperatedBy a owl:ObjectProperty ;
+    rdfs:domain abi:DigitalWorkspace ;
+    rdfs:range abi:User ;
+    rdfs:label "is operated by" ;
+    skos:definition "Relates a Digital Workspace to the User who operates it, indicating the agent responsible for managing the digital environment." ;
+    rdfs:comment "This property captures the dependency of a Digital Workspace on a specific agent, which is crucial for its operation and functionality." .
+
+abi:containsWorkspaceObject a owl:ObjectProperty ;
+    rdfs:domain abi:DigitalWorkspace ;
+    rdfs:range abi:DigitalWorkspaceObject ;
+    rdfs:label "contains workspace object" ;
+    skos:definition "Relates a Digital Workspace to the Digital Workspace Objects it contains, indicating that these objects are components within the workspace that facilitate digital work processes." ;
+    rdfs:comment "This property models the structural relationship between a Digital Workspace and its constituent objects, emphasizing the role of these objects in enabling workspace functionality." .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:node_id a owl:DatatypeProperty ;
+    rdfs:label "node id" ;
+    skos:definition "The node id of a platform object." ;
+    rdfs:range xsd:string .
+
+abi:bio a owl:DatatypeProperty ;
+    rdfs:label "bio" ;
+    skos:definition "The bio of the user." ;
+    rdfs:range xsd:string .
+
+abi:following a owl:DatatypeProperty ;
+    rdfs:label "following"@en ;
+    skos:definition "The number of users the user is following."@en ;
+    rdfs:domain abi:User ;
+    rdfs:range xsd:integer .
+    
+abi:followers a owl:DatatypeProperty ;
+    rdfs:label "followers"@en ;
+    skos:definition "The number of users following the user."@en ;
+    rdfs:domain abi:User ;
+    rdfs:range xsd:integer .
+
+abi:created_date a owl:DatatypeProperty ;
+    rdfs:label "created date" ;
+    skos:definition "The date the user was created."@en ;
+    rdfs:range xsd:dateTime .
+
+abi:updated_date a owl:DatatypeProperty ;
+    rdfs:label "updated date" ;
+    skos:definition "The date the user was updated."@en ;
+    rdfs:range xsd:dateTime .
