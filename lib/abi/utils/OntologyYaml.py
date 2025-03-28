@@ -7,7 +7,7 @@ import random
 from abi import logger
 import json
 from pathlib import Path
-from src.core.modules.common.ontologies.mapping import MAPPING_URL_LABEL
+from marketplace.modules.__common.ontologies.mapping import MAPPING_URL_LABEL
 from rdflib import Graph
 
 
