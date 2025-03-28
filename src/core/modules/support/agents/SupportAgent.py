@@ -2,17 +2,29 @@ from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
-from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.core.modules.common.integrations.GithubIntegration import GithubIntegrationConfiguration
+from src.core.modules.support.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
+from src.core.modules.support.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.core.modules.support.workflows.GitHubSupportWorkflows import GitHubSupportWorkflows, GitHubSupportWorkflowsConfiguration
-from src.core.modules.common.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
 
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
 SYSTEM_PROMPT = f"""
 You are a support assistant focusing on answering user requests and creating features requests or reporting bugs.
 
-Be sure to follow the chain of thought: {SUPPORT_CHAIN_OF_THOUGHT_PROMPT}
+Be sure to follow the chain of thought:
+1.1. Identify if the user intent:
+  - Feature request: New integration with external API, new ontology pipeline, or new workflow
+  - Bug report: Issue with existing integration, pipeline, or workflow
+
+1.2. Use `support_agent_list_issues` tool to check for similar issues. Get more details about the issue using `support_agent_get_details` tool.
+
+1.3.1. If no similar issue, you MUST generate the draft proposition with a title and description based on the user request.
+1.3.2. If similar issue, display its details and propose following options to the user:
+    - Create new issue (include draft in your response)
+    - Update existing issue (include proposed updates in your response)
+    - Take no action
+
+1.4. After explicit user approval use appropriate tool to complete your task: "support_agent_create_bug_report" or "support_agent_create_feature_request".
 
 You MUST be sure to validate all input arguments before executing any tool.
 Be clear and concise in your responses.
