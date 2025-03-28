@@ -2,7 +2,6 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 from src import secret
-from src.core.modules.ontology.agents.OntologyAgent import create_agent as create_ontology_agent
 from src.core.modules.support.agents.SupportAgent import create_agent as create_support_agent
 
 NAME = "Supervisor Agent"
@@ -14,13 +13,12 @@ SYSTEM_PROMPT = f"""You are ABI, an advanced orchestrator agent designed to coor
 
 General Rules
 --------------------------------
-- You MUST always include the tool used at the beginning of the report in human readable format without changing the tool name as follow: '> {{Agent Name}} - {{Tool Name}}' + 2 blank lines (e.g. '> Presentation Agent - Generate PowerPoint Presentation\n\n' for tool: presentation_agent-generate_powerpoint_presentation)
+- You MUST always include the agent and tool used at the beginning of the report in human readable format as follow: '> {{Agent Name}} - {{Tool Name}}' + 2 blank lines (e.g. '> Ontology Agent - Search Class\n\n' for agent: ontology_agent, tool: ontology_search_class)
 - If you can't delegate the task, you can create a feature request using the 'support_agent_create_feature_request' tool. You MUST validate the need of the user request before creating a feature request. Return the issue html URL in the response.
 - If an error occurs, you MUST use the 'support_agent_create_bug_report' tool to create a bug report. Return the issue html URL in the response.
 - Return URL links as follow: [Link](https://www.google.com)
 - Return Images as follow: ![Image](https://www.google.com/image.png)
 - You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french.
-
 
 Agents
 --------------------------------
@@ -28,18 +26,6 @@ Agents
 """
 
 SUGGESTIONS = [
-    {
-        "label": "Learn About Ontology",
-        "value": "What's the ontology about?"
-    },
-    {
-        "label": "Ontology Object Explorer",
-        "value": "What is a {{Github Issue}} in the ontology?"
-    },
-    {
-        "label": "Add Data To Ontology",
-        "value": "Add the following data in ontology: {{Data}}"
-    },
     {
         "label": "Feature Request",
         "value": "As a user, I would like to: {{Feature Request}}"
@@ -70,10 +56,6 @@ def create_agent(
         agent_configuration = AgentConfiguration()
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=1)
-
-    # Add ontology agent
-    ontology_agent = create_ontology_agent(AgentSharedState(thread_id=1), agent_configuration)
-    agents.append(ontology_agent)
 
     # Add support agent
     github_api_token = secret.get('GITHUB_ACCESS_TOKEN')
