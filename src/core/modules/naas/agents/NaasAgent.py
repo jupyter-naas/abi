@@ -2,24 +2,23 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret
 from fastapi import APIRouter
-from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
-from src.core.modules.common.integrations import NaasIntegration
-from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
-from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.naas.integrations import NaasIntegration
+from src.core.modules.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
 
-DESCRIPTION = "A Naas Assistant with access to Naas Integration tools."
+NAME = "Naas Agent"
+MODEL = "o3-mini"
+TEMPERATURE = 1
+DESCRIPTION = "A Naas Agent with access to Naas Integration tools."
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
 SYSTEM_PROMPT = f"""
-You are a Naas Assistant with access to NaasIntegration tools.
+You are a Naas Agent with access to NaasIntegration tools to perform actions on Naas workspaces.
 If you don't have access to any tool, ask the user to set their access token in .env file.
 Always be clear and professional in your communication while helping users interact with Naas services.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
-
-{RESPONSIBILITIES_PROMPT}
 """
+SUGGESTIONS = []
 
-def create_naas_agent(
+def create_agent(
     agent_shared_state: AgentSharedState = None, 
     agent_configuration: AgentConfiguration = None
 ) -> Agent:
@@ -36,11 +35,7 @@ def create_naas_agent(
 
     # Set configuration
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
-            on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
-            system_prompt=SYSTEM_PROMPT
-        )
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
     
@@ -49,12 +44,9 @@ def create_naas_agent(
         naas_integration_config = NaasIntegrationConfiguration(api_key=secret.get('NAAS_API_KEY'))
         tools += NaasIntegration.as_tools(naas_integration_config)
 
-    # Add agents
-    agents.append(create_support_agent(AgentSharedState(thread_id=2), agent_configuration))
-    
-    return NaasAssistant(
-        name="naas_agent",
-        description="Use to manage Naas workspace, plugins and ontologies",
+    return NaasAgent(
+        name=NAME,
+        description=DESCRIPTION,
         chat_model=model,
         tools=tools,
         agents=agents,  
@@ -63,14 +55,14 @@ def create_naas_agent(
         memory=MemorySaver()
     )
 
-class NaasAssistant(Agent):
+class NaasAgent(Agent):
     def as_api(
         self, 
         router: APIRouter, 
         route_name: str = "naas", 
-        name: str = "Naas Assistant", 
-        description: str = "API endpoints to call the Naas assistant completion.", 
-        description_stream: str = "API endpoints to call the Naas assistant stream completion.",
+        name: str = "Naas Agent", 
+        description: str = "API endpoints to call the Naas agent completion.", 
+        description_stream: str = "API endpoints to call the Naas agent stream completion.",
         tags: list[str] = []
     ):
         return super().as_api(router, route_name, name, description, description_stream, tags)
