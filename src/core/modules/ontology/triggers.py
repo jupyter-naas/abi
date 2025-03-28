@@ -19,23 +19,27 @@
 #     ((None, URIRef(ex + "hasOpenData"), None), OntologyEvent.INSERT, handle_new_dataset),
 # ]
 
-from src import services
+from src import services, secret
 from lib.abi.services.ontology_store.OntologyStorePorts import OntologyEvent
 from rdflib import URIRef, Literal
 from abi import logger
 
 # Register organization logo update trigger
 def push_ontology_to_naas_workspace():
-    from src import secret
-    from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
+    from src.core.modules.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
     from src.core.modules.ontology.workflows.CreateClassOntologyYAML import CreateClassOntologyYAML, CreateClassOntologyYAMLConfiguration
 
     # Initialize ontology store
     ontology_store = services.ontology_store_service
 
     # Initialize integrations
+    naas_api_key = secret.get("NAAS_API_KEY")
+    if naas_api_key is None:
+        logger.error("NAAS_API_KEY is not set")
+        return None
+    
     naas_integration_config = NaasIntegrationConfiguration(
-        api_key=secret.get("NAAS_API_KEY")
+        api_key=naas_api_key
     )
 
     # Initialize workflows
