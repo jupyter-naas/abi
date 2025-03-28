@@ -64,7 +64,7 @@ class GetClassWorkflow(Workflow):
     
     def search_class(self, parameters: SearchClassWorkflowParameters) -> dict:
         graph = Graph()
-        graph.parse("src/core/modules/common/ontologies/ConsolidatedOntology.ttl")
+        graph.parse("src/core/modules/ontology/ontologies/ConsolidatedOntology.ttl")
 
         """Find a class URI based on its label with fuzzy matching.
         
