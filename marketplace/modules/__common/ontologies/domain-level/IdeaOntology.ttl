@@ -1,0 +1,55 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/IdeaOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/InformationEntityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/IdeaOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for ideas and content concepts."@en ;
+    dc:license "" ;
+    dc:title "Idea Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Idea a owl:Class ;
+    rdfs:label "Idea"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
+    skos:definition "A concept or thought generated from content that could be developed into content"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:generatedFrom a owl:ObjectProperty ;
+    rdfs:label "generated from"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range abi:Post .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:hasTitle a owl:DatatypeProperty ;
+    rdfs:label "has title"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
+
+abi:hasDescription a owl:DatatypeProperty ;
+    rdfs:label "has description"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
+
+abi:hasTopic a owl:DatatypeProperty ;
+    rdfs:label "has topic"@en ;
+    rdfs:domain abi:Idea ;
+    rdfs:range xsd:string .
