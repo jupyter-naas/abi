@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
 from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
-from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.modules.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src import secret, config, services
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
