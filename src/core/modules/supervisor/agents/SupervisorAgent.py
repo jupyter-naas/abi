@@ -104,7 +104,7 @@ def create_agent(
         agents_info_str += "\n"
 
     # Replace the [AGENTS] placeholder in the system prompt with the agents_info
-    system_prompt = system_prompt.replace("[AGENTS]", agents_info_str)
+    system_prompt = SYSTEM_PROMPT.replace("[AGENTS]", agents_info_str)
     agent_configuration.system_prompt = system_prompt
 
     return SupervisorAgent(
