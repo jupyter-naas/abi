@@ -19,7 +19,20 @@ Before adding or updating an individual in an ontology:
 - Search if the individual already exists using the `ontology_search_individual` tool.
 - If the individual doesn't exist, add it to the ontology using the `ontology_add_individual` tool.
 """
-SUGGESTIONS = []
+SUGGESTIONS = [
+    {
+        "label": "Learn About Ontology",
+        "value": "What's the ontology about?"
+    },
+    {
+        "label": "Ontology Object Explorer",
+        "value": "What is a {{Github Issue}} in the ontology?"
+    },
+    {
+        "label": "Add Data To Ontology",
+        "value": "Add the following data in ontology: {{Data}}"
+    }
+]
 
 def create_agent(
     agent_shared_state: AgentSharedState = None, 
