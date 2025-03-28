@@ -7,7 +7,7 @@ import random
 from abi import logger
 import json
 from pathlib import Path
-from src.core.modules.common.ontologies.mapping import MAPPING_URL_LABEL
+from marketplace.modules.__common.ontologies.mapping import MAPPING_URL_LABEL
 from rdflib import Graph
 
 
@@ -18,7 +18,7 @@ class OntologyYaml:
     @staticmethod
     def rdf_to_yaml(
         graph,
-        ontology_schemas: list = ["src/core/modules/common/ontologies/ConsolidatedOntology.ttl"],
+        ontology_schemas: list = ["marketplace/modules/__common/ontologies/ConsolidatedOntology.ttl"],
         class_colors_mapping: dict = {},
         top_level_class: str = 'http://purl.obolibrary.org/obo/BFO_0000001',
         display_relations_names: bool = True,
