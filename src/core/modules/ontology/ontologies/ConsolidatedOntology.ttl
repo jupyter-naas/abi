@@ -1,3 +1,4 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix dc: <http://purl.org/dc/elements/1.1/> .
@@ -8,6 +9,22 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+abi:hasSkill a owl:ObjectProperty ;
+    rdfs:label "has skill"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range abi:ProfessionalSkills ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a person and a professional skill they possess."@en ;
+    skos:example "John has the skill to play the piano."@en .
+
+abi:isSkillOf a owl:ObjectProperty ;
+    rdfs:label "is skill of"@en ;
+    rdfs:domain abi:ProfessionalSkills ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a professional skill and the person who possesses it."@en ;
+    skos:example "Playing the piano is a skill of John."@en .
 
 bfo:BFO_0000054 a owl:ObjectProperty ;
     rdfs:label "has realization"@en ;
@@ -36,15 +53,6 @@ bfo:BFO_0000108 a owl:ObjectProperty ;
     rdfs:range bfo:BFO_0000008 ;
     skos:definition "(Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists"@en ;
     skos:example "First World War exists at 1914-1916; Mexico exists at January 1, 2000"@en .
-
-bfo:BFO_0000127 a owl:ObjectProperty ;
-    rdfs:label "material basis of"@en ;
-    dc:identifier "244-BFO" ;
-    rdfs:domain bfo:BFO_0000040 ;
-    rdfs:range bfo:BFO_0000016 ;
-    owl:inverseOf bfo:BFO_0000218 ;
-    skos:definition "b material basis of c =Def c has material basis b"@en ;
-    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
 
 bfo:BFO_0000153 a owl:FunctionalProperty,
         owl:ObjectProperty ;
@@ -10063,6 +10071,15 @@ bfo:BFO_0000115 a owl:ObjectProperty ;
     skos:definition "b has member part c =Def c member part of b"@en ;
     skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
 
+bfo:BFO_0000127 a owl:ObjectProperty ;
+    rdfs:label "material basis of"@en ;
+    dc:identifier "244-BFO" ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range bfo:BFO_0000016 ;
+    owl:inverseOf bfo:BFO_0000218 ;
+    skos:definition "b material basis of c =Def c has material basis b"@en ;
+    skos:scopeNote "Users that require more sophisticated representations of time are encouraged to import a temporal extension of BFO-Core provided by the BFO development team. See documentation for guidance: <https://github.com/BFO-ontology/BFO-2020/tree/master/src/owl/profiles/temporal%20extensions>"@en .
+
 bfo:BFO_0000145 a owl:Class ;
     rdfs:label "relational quality"@en ;
     dc:identifier "057-BFO" ;
@@ -13191,14 +13208,6 @@ cco:ont00001235 a owl:Class ;
     skos:definition "A Time Zone Identifier that designates a spatial region where the local time is calculated according to the specified offset from Zulu time, which has no offset from Coordinated Universal Time."@en ;
     cco:ont00001760 "https://www.commoncoreontologies.org/InformationEntityOntology"^^xsd:anyURI .
 
-cco:ont00001262 a owl:Class ;
-    rdfs:label "Person"@en ;
-    rdfs:subClassOf cco:ont00000562 ;
-    skos:altLabel "Human"@en ;
-    skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
-    cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Human&oldid=1063145185"^^xsd:anyURI ;
-    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
-
 cco:ont00001352 a owl:Class ;
     rdfs:label "Greenwich Mean Time Zone Identifier"@en ;
     rdfs:comment "Greenwich Mean Time (GMT) is the mean solar time at the Royal Observatory in Greenwich, London and has been superseded by Coordinated Universal Time (UTC)."@en ;
@@ -13212,6 +13221,14 @@ cco:ont00000120 a owl:Class ;
     skos:definition "A Descriptive Information Content Entity that describes a definite magnitude of a physical quantity, defined and adopted by convention and/or by law, that is used as a standard for measurement of the same physical quantity."@en ;
     cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Unit_of_measurement&oldid=1061038125"^^xsd:anyURI ;
     cco:ont00001760 "https://www.commoncoreontologies.org/InformationEntityOntology"^^xsd:anyURI .
+
+cco:ont00001262 a owl:Class ;
+    rdfs:label "Person"@en ;
+    rdfs:subClassOf cco:ont00000562 ;
+    skos:altLabel "Human"@en ;
+    skos:definition "An Animal that is a member of the species Homo sapiens."@en ;
+    cco:ont00001754 "https://en.wikipedia.org/w/index.php?title=Human&oldid=1063145185"^^xsd:anyURI ;
+    cco:ont00001760 "https://www.commoncoreontologies.org/AgentOntology"^^xsd:anyURI .
 
 bfo:BFO_0000004 a owl:Class ;
     rdfs:label "independent continuant"@en ;
@@ -13292,8 +13309,87 @@ cco:ont00000518 a owl:Class ;
     skos:example "U.S. Dollar, Euro, Yuan, South African Rand" ;
     cco:ont00001760 "https://www.commoncoreontologies.org/CurrencyUnitOntology"^^xsd:anyURI .
 
-[] owl:onProperty bfo:BFO_0000176 ;
-    owl:someValuesFrom cco:ont00000358 .
+[] owl:onProperty cco:ont00001864 ;
+    owl:someValuesFrom cco:ont00001335 .
+
+[] owl:onProperty cco:ont00001864 ;
+    owl:someValuesFrom cco:ont00001180 .
+
+[] rdf:first cco:ont00001180 .
+
+[] owl:onProperty cco:ont00001974 ;
+    owl:someValuesFrom bfo:BFO_0000015 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000173 .
+
+[] rdf:first cco:ont00001262 .
+
+[] rdf:first cco:ont00001180 .
+
+[] rdf:first cco:ont00001262 .
+
+[] owl:onProperty cco:ont00001889 ;
+    owl:someValuesFrom cco:ont00001262 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000898 .
+
+[] owl:onProperty bfo:BFO_0000115 ;
+    owl:someValuesFrom cco:ont00001017 .
+
+[] rdf:first cco:ont00001180 .
+
+[] owl:allValuesFrom cco:ont00001017 ;
+    owl:onProperty bfo:BFO_0000115 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000987 .
+
+[] rdf:first cco:ont00001262 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000485 .
+
+[] owl:onProperty cco:ont00001859 ;
+    owl:someValuesFrom cco:ont00000139 .
+
+[] owl:onProperty cco:ont00001800 ;
+    owl:someValuesFrom bfo:BFO_0000015 .
+
+[] owl:onProperty cco:ont00001889 ;
+    owl:someValuesFrom cco:ont00001180 .
+
+[] owl:onProperty bfo:BFO_0000171 ;
+    owl:someValuesFrom cco:ont00000139 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000917 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000175 .
+
+[] rdf:first cco:ont00001180 .
+
+[] owl:onProperty bfo:BFO_0000171 ;
+    owl:someValuesFrom cco:ont00001152 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000486 .
+
+[] rdf:first cco:ont00001262 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000279 .
+
+[] owl:onProperty cco:ont00001910 ;
+    owl:someValuesFrom bfo:BFO_0000015 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00000587 .
+
+[] owl:onProperty bfo:BFO_0000196 ;
+    owl:someValuesFrom cco:ont00001379 .
 
 [] rdf:first bfo:BFO_0000026 .
 
@@ -13424,6 +13520,61 @@ cco:ont00000518 a owl:Class ;
 
 [] rdf:first bfo:BFO_0000018 .
 
+[] owl:onProperty bfo:BFO_0000176 ;
+    owl:someValuesFrom cco:ont00000358 .
+
+[] owl:onProperty bfo:BFO_0000101 ;
+    owl:someValuesFrom cco:ont00000958 .
+
+[] owl:onProperty cco:ont00001868 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] rdf:first bfo:BFO_0000176 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom bfo:BFO_0000006 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom bfo:BFO_0000008 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom cco:ont00000800 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom bfo:BFO_0000203 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] rdf:first cco:ont00001982 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom cco:ont00000223 .
+
+[] owl:onProperty cco:ont00001808 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] owl:onProperty cco:ont00001942 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] owl:onProperty cco:ont00001811 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] owl:onProperty cco:ont00001916 ;
+    owl:someValuesFrom bfo:BFO_0000038 .
+
+[] owl:onProperty cco:ont00001983 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] owl:onProperty cco:ont00001938 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] owl:onProperty cco:ont00001966 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
+[] owl:onProperty cco:ont00001877 ;
+    owl:someValuesFrom bfo:BFO_0000001 .
+
 [] owl:onProperty bfo:BFO_0000196 ;
     owl:someValuesFrom cco:ont00001999 .
 
@@ -13495,138 +13646,4 @@ cco:ont00000518 a owl:Class ;
 
 [] owl:onProperty bfo:BFO_0000196 ;
     owl:someValuesFrom bfo:BFO_0000023 .
-
-[] owl:onProperty cco:ont00001864 ;
-    owl:someValuesFrom cco:ont00001335 .
-
-[] owl:onProperty cco:ont00001864 ;
-    owl:someValuesFrom cco:ont00001180 .
-
-[] rdf:first cco:ont00001180 .
-
-[] owl:onProperty cco:ont00001974 ;
-    owl:someValuesFrom bfo:BFO_0000015 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000173 .
-
-[] rdf:first cco:ont00001262 .
-
-[] rdf:first cco:ont00001180 .
-
-[] rdf:first cco:ont00001262 .
-
-[] owl:onProperty cco:ont00001889 ;
-    owl:someValuesFrom cco:ont00001262 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000898 .
-
-[] owl:onProperty bfo:BFO_0000115 ;
-    owl:someValuesFrom cco:ont00001017 .
-
-[] rdf:first cco:ont00001180 .
-
-[] owl:allValuesFrom cco:ont00001017 ;
-    owl:onProperty bfo:BFO_0000115 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000987 .
-
-[] rdf:first cco:ont00001262 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000485 .
-
-[] owl:onProperty cco:ont00001859 ;
-    owl:someValuesFrom cco:ont00000139 .
-
-[] owl:onProperty cco:ont00001800 ;
-    owl:someValuesFrom bfo:BFO_0000015 .
-
-[] owl:onProperty cco:ont00001889 ;
-    owl:someValuesFrom cco:ont00001180 .
-
-[] owl:onProperty bfo:BFO_0000171 ;
-    owl:someValuesFrom cco:ont00000139 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000917 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000175 .
-
-[] rdf:first cco:ont00001180 .
-
-[] owl:onProperty bfo:BFO_0000171 ;
-    owl:someValuesFrom cco:ont00001152 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000486 .
-
-[] rdf:first cco:ont00001262 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000279 .
-
-[] owl:onProperty cco:ont00001910 ;
-    owl:someValuesFrom bfo:BFO_0000015 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00000587 .
-
-[] owl:onProperty bfo:BFO_0000196 ;
-    owl:someValuesFrom cco:ont00001379 .
-
-[] owl:onProperty bfo:BFO_0000101 ;
-    owl:someValuesFrom cco:ont00000958 .
-
-[] owl:onProperty cco:ont00001868 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] rdf:first bfo:BFO_0000176 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom bfo:BFO_0000006 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom bfo:BFO_0000008 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom cco:ont00000800 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom bfo:BFO_0000203 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] rdf:first cco:ont00001982 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom cco:ont00000223 .
-
-[] owl:onProperty cco:ont00001808 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] owl:onProperty cco:ont00001942 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] owl:onProperty cco:ont00001811 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] owl:onProperty cco:ont00001916 ;
-    owl:someValuesFrom bfo:BFO_0000038 .
-
-[] owl:onProperty cco:ont00001983 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] owl:onProperty cco:ont00001938 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] owl:onProperty cco:ont00001966 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
-
-[] owl:onProperty cco:ont00001877 ;
-    owl:someValuesFrom bfo:BFO_0000001 .
 
