@@ -4,6 +4,9 @@ from fastapi import APIRouter
 from src import secret, services
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import AddIndividualPipeline, AddIndividualPipelineConfiguration
 from src.core.modules.ontology.workflows.GetClassWorkflow import GetClassWorkflow, GetClassConfigurationWorkflow
+from src.core.modules.ontology.pipelines.AddSkilltoPersonPipeline import AddSkilltoPersonPipeline, AddSkilltoPersonPipelineConfiguration
+from src.core.modules.ontology.workflows.GetPersonsAssociatedwithSkillsWorkflow import GetPersonsAssociatedwithSkillsWorkflow, GetPersonsAssociatedwithSkillsConfigurationWorkflow
+from src.core.modules.ontology.workflows.GetSkillsAssociatedwithPersonsWorkflow import GetSkillsAssociatedwithPersonsWorkflow, GetSkillsAssociatedwithPersonsConfigurationWorkflow
 
 NAME = "Ontology Agent"
 MODEL = "o3-mini"
@@ -54,9 +57,18 @@ def create_agent(
     add_individual_pipeline = AddIndividualPipeline(AddIndividualPipelineConfiguration(ontology_store))
     tools += add_individual_pipeline.as_tools()
 
+    add_skill_to_person_pipeline = AddSkilltoPersonPipeline(AddSkilltoPersonPipelineConfiguration(ontology_store))
+    tools += add_skill_to_person_pipeline.as_tools()
+
     # Add workflows
     get_class_workflow = GetClassWorkflow(GetClassConfigurationWorkflow(ontology_store))
     tools += get_class_workflow.as_tools()
+
+    get_persons_associated_with_skills_workflow = GetPersonsAssociatedwithSkillsWorkflow(GetPersonsAssociatedwithSkillsConfigurationWorkflow(ontology_store))
+    tools += get_persons_associated_with_skills_workflow.as_tools()
+
+    get_skills_associated_with_persons_workflow = GetSkillsAssociatedwithPersonsWorkflow(GetSkillsAssociatedwithPersonsConfigurationWorkflow(ontology_store))
+    tools += get_skills_associated_with_persons_workflow.as_tools()
 
     # Use provided configuration or create default one
     if agent_configuration is None:
