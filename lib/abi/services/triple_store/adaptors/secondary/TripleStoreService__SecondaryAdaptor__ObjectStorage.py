@@ -37,6 +37,8 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
                 graph = self.load_triples(subject_hash)
             except ObjectStorageExceptions.ObjectNotFound:
                 graph = Graph()
+                for prefix, namespace in triples.namespaces():
+                    graph.bind(prefix, namespace)
 
             for p, o in triples_by_subject[subject]:
                 graph.add((subject, p, o))
@@ -63,7 +65,10 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
         triples = Graph()
         
         for obj in self.__object_storage_service.list_objects(prefix=self.__triples_prefix):
-            triples += self.load_triples(obj)
+            g = self.load_triples(obj)
+            for prefix, namespace in g.namespaces():
+                triples.bind(prefix, namespace)
+            triples += g
             
         return triples
 
