@@ -10,8 +10,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
     def __init__(self, store_path: str, triples_path: str = "triples"):
         self.__store_path = store_path
         self.__triples_path = triples_path
-        
-        print(os.path.join(self.__store_path, self.__triples_path))
+
         os.makedirs(os.path.join(self.__store_path, self.__triples_path), exist_ok=True)
     
     def __merge_graphs(self, graphs: List[Graph]) -> Graph:
@@ -34,6 +33,9 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
             
             if not os.path.exists(self.hash_triples_path(subject_hash)):
                 graph = Graph()
+                
+                for prefix, namespace in triples.namespaces():
+                    graph.bind(prefix, namespace)
             else:
                 graph = Graph().parse(self.hash_triples_path(subject_hash), format='turtle')
             
@@ -62,8 +64,12 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
         triples = Graph()
         
         for file in os.listdir(os.path.join(self.__store_path, 'triples')):
-            triples += Graph().parse(self.hash_triples_path(file), format='turtle')
+            g = Graph().parse(self.hash_triples_path(file), format='turtle')
             
+            for prefix, namespace in g.namespaces():
+                triples.bind(prefix, namespace)
+            
+            triples += g
         return triples
         
 
