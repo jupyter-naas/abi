@@ -6,7 +6,7 @@ from src.core.modules.opendata.workflows.LinkedInOrganizationsWorkflows import L
 from src.core.modules.opendata.pipelines.LinkedInGetOrganizationLogoPipeline import LinkedInGetOrganizationLogoPipeline, LinkedInGetOrganizationLogoPipelineConfiguration, LinkedInGetOrganizationLogoPipelineParameters
 
 # Initialize ontology store
-ontology_store = services.ontology_store_service
+triple_store = services.triple_store_service
 
 # Initialize integrations
 naas_integration_config = NaasIntegrationConfiguration(
@@ -26,7 +26,7 @@ linkedin_organization_workflows_config = LinkedInOrganizationWorkflowsConfigurat
 
 # Initialize pipeline
 pipeline = LinkedInGetOrganizationLogoPipeline(LinkedInGetOrganizationLogoPipelineConfiguration(
-    ontology_store=ontology_store,
+    triple_store=triple_store,
     linkedin_organization_workflows_config=linkedin_organization_workflows_config,
 ))
 

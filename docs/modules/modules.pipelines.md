@@ -118,7 +118,7 @@ from dataclasses import dataclass
 from src.data.integrations import YourIntegration
 from abi.utils.Graph import ABIGraph
 from rdflib import Graph
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src import secret
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
@@ -129,12 +129,12 @@ class YourPipelineConfiguration(PipelineConfiguration):
     
     Attributes:
         integration (YourIntegration): The integration instance to use
-        ontology_store (IOntologyStoreService): The ontology store service to use
-        ontology_store_name (str): Name of the ontology store to use. Defaults to "yourstorename"
+        triple_store (ITripleStoreService): The ontology store service to use
+        triple_store_name (str): Name of the ontology store to use. Defaults to "yourstorename"
     """
     integration: YourIntegration
-    ontology_store: IOntologyStoreService
-    ontology_store_name: str = "yourstorename"
+    triple_store: ITripleStoreService
+    triple_store_name: str = "yourstorename"
 
 class YourPipelineParameters(PipelineParameters):
     """Parameters for YourPipeline execution.
@@ -196,7 +196,7 @@ class YourPipeline(Pipeline):
                 graph.add((subject, "http://example.org/property/relatedTo", related_subject))
         
         # Store the graph in the ontology store
-        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
+        self.__configuration.triple_store.insert(self.__configuration.triple_store_name, graph)
         
         return graph
 ```

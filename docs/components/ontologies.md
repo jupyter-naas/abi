@@ -120,7 +120,7 @@ return graph
 SPARQL is used to query the ontology store:
 
 ```python
-def query_entities(ontology_store, store_name):
+def query_entities(triple_store, store_name):
 sparql_query = """
 PREFIX your: <http://ontology.naas.ai/your_module/>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -130,7 +130,7 @@ WHERE {
 your:hasAttribute ?attribute .
 }
 """
-return ontology_store.query(store_name=store_name, query=sparql_query)
+return triple_store.query(store_name=store_name, query=sparql_query)
 ```
 
 ## Related Resources

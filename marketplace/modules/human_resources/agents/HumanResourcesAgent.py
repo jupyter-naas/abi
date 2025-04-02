@@ -26,7 +26,7 @@ def create_agent(
     # Init
     tools = []
     agents = []
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # Set model
     model = ChatOpenAI(
@@ -35,22 +35,22 @@ def create_agent(
         api_key=secret.get('OPENAI_API_KEY')
     )
     # Add pipelines
-    add_individual_pipeline = AddIndividualPipeline(AddIndividualPipelineConfiguration(ontology_store))
+    add_individual_pipeline = AddIndividualPipeline(AddIndividualPipelineConfiguration(triple_store))
     tools += add_individual_pipeline.as_tools()
 
     # Add workflows
-    get_class_workflow = GetClassWorkflow(GetClassConfigurationWorkflow(ontology_store))
+    get_class_workflow = GetClassWorkflow(GetClassConfigurationWorkflow(triple_store))
     tools += get_class_workflow.as_tools()
     
     # Add pipelines
-    add_skill_to_person_pipeline = AddSkilltoPersonPipeline(AddSkilltoPersonPipelineConfiguration(ontology_store))
+    add_skill_to_person_pipeline = AddSkilltoPersonPipeline(AddSkilltoPersonPipelineConfiguration(triple_store))
     tools += add_skill_to_person_pipeline.as_tools()
 
     # Add workflows
-    get_persons_associated_with_skills_workflow = GetPersonsAssociatedwithSkillsWorkflow(GetPersonsAssociatedwithSkillsConfigurationWorkflow(ontology_store))
+    get_persons_associated_with_skills_workflow = GetPersonsAssociatedwithSkillsWorkflow(GetPersonsAssociatedwithSkillsConfigurationWorkflow(triple_store))
     tools += get_persons_associated_with_skills_workflow.as_tools()
 
-    get_skills_associated_with_persons_workflow = GetSkillsAssociatedwithPersonsWorkflow(GetSkillsAssociatedwithPersonsConfigurationWorkflow(ontology_store))
+    get_skills_associated_with_persons_workflow = GetSkillsAssociatedwithPersonsWorkflow(GetSkillsAssociatedwithPersonsConfigurationWorkflow(triple_store))
     tools += get_skills_associated_with_persons_workflow.as_tools()
 
     # Use provided configuration or create default one

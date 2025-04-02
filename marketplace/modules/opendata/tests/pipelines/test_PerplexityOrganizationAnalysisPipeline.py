@@ -6,7 +6,7 @@ from src.core.modules.opendata.pipelines.PerplexityOrganizationAnalysisPipeline 
 from src.core.modules.opendata.workflows.PerplexityGetOrganizationWorkflows import PerplexityOrganizationWorkflowsConfiguration
 
 # Initialize ontology store
-ontology_store = services.ontology_store_service
+triple_store = services.triple_store_service
 
 # Initialize integrations
 naas_integration_config = NaasIntegrationConfiguration(
@@ -17,12 +17,12 @@ perplexity_organization_workflows_config = PerplexityOrganizationWorkflowsConfig
 )
 create_ontology_yaml_config = CreateOntologyYAMLConfiguration(
     naas_integration_config=naas_integration_config,
-    ontology_store=ontology_store
+    triple_store=triple_store
 )
 
 # Initialize pipeline
 pipeline = PerplexityOrganizationAnalysisPipeline(PerplexityOrganizationAnalysisPipelineConfiguration(
-    ontology_store=ontology_store,
+    triple_store=triple_store,
     naas_integration_config=naas_integration_config,
     perplexity_organization_workflows_config=perplexity_organization_workflows_config,
     create_ontology_yaml_config=create_ontology_yaml_config,

@@ -1,5 +1,5 @@
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from abi import logger
 from dataclasses import dataclass
 from langchain_core.tools import StructuredTool
@@ -22,12 +22,12 @@ class AbiApplicationPipelineConfiguration(PipelineConfiguration):
     """Configuration for ABIOntology pipeline.
     
     Attributes:
-        ontology_store (IOntologyStoreService): The ontology store service to use
-        ontology_store_name (str): Name of the ontology store to use
+        triple_store (ITripleStoreService): The ontology store service to use
+        triple_store_name (str): Name of the ontology store to use
     """
     naas_integration_config: NaasIntegrationConfiguration
-    ontology_store: IOntologyStoreService
-    ontology_store_name: str = "application/abi-boilerplate"
+    triple_store: ITripleStoreService
+    triple_store_name: str = "application/abi-boilerplate"
 
 class OntologyPipelineParameters(PipelineParameters):
     """Parameters for ABIOntology pipeline execution.
@@ -404,7 +404,7 @@ class AbiApplicationPipeline(Pipeline):
         self.scan_workflows(graph)
 
         # Store the graph
-        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
+        self.__configuration.triple_store.insert(self.__configuration.triple_store_name, graph)
 
         from src.core.modules.common.pipelines.abi.mappings import COLORS_NODES
         # Generate YAML data with mapping colors
@@ -483,15 +483,15 @@ class AbiApplicationPipeline(Pipeline):
 
 if __name__ == "__main__":
     from src import secret, config
-    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+    from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.triple_store.TripleStoreService import TripleStoreService
 
-    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
+    triple_store = TripleStoreService(TripleStoreService__SecondaryAdaptor__Filesystem(store_path=config.triple_store_path))
 
     pipeline = AbiApplicationPipeline(AbiApplicationPipelineConfiguration(
         naas_integration_config=NaasIntegrationConfiguration(
             api_key=secret.get("NAAS_API_KEY")
         ),
-        ontology_store=ontology_store
+        triple_store=triple_store
     ))
     pipeline.run(OntologyPipelineParameters())

@@ -1,13 +1,13 @@
 import os
 
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory, ObjectStorageService
-from lib.abi.services.ontology_store.OntologyFactory import OntologyStoreFactory, OntologyStoreService
+from lib.abi.services.triple_store.TripleStoreFactory import TripleStoreFactory, TripleStoreService
 
 class Services:
     _instance = None
     
     storage_service: ObjectStorageService
-    ontology_store_service: OntologyStoreService
+    triple_store_service: TripleStoreService
     
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -25,7 +25,7 @@ class Services:
     
     def __init_dev(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
-        self.ontology_store_service = OntologyStoreFactory.OntologyStoreServiceFilesystem(self.config.ontology_store_path)
+        self.triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(self.config.triple_store_path)
     
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
@@ -33,7 +33,7 @@ class Services:
             workspace_id=self.config.workspace_id,
             storage_name=self.config.storage_name
         )
-        self.ontology_store_service = OntologyStoreFactory.OntologyStoreServiceNaas(
+        self.triple_store_service = TripleStoreFactory.TripleStoreServiceNaas(
             naas_api_key=self.secret.get('NAAS_API_KEY'),
             workspace_id=self.config.workspace_id,
             storage_name=self.config.storage_name

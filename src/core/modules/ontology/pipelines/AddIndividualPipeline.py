@@ -1,5 +1,5 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, OntologyEvent
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
 from langchain_core.tools import StructuredTool
 from dataclasses import dataclass
 from abi import logger
@@ -15,9 +15,9 @@ class AddIndividualPipelineConfiguration(PipelineConfiguration):
     """Configuration for AddIndividualPipeline.
     
     Attributes:
-        ontology_store (IOntologyStoreService): The ontology store service to use
+        triple_store (ITripleStoreService): The ontology store service to use
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class AddIndividualPipelineParameters(PipelineParameters):
     class_uri: str = Field(..., description="Class URI to add the individual to. Please make sure the class URI is valid and exists in the ontology. Use tool `ontology_search_class` to search for a class in the ontology.")
@@ -38,7 +38,7 @@ class AddIndividualPipeline(Pipeline):
         logger.info(f"Ontology name: {ontology_name}")
         graph = ABIGraph()
         try:
-            graph = self.__configuration.ontology_store.get(ontology_name)
+            graph = self.__configuration.triple_store.get(ontology_name)
         except Exception as e:
             logger.info(f"Error getting ontology graph: {e}")
 
@@ -47,7 +47,7 @@ class AddIndividualPipeline(Pipeline):
         graph.add((individual_uri, RDF.type, OWL.NamedIndividual))
         graph.add((individual_uri, RDF.type, URIRef(parameters.class_uri)))
         graph.add((individual_uri, RDFS.label, Literal(parameters.individual_label)))
-        self.__configuration.ontology_store.insert(ontology_name, graph)
+        self.__configuration.triple_store.insert(ontology_name, graph)
         return graph
     
     def as_tools(self) -> list[StructuredTool]:

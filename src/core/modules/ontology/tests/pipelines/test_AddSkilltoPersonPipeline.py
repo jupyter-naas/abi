@@ -7,8 +7,8 @@ skill_uri = "http://ontology.naas.ai/abi/dbc5aa3d-fe0a-448d-bc80-4b443b4dd4fb"
 parameters = AddSkilltoPersonPipelineParameters(person_uri=person_uri, skill_uri=skill_uri)
 
 # Configuration
-ontology_store = services.ontology_store_service
-configuration = AddSkilltoPersonPipelineConfiguration(ontology_store=ontology_store)
+triple_store = services.triple_store_service
+configuration = AddSkilltoPersonPipelineConfiguration(triple_store=triple_store)
 pipeline = AddSkilltoPersonPipeline(configuration)
 
 # Test
