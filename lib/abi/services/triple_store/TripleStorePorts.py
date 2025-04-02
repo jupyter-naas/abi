@@ -1,14 +1,20 @@
 from abc import ABC, abstractmethod
 from rdflib import Graph
-from typing import List, Callable, Dict
+from typing import List, Callable, Dict, Tuple
 from enum import Enum
 
 class Exceptions:
     class SubscriptionNotFoundError(Exception):
             pass
+        
+    class ViewNotFoundError(Exception):
+        pass
+
+class OntologyEvent(Enum):
+    INSERT = "INSERT"
+    DELETE = "DELETE"
 
 class ITripleStorePort(ABC):
-    
 
     @abstractmethod
     def insert(self, triples: Graph):
@@ -23,18 +29,24 @@ class ITripleStorePort(ABC):
         pass
 
     @abstractmethod
-    def query(self, query: str) -> Graph:
+    def handle_view_event(self, view: Tuple[str, str, str], event: OntologyEvent, triple: Tuple[str, str, str]):
         pass
 
-class OntologyEvent(Enum):
-    INSERT = "INSERT"
-    DELETE = "DELETE"
+    @abstractmethod
+    def query(self, query: str) -> Graph:
+        pass
+    
+    @abstractmethod
+    def query_view(self, view: str, query: str) -> Graph:
+        pass
 
 class ITripleStoreService(ABC):
     
     __ontology_adaptor: ITripleStorePort
     
     __event_listeners: Dict[tuple, Dict[OntologyEvent, List[tuple[str, Callable]]]]
+    
+    __views: List[Tuple[str, str, str]]
     
     @abstractmethod
     def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
@@ -49,7 +61,6 @@ class ITripleStoreService(ABC):
             event_type (OntologyEvent): The type of event to subscribe to (INSERT or DELETE)
             callback (Callable): Function to call when matching events occur. Will be called with:
                 - event_type: The OntologyEvent that occurred
-                - name: Name of the ontology that changed
                 - triple: The (subject, predicate, object) triple that matched
 
         Returns:
@@ -138,3 +149,6 @@ class ITripleStoreService(ABC):
         """
         pass
         
+    @abstractmethod
+    def query_view(self, view: str, query: str) -> Graph:
+        pass
