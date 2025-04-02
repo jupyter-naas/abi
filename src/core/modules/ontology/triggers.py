@@ -55,5 +55,5 @@ def push_ontology_to_naas_workspace():
     return ((None, None, None), OntologyEvent.INSERT, workflow.trigger)
 
 triggers = [
-    push_ontology_to_naas_workspace(),
+    # push_ontology_to_naas_workspace(),
 ]
