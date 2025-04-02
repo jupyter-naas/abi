@@ -15,6 +15,34 @@ def triple_store_service(temp_storage_dir):
     """Create a TripleStoreService instance with filesystem storage."""
     return TripleStoreFactory.TripleStoreServiceFilesystem(temp_storage_dir)
 
+def test_prefix_persistence(triple_store_service):
+    """Test that namespace prefixes are preserved when storing and retrieving graphs."""
+    # Create a test graph with a prefix
+    graph = Graph()
+    graph.bind("ex", "http://example.org/")
+    
+    # Add a triple using the prefix
+    subject = URIRef("http://example.org/subject")
+    predicate = URIRef("http://example.org/predicate")
+    object = Literal("test object")
+    graph.add((subject, predicate, object))
+    
+    # Insert the graph
+    triple_store_service.insert(graph)
+    
+    # Retrieve the graph
+    retrieved_graph = triple_store_service.get()
+    
+    # Check if prefix is preserved
+    prefixes = dict(retrieved_graph.namespaces())
+    assert "ex" in prefixes
+    assert str(prefixes["ex"]) == "http://example.org/"
+    
+    # Verify the triple is also present
+    assert len(retrieved_graph) == 1
+    assert (subject, predicate, object) in retrieved_graph
+
+
 def test_insert_and_get(triple_store_service):
     """Test inserting and retrieving triples."""
     # Create a test graph
