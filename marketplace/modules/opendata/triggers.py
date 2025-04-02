@@ -6,7 +6,7 @@
 #   3. A callback function to execute when the event occurs
 #
 # Example:
-# from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+# from abi.services.triple_store.TripleStorePorts import OntologyEvent
 # from rdflib import URIRef, Namespace
 #
 # ex = Namespace("http://example.org/")
@@ -20,7 +20,7 @@
 # ]
 
 from src import services
-from lib.abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from lib.abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import URIRef, Literal
 from abi import logger
 
@@ -34,7 +34,7 @@ def register_organization_logo_update_trigger():
     from src.core.modules.opendata.pipelines.LinkedInGetOrganizationLogoPipeline import LinkedInGetOrganizationLogoPipeline, LinkedInGetOrganizationLogoPipelineConfiguration
 
     # Initialize ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # Initialize integrations
     naas_integration_config = NaasIntegrationConfiguration(
@@ -54,7 +54,7 @@ def register_organization_logo_update_trigger():
 
     # Initialize pipeline
     pipeline = LinkedInGetOrganizationLogoPipeline(LinkedInGetOrganizationLogoPipelineConfiguration(
-        ontology_store=ontology_store,
+        triple_store=triple_store,
         linkedin_organization_workflows_config=linkedin_organization_workflows_config,
     ))
 
@@ -66,11 +66,11 @@ def register_organization_size_trigger():
     from src.core.modules.opendata.pipelines.OrganizationSizePipeline import OrganizationSizePipeline, OrganizationSizePipelineConfiguration
 
     # Initialize ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # Initialize pipeline
     pipeline = OrganizationSizePipeline(OrganizationSizePipelineConfiguration(
-        ontology_store=ontology_store
+        triple_store=triple_store
     ))
 
     # Subscribe to the trigger

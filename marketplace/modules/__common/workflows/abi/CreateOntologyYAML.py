@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src import secret, config, services
 from dataclasses import dataclass
@@ -24,7 +24,7 @@ class CreateOntologyYAMLConfiguration(WorkflowConfiguration):
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
     naas_integration_config: NaasIntegrationConfiguration
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class CreateOntologyYAMLParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
@@ -58,7 +58,7 @@ class CreateOntologyYAML(Workflow):
     def graph_to_yaml(self, parameters: CreateOntologyYAMLParameters) -> str:
         # Initialize parameters
         yaml_data = None
-        graph = self.__configuration.ontology_store.get(parameters.ontology_name)
+        graph = self.__configuration.triple_store.get(parameters.ontology_name)
 
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(

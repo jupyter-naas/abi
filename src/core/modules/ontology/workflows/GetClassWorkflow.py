@@ -1,5 +1,5 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src import config
 from dataclasses import dataclass
 from pydantic import Field
@@ -16,9 +16,9 @@ class GetClassConfigurationWorkflow(WorkflowConfiguration):
     """Configuration for GetClass workflow.
     
     Attributes:
-        ontology_store (IOntologyStoreService): Ontology store service
+        triple_store (ITripleStoreService): Ontology store service
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class SearchClassWorkflowParameters(WorkflowParameters):
     """Parameters for SearchClass workflow.
@@ -154,7 +154,7 @@ class GetClassWorkflow(Workflow):
         GROUP BY ?class_uri ?individual_uri ?label
         ORDER BY DESC(?score) ?label
         """
-        results = self.__configuration.ontology_store.query(query)
+        results = self.__configuration.triple_store.query(query)
         return self.results_to_list(results)
 
     def get_all_individuals(self, parameters: GetAllIndividualsWorkflowParameters) -> dict:
@@ -168,7 +168,7 @@ class GetClassWorkflow(Workflow):
         }}
         ORDER BY ?label
         """
-        results = self.__configuration.ontology_store.query(query)
+        results = self.__configuration.triple_store.query(query)
         return self.results_to_list(results)
 
     def as_tools(self) -> list[StructuredTool]:

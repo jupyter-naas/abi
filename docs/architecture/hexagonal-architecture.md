@@ -25,7 +25,7 @@ Each service in ABI follows the Hexagonal Architecture pattern:
 In ABI, ports are defined as Python interfaces (abstract base classes) that specify the capabilities of a service:
 
 1. **Primary Ports**: Define how the application can be used (Service APIs)
-   - Example: `IOntologyStoreService` interface
+   - Example: `ITripleStoreService` interface
 
 2. **Secondary Ports**: Define what the application needs from external systems
    - Example: `IObjectStorageAdapter` interface
@@ -38,7 +38,7 @@ Adapters implement the port interfaces and connect the application to external s
    - Examples: FastAPI routes, CLI commands, LLM tools
 
 2. **Secondary Adapters**: Implement secondary ports for various backends
-   - Examples: `OntologyStoreServiceFilesystem`, `ObjectStorageSecondaryAdapterS3`
+   - Examples: `TripleStoreServiceFilesystem`, `ObjectStorageSecondaryAdapterS3`
 
 ## Benefits in ABI
 

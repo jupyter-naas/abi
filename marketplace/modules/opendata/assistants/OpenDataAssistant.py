@@ -73,7 +73,7 @@ def create_agent(
     perplexity_api_key = None
 
     # Setup ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # NaasIntegration Configuration
     naas_api_key = secret.get('NAAS_API_KEY')
@@ -104,12 +104,12 @@ def create_agent(
         )
         create_ontology_yaml_config = CreateOntologyYAMLConfiguration(
             naas_integration_config=naas_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         )
 
         # Setup pipeline
         pipeline = PerplexityOrganizationAnalysisPipeline(PerplexityOrganizationAnalysisPipelineConfiguration(
-            ontology_store=ontology_store,
+            triple_store=triple_store,
             naas_integration_config=naas_integration_config,
             perplexity_organization_workflows_config=perplexity_organization_workflows_config,
             create_ontology_yaml_config=create_ontology_yaml_config,

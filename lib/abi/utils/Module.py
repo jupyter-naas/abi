@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from lib.abi.services.agent.Agent import Agent
 from typing import Callable, List, Dict, Any
 import os
