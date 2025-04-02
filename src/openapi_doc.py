@@ -210,36 +210,28 @@ Required:
         """
     },
     {
-        "name": "Assistants",
+        "name": "Agents",
         "description": """
-API endpoints for interacting with ABI's assistant/agents.
+API endpoints for interacting with ABI's agents.
 
-ABI provides three categories of assistants:
-
-### Foundation Assistants:
-- Supervisor: Manages and coordinates other assistants
+### Core Agents:
+- Supervisor: Manages and coordinates other agents
+- Ontology: Manages and coordinates other agents
+- Naas: Manages and coordinates other agents
 - Support: Provides help and guidance for using ABI
 
-### Domain Assistants:
-- Open Data: Specializes in accessing and analyzing open data sources
-- Content: Helps create and manage content
-- Finance: Handles financial analysis and reporting
-- Growth: Focuses on business growth and metrics
-- Operations: Manages operational tasks and processes
-- Sales: Assists with sales-related activities
-
-### Expert Assistants:
-- Custom assistants with deep expertise in specific domains
+### Marketplace Agents:
+- Custom agents with deep expertise in specific domains
 - Can be configured and trained for specialized tasks
 - Extensible through custom tools and knowledge bases
 
-Each assistant can be accessed through dedicated endpoints that allow:
+Each agent can be accessed through dedicated endpoints that allow:
 - Completion requests for generating responses
 - Chat interactions for ongoing conversations
 - Tool execution for specific tasks
 - Configuration updates for customizing behavior
 
-Assistants leverage various tools including integrations, pipelines and workflows to accomplish tasks. They can be extended with custom tools and knowledge to enhance their capabilities.
+Agents leverage various tools including integrations, pipelines and workflows to accomplish tasks. They can be extended with custom tools and knowledge to enhance their capabilities.
 
         """
     },
