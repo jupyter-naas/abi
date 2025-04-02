@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from abi import logger
 from pydantic import Field
 from abi.utils.Graph import ABI
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, OntologyEvent
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
 from src import services
 from typing import Optional, Any
 from abi.utils.Graph import ABIGraph as Graph
@@ -19,10 +19,10 @@ class LinkedInGetOrganizationLogoPipelineConfiguration(PipelineConfiguration):
     """Configuration for LinkedInGetOrganizationLogo pipeline.
     
     Attributes:
-        ontology_store (IOntologyStoreService): The ontology store service to use
+        triple_store (ITripleStoreService): The ontology store service to use
         linkedin_organization_workflows_config (LinkedInOrganizationWorkflowsConfiguration): Configuration for LinkedIn organization workflows
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
     linkedin_organization_workflows_config: LinkedInOrganizationWorkflowsConfiguration
 
 class LinkedInGetOrganizationLogoPipelineParameters(PipelineParameters):
@@ -46,7 +46,7 @@ class LinkedInGetOrganizationLogoPipeline(Pipeline):
     def __init__(self, configuration: LinkedInGetOrganizationLogoPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__ontology_store = self.__configuration.ontology_store
+        self.__triple_store = self.__configuration.triple_store
         self.__linkedin_organization_workflows = LinkedInOrganizationWorkflows(configuration.linkedin_organization_workflows_config)
         
     def trigger(self, event: OntologyEvent, ontology_name:str, triple: tuple[Any, Any, Any]) -> Graph:
@@ -61,7 +61,7 @@ class LinkedInGetOrganizationLogoPipeline(Pipeline):
         
     def run(self, parameters: LinkedInGetOrganizationLogoPipelineParameters) -> None:
         # Initialize graph
-        graph = self.__ontology_store.get(parameters.ontology_name)
+        graph = self.__triple_store.get(parameters.ontology_name)
 
         # Query ontology to get organization name
         logger.info(f"-----> Get organization name from ontology: {parameters.ontology_name}")
@@ -72,7 +72,7 @@ class LinkedInGetOrganizationLogoPipeline(Pipeline):
                 <{parameters.organization_uri}> rdfs:label ?label .
             }}
         """
-        results = self.__ontology_store.query(query)
+        results = self.__triple_store.query(query)
         for row in results:
             organization_name = row.get('label')
             logger.info(f"Organization name: {organization_name}")
@@ -82,7 +82,7 @@ class LinkedInGetOrganizationLogoPipeline(Pipeline):
 
         # Save graph
         logger.info(f"-----> Saving graph to ontology store")
-        self.__configuration.ontology_store.store(parameters.ontology_name, graph)
+        self.__configuration.triple_store.store(parameters.ontology_name, graph)
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this pipeline."""

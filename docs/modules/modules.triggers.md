@@ -61,7 +61,7 @@ Triggers are registered by creating a `triggers.py` file in your module director
 Here's an example of a `triggers.py` file:
 
 ```python
-from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import URIRef
 from .pipelines.LinkedInProfileIngestionPipeline import ingest_linkedin_profile
 

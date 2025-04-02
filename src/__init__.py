@@ -23,7 +23,7 @@ class Config:
     github_project_repository: str
     github_support_repository: str
     github_project_id: int
-    ontology_store_path: str
+    triple_store_path: str
     api_title: str
     api_description: str
     logo_path: str
@@ -50,7 +50,7 @@ class Config:
                     github_project_repository=config_data['github_project_repository'],
                     github_support_repository=config_data['github_support_repository'], 
                     github_project_id=config_data['github_project_id'],
-                    ontology_store_path=config_data['ontology_store_path'],
+                    triple_store_path=config_data['triple_store_path'],
                     api_title=config_data['api_title'],
                     api_description=config_data['api_description'],
                     logo_path=config_data['logo_path'],
@@ -65,7 +65,7 @@ class Config:
                 github_project_repository="",
                 github_support_repository="",
                 github_project_id=0,
-                ontology_store_path="",
+                triple_store_path="",
                 api_title="",
                 api_description="",
                 logo_path="",
@@ -85,7 +85,7 @@ modules = get_modules()
 for module in modules:
     for trigger in module.triggers:
         topic, event_type, callback = trigger
-        services.ontology_store_service.subscribe(topic, event_type, callback)
+        services.triple_store_service.subscribe(topic, event_type, callback)
 
 if __name__ == "__main__":
     cli()

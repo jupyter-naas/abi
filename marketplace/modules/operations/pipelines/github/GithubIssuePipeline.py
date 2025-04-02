@@ -5,7 +5,7 @@ from src.core.modules.common.integrations.GithubGraphqlIntegration import Github
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime, timedelta
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, OntologyEvent
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
 import pydash as _
 from abi import logger
 from langchain_core.tools import StructuredTool
@@ -23,13 +23,13 @@ class GithubIssuePipelineConfiguration(PipelineConfiguration):
     Attributes:
         github_integration_config (GithubIntegrationConfiguration): The GitHub REST API integration instance
         github_graphql_integration_config (GithubGraphqlIntegrationConfiguration): The GitHub GraphQL API integration instance
-        ontology_store (IOntologyStoreService): The ontology store service to use
-        ontology_store_name (str): Name of the ontology store to use. Defaults to "github"
+        triple_store (ITripleStoreService): The ontology store service to use
+        triple_store_name (str): Name of the ontology store to use. Defaults to "github"
     """
     github_integration_config: GithubIntegrationConfiguration
     github_graphql_integration_config: GithubGraphqlIntegrationConfiguration
-    ontology_store: IOntologyStoreService
-    ontology_store_name: str = "github"
+    triple_store: ITripleStoreService
+    triple_store_name: str = "github"
 
 
 class GithubIssuePipelineParameters(PipelineParameters):
@@ -52,7 +52,7 @@ class GithubIssuePipeline(Pipeline):
     def run(self, parameters: GithubIssuePipelineParameters) -> Graph:
         # Init graph
         try:    
-            existing_graph = self.__configuration.ontology_store.get(self.__configuration.ontology_store_name)
+            existing_graph = self.__configuration.triple_store.get(self.__configuration.triple_store_name)
             # Create new ABIGraph and merge existing data
             graph = ABIGraph()
             for triple in existing_graph:
@@ -286,7 +286,7 @@ class GithubIssuePipeline(Pipeline):
             )
             graph.add((task_completion, ABI.hasAssignee, github_assignee))
         
-        self.__configuration.ontology_store.store(self.__configuration.ontology_store_name, graph)
+        self.__configuration.triple_store.store(self.__configuration.triple_store_name, graph)
         
         return graph
     
@@ -313,10 +313,10 @@ class GithubIssuePipeline(Pipeline):
             return self.run(parameters).serialize(format="turtle")
         
 if __name__ == "__main__":
-    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+    from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.triple_store.TripleStoreService import TripleStoreService
     # Initialize ontology store
-    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
+    triple_store = TripleStoreService(TripleStoreService__SecondaryAdaptor__Filesystem(store_path=config.triple_store_path))
 
     # Initialize Github integration
     github_integration_config = GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
@@ -328,8 +328,8 @@ if __name__ == "__main__":
     pipeline = GithubIssuePipeline(GithubIssuePipelineConfiguration(
         github_integration_config=github_integration_config,
         github_graphql_integration_config=github_graphql_integration_config,
-        ontology_store=ontology_store,
-        ontology_store_name="github"
+        triple_store=triple_store,
+        triple_store_name="github"
     ))
 
     # Run pipeline

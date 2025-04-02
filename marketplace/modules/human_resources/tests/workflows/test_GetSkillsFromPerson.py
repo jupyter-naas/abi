@@ -7,10 +7,10 @@ from src.core.modules.ontology.workflows.GetPersonSkillsWorkflow import (
 )
 
 # Init ontology store
-ontology_store = services.ontology_store_service
+triple_store = services.triple_store_service
 
 # Init workflow
-configuration = GetPersonSkillsConfigurationWorkflow(ontology_store=ontology_store)
+configuration = GetPersonSkillsConfigurationWorkflow(triple_store=triple_store)
 workflow = GetPersonSkillsWorkflow(configuration)
 
 # Test

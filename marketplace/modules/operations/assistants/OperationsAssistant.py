@@ -71,7 +71,7 @@ def create_agent(
     JSESSIONID = None
 
     # Init ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # Add integrations & workflbased on available credentials
     if naas_api_key:
@@ -111,21 +111,21 @@ def create_agent(
         github_issues_pipeline = GithubIssuesPipeline(GithubIssuesPipelineConfiguration(
             github_integration_config=github_integration_config,
             github_graphql_integration_config=github_graphql_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         ))
         tools += github_issues_pipeline.as_tools()
 
         # Add GithubUserDetailsPipeline tool
         github_user_details_pipeline = GithubUserDetailsPipeline(GithubUserDetailsPipelineConfiguration(
             github_integration_config=github_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         ))
         tools += github_user_details_pipeline.as_tools()
 
-    if ontology_store:
+    if triple_store:
         # Add GetTopPrioritiesWorkflow tool
         get_top_priorities_workflow = GetTopPrioritiesWorkflow(GetTopPrioritiesConfiguration(
-            ontology_store=ontology_store
+            triple_store=triple_store
         ))
         tools += get_top_priorities_workflow.as_tools()
     
