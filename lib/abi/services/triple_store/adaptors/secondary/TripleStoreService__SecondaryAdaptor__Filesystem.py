@@ -1,6 +1,6 @@
-from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort
+from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent, Exceptions
 from abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import TripleStoreService__SecondaryAdaptor__FileBase
-from rdflib import Graph
+from rdflib import Graph, RDFS
 from typing import List, Dict, Tuple, Any
 import os
 class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleStoreService__SecondaryAdaptor__FileBase):
@@ -77,6 +77,51 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
         aggregate_graph = self.get()
         
         return aggregate_graph.query(query)
-
     
+    def query_view(self, view: str, query: str) -> Graph:
+        if os.path.exists(os.path.join(self.__store_path, 'views', view)):
+            aggregate_graph = Graph()
+            
+            for file in os.listdir(os.path.join(self.__store_path, 'views', view)):
+                g = Graph().parse(os.path.join(self.__store_path, 'views', view, file), format='turtle')
+                
+                for prefix, namespace in g.namespaces():
+                    aggregate_graph.bind(prefix, namespace)
+                
+                aggregate_graph += g
+                
+            return aggregate_graph.query(query)
+        else:
+            raise Exceptions.ViewNotFoundError(f"View {view} not found")
+    
+    def handle_view_event(self, view: Tuple[str, str, str], event: OntologyEvent, triple: Tuple[str, str, str]):
+        s, _, o = triple
+        
+        partition_hash = self.iri_hash(o)
+        
+        if os.path.exists(self.hash_triples_path(partition_hash)):
+            graph = Graph().parse(self.hash_triples_path(partition_hash), format='turtle')
+            
+            label = graph.value(subject=o, predicate=RDFS.label)
+            object_id = str(o).split("/")[-1].split("#")[-1]
+            
+            dir_name = f"{label}_{object_id}"
+            
+            os.makedirs(os.path.join(self.__store_path, 'views', dir_name), exist_ok=True)
+            
+            if event == OntologyEvent.INSERT:
+                try:
+                    # Create symbolic link
+                    os.symlink(os.path.join('..', '..', 'triples', f'{self.iri_hash(s)}.ttl'), os.path.join(self.__store_path, 'views', dir_name, f'{self.iri_hash(s)}.ttl'))
+                except FileExistsError:
+                    pass
+            elif event == OntologyEvent.DELETE:
+                # Remove symbolic link
+                try:
+                    os.remove(os.path.join(self.__store_path, 'views', dir_name, f'{self.iri_hash(s)}.ttl'))
+                except FileNotFoundError:
+                    pass
+            
+        
+        
 

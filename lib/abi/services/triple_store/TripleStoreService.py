@@ -1,8 +1,12 @@
 from lib.abi.services.triple_store.TripleStorePorts import ITripleStoreService, ITripleStorePort, OntologyEvent
-from rdflib import Graph
-from typing import Callable
+from rdflib import Graph, RDF, RDFS
+from typing import Callable, List, Tuple
 import uuid
 import pydash
+
+OWL_URL = "https://www.w3.org/2002/07/owl"
+CCO_URL = "https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/heads/develop/src/cco-merged/CommonCoreOntologiesMerged.ttl"
+BFO_URL = "https://raw.githubusercontent.com/BFO-ontology/BFO-2020/refs/heads/master/src/owl/bfo-core.ttl"
 
 class TripleStoreService(ITripleStoreService):
     """TripleStoreService provides CRUD operations and SPARQL querying capabilities for ontologies.
@@ -22,9 +26,31 @@ class TripleStoreService(ITripleStoreService):
         >>> store.store("my_ontology", ontology)
         >>> results = store.query("SELECT ?s WHERE { ?s a owl:Class }")
     """
-    def __init__(self, ontology_adaptor: ITripleStorePort):
+    def __init__(self, ontology_adaptor: ITripleStorePort, views: List[Tuple[str, str, str]] = [
+        (None, RDF.type, None)
+    ], load_base_ontologies: bool = False):
         self.__ontology_adaptor = ontology_adaptor
         self.__event_listeners = {}
+        self.__views = views
+        
+        self.init_views()
+        
+        if load_base_ontologies:
+            # Load OWL
+            self.insert(Graph().parse(OWL_URL, format='turtle'))
+            
+            # Load BFO
+            self.insert(Graph().parse(BFO_URL, format='turtle'))
+            
+                # Load CCO
+            self.insert(Graph().parse(CCO_URL, format='turtle'))
+        
+        
+
+    def init_views(self):
+        for view in self.__views:
+            self.subscribe(view, OntologyEvent.INSERT, lambda event, triple: self.__ontology_adaptor.handle_view_event(view, event, triple))
+            self.subscribe(view, OntologyEvent.DELETE, lambda event, triple: self.__ontology_adaptor.handle_view_event(view, event, triple))
 
     def insert(self, triples: Graph):
         # Insert the triples into the store
@@ -56,6 +82,9 @@ class TripleStoreService(ITripleStoreService):
     def query(self, query: str) -> Graph:
         return self.__ontology_adaptor.query(query)
     
+    def query_view(self, view: str, query: str) -> Graph:
+        return self.__ontology_adaptor.query_view(view, query)
+    
     def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:        
         if topic not in self.__event_listeners:
             self.__event_listeners[topic] = {}
@@ -65,8 +94,6 @@ class TripleStoreService(ITripleStoreService):
         subscription_id = str(uuid.uuid4())
             
         self.__event_listeners[topic][event_type].append((subscription_id, callback))
-        
-        print(self.__event_listeners)
         
         return subscription_id
     
