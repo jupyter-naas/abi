@@ -42,7 +42,7 @@ class AddIndividualPipeline(Pipeline):
         graph.add((individual_uri, RDF.type, URIRef(parameters.class_uri)))
         graph.add((individual_uri, RDFS.label, Literal(parameters.individual_label)))
         self.__configuration.triple_store.insert(graph)
-        return graph
+        return individual_uri, graph
     
     def as_tools(self) -> list[StructuredTool]:
         return [
