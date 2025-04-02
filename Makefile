@@ -38,7 +38,7 @@ dvc-login: .venv
 storage-pull: .venv
 	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/storage_pull.py | sh'
 
-storage-push: .venv
+storage-push: .venv storage-pull
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
 clean:
