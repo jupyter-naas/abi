@@ -85,10 +85,10 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
 
     return {"access_token": "abi", "token_type": "bearer"}
 
-# Create Assistants API Router
-assistants_router = APIRouter(
-    prefix="/assistants",
-    tags=["Assistants"],
+# Create Agents API Router
+agents_router = APIRouter(
+    prefix="/agents",
+    tags=["Agents"],
     responses={401: {"description": "Unauthorized"}},
     dependencies=[Depends(is_token_valid)]  # Apply token verification
 )
@@ -152,10 +152,10 @@ from src.__modules__ import get_modules
 
 for module in get_modules():
     for agent in module.agents:
-        agent.as_api(assistants_router)
+        agent.as_api(agents_router)
 
 # Include routers
-app.include_router(assistants_router)
+app.include_router(agents_router)
 app.include_router(pipelines_router)
 app.include_router(workflows_router)
 
