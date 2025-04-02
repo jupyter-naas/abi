@@ -45,6 +45,9 @@ class AddPersonPipeline(Pipeline):
             individual_label=parameters.name
         ))
 
+        # Initialize a new graph for performance.
+        graph = Graph()
+
         # Add person type and properties
         if parameters.first_name:
             graph.add((person_uri, ABI.firstName, Literal(parameters.first_name)))
