@@ -37,7 +37,7 @@ class AddSkillPipeline(Pipeline):
         self.__configuration = configuration
         self.__add_individual_pipeline = AddIndividualPipeline(configuration.add_individual_pipeline_configuration)
 
-    def run(self, parameters: AddSkillPipelineParameters) -> Graph:
+    def run(self, parameters: AddSkillPipelineParameters) -> str:
         # Create skill URI using the name
         skill_uri, graph = self.__add_individual_pipeline.run(AddIndividualPipelineParameters(
             class_uri=CCO.ont00000089,
@@ -53,7 +53,7 @@ class AddSkillPipeline(Pipeline):
         
         # Save the graph
         self.__configuration.triple_store.insert(graph)
-        return graph
+        return skill_uri
     
     def as_tools(self) -> list[StructuredTool]:
         return [
