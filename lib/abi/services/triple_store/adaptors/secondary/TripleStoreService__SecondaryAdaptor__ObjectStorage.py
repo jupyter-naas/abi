@@ -1,4 +1,4 @@
-from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort
+from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent
 from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
 from lib.abi.services.object_storage.ObjectStoragePort import Exceptions as ObjectStorageExceptions
 from lib.abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import TripleStoreService__SecondaryAdaptor__FileBase
@@ -75,4 +75,11 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
 
     def query(self, query: str) -> Graph:
         return self.get().query(query)
+    
+    def query_view(self, view: str, query: str) -> Graph:
+        return self.get().query(query)
+    
+    def handle_view_event(self, view: Tuple[str, str, str], event: OntologyEvent, triple: Tuple[str, str, str]):
+        pass
+    
     
