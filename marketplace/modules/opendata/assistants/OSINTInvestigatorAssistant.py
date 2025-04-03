@@ -78,7 +78,7 @@ def create_osint_investigator_agent(
         tools += OpenAIIntegration.as_tools(openai_integration_config)
 
     # Setup ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # Init pipelines
     if perplexity_api_key and naas_api_key:
@@ -88,12 +88,12 @@ def create_osint_investigator_agent(
         )
         create_ontology_yaml_config = CreateOntologyYAMLConfiguration(
             naas_integration_config=naas_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         )
 
         # Setup pipeline
         pipeline = PerplexityOrganizationAnalysisPipeline(PerplexityOrganizationAnalysisPipelineConfiguration(
-            ontology_store=ontology_store,
+            triple_store=triple_store,
             naas_integration_config=naas_integration_config,
             perplexity_organization_workflows_config=perplexity_organization_workflows_config,
             create_ontology_yaml_config=create_ontology_yaml_config,

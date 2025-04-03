@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src import config
 from dataclasses import dataclass
 from pydantic import Field
@@ -18,9 +18,9 @@ class GetTopPrioritiesConfiguration(WorkflowConfiguration):
     """Configuration for GetTopPriorities workflow.
     
     Attributes:
-        ontology_store (IOntologyStoreService): Ontology store service
+        triple_store (ITripleStoreService): Ontology store service
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 
 class GetTopPrioritiesParameters(WorkflowParameters):
@@ -41,7 +41,7 @@ class GetTopPrioritiesWorkflow(Workflow):
     def __init__(self, configuration: GetTopPrioritiesConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__ontology_store = self.__configuration.ontology_store
+        self.__triple_store = self.__configuration.triple_store
 
     def run(self, parameters: GetTopPrioritiesParameters) -> dict:
         # First, get all task subclasses
@@ -111,7 +111,7 @@ class GetTopPrioritiesWorkflow(Workflow):
             ORDER BY DESC(?due_date) ?title
         """
         logger.info(f"Query: {query}")
-        results = self.__ontology_store.query(query)
+        results = self.__triple_store.query(query)
         
         # Convert tasks to a list of dictionaries for better LLM consumption
         data = []

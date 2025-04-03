@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from abi.services.ontology.OntologyPorts import IOntologyService
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from rdflib import Graph
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
@@ -13,11 +13,11 @@ class OntologyNERPipelineConfiguration(PipelineConfiguration):
     
     Attributes:
         ontology_service (IOntologyService): Service for performing ontology operations
-        ontology_store (IOntologyStoreService): Store for persisting ontology data
+        triple_store (ITripleStoreService): Store for persisting ontology data
     """
     ontology_service: IOntologyService
-    ontology_store: IOntologyStoreService
-    ontology_store_name: str
+    triple_store: ITripleStoreService
+    triple_store_name: str
 
 class OntologyNERPipelineParameters(PipelineParameters):
     """Parameters for OntologyNERPipeline execution.
@@ -63,7 +63,7 @@ class OntologyNERPipeline(Pipeline):
         
         graph += self.__configuration.ontology_service.named_entity_recognition(parameters.input_text)
         
-        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
+        self.__configuration.triple_store.insert(self.__configuration.triple_store_name, graph)
         return graph
 
 def main():
