@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional
 from abi.utils.Graph import CCO, ABI
-from rdflib import URIRef, Literal, RDF, OWL, Graph
+from rdflib import URIRef, Literal, RDF, OWL, Graph, XSD
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
@@ -39,7 +39,7 @@ class AddPersonPipeline(Pipeline):
         self.__configuration = configuration
         self.__add_individual_pipeline = AddIndividualPipeline(configuration.add_individual_pipeline_configuration)
 
-    def run(self, parameters: AddPersonPipelineParameters) -> Graph:
+    def run(self, parameters: AddPersonPipelineParameters) -> str:
         # Create person URI using first and last name
         person_uri, graph = self.__add_individual_pipeline.run(AddIndividualPipelineParameters(
             class_uri=CCO.ont00001262,
@@ -54,10 +54,12 @@ class AddPersonPipeline(Pipeline):
             graph.add((person_uri, ABI.first_name, Literal(parameters.first_name)))
         if parameters.last_name:
             graph.add((person_uri, ABI.last_name, Literal(parameters.last_name)))
+        if parameters.date_of_birth:
+            graph.add((person_uri, ABI.date_of_birth, Literal(parameters.date_of_birth, datatype=XSD.date)))
         
         # Save the graph
         self.__configuration.triple_store.insert(graph)
-        return graph
+        return person_uri
     
     def as_tools(self) -> list[StructuredTool]:
         return [
