@@ -12,9 +12,13 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
 
     __triples_prefix : str
     
+    __live_graph : Graph
+    
     def __init__(self, object_storage_service: ObjectStorageService, triples_prefix: str = "triples"):
         self.__object_storage_service = object_storage_service
         self.__triples_prefix = triples_prefix
+        
+        self.__live_graph = self.load()
     
     def load_triples(self, subject_hash: str) -> Graph:
         obj = self.__object_storage_service.get_object(prefix=self.__triples_prefix, key=f"{subject_hash}.ttl")
@@ -44,6 +48,11 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
                 graph.add((subject, p, o))
             
             self.store(subject_hash, graph)
+        
+        for prefix, namespace in triples.namespaces():
+            self.__live_graph.bind(prefix, namespace)
+            
+        self.__live_graph += triples
     
     
     def remove(self, triples: Graph):
@@ -60,8 +69,13 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
                 self.store(subject_hash, graph)
             except ObjectStorageExceptions.ObjectNotFound:
                 pass
+        
+        for prefix, namespace in triples.namespaces():
+            self.__live_graph.bind(prefix, namespace)
+            
+        self.__live_graph -= triples
     
-    def get(self) -> Graph:
+    def load(self) -> Graph:
         triples = Graph()
         
         for obj in self.__object_storage_service.list_objects(prefix=self.__triples_prefix):
@@ -72,6 +86,8 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
             
         return triples
 
+    def get(self) -> Graph:
+        return self.__live_graph
 
     def query(self, query: str) -> Graph:
         return self.get().query(query)
