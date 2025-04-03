@@ -7,12 +7,16 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
     __store_path: str
     __triples_path: str
     
+    __live_graph : Graph
+    
     def __init__(self, store_path: str, triples_path: str = "triples"):
         self.__store_path = store_path
         self.__triples_path = triples_path
-
+        
         os.makedirs(os.path.join(self.__store_path, self.__triples_path), exist_ok=True)
-    
+        
+        self.__live_graph = self.load()
+        
     def __merge_graphs(self, graphs: List[Graph]) -> Graph:
         merged_graph = Graph()
         for graph in graphs:
@@ -43,7 +47,10 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
                 graph.add((subject, p, o))
             
             graph.serialize(destination=self.hash_triples_path(subject_hash), format='turtle')
-    
+        
+        # Update the live graph
+        self.__live_graph += triples
+
     def remove(self, triples: Graph):
         triples_by_subject : Dict[Any, List[Tuple[Any, Any]]] = self.triples_by_subject(triples)
         
@@ -57,10 +64,16 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
                     graph.remove((subject, p, o))
                 
                 graph.serialize(destination=self.hash_triples_path(subject_hash), format='turtle')
-    
+
+        # Update the live graph
+        self.__live_graph -= triples
+
     ## Ontology Methods
 
     def get(self) -> Graph:
+        return self.__live_graph
+    
+    def load(self) -> Graph:
         triples = Graph()
         
         for file in os.listdir(os.path.join(self.__store_path, 'triples')):
@@ -70,12 +83,13 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
                 triples.bind(prefix, namespace)
             
             triples += g
+
         return triples
         
 
     def query(self, query: str) -> Graph:
         aggregate_graph = self.get()
-        
+
         return aggregate_graph.query(query)
     
     def query_view(self, view: str, query: str) -> Graph:
