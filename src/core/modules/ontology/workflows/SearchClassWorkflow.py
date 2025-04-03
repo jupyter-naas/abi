@@ -60,7 +60,7 @@ class SearchClassWorkflow(Workflow):
         Returns:
             dict: Results containing matched class URIs and scores
         """
-        graph = self.merge_ontologies()
+        # graph = self.merge_ontologies()
         query = """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -112,7 +112,7 @@ class SearchClassWorkflow(Workflow):
         ORDER BY DESC(?score)
         LIMIT 10
         """
-        results = graph.query(
+        results = self.__configuration.triple_store.query(
             query.replace("?searchLabel", f'"{parameters.search_label}"')
         )
         return results_to_list(results)
