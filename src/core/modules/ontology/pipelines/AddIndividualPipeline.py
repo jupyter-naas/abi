@@ -40,6 +40,7 @@ class AddIndividualPipeline(Pipeline):
         graph.bind("bfo", BFO)
         graph.bind("cco", CCO)
         graph.bind("abi", ABI)
+        graph.bind("dcterms", DCTERMS)
 
         # Add individual
         individual_uri = ABI[str(uuid.uuid4())]
