@@ -1,0 +1,85 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/OrganizationOntology> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OrganizationOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for organizations."@en ;
+    dc:license "" ;
+    dc:title "Organization Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Website a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "Website" ;
+    skos:definition "A website containing a biography, portfolio of work, and contact information, representing an organization's presence and identity on the web." ;
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries." .
+
+abi:Ticker a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "Ticker" ;
+    skos:definition "Represents a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges." ;
+    skos:example "AAPL, GOOGL, AMZN, etc." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasLegalName a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001331 ;
+    rdfs:label "has legal name"@en ;
+    skos:definition "Relates an Organization to its legal name, which is a formally registered designation of the organization."@en .
+
+abi:isLegalNameOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00001331 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is legal name of"@en ;
+    skos:definition "Relates a legal name to the organization it belongs to."@en .
+
+abi:hasWebsite a owl:ObjectProperty ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Website ;
+    rdfs:label "has website"@en ;
+    skos:definition "Relates an organization to its website."@en ;
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries."@en .
+
+abi:isWebsiteOf a owl:ObjectProperty ;
+    rdfs:domain abi:Website ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is website of"@en ;
+    skos:definition "Relates a website to the organization it represents."@en ;
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries."@en .
+
+abi:hasTickerSymbol a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Ticker ;
+    rdfs:label "has ticker"@en ;
+    skos:definition "Relates an Organization to its ticker, which is a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges."@en .
+
+abi:isTickerSymbolOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:Ticker ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is ticker symbol of"@en ;
+    skos:definition "Relates a ticker symbol to the organization it belongs to."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+
