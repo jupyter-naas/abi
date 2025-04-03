@@ -80,7 +80,12 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
         triples = Graph()
         
         for file in os.listdir(os.path.join(self.__store_path, 'triples')):
-            g = Graph().parse(self.hash_triples_path(file), format='turtle')
+            try:
+                g = Graph().parse(self.hash_triples_path(file), format='turtle')
+            except Exception as e:
+                from abi import logger
+                logger.error(f"Error loading triples from {self.hash_triples_path(file)}: {e}")
+                raise e
             
             for prefix, namespace in g.namespaces():
                 triples.bind(prefix, namespace)

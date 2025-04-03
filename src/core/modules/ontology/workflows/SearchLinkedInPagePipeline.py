@@ -52,7 +52,7 @@ class SearchLinkedInPageWorkflow(Workflow):
             ?individual_uri a ?class_uri ;
                             a owl:NamedIndividual ;
                             rdfs:label ?label .
-            FILTER(?class_uri IN ({subclasses_values}))
+            {subclasses_values}
             
             # Calculate scores for perfect and partial matches
             BIND(IF(LCASE(STR(?label)) = LCASE("{parameters.search_label}"), 10, 0) AS ?perfect_score)
