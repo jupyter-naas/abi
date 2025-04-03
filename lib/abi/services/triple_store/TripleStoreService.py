@@ -45,7 +45,10 @@ class TripleStoreService(ITripleStoreService):
                 # Load CCO
             self.insert(Graph().parse(CCO_URL, format='turtle'))
         
-        
+
+    def load(self, filepath: str):
+        g = Graph().parse(filepath)
+        self.insert(g)
 
     def init_views(self):
         for view in self.__views:
