@@ -1,7 +1,7 @@
 from src import services
 
 ontology_name = "person_ont00001262"
-graph = services.ontology_store_service.get(ontology_name)
+graph = services.triple_store_service.get(ontology_name)
 
 query = """
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -40,7 +40,7 @@ ORDER BY ?object
 
 from rdflib import URIRef, RDFS, Literal, RDF, OWL
 
-results = services.ontology_store_service.query(query)
+results = services.triple_store_service.query(query)
 data = []
 for row in results:
     data_dict = {}

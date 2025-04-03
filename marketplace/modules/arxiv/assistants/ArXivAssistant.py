@@ -3,8 +3,8 @@ from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret, config
 from src.custom.modules.arxiv_agent.integrations.ArXivIntegration import ArXivIntegration, ArXivIntegrationConfiguration
 from src.custom.modules.arxiv_agent.pipelines.ArXivPaperPipeline import ArXivPaperPipeline, ArXivPaperPipelineConfiguration
-from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+from abi.services.triple_store.TripleStoreService import TripleStoreService
 from src.custom.modules.arxiv_agent.workflows.ArXivQueryWorkflow import ArXivQueryWorkflow, ArXivQueryWorkflowConfiguration
 
 NAME = "ArXiv Assistant"
@@ -53,9 +53,9 @@ def create_agent(
     tools = []
     
     # Initialize ontology store
-    ontology_store = OntologyStoreService(
-        OntologyStoreService__SecondaryAdaptor__Filesystem(
-            store_path=config.ontology_store_path
+    triple_store = TripleStoreService(
+        TripleStoreService__SecondaryAdaptor__Filesystem(
+            store_path=config.triple_store_path
         )
     )
 
@@ -66,7 +66,7 @@ def create_agent(
     arxiv_pipeline = ArXivPaperPipeline(
         ArXivPaperPipelineConfiguration(
             arxiv_integration_config=arxiv_integration_config,
-            ontology_store=ontology_store,
+            triple_store=triple_store,
             storage_base_path="storage/triplestore/application-level/arxiv",
             pdf_storage_path="datastore/application-level/arxiv"
         )

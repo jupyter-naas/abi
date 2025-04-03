@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from abi import logger
 from pydantic import Field
 from abi.utils.Graph import ABI
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService, OntologyEvent
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
 from typing import Any
 from abi.utils.Graph import ABIGraph as Graph
 from rdflib import URIRef
@@ -15,9 +15,9 @@ class OrganizationSizePipelineConfiguration(PipelineConfiguration):
     """Configuration for OrganizationSize pipeline.
     
     Attributes:
-        ontology_store (IOntologyStoreService): The ontology store service to use
+        triple_store (ITripleStoreService): The ontology store service to use
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class OrganizationSizePipelineParameters(PipelineParameters):
     """Parameters for OrganizationSize pipeline execution.
@@ -38,7 +38,7 @@ class OrganizationSizePipeline(Pipeline):
     def __init__(self, configuration: OrganizationSizePipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__ontology_store = self.__configuration.ontology_store
+        self.__triple_store = self.__configuration.triple_store
 
     def trigger(self, event: OntologyEvent, ontology_name:str, triple: tuple[Any, Any, Any]) -> Graph:
         s, p, o = triple
@@ -55,7 +55,7 @@ class OrganizationSizePipeline(Pipeline):
         # Initialize graph
         graph = Graph()
         try:    
-            existing_graph = self.__configuration.ontology_store.get(parameters.ontology_name)
+            existing_graph = self.__configuration.triple_store.get(parameters.ontology_name)
             # Create new ABIGraph and merge existing data
             for triple in existing_graph:
                 graph.add(triple)
@@ -98,7 +98,7 @@ class OrganizationSizePipeline(Pipeline):
         
         # Save to ontology store
         logger.info(f"Saving organization size classification to ontology store")
-        self.__configuration.ontology_store.store(parameters.ontology_name, graph)
+        self.__configuration.triple_store.store(parameters.ontology_name, graph)
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this pipeline."""
