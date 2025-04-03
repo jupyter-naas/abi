@@ -46,3 +46,24 @@ abi:isSkillOf a owl:ObjectProperty ;
 #    Data Properties
 #################################################################
 
+abi:first_name a owl:DataProperty ;
+    rdfs:label "first name"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:string ;
+    skos:definition "The first name of a person."@en ;
+    skos:example "John"@en .
+
+abi:last_name a owl:DataProperty ;
+    rdfs:label "last name"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:string ;
+    skos:definition "The last name of a person."@en ;
+    skos:example "Doe"@en .
+
+abi:date_of_birth a owl:DataProperty ;
+    rdfs:label "date of birth"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:date ;
+    skos:definition "The date of birth of a person."@en ;
+    skos:example "1990-01-01"@en .
+    

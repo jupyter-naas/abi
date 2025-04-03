@@ -109,16 +109,16 @@ Here is an example of how to run a pipeline in your terminal:
 if __name__ == "__main__":
       from src import secret
       from src.core.modules.common.integrations import YourIntegration
-      from abi.services.ontology_store import OntologyStoreService
+      from abi.services.triple_store import TripleStoreService
       
       # Setup dependencies
       integration = YourIntegration(YourIntegrationConfiguration(...))
-      ontology_store = OntologyStoreService()
+      triple_store = TripleStoreService()
       
       # Create pipeline configuration
       config = YourPipelineConfiguration(
          integration=integration,
-         ontology_store=ontology_store
+         triple_store=triple_store
       )
       
       # Initialize and run pipeline

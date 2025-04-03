@@ -7,7 +7,7 @@ from pydantic import Field
 from typing import Dict, Optional, Any
 from abi.utils.Graph import ABIGraph, ABI, BFO, CCO, XSD, TIME
 from abi.utils.String import create_id_from_string
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src import config, secret
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAML, CreateOntologyYAMLConfiguration, CreateOntologyYAMLParameters
@@ -20,12 +20,12 @@ class PerplexityOrganizationAnalysisPipelineConfiguration(PipelineConfiguration)
     """Configuration for OrganizationAnalysis pipeline.
     
     Attributes:
-        ontology_store (IOntologyStoreService): The ontology store service to use
+        triple_store (ITripleStoreService): The ontology store service to use
         naas_integration_config (NaasIntegrationConfiguration): Configuration for Naas integration
         perplexity_organization_workflows_config (PerplexityOrganizationWorkflowsConfiguration): Configuration for PerplexityOrganizationWorkflows
         create_ontology_yaml_config (CreateOntologyYAMLConfiguration): Configuration for CreateOntologyYAML
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
     naas_integration_config: NaasIntegrationConfiguration
     perplexity_organization_workflows_config: PerplexityOrganizationWorkflowsConfiguration
     create_ontology_yaml_config: CreateOntologyYAMLConfiguration
@@ -76,7 +76,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
         logger.info(f"-----> Loading ontology: {organization_id}")
         graph = ABIGraph()
         try:    
-            existing_graph = self.__configuration.ontology_store.get(organization_id)
+            existing_graph = self.__configuration.triple_store.get(organization_id)
             # Create new ABIGraph and merge existing data
             for triple in existing_graph:
                 graph.add(triple)
@@ -720,7 +720,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
 
         # Save graph to ontology store
         logger.info(f"-----> Saving graph to ontology store: {organization_id}")
-        self.__configuration.ontology_store.insert(organization_id, graph)
+        self.__configuration.triple_store.insert(organization_id, graph)
         
         # Get organization logo URL
         query = f"""
@@ -732,7 +732,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
                 <{organization_uri}> abi:logo ?logo .
             }}
         """
-        results = self.__configuration.ontology_store.query(query)
+        results = self.__configuration.triple_store.query(query)
         organization_logo_url = ""
         for result in results:
             organization_logo_url = result.get("logo", "")
@@ -796,7 +796,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
             logger.info(f"✅ Plugin ({plugin_id}) updated in workspace: {config.workspace_id}")
         return f"""Report: Organization analysis completed successfully
 - Data extracted from Perplexity stored in datalake: {organization_storage_path}
-- Ontology created and stored in triplestore: {config.ontology_store_path}/{organization_id}.ttl
+- Ontology created and stored in triplestore: {config.triple_store_path}/{organization_id}.ttl
 - Ontology YAML published in workspace {config.workspace_id} (id: {ontology_workspace_id}).
 - Plugin (id: {plugin_id}) created or updated in workspace {config.workspace_id}.
 Please refresh your page to access the new plugin and ontology in your workspace.

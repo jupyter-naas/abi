@@ -10,7 +10,7 @@ from src.core.modules.common.pipelines.github.GithubIssuePipeline import (
 )
 from src.core.modules.common.integrations.GithubIntegration import GithubIntegration
 from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration
-from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+from abi.services.triple_store.TripleStoreService import TripleStoreService
 
 @pytest.fixture
 def mock_issue_data():
@@ -100,13 +100,13 @@ def test_github_issue_pipeline(mock_issue_data, mock_project_data, mock_item_dat
     mock_github_graphql.get_item_id_from_node_id.return_value = mock_item_data
     mock_github_graphql.get_item_details.return_value = mock_item_details
 
-    mock_ontology_store = Mock(spec=OntologyStoreService)
+    mock_triple_store = Mock(spec=TripleStoreService)
 
     # Create pipeline configuration
     config = GithubIssuePipelineConfiguration(
         github_integration=mock_github,
         github_graphql_integration=mock_github_graphql,
-        ontology_store=mock_ontology_store
+        triple_store=mock_triple_store
     )
 
     # Create pipeline parameters
@@ -123,7 +123,7 @@ def test_github_issue_pipeline(mock_issue_data, mock_project_data, mock_item_dat
     # Assertions
     assert isinstance(result, Graph)
     mock_github.get_issue.assert_called_once_with("org/repo", "123")
-    mock_ontology_store.insert.assert_called_once()
+    mock_triple_store.insert.assert_called_once()
 
     # Verify the graph contains expected data
     turtle_data = result.serialize(format="turtle")
@@ -156,13 +156,13 @@ def test_github_issue_pipeline_without_project():
     }
 
     mock_github_graphql = Mock(spec=GithubGraphqlIntegration)
-    mock_ontology_store = Mock(spec=OntologyStoreService)
+    mock_triple_store = Mock(spec=TripleStoreService)
 
     # Create pipeline configuration
     config = GithubIssuePipelineConfiguration(
         github_integration=mock_github,
         github_graphql_integration=mock_github_graphql,
-        ontology_store=mock_ontology_store
+        triple_store=mock_triple_store
     )
 
     # Create pipeline parameters
@@ -180,4 +180,4 @@ def test_github_issue_pipeline_without_project():
     assert isinstance(result, Graph)
     mock_github.get_issue.assert_called_once_with("org/repo", "123")
     mock_github_graphql.get_project_node_id.assert_not_called()
-    mock_ontology_store.insert.assert_called_once()
+    mock_triple_store.insert.assert_called_once()

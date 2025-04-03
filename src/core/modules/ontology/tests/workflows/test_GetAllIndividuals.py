@@ -1,6 +1,6 @@
 from src import services
 
-ontology_store = services.ontology_store_service
+triple_store = services.triple_store_service
 
 class_uri = "https://www.commoncoreontologies.org/ont00000089"
 
@@ -15,7 +15,7 @@ WHERE {{
 ORDER BY ?label
 """
 
-results = ontology_store.query(query)
+results = triple_store.query(query)
 data = []
 for row in results:
     data_dict = {}

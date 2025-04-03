@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from dataclasses import dataclass
 from typing import Any
 
-from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 
 @dataclass
 class PipelineConfiguration():

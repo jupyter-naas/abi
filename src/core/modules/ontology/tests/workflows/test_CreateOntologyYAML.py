@@ -3,7 +3,7 @@ from src.core.modules.common.integrations.NaasIntegration import NaasIntegration
 from src import secret, config, services
 
 workflow = CreateClassOntologyYAML(CreateClassOntologyYAMLConfiguration(
-    ontology_store=services.ontology_store_service,
+    triple_store=services.triple_store_service,
     naas_integration_config=NaasIntegrationConfiguration(
         api_key=secret.get("NAAS_API_KEY"),
     )
