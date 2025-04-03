@@ -5,9 +5,13 @@ from dataclasses import dataclass
 from abi import logger
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, Any
-from rdflib import Graph, RDF, OWL, RDFS, URIRef, Literal, Namespace
+from typing import Optional, Any, Tuple
+from rdflib import Graph, URIRef, Literal, Namespace, RDF, OWL, RDFS, SKOS, XSD, TIME, DCTERMS
 import uuid
+
+BFO = Namespace("http://purl.obolibrary.org/obo/")
+CCO = Namespace("https://www.commoncoreontologies.org/")
+ABI = Namespace("http://ontology.naas.ai/abi/")
 
 @dataclass
 class AddIndividualPipelineConfiguration(PipelineConfiguration):
@@ -30,10 +34,11 @@ class AddIndividualPipeline(Pipeline):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def run(self, parameters: AddIndividualPipelineParameters) -> Graph:
+    def run(self, parameters: AddIndividualPipelineParameters) -> Tuple[str, Graph]:
         # Init graph
         graph = Graph()
-        ABI = Namespace("http://ontology.naas.ai/abi/")
+        graph.bind("bfo", BFO)
+        graph.bind("cco", CCO)
         graph.bind("abi", ABI)
 
         # Add individual
@@ -48,7 +53,7 @@ class AddIndividualPipeline(Pipeline):
         return [
             StructuredTool(
                 name="ontology_add_individual",
-                description="Add a new individual to an ontology if it does not already exist.",
+                description="Add a new individual/instance to triple store.",
                 func=lambda **kwargs: self.run(AddIndividualPipelineParameters(**kwargs)),
                 args_schema=AddIndividualPipelineParameters
             )

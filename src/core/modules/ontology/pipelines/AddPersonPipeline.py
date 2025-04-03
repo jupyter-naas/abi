@@ -25,9 +25,10 @@ class AddPersonPipelineConfiguration(PipelineConfiguration):
     add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
 class AddPersonPipelineParameters(PipelineParameters):
-    name: str = Field(..., description="Person's name. It must have a first name and a last name.")
-    first_name: Optional[str] = Field(None, description="Person's first name")
-    last_name: Optional[str] = Field(None, description="Person's last name")
+    name: str = Field(..., description="Person's name. It must have a first name and a last name (e.g. 'Florent Ravenel').")
+    first_name: str = Field(..., description="First name of the person. It can be identified as the first word (before the space) of the person's name (e.g. 'Florent Ravenel' -> 'Florent')")
+    last_name: str = Field(..., description="Last name of the person. It can be identified as the last word (after the space) of the person's name (e.g. 'Florent Ravenel' -> 'Ravenel')")
+    date_of_birth: Optional[str] = Field(None, description="Date of birth of the person. It must be in the format 'YYYY-MM-DD' (e.g. '1990-01-01').")
 
 class AddPersonPipeline(Pipeline):
     """Pipeline for adding a new person to the ontology."""
@@ -50,19 +51,19 @@ class AddPersonPipeline(Pipeline):
 
         # Add person type and properties
         if parameters.first_name:
-            graph.add((person_uri, ABI.firstName, Literal(parameters.first_name)))
+            graph.add((person_uri, ABI.first_name, Literal(parameters.first_name)))
         if parameters.last_name:
-            graph.add((person_uri, ABI.lastName, Literal(parameters.last_name)))
+            graph.add((person_uri, ABI.last_name, Literal(parameters.last_name)))
         
         # Save the graph
         self.__configuration.triple_store.insert(graph)
-        return person_uri, graph
+        return graph
     
     def as_tools(self) -> list[StructuredTool]:
         return [
             StructuredTool(
                 name="ontology_add_person",
-                description="Adds a new person to the ontology with first name and last name. Returns the person's graph.",
+                description="Add a person with a name to the ontology. A first name or last name alone is not enough to use this tool. It must have both first name and last name.",
                 func=lambda **kwargs: self.run(AddPersonPipelineParameters(**kwargs)),
                 args_schema=AddPersonPipelineParameters
             )   
