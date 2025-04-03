@@ -222,6 +222,9 @@ class TripleStoreService(ITripleStoreService):
             # Insert schema into the triple store
             self.insert(g)
             
+            # Get file last update time
+            file_last_update_time = os.path.getmtime(filepath)
+            
             # Insert Schema with hash, filePath, fileLastUpdateTime and content to be able to track changes.
             self.insert(Graph().parse(io.StringIO(f'''
                 @prefix internal: <http://triple-store.internal#> .
