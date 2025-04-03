@@ -158,13 +158,15 @@ class TripleStoreService(ITripleStoreService):
             # Get file last update time
             file_last_update_time = os.path.getmtime(filepath)
             
-            # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
-            if schema_dict['fileLastUpdateTime'] == str(file_last_update_time):
-                return
-            
             # Open file and get content.
             with open(filepath, 'r') as file:
                 new_content = file.read()
+            
+            new_content_hash = hashlib.sha256(new_content.encode('utf-8')).hexdigest()
+            
+            # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
+            if schema_dict['hash'] == new_content_hash:
+                return
             
             # Decode old content
             old_content = base64.b64decode(schema_dict['content']).decode('utf-8')
@@ -195,7 +197,7 @@ class TripleStoreService(ITripleStoreService):
             self.insert(Graph().parse(io.StringIO(f'''
                 @prefix internal: <http://triple-store.internal#> .
                 
-                <{subject}> internal:hash "{hashlib.sha256(new_content.encode('utf-8')).hexdigest()}" ;
+                <{subject}> internal:hash "{new_content_hash}" ;
                     internal:fileLastUpdateTime "{file_last_update_time}" ;
                     internal:content "{base64.b64encode(new_content.encode('utf-8')).decode('utf-8')}" .
             '''), format='turtle'))
