@@ -90,7 +90,7 @@ for module in modules:
 
     # Loading ontologies
     for ontology in module.ontologies:
-        services.triple_store_service.load(ontology)
+        services.triple_store_service.load_schema(ontology)
 
 if __name__ == "__main__":
     cli()
