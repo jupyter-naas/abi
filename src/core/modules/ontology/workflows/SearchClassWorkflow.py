@@ -11,19 +11,19 @@ import os
 from abi.utils.SPARQL import results_to_list
 
 @dataclass
-class SearchClassOntologyConfiguration(WorkflowConfiguration):
-    """Configuration for SearchClassOntology workflow."""
+class SearchClassConfigurationWorkflow(WorkflowConfiguration):
+    """Configuration for SearchClass workflow."""
     triple_store: ITripleStoreService
 
 class SearchClassWorkflowParameters(WorkflowParameters):
     """Parameters for SearchClass workflow."""
     search_label: str = Field(..., description="Class label to search for in the ontology schema.")
 
-class SearchClassOntologyWorkflow(Workflow):
+class SearchClassWorkflow(Workflow):
     """Workflow for searching ontology classes."""
-    __configuration: SearchClassOntologyConfiguration
+    __configuration: SearchClassConfigurationWorkflow
     
-    def __init__(self, configuration: SearchClassOntologyConfiguration):
+    def __init__(self, configuration: SearchClassConfigurationWorkflow):
         super().__init__(configuration)
         self.__configuration = configuration
 
