@@ -25,12 +25,12 @@ class AddCommercialOrganizationPipelineConfiguration(PipelineConfiguration):
     add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
 class AddCommercialOrganizationPipelineParameters(PipelineParameters):
-    name: Optional[str] = Field(None, description="Name of the commercial organization.")
-    individual_uri: Optional[str] = Field(None, description="URI of the commercial organization if already known.")
-    legal_uri: Optional[str] = Field(None, description="Individual URI from class: https://www.commoncoreontologies.org/ont00001331")
-    ticker_uri: Optional[str] = Field(None, description="Individual URI from class: http://ontology.naas.ai/abi/Ticker")
-    website_uri: Optional[str] = Field(None, description="Individual URI from class: http://ontology.naas.ai/abi/Website")
-    linkedin_page_uri: Optional[str] = Field(None, description="Individual URI from class: http://ontology.naas.ai/abi/LinkedInOrganizationPage")
+    name: Optional[str] = Field(None, description="Name of the commercial organization to be added in class: https://www.commoncoreontologies.org/ont00000443")
+    individual_uri: Optional[str] = Field(None, description="URI of the commercial organization if already known. It must start with 'http://ontology.naas.ai/abi/'.")
+    legal_uri: Optional[str] = Field(None, description="Individual URI from class: https://www.commoncoreontologies.org/ont00001331. It must start with 'http://ontology.naas.ai/abi/'.")
+    ticker_uri: Optional[str] = Field(None, description="Individual URI from class: http://ontology.naas.ai/abi/Ticker. It must start with 'http://ontology.naas.ai/abi/'.")
+    website_uri: Optional[str] = Field(None, description="Individual URI from class: http://ontology.naas.ai/abi/Website. It must start with 'http://ontology.naas.ai/abi/'.")
+    linkedin_page_uri: Optional[str] = Field(None, description="Individual URI from class: http://ontology.naas.ai/abi/LinkedInOrganizationPage. It must start with 'http://ontology.naas.ai/abi/'.")
 
 class AddCommercialOrganizationPipeline(Pipeline):
     """Pipeline for adding a new commercial organization to the ontology."""
@@ -42,7 +42,10 @@ class AddCommercialOrganizationPipeline(Pipeline):
         self.__add_individual_pipeline = AddIndividualPipeline(configuration.add_individual_pipeline_configuration)
 
     def run(self, parameters: AddCommercialOrganizationPipelineParameters) -> str:
+        # Initialize a new graph
         graph = Graph()
+
+        # Create organization URI using name
         organization_uri = parameters.individual_uri
         if parameters.name and not organization_uri:
             # Create organization URI using name
@@ -50,26 +53,43 @@ class AddCommercialOrganizationPipeline(Pipeline):
                 class_uri=CCO.ont00000443,
                 individual_label=parameters.name
             ))        
+        else:
+            if organization_uri.startswith("http://ontology.naas.ai/abi/"):
+                organization_uri = URIRef(organization_uri)
+            else:
+                raise ValueError(f"Invalid Organization URI: {organization_uri}. It must start with 'http://ontology.naas.ai/abi/'.")
 
         # Add legal URI if provided
         if parameters.legal_uri:
-            graph.add((organization_uri, ABI.hasLegalName, parameters.legal_uri))
-            graph.add((parameters.legal_uri, ABI.isLegalNameOf, organization_uri))
+            if parameters.legal_uri.startswith("http://ontology.naas.ai/abi/"):
+                graph.add((organization_uri, ABI.hasLegalName, URIRef(parameters.legal_uri)))
+                graph.add((URIRef(parameters.legal_uri), ABI.isLegalNameOf, organization_uri))
+            else:
+                raise ValueError(f"Invalid Legal URI: {parameters.legal_uri}. It must start with 'http://ontology.naas.ai/abi/'.")
 
         # Add website URL if provided
         if parameters.website_uri:
-            graph.add((organization_uri, ABI.hasWebsite, parameters.website_uri))
-            graph.add((parameters.website_uri, ABI.isWebsiteOf, organization_uri))
+            if parameters.website_uri.startswith("http://ontology.naas.ai/abi/"):
+                graph.add((organization_uri, ABI.hasWebsite, URIRef(parameters.website_uri)))
+                graph.add((URIRef(parameters.website_uri), ABI.isWebsiteOf, organization_uri))
+            else:
+                raise ValueError(f"Invalid Website URI: {parameters.website_uri}. It must start with 'http://ontology.naas.ai/abi/'.")
         
         # Add ticker URI if provided
         if parameters.ticker_uri:
-            graph.add((organization_uri, ABI.hasTickerSymbol, parameters.ticker_uri))
-            graph.add((parameters.ticker_uri, ABI.isTickerSymbolOf, organization_uri))
+            if parameters.ticker_uri.startswith("http://ontology.naas.ai/abi/"):
+                graph.add((organization_uri, ABI.hasTickerSymbol, URIRef(parameters.ticker_uri)))
+                graph.add((URIRef(parameters.ticker_uri), ABI.isTickerSymbolOf, organization_uri))
+            else:
+                raise ValueError(f"Invalid Ticker URI: {parameters.ticker_uri}. It must start with 'http://ontology.naas.ai/abi/'.")
             
         # Add LinkedIn page URI if provided
         if parameters.linkedin_page_uri:
-            graph.add((organization_uri, ABI.hasLinkedInPage, parameters.linkedin_page_uri))
-            graph.add((parameters.linkedin_page_uri, ABI.isLinkedInPageOf, organization_uri))
+            if parameters.linkedin_page_uri.startswith("http://ontology.naas.ai/abi/"):
+                graph.add((organization_uri, ABI.hasLinkedInPage, URIRef(parameters.linkedin_page_uri)))
+                graph.add((URIRef(parameters.linkedin_page_uri), ABI.isLinkedInPageOf, organization_uri))
+            else:
+                raise ValueError(f"Invalid LinkedIn Page URI: {parameters.linkedin_page_uri}. It must start with 'http://ontology.naas.ai/abi/'.")
         
         # Save the graph
         self.__configuration.triple_store.insert(graph)
