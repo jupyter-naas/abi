@@ -152,3 +152,21 @@ class ITripleStoreService(ABC):
     @abstractmethod
     def query_view(self, view: str, query: str) -> Graph:
         pass
+    
+    @abstractmethod
+    def load(self, filepath: str):
+        """Load an RDF/OWL ontology file into the triple store.
+        
+        This method takes a file path string pointing to an RDF/OWL ontology file,
+        loads it into an RDFlib Graph, and inserts all triples into the triple store.
+        
+        Args:
+            filepath (str): Path to the RDF/OWL ontology file to load
+            
+        Returns:
+            None
+            
+        Example:
+            >>> store.load("path/to/ontology.ttl")
+        """
+        pass

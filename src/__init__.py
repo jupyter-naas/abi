@@ -83,9 +83,14 @@ services = init_services(config, secret)
 modules = get_modules()
 
 for module in modules:
+    # Loading triggers
     for trigger in module.triggers:
         topic, event_type, callback = trigger
         services.triple_store_service.subscribe(topic, event_type, callback)
+
+    # Loading ontologies
+    for ontology in module.ontologies:
+        services.triple_store_service.load(ontology)
 
 if __name__ == "__main__":
     cli()
