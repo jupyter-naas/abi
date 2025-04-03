@@ -8,11 +8,22 @@ from src.core.modules.ontology.workflows.SearchClassWorkflow import SearchClassW
 from src.core.modules.ontology.workflows.SearchIndividualWorkflow import SearchIndividualWorkflow, SearchIndividualConfigurationWorkflow
 from src.core.modules.ontology.workflows.GetIndividualsFromClassWorkflow import GetIndividualsFromClassWorkflow, GetIndividualsFromClassConfigurationWorkflow
 # Specialized
+from src.core.modules.ontology.pipelines.AddCommercialOrganizationPipeline import AddCommercialOrganizationPipeline, AddCommercialOrganizationPipelineConfiguration
+from src.core.modules.ontology.pipelines.AddLinkedInPagePipeline import AddLinkedInPagePipeline, AddLinkedInPagePipelineConfiguration
 from src.core.modules.ontology.pipelines.AddPersonPipeline import AddPersonPipeline, AddPersonPipelineConfiguration
-from src.core.modules.ontology.workflows.SearchPersonWorkflow import SearchPersonWorkflow, SearchPersonConfigurationWorkflow
 from src.core.modules.ontology.pipelines.AddSkillPipeline import AddSkillPipeline, AddSkillPipelineConfiguration
+from src.core.modules.ontology.pipelines.AddWebsitePipeline import AddWebsitePipeline, AddWebsitePipelineConfiguration
+from src.core.modules.ontology.pipelines.AddLegalNamePipeline import AddLegalNamePipeline, AddLegalNamePipelineConfiguration
+from src.core.modules.ontology.pipelines.AddTickerPipeline import AddTickerPipeline, AddTickerPipelineConfiguration
+
+from src.core.modules.ontology.workflows.SearchPersonWorkflow import SearchPersonWorkflow, SearchPersonConfigurationWorkflow
 from src.core.modules.ontology.workflows.SearchSkillWorkflow import SearchSkillWorkflow, SearchSkillConfigurationWorkflow
-from src.core.modules.ontology.pipelines.AddSkilltoPersonPipeline import AddSkilltoPersonPipeline, AddSkilltoPersonPipelineConfiguration
+from src.core.modules.ontology.workflows.SearchCommercialOrganizationWorkflow import SearchCommercialOrganizationWorkflow, SearchCommercialOrganizationConfigurationWorkflow
+from src.core.modules.ontology.workflows.SearchWebsitePipeline import SearchWebsiteWorkflow, SearchWebsiteConfigurationWorkflow
+from src.core.modules.ontology.workflows.SearchLinkedInPagePipeline import SearchLinkedInPageWorkflow, SearchLinkedInPageConfigurationWorkflow
+from src.core.modules.ontology.workflows.SearchTickerPipeline import SearchTickerWorkflow, SearchTickerConfigurationWorkflow
+from src.core.modules.ontology.workflows.SearchLegalNamePipeline import SearchLegalNameWorkflow, SearchLegalNameConfigurationWorkflow
+
 from src.core.modules.ontology.workflows.GetPersonsAssociatedwithSkillsWorkflow import GetPersonsAssociatedwithSkillsWorkflow, GetPersonsAssociatedwithSkillsConfigurationWorkflow
 from src.core.modules.ontology.workflows.GetSkillsAssociatedwithPersonsWorkflow import GetSkillsAssociatedwithPersonsWorkflow, GetSkillsAssociatedwithPersonsConfigurationWorkflow
 
@@ -27,19 +38,22 @@ You must ALWAYS identify the best tool to use to answer the user's question.
 
 Specific rules: Add Individual
 --------------------------------
-Before adding an new individual/instance to the ontology always try to find if it does not already exist in the ontology.
+Before adding/updating an new individual/instance to the ontology always try to find if it does not already exist in the ontology.
 To do so follow these steps:
 1. Search the individual:
     Search if the individual already exists in the ontology using corresponding workflows. For example, if the user request to add a person like "Add Florent Ravenel", you can use the `ontology_search_person` tool.
     If no workflows exists:
         - Search the class that could be used to add the individual using the `ontology_search_class` tool. If you find a class with a score >= 9 use it. If not ask user for validation.
         - Search if the individual already exists using the `ontology_search_individual` tool.
-2. Add the individual:
-    If the individual doesn't exist, add it to the ontology using the corresponding pipeline. For example, if the user request to add a person like "Add Florent Ravenel", you can use the `ontology_add_person` tool.
+2. Add or update the individual:
+    If the individual doesn't exist, add it to the ontology, if it exists update it by passing the individual URI (parameter: individual_uri).
+    All parameters that need a URI (ends with "_uri" or "_uris") must be created as individual in the ontology using this same process. A valid URI must start with the namespace abi: "http://ontology.naas.ai/abi/".
+    Try to use existing pipelines. For example, if the user request to add a person like "Add Florent Ravenel", you can use the `ontology_add_person` tool.
     If you can't find a corresponding pipeline, use the `ontology_add_individual` tool with the class found in step 1.
 
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 """
+
 SUGGESTIONS = [
     {
         "label": "Learn About Ontology",
@@ -102,8 +116,45 @@ def create_agent(
     search_skill_workflow = SearchSkillWorkflow(SearchSkillConfigurationWorkflow(triple_store))
     tools += search_skill_workflow.as_tools()
 
-    add_skill_to_person_pipeline = AddSkilltoPersonPipeline(AddSkilltoPersonPipelineConfiguration(triple_store))
-    tools += add_skill_to_person_pipeline.as_tools()
+    add_commercial_organization_pipeline_configuration = AddCommercialOrganizationPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_commercial_organization_pipeline = AddCommercialOrganizationPipeline(add_commercial_organization_pipeline_configuration)
+    tools += add_commercial_organization_pipeline.as_tools()
+
+    search_commercial_organization_workflow = SearchCommercialOrganizationWorkflow(SearchCommercialOrganizationConfigurationWorkflow(triple_store))
+    tools += search_commercial_organization_workflow.as_tools()
+
+    add_linkedin_page_pipeline_configuration = AddLinkedInPagePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_linkedin_page_pipeline = AddLinkedInPagePipeline(add_linkedin_page_pipeline_configuration)
+    tools += add_linkedin_page_pipeline.as_tools()
+
+    search_linkedin_page_workflow = SearchLinkedInPageWorkflow(SearchLinkedInPageConfigurationWorkflow(triple_store))
+    tools += search_linkedin_page_workflow.as_tools()
+
+    add_website_pipeline_configuration = AddWebsitePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_website_pipeline = AddWebsitePipeline(add_website_pipeline_configuration)
+    tools += add_website_pipeline.as_tools()
+
+    search_website_workflow = SearchWebsiteWorkflow(SearchWebsiteConfigurationWorkflow(triple_store))
+    tools += search_website_workflow.as_tools()
+
+    add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_legal_name_pipeline = AddLegalNamePipeline(add_legal_name_pipeline_configuration)
+    tools += add_legal_name_pipeline.as_tools()
+
+    add_ticker_pipeline_configuration = AddTickerPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_ticker_pipeline = AddTickerPipeline(add_ticker_pipeline_configuration)
+    tools += add_ticker_pipeline.as_tools()
+
+    search_ticker_workflow = SearchTickerWorkflow(SearchTickerConfigurationWorkflow(triple_store))
+    tools += search_ticker_workflow.as_tools()
+
+    add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_legal_name_pipeline = AddLegalNamePipeline(add_legal_name_pipeline_configuration)
+    tools += add_legal_name_pipeline.as_tools()
+
+    search_legal_name_workflow = SearchLegalNameWorkflow(SearchLegalNameConfigurationWorkflow(triple_store))
+    tools += search_legal_name_workflow.as_tools()
+    
 
     get_persons_associated_with_skills_workflow = GetPersonsAssociatedwithSkillsWorkflow(GetPersonsAssociatedwithSkillsConfigurationWorkflow(triple_store))
     tools += get_persons_associated_with_skills_workflow.as_tools()
