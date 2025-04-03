@@ -8,24 +8,24 @@ from langchain_core.tools import StructuredTool
 from abi.utils.SPARQL import results_to_list
 
 @dataclass
-class SearchIndividualOntologyConfiguration(WorkflowConfiguration):
-    """Configuration for SearchIndividualOntology workflow."""
+class SearchSkillConfigurationWorkflow(WorkflowConfiguration):
+    """Configuration for SearchSkill workflow."""
     triple_store: ITripleStoreService
 
-class SearchIndividualWorkflowParameters(WorkflowParameters):
-    """Parameters for SearchIndividual workflow."""
-    class_uri: str = Field(..., description="Class URI to use to search for individuals.")
-    search_label: str = Field(..., description="Individual label to search for in the ontology schema.")
+class SearchSkillWorkflowParameters(WorkflowParameters):
+    """Parameters for SearchSkill workflow."""
+    search_label: str = Field(..., description="Name of the skill to search for in the ontology schema.")
 
-class SearchIndividualOntologyWorkflow(Workflow):
-    """Workflow for searching ontology individuals."""
-    __configuration: SearchIndividualOntologyConfiguration
+class SearchSkillWorkflow(Workflow):
+    """Workflow for searching ontology skills."""
+    __configuration: SearchSkillConfigurationWorkflow
     
-    def __init__(self, configuration: SearchIndividualOntologyConfiguration):
+    def __init__(self, configuration: SearchSkillConfigurationWorkflow):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> dict:
+    def search_skill(self, parameters: SearchSkillWorkflowParameters) -> dict:
+        class_uri = "https://www.commoncoreontologies.org/ont00000089"
         query = f"""
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
@@ -33,7 +33,7 @@ class SearchIndividualOntologyWorkflow(Workflow):
             ?individual_uri a ?class_uri ;
                             a owl:NamedIndividual ;
                             rdfs:label ?label .
-            FILTER(?class_uri = <{parameters.class_uri}>)
+            FILTER(?class_uri = <{class_uri}>)
             
             # Calculate scores for perfect and partial matches
             BIND(IF(LCASE(STR(?label)) = LCASE("{parameters.search_label}"), 10, 0) AS ?perfect_score)
@@ -48,16 +48,16 @@ class SearchIndividualOntologyWorkflow(Workflow):
         GROUP BY ?class_uri ?individual_uri ?label
         ORDER BY DESC(?score) ?label
         """
-        results = self.__configuration.ontology_store.query(query)
+        results = self.__configuration.triple_store.query(query)
         return results_to_list(results)
 
     def as_tools(self) -> list[StructuredTool]:
         return [
             StructuredTool(
-                name="ontology_search_individual",
-                description="Search an ontology individual based on its label. It will return the most relevant individual using matching with rdfs:label",
-                func=lambda class_uri, search_label: self.search_individual(SearchIndividualWorkflowParameters(class_uri=class_uri, search_label=search_label)),
-                args_schema=SearchIndividualWorkflowParameters
+                name="ontology_search_skill",
+                description="Search an ontology skill based on its name.",
+                func=lambda search_label: self.search_skill(SearchSkillWorkflowParameters(search_label=search_label)),
+                args_schema=SearchSkillWorkflowParameters
             )
         ]
 
