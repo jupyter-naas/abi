@@ -78,11 +78,14 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
     def load(self) -> Graph:
         triples = Graph()
         
-        for obj in self.__object_storage_service.list_objects(prefix=self.__triples_prefix):
-            g = self.load_triples(obj)
-            for prefix, namespace in g.namespaces():
-                triples.bind(prefix, namespace)
-            triples += g
+        try:
+            for obj in self.__object_storage_service.list_objects(prefix=self.__triples_prefix):
+                g = self.load_triples(obj)
+                for prefix, namespace in g.namespaces():
+                    triples.bind(prefix, namespace)
+                triples += g
+        except ObjectStorageExceptions.ObjectNotFound:
+            pass
             
         return triples
 
