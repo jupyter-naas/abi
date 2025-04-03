@@ -154,19 +154,20 @@ class ITripleStoreService(ABC):
         pass
     
     @abstractmethod
-    def load(self, filepath: str):
-        """Load an RDF/OWL ontology file into the triple store.
+    def load_schema(self, filepath: str):
+        """Load an RDF/OWL schema file into the triple store.
         
-        This method takes a file path string pointing to an RDF/OWL ontology file,
-        loads it into an RDFlib Graph, and inserts all triples into the triple store.
+        This method takes a file path string pointing to an RDF/OWL schema file,
+        loads it into an RDFlib Graph, and inserts all schema triples into the triple store.
+        The schema defines the ontology structure including classes, properties and restrictions.
         
         Args:
-            filepath (str): Path to the RDF/OWL ontology file to load
+            filepath (str): Path to the RDF/OWL schema file to load
             
         Returns:
             None
             
         Example:
-            >>> store.load("path/to/ontology.ttl")
+            >>> store.load_schema("path/to/schema.ttl") 
         """
         pass
