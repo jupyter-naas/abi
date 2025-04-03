@@ -8,7 +8,7 @@ from langchain_core.tools import StructuredTool
 from abi.utils.SPARQL import results_to_list
 
 @dataclass
-class GetIndividualsFromClassConfiguration(WorkflowConfiguration):
+class GetIndividualsFromClassConfigurationWorkflow(WorkflowConfiguration):
     """Configuration for GetIndividualsFromClass workflow."""
     triple_store: ITripleStoreService
 
@@ -18,9 +18,9 @@ class GetIndividualsFromClassWorkflowParameters(WorkflowParameters):
 
 class GetIndividualsFromClassWorkflow(Workflow):
     """Workflow for getting all individuals of a class."""
-    __configuration: GetIndividualsFromClassConfiguration
+    __configuration: GetIndividualsFromClassConfigurationWorkflow
     
-    def __init__(self, configuration: GetIndividualsFromClassConfiguration):
+    def __init__(self, configuration: GetIndividualsFromClassConfigurationWorkflow):
         super().__init__(configuration)
         self.__configuration = configuration
 
