@@ -48,6 +48,9 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
             
             graph.serialize(destination=self.hash_triples_path(subject_hash), format='turtle')
         
+        for prefix, namespace in triples.namespaces():
+            self.__live_graph.bind(prefix, namespace)
+        
         # Update the live graph
         self.__live_graph += triples
 
