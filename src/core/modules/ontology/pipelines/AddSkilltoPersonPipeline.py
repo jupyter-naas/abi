@@ -31,7 +31,7 @@ class AddSkilltoPersonPipeline(Pipeline):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def run(self, parameters: AddSkilltoPersonPipelineParameters) -> Graph:
+    def run(self, parameters: AddSkilltoPersonPipelineParameters) -> str:
         # Init URI
         person_uri = URIRef(str(parameters.person_uri))
         skill_uri = URIRef(str(parameters.skill_uri))
@@ -45,7 +45,7 @@ class AddSkilltoPersonPipeline(Pipeline):
         graph = Graph()
         graph.add((skill_uri, ABI.isSkillOf, person_uri))
         self.__configuration.triple_store.insert(graph)
-        
+        return f"Skill {parameters.skill_uri} added to person {parameters.person_uri}"
     
     def as_tools(self) -> list[StructuredTool]:
         return [
