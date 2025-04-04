@@ -29,7 +29,7 @@ ABI's codebase is organized into two primary module categories:
 
 1. **Core Modules** (`src/core/modules/`): Essential system functionality
 2. **Custom Modules** (`src/custom/modules/`): User-created extensions
-3. **Marketplace**: (`src/custom/marketplace/`) A place for sharing and discovering integrations, pipelines, and workflows, analytics, agents & agents
+3. **Marketplace**: (`marketplace/`) A place for sharing and discovering integrations, pipelines, and workflows, analytics, agents & agents
 
 Each module follows a standardized directory structure:
 - `agents/`: AI agent implementations
