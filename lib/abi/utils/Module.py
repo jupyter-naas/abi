@@ -15,7 +15,7 @@ class IModule(ABC):
     
     
     The default loading mechanism will:
-    1. Load all agents from the module's 'assistants' directory
+    1. Load all agents from the module's 'agents' directory
     2. Initialize module configuration and state
     
     Attributes:
