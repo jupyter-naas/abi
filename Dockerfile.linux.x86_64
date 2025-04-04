@@ -11,6 +11,7 @@ ADD ./poetry.lock /app/poetry.lock
 ADD ./pyproject.toml /app/pyproject.toml
 ADD ./README.md /app/README.md
 ADD ./.git /app/.git
+ADD ./marketplace/ /app/marketplace
 
 RUN pip install poetry
 RUN poetry install
