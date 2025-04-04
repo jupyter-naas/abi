@@ -53,7 +53,7 @@ src/
 ```
 
 Each module can contain:
-- `assistants/`: LLM agent configurations
+- `agents/`: LLM agent configurations
 - `workflows/`: Business logic implementations
 - `pipelines/`: Data transformation processes
 - `integrations/`: Service connectors
@@ -124,9 +124,9 @@ Pipelines transform data into semantic triples:
 4. Ensure idempotent operations
 5. Handle large datasets efficiently
 
-### Implementing Assistants
+### Implementing Agents
 
-Assistants provide LLM agent interfaces:
+Agents provide LLM agent interfaces:
 
 1. Define metadata (name, description, etc.)
 2. Create a system prompt
