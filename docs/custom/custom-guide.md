@@ -9,7 +9,7 @@ This documentation covers how to work with custom modules in the ABI system. Cus
 Custom modules are extension points that allow you to add your own functionality to the ABI system without modifying the core codebase. They follow the same modular architecture as core modules but are kept separate to maintain a clear distinction between essential system functionality and custom extensions.
 
 Custom modules can contain:
-- **Assistants**: AI agents that provide specific capabilities
+- **Agents**: AI agents that provide specific capabilities
 - **Workflows**: Sequences of operations that accomplish specific tasks
 - **Pipelines**: Data processing flows that transform and analyze information
 - **Integrations**: Connectors to external services and APIs
@@ -37,7 +37,7 @@ cp -r src/marketplace/your_module_name/ src/custom/modules/
 
 ```
 src/custom/modules/your_module_name/
-├── assistants/           # Contains AI agents
+├── agents/           # Contains AI agents
 ├── workflows/            # Contains workflow implementations
 ├── pipelines/            # Contains pipeline implementations
 ├── integrations/         # Contains service connectors
@@ -89,7 +89,7 @@ custom_modules:
 
 Once installed, custom modules are automatically discovered and loaded by the ABI system at runtime. You can use them in several ways:
 
-### Accessing Assistants
+### Accessing Agents
 
 ```bash
 # Run a custom assistant directly
@@ -99,7 +99,7 @@ make chat-your-assistant-name-agent
 ### Using Workflows and Pipelines
 
 Custom workflows and pipelines can be:
-1. Used by assistants as tools
+1. Used by agents as tools
 2. Called directly from your code
 3. Accessed via the API endpoints they expose
 
