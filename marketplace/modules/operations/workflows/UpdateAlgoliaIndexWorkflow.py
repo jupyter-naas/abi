@@ -47,17 +47,17 @@ class UpdateAlgoliaIndex(Workflow):
         self.__algolia = AlgoliaIntegration(self.__configuration.algolia_integration_config)
 
     def __scan_agents(self, branch_name: str) -> List[Dict[str, str]]:
-        """Scan assistants directory and collect metadata."""
+        """Scan agents directory and collect metadata."""
         results = []
-        assistants_dir = Path("src/core/assistants")
+        agents_dir = Path("src/core/agents")
         
-        for file in assistants_dir.rglob("*.py"):
+        for file in agents_dir.rglob("*.py"):
             if file.stem.endswith("Assistant"):
                 logger.info(f"Processing assistant {file}")
                 try:
                     # Build import path based on file location
-                    import_path = "src.core.modules.common.assistants"
-                    relative_path = file.relative_to(assistants_dir)
+                    import_path = "src.core.modules.common.agents"
+                    relative_path = file.relative_to(agents_dir)
                     if len(relative_path.parts) > 1:
                         # File is in subfolder(s)
                         import_path += "." + ".".join(relative_path.parts[:-1])
@@ -83,7 +83,7 @@ class UpdateAlgoliaIndex(Workflow):
                         "description": getattr(module, "DESCRIPTION", ""),
                         "image_url": getattr(module, "AVATAR_URL", ""),
                         "source_title": subfolder.capitalize(),
-                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/assistants/{relative_path}",
+                        "source_url": f"https://github.com/jupyter-naas/abi/tree/{branch_name}/src/core/agents/{relative_path}",
                         "ranking": ranking,
                         "slug": getattr(module, "SLUG", slug),
                         "model": getattr(module, "MODEL", "gpt-4o-mini"), 
@@ -627,9 +627,9 @@ class UpdateAlgoliaIndex(Workflow):
         all_records = []
 
         # Collect all data with branch_name parameter
-        assistants = self.__scan_agents(parameters.branch_name)
-        logger.info(f"Found {len(assistants)} assistants")
-        all_records.extend(assistants)
+        agents = self.__scan_agents(parameters.branch_name)
+        logger.info(f"Found {len(agents)} agents")
+        all_records.extend(agents)
 
         integrations = self.__scan_integrations(parameters.branch_name)
         logger.info(f"Found {len(integrations)} integrations")
@@ -668,7 +668,7 @@ class UpdateAlgoliaIndex(Workflow):
         """Returns a list of LangChain tools for this workflow."""
         return [StructuredTool(
             name="update_algolia_index",
-            description="Updates the Algolia search index with all assistants, integrations, and ontologies metadata",
+            description="Updates the Algolia search index with all agents, integrations, and ontologies metadata",
             func=lambda **kwargs: asyncio.run(self.run(UpdateAlgoliaIndexParameters(**kwargs))),
             args_schema=UpdateAlgoliaIndexParameters
         )]

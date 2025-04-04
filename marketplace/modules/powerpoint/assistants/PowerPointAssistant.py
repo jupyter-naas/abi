@@ -2,7 +2,7 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config
 from fastapi import APIRouter
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src.core.modules.common.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration

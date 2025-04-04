@@ -14,29 +14,29 @@ from pathlib import Path
 import os
 
 @dataclass
-class PublishRemoteAssistantsWorkflowConfiguration(WorkflowConfiguration):
-    """Configuration for PublishRemoteAssistantsWorkflow.
+class PublishRemoteAgentsWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for PublishRemoteAgentsWorkflow.
     
     Attributes:
         naas_integration_config (NaasIntegrationConfiguration): Configuration for Naas integration
-        workspace_id (str): The ID of the workspace to publish the remote assistants to
-        space_name (str): The name of the space to publish the remote assistants to
+        workspace_id (str): The ID of the workspace to publish the remote agents to
+        space_name (str): The name of the space to publish the remote agents to
     """
     naas_integration_config: NaasIntegrationConfiguration
     workspace_id: str = config.workspace_id
     space_name: str = config.space_name
 
-class PublishRemoteAssistantsWorkflow(Workflow):
-    """Workflow for publishing remote assistants to a Naas workspace."""
+class PublishRemoteAgentsWorkflow(Workflow):
+    """Workflow for publishing remote agents to a Naas workspace."""
     
-    __configuration: PublishRemoteAssistantsWorkflowConfiguration
+    __configuration: PublishRemoteAgentsWorkflowConfiguration
     
-    def __init__(self, configuration: PublishRemoteAssistantsWorkflowConfiguration):
+    def __init__(self, configuration: PublishRemoteAgentsWorkflowConfiguration):
         self.__configuration = configuration
         self.__naas = NaasIntegration(self.__configuration.naas_integration_config)
 
-    def publish_remote_assistants(self) -> List[str]:
-        """Publishes the remote assistants to the workspace.
+    def publish_remote_agents(self) -> List[str]:
+        """Publishes the remote agents to the workspace.
         
         Returns:
             List[str]: List of messages indicating the status of the publication
@@ -60,7 +60,7 @@ class PublishRemoteAssistantsWorkflow(Workflow):
             content = file.read()
 
         # Get full import paths and run functions
-        import_matches = [match[0] for match in re.findall(r'from (src\.(core|custom)\.assistants(?:\.\w+)*\.\w+Assistant) import .*', content)]
+        import_matches = [match[0] for match in re.findall(r'from (src\.(core|custom)\.agents(?:\.\w+)*\.\w+Assistant) import .*', content)]
 
         # Extract run functions from imports
         for import_path in import_matches:
@@ -110,7 +110,7 @@ class PublishRemoteAssistantsWorkflow(Workflow):
                         "type": type, 
                         "include_ontology": "true",
                         "include_date": "true",
-                        "remote": {"url": f"{api_base_url}/assistants/{route_name}/stream-completion?token={api_key}"},
+                        "remote": {"url": f"{api_base_url}/agents/{route_name}/stream-completion?token={api_key}"},
                         "suggestions": suggestions
                     }
                 else:
@@ -142,7 +142,7 @@ class PublishRemoteAssistantsWorkflow(Workflow):
         return [
             StructuredTool(
                 name="publish_remote_agents",
-                description="Publish remote assistants to a Naas workspace",
+                description="Publish remote agents to a Naas workspace",
                 func=self.publish_remote_agents,
                 args_schema=None
             )
@@ -152,10 +152,10 @@ class PublishRemoteAssistantsWorkflow(Workflow):
         pass
     
 if __name__ == "__main__":
-    configuration = PublishRemoteAssistantsWorkflowConfiguration(
+    configuration = PublishRemoteAgentsWorkflowConfiguration(
         naas_integration_config=NaasIntegrationConfiguration(
             api_key=secret.get('NAAS_API_KEY')
         )
     )
-    workflow = PublishRemoteAssistantsWorkflow(configuration)
-    workflow.publish_remote_assistants()
+    workflow = PublishRemoteAgentsWorkflow(configuration)
+    workflow.publish_remote_agents()
