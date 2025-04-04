@@ -1,5 +1,5 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src import config
 from dataclasses import dataclass
 from pydantic import Field
@@ -17,9 +17,9 @@ class GetPersonsAssociatedwithSkillsConfigurationWorkflow(WorkflowConfiguration)
     """Configuration for GetPersonsAssociatedwithSkills workflow.
     
     Attributes:
-        ontology_store (IOntologyStoreService): Ontology store service
+        triple_store (ITripleStoreService): Ontology store service
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class GetPersonsAssociatedwithSkillsWorkflowParameters(WorkflowParameters):
     """Parameters for GetPersonsAssociatedwithSkills workflow.
@@ -52,7 +52,7 @@ class GetPersonsAssociatedwithSkillsWorkflow(Workflow):
             ?person rdfs:label ?person_label .
         }}
         """
-        results = self.__configuration.ontology_store.query(query)
+        results = self.__configuration.triple_store.query(query)
         return results_to_list(results)
     
     def as_tools(self) -> list[StructuredTool]:

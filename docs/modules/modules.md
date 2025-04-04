@@ -11,7 +11,7 @@ This separation makes the system architecture easier to understand and maintain,
 
 Modules provide a way to organize and structure your code in a modular fashion, making it easier to maintain, extend, and reuse functionality. They can contain various components such as:
 
-- **Assistants**: AI agents that provide specific capabilities
+- **Agents**: AI agents that provide specific capabilities
 - **Workflows**: Sequences of operations that accomplish specific tasks
 - **Pipelines**: Data processing flows that transform and analyze information
 - **Tests**: Unit and integration tests for the module's components
@@ -26,7 +26,7 @@ The ABI system automatically discovers and loads modules at runtime. Here's how 
 2. Each subdirectory (except `__pycache__` and those containing "disabled" in their name) is considered a module
 3. The module is imported using Python's import system
 4. An `IModule` instance is created for the module
-5. The module's components (assistants, workflows, pipelines) are loaded
+5. The module's components (agents, workflows, pipelines) are loaded
 6. The loaded module is added to the system's registry
 
 This automatic loading mechanism means that you can add new functionality to the system simply by creating a new module directory with the appropriate structure in either the core or custom modules directory.
@@ -37,7 +37,7 @@ A typical module has the following directory structure:
 
 ```
 src/core/modules/your_core_module_name/
-├── assistants/           # Contains AI agents
+├── agents/           # Contains AI agents
 │   └── YourAssistant.py  # An agent implementation
 ├── workflows/            # Contains workflow implementations
 │   └── YourWorkflow.py   # A workflow implementation
@@ -51,7 +51,7 @@ Or for custom modules:
 
 ```
 src/custom/modules/your_custom_module_name/
-├── assistants/           # Contains AI agents
+├── agents/           # Contains AI agents
 │   └── YourAssistant.py  # An agent implementation
 ├── workflows/            # Contains workflow implementations
 │   └── YourWorkflow.py   # A workflow implementation
@@ -63,7 +63,7 @@ src/custom/modules/your_custom_module_name/
 
 ### How Components Are Loaded
 
-- **Assistants**: The system looks for Python files in the `assistants/` directory. Each file should contain a `create_agent()` function that returns an `Agent` instance.
+- **Agents**: The system looks for Python files in the `agents/` directory. Each file should contain a `create_agent()` function that returns an `Agent` instance.
 - **Workflows and Pipelines**: These are made available to the system when they're imported as part of the module loading process.
 
 ## Creating a New Module
@@ -74,7 +74,7 @@ To create a new module, follow these steps:
    - Core modules (`src/core/modules/`) are for essential system functionality
    - Custom modules (`src/custom/modules/`) are for extensions and user-specific functionality
 2. Create a new directory under the appropriate path with your module name (use a descriptive name in snake_case)
-3. Set up the standard directory structure (assistants, workflows, pipelines, tests)
+3. Set up the standard directory structure (agents, workflows, pipelines, tests)
 4. Implement your components following the appropriate patterns
 
 ### Step-by-Step Guide
@@ -83,17 +83,17 @@ To create a new module, follow these steps:
 
 For a core module:
 ```bash
-mkdir -p src/core/modules/your_module_name/{assistants,workflows,pipelines,tests}
+mkdir -p src/core/modules/your_module_name/{agents,workflows,pipelines,tests}
 ```
 
 For a custom module:
 ```bash
-mkdir -p src/custom/modules/your_module_name/{assistants,workflows,pipelines,tests}
+mkdir -p src/custom/modules/your_module_name/{agents,workflows,pipelines,tests}
 ```
 
 #### 2. Create an Assistant
 
-Create a file `src/[core|custom]/modules/your_module_name/assistants/YourAssistant.py`:
+Create a file `src/[core|custom]/modules/your_module_name/agents/YourAssistant.py`:
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -237,7 +237,7 @@ Create a file `src/[core|custom]/modules/your_module_name/tests/test_module.py`:
 ```python
 import unittest
 # Import your module components
-# from ..assistants.YourAssistant import create_agent
+# from ..agents.YourAssistant import create_agent
 # from ..workflows.YourWorkflow import YourWorkflow, YourWorkflowConfiguration
 # from ..pipelines.YourPipeline import YourPipeline, YourPipelineConfiguration
 
@@ -277,7 +277,7 @@ The system will automatically skip loading modules with "disabled" in their name
 1. **Choose the right location**: Place essential system functionality in core modules and extensions in custom modules
 2. **Keep modules focused**: Each module should have a clear, specific purpose
 3. **Maintain independence**: Minimize dependencies between modules
-4. **Document your components**: Provide clear documentation for your assistants, workflows, and pipelines
+4. **Document your components**: Provide clear documentation for your agents, workflows, and pipelines
 5. **Write tests**: Include comprehensive tests for your module's components
 6. **Follow naming conventions**: Use descriptive names for your module and its components
 
@@ -287,7 +287,7 @@ If your module is not being loaded correctly, check the following:
 
 1. Ensure your module directory is directly under either `src/core/modules/` or `src/custom/modules/`
 2. Verify that your module name doesn't contain "disabled"
-3. Check that your assistants have a `create_agent()` function
+3. Check that your agents have a `create_agent()` function
 4. Ensure your workflows and pipelines follow the correct class structure
 5. Check for import errors or exceptions during the loading process
 

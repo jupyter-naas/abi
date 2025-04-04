@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src import secret, config, services
 from dataclasses import dataclass
@@ -24,7 +24,7 @@ class CreateOntologyYAMLConfiguration(WorkflowConfiguration):
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
     naas_integration_config: NaasIntegrationConfiguration
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class CreateOntologyYAMLParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
@@ -39,7 +39,7 @@ class CreateOntologyYAMLParameters(WorkflowParameters):
     """
     ontology_name: str = Field(..., description="The name of the ontology store to use")
     label: str = Field(..., description="The label of the ontology")
-    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with assistants, workflows, ontologies, pipelines and integrations.'")
+    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
     workspace_id: str = Field(..., description="The ID of the Naas workspace to use")
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
     level: str ='USE_CASE'
@@ -58,7 +58,7 @@ class CreateOntologyYAML(Workflow):
     def graph_to_yaml(self, parameters: CreateOntologyYAMLParameters) -> str:
         # Initialize parameters
         yaml_data = None
-        graph = self.__configuration.ontology_store.get(parameters.ontology_name)
+        graph = self.__configuration.triple_store.get(parameters.ontology_name)
 
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(

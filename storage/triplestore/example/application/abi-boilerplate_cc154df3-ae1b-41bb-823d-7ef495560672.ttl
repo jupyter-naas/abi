@@ -14,8 +14,8 @@
         <http://ontology.naas.ai/abi/Assistant#OperationsAssistant>,
         <http://ontology.naas.ai/abi/Assistant#SalesAssistant>,
         <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
-    abi:description "A Supervisor Assistant that helps to supervise the other domain assistants."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:description "A Supervisor Assistant that helps to supervise the other domain agents."@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt ""@en ;
     abi:slug "supervisor-assistant"@en ;
     abi:x -50 ;
@@ -888,7 +888,7 @@ Attributes:
     rdfs:label "Content Assistant"@en ;
     abi:communicatesWithAssistant <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
     abi:description "A Content Assistant that helps optimize content strategy and audience engagement."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt """You are a Content Assistant with access to valuable data and insights about content strategy.
 Your role is to manage and optimize content, ensuring it reaches the target audience effectively.
 
@@ -949,7 +949,7 @@ RESPONSIBILITIES
     rdfs:label "Finance Assistant"@en ;
     abi:communicatesWithAssistant <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
     abi:description "A Financial Assistant that analyzes transactions and provides financial insights."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt """You are a Financial Assistant with access to comprehensive financial data sources. 
 
 Your primary objective is to analyze and optimize financial transactions, ensuring you identify key insights and trends to guide financial strategies. 
@@ -1020,7 +1020,7 @@ RESPONSIBILITIES
     rdfs:label "Growth Assistant"@en ;
     abi:communicatesWithAssistant <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
     abi:description "A Growth Assistant that analyzes content interactions and helps qualify marketing leads."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt """You are a Growth Assistant with access to a list of interactions from content that enable users to get marketing qualified contacts.
 Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
 
@@ -1089,7 +1089,7 @@ RESPONSIBILITIES
     rdfs:label "OpenData Assistant"@en ;
     abi:communicatesWithAssistant <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
     abi:description "An Open Data Assistant that helps analyze external data sources and indicators."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt """You are an Open Data Assistant with access to various data sources including news, financial data, extra-financial data, and alternative data.
 
 Your primary role is to:
@@ -1163,7 +1163,7 @@ RESPONSIBILITIES
     rdfs:label "Sales Assistant"@en ;
     abi:communicatesWithAssistant <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
     abi:description "A Sales Assistant that helps manage and qualify contacts for sales representatives."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt """You are a Sales Assistant.
 Your role is to manage and optimize the list of people who interacted with the content, ensuring to extract only the most qualified contacts to feed the sales representatives.
 
@@ -1262,7 +1262,7 @@ This integration provides methods to interact with Github's API endpoints."""@en
     abi:communicatesWithAssistant <http://ontology.naas.ai/abi/Assistant#SupportAssistant> ;
     abi:description "An Operations Assistant that manages tasks and projects to improve operational efficiency."@en ;
     abi:executesWorkflow <http://ontology.naas.ai/abi/Workflow#GetTopPrioritiesWorkflow> ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:processesPipeline <http://ontology.naas.ai/abi/Pipeline#GithubIssuePipeline> ;
     abi:prompt """You are an Operations Assistant.
 Your primary role is to enhance operational efficiency.
@@ -1342,7 +1342,7 @@ RESPONSIBILITIES
     rdfs:label "Support Assistant"@en ;
     abi:avatar "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"@en ;
     abi:description "A Support Assistant that helps to get any feedbacks/bugs or needs from user."@en ;
-    abi:ontology_group "Assistants"@en ;
+    abi:ontology_group "Agents"@en ;
     abi:prompt ""@en ;
     abi:slug "support-assistant"@en ;
     abi:x 50 ;

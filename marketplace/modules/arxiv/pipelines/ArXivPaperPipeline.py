@@ -13,13 +13,13 @@ from fastapi import APIRouter
 from abi.pipeline import Pipeline, PipelineConfiguration
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from src.custom.modules.arxiv_agent.integrations.ArXivIntegration import ArXivIntegration, ArXivIntegrationConfiguration
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 
 @dataclass
 class ArXivPaperPipelineConfiguration(PipelineConfiguration):
     """Configuration for ArXivPaperPipeline."""
     arxiv_integration_config: ArXivIntegrationConfiguration
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
     storage_base_path: str = "storage/triplestore/application-level/arxiv"
     pdf_storage_path: str = "datastore/application-level/arxiv"
 

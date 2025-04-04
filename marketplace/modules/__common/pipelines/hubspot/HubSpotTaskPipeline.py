@@ -4,7 +4,7 @@ from src.core.modules.common.integrations.HubSpotIntegration import HubSpotInteg
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from abi import logger
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
@@ -20,12 +20,12 @@ class HubSpotTaskPipelineConfiguration(PipelineConfiguration):
     
     Attributes:
         hubspot_integration_config (HubSpotIntegrationConfiguration): The HubSpot API integration instance
-        ontology_store (IOntologyStoreService): The ontology store service to use
-        ontology_store_name (str): Name of the ontology store to use. Defaults to "hubspot"
+        triple_store (ITripleStoreService): The ontology store service to use
+        triple_store_name (str): Name of the ontology store to use. Defaults to "hubspot"
     """
     hubspot_integration_config: HubSpotIntegrationConfiguration
-    ontology_store: IOntologyStoreService
-    ontology_store_name: str = "hubspot"
+    triple_store: ITripleStoreService
+    triple_store_name: str = "hubspot"
 
 
 class HubSpotTaskPipelineParameters(PipelineParameters):
@@ -51,7 +51,7 @@ class HubSpotTaskPipeline(Pipeline):
     def run(self, parameters: HubSpotTaskPipelineParameters) -> Graph:
         # Init graph
         try:    
-            graph = self.__configuration.ontology_store.get(self.__configuration.ontology_store_name)
+            graph = self.__configuration.triple_store.get(self.__configuration.triple_store_name)
         except Exception as e:
             logger.error(f"Error getting graph: {e}")
             graph = ABIGraph()
@@ -193,7 +193,7 @@ class HubSpotTaskPipeline(Pipeline):
         )
         graph.add((task_completion, ABI.hasCreator, owner))
         
-        self.__configuration.ontology_store.store(self.__configuration.ontology_store_name, graph)
+        self.__configuration.triple_store.store(self.__configuration.triple_store_name, graph)
         
         return graph
     
@@ -220,11 +220,11 @@ class HubSpotTaskPipeline(Pipeline):
             return self.run(parameters).serialize(format="turtle")
         
 if __name__ == "__main__":
-    from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-    from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+    from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.triple_store.TripleStoreService import TripleStoreService
 
     # Initialize ontology store
-    ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
+    triple_store = TripleStoreService(TripleStoreService__SecondaryAdaptor__Filesystem(store_path=config.triple_store_path))
 
     # Initialize HubSpot integration
     hubspot_integration_config = HubSpotIntegrationConfiguration(access_token=secret.get("HUBSPOT_ACCESS_TOKEN"))
@@ -232,8 +232,8 @@ if __name__ == "__main__":
     # Initialize pipeline
     pipeline = HubSpotTaskPipeline(HubSpotTaskPipelineConfiguration(
         hubspot_integration_config=hubspot_integration_config,
-        ontology_store=ontology_store,
-        ontology_store_name="hubspot"
+        triple_store=triple_store,
+        triple_store_name="hubspot"
     ))
 
     # Run pipeline

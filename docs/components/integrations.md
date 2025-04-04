@@ -32,7 +32,7 @@ Overall, this structure ensures that integrations are self-contained, technology
 Integrations are organized into the following directories:
 
 - `src/core/integrations/`: Core integrations
-- `src/integrations/custom/`: Custom integrations
+- `src/custom/integrations/`: Custom integrations
 
 
 ## Key Components
@@ -47,25 +47,3 @@ Integrations are organized into the following directories:
    - Implements methods to interact with external service
    - Handles authentication, API requests, and error management
    - May expose methods as tools for LLM agents
-
-## Implementation Example
-
-
-## Key Components
-
-1. **Pipeline Configuration Class**:
-   - Dataclass extending `PipelineConfiguration`
-   - Contains necessary service references (integrations, ontology store)
-   - Defines persistent configuration options
-
-2. **Pipeline Parameters Class**:
-   - Pydantic model extending `PipelineParameters`
-   - Defines runtime parameters for pipeline execution
-   - Used for input validation and documentation
-
-3. **Pipeline Class**:
-   - Extends the base `Pipeline` class
-   - Implements the `run()` method for data transformation
-   - May implement the `trigger()` method for event-based execution
-   - Exposes itself as tools for LLM agents and/or API endpoints
-

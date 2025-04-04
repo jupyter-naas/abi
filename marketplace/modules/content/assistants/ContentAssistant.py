@@ -7,7 +7,7 @@ from src.core.modules.common.integrations.LinkedInIntegration import LinkedInInt
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration  
 from src.core.modules.content.workflows.LinkedinPostsWorkflow import LinkedinPostsWorkflow, LinkedinPostsWorkflowConfiguration
 from fastapi import APIRouter
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 NAME = "Content Assistant"

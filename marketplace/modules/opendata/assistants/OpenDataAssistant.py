@@ -2,7 +2,7 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, services
 from fastapi import APIRouter
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.modules.common.integrations import PerplexityIntegration, GoogleSearchIntegration
 from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
@@ -73,7 +73,7 @@ def create_agent(
     perplexity_api_key = None
 
     # Setup ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # NaasIntegration Configuration
     naas_api_key = secret.get('NAAS_API_KEY')
@@ -104,12 +104,12 @@ def create_agent(
         )
         create_ontology_yaml_config = CreateOntologyYAMLConfiguration(
             naas_integration_config=naas_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         )
 
         # Setup pipeline
         pipeline = PerplexityOrganizationAnalysisPipeline(PerplexityOrganizationAnalysisPipelineConfiguration(
-            ontology_store=ontology_store,
+            triple_store=triple_store,
             naas_integration_config=naas_integration_config,
             perplexity_organization_workflows_config=perplexity_organization_workflows_config,
             create_ontology_yaml_config=create_ontology_yaml_config,
@@ -135,7 +135,7 @@ def create_agent(
             }        
             agents_info.append(agent_info)
 
-    # Transform assistants_info into formatted string
+    # Transform agents_info into formatted string
     agents_info_str = ""
     for agent in agents_info:
         agents_info_str += f"-{agent['name']}: {agent['description']}\n"
