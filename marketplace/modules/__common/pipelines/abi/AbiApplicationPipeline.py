@@ -41,7 +41,7 @@ class OntologyPipelineParameters(PipelineParameters):
     """
     workspace_id: str = "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81"
     label: str = "ABI Ontology"
-    description: str = "Represents ABI Ontology with assistants, workflows, ontologies, pipelines and integrations."
+    description: str = "Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations."
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
     level: str = "USE_CASE"
 
@@ -190,21 +190,21 @@ class AbiApplicationPipeline(Pipeline):
                 logger.error(f"Error processing ontology {file}: {e}")
 
     def scan_agents(self, graph: Graph) -> None:
-        """Scan assistants directory and add to graph, excluding experts/integrations."""
-        assistants_dir = Path("src/assistants")
-        nb_agents = len(glob.glob("src/assistants/domain/*.py", recursive=True)) + len(glob.glob("src/assistants/foundation/*.py", recursive=True))
-        logger.debug(f"---> Found {nb_agents} assistants.")
+        """Scan agents directory and add to graph, excluding experts/integrations."""
+        agents_dir = Path("src/agents")
+        nb_agents = len(glob.glob("src/agents/domain/*.py", recursive=True)) + len(glob.glob("src/agents/foundation/*.py", recursive=True))
+        logger.debug(f"---> Found {nb_agents} agents.")
         coordinates = self.__generate_coordinates(200, nb_agents - 2) # Exclude supervisor assistant
         i = 0
 
-        for file in assistants_dir.rglob("*.py"):
+        for file in agents_dir.rglob("*.py"):
             if "__agentTemplate__" in str(file) or "expert" in str(file).lower() or "integration" in str(file).lower():
                 continue
             if file.stem.endswith("Assistant"):
                 try:
                     # Build import path based on file location
-                    import_path = "src.core.modules.common.assistants"
-                    relative_path = file.relative_to(assistants_dir)
+                    import_path = "src.core.modules.common.agents"
+                    relative_path = file.relative_to(agents_dir)
                     if len(relative_path.parts) > 1:
                         # File is in subfolder(s)
                         import_path += "." + ".".join(relative_path.parts[:-1])
@@ -253,7 +253,7 @@ class AbiApplicationPipeline(Pipeline):
                             avatar=avatar,
                             prompt=prompt,
                             slug=slug,
-                            ontology_group="Assistants",
+                            ontology_group="Agents",
                             x=x,
                             y=y,
                         )
@@ -264,8 +264,8 @@ class AbiApplicationPipeline(Pipeline):
                     with open(file, 'r') as f:
                         content = f.read()
 
-                        # Look for import from src.core.modules.common.assistants
-                        assistant_imports = re.findall(r'from (src\.assistants(?:\.\w+)*\.\w+Assistant)', content)
+                        # Look for import from src.core.modules.common.agents
+                        assistant_imports = re.findall(r'from (src\.agents(?:\.\w+)*\.\w+Assistant)', content)
                         for a in assistant_imports:
                             uid = a.split(".")[-1]
                             assistant_uri = URIRef(str(ABI.Assistant) + "#" + uid)
@@ -281,7 +281,7 @@ class AbiApplicationPipeline(Pipeline):
                                     avatar=avatar,
                                     prompt=prompt,
                                     slug=slug,
-                                    ontology_group="Assistants",
+                                    ontology_group="Agents",
                                     x=x,
                                     y=y,
                                 )
@@ -334,7 +334,7 @@ class AbiApplicationPipeline(Pipeline):
                     graph.add((pipeline, ABI.usesOntology, task_ontology))
                     graph.add((pipeline, ABI.usesOntology, platform_ontology))
 
-                    # Add assistants relations
+                    # Add agents relations
                     operations_agent = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
                     graph.add((operations_agent, ABI.processesPipeline, pipeline))
                 except Exception as e:
@@ -373,7 +373,7 @@ class AbiApplicationPipeline(Pipeline):
                     task_ontology = URIRef(str(ABI.Ontology) + "#TaskOntology")
                     graph.add((workflow, ABI.usesOntology, task_ontology))
 
-                    # Add assistants relations
+                    # Add agents relations
                     operations_agent = URIRef(str(ABI.Assistant) + "#OperationsAssistant")
                     graph.add((operations_agent, ABI.executesWorkflow, workflow))
                 except Exception as e:
@@ -396,7 +396,7 @@ class AbiApplicationPipeline(Pipeline):
         self.scan_integrations(graph)
         logger.debug(f"-----> Scanning ontologies")
         self.scan_ontologies(graph)
-        logger.debug(f"-----> Scanning assistants")
+        logger.debug(f"-----> Scanning agents")
         self.scan_agents(graph)
         logger.debug(f"-----> Scanning pipelines")
         self.scan_pipelines(graph)

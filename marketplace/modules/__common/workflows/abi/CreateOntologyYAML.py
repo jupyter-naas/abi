@@ -39,7 +39,7 @@ class CreateOntologyYAMLParameters(WorkflowParameters):
     """
     ontology_name: str = Field(..., description="The name of the ontology store to use")
     label: str = Field(..., description="The label of the ontology")
-    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with assistants, workflows, ontologies, pipelines and integrations.'")
+    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
     workspace_id: str = Field(..., description="The ID of the Naas workspace to use")
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
     level: str ='USE_CASE'

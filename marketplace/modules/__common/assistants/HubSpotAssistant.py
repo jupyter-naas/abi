@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.modules.common.integrations import HubSpotIntegration
 from src.core.modules.common.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A HubSpot Assistant with access to HubSpot Integration tools."
