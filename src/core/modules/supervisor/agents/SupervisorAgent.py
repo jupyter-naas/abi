@@ -77,7 +77,7 @@ def create_agent(
         }
         agents_info.append(agent_info)
 
-    # Transform assistants_info into formatted string
+    # Transform agents_info into formatted string
     agents_info_str = ""
     for agent in agents_info:
         agents_info_str += f"-{agent['name']}: {agent['description']}\n"
