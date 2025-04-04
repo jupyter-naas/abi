@@ -31,6 +31,9 @@ sh: .venv
 api: .venv
 	@ docker compose run --rm --remove-orphans -p 9879:9879 abi poetry run api
 
+api-prod:
+	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
 dvc-login: .venv
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/setup_dvc.py | sh'
