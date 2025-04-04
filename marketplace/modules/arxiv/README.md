@@ -31,7 +31,7 @@ Enables powerful querying capabilities against your stored papers:
 ## 4. Directory Structure
 
 src/custom/modules/arxiv_agent/
-- assistants/
+- agents/
   • ArXivAgent.py - Assistant implementation
 - integrations/
   • ArXivIntegration.py - ArXiv API connection
