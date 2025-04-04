@@ -20,7 +20,7 @@ Ontologies in ABI are organized in a layered approach:
 3. **Domain Ontologies**: Concepts specific to particular domains (e.g., Finance, Healthcare)
 4. **Application Ontologies**: Concepts specific to applications
 
-The `src/core/modules/common/ontologies/` directory contains the core ontologies used across ABI.
+The `src/core/modules/ontology/ontologies/` directory contains the vetted ontologies used across ABI.
 
 ## Creating Module Ontologies
 
@@ -46,95 +46,119 @@ src/custom/modules/your_module_name/
 Ontology files use mostly Turtle (.ttl) format:
 
 ```t
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
-@prefix your: <http://ontology.naas.ai/your_module/> .
-# Ontology metadata
-<http://ontology.naas.ai/your_module/YourOntology> rdf:type owl:Ontology ;
-owl:imports <https://www.commoncoreontologies.org/RelevantOntology> ;
-dc:title "Your Ontology" ;
-dc:description "Description of your ontology" .
-# Classes
-your:YourClass rdf:type owl:Class ;
-rdfs:label "Your Class"@en ;
-rdfs:subClassOf bfo:BFO_0000001 ; # Choose appropriate parent class
-skos:definition "Definition of your class" .
-# Object Properties
-your:hasRelatedEntity rdf:type owl:ObjectProperty ;
-rdfs:label "has related entity"@en ;
-rdfs:domain your:YourClass ;
-rdfs:range your:RelatedClass ;
-skos:definition "Relates your class to a related class" .
-# Data Properties
-your:hasAttribute rdf:type owl:DatatypeProperty ;
-rdfs:label "has attribute"@en ;
-rdfs:domain your:YourClass ;
-rdfs:range xsd:string ;
-skos:definition "An attribute of your class" .
-# Individuals
-your:exampleIndividual rdf:type your:YourClass ;
-rdfs:label "Example Individual"@en ;
-your:hasAttribute "Example value" .
+
+<http://ontology.naas.ai/abi/linkedin.ttl> rdf:type owl:Ontology ;
+                                        owl:imports <> ;
+                                        owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/linkedin.ttl> ;
+                                        dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                        dc:description "Application ontology for LinkedIn."@en ;
+                                        dc:license "" ;
+                                        dc:title "LinkedIn Application Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:LinkedInPage a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "LinkedIn Page" ;
+    skos:definition "A LinkedIn page that represents an entity's presence on LinkedIn, containing information specific to that entity type such as professional details, organizational information, or educational programs." ;
+    skos:example "A LinkedIn page could be a profile page showing work experience, a company page with job postings, or a school page highlighting academic programs." ;
+    rdfs:comment "A LinkedIn page must be registered in https://www.linkedin.com/" .
+
+abi:LinkedInProfilePage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn Profile Page" ;
+    skos:definition "A LinkedIn profile page that includes information such as a person's professional history, skills, and endorsements, representing the individual's professional identity on the web." ;
+    skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues." ;
+    rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" .
+
+abi:LinkedInCompanyPage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn Company Page" ;
+    skos:definition "A LinkedIn company page that includes information such as the company's overview, products/services, job postings, and updates, representing the organization's professional presence on LinkedIn." ;
+    skos:example "Microsoft's LinkedIn company page, which showcases their company information, latest news, job opportunities, and employee insights." ;
+    rdfs:comment "A LinkedIn company page must be registered in https://www.linkedin.com/company/" .
+
+abi:LinkedInSchoolPage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn School Page" ;
+    skos:definition "A LinkedIn school page that includes information about the school's programs, faculty, students, and events, representing the educational institution's professional presence on LinkedIn." ;
+    rdfs:comment "A LinkedIn school page must be registered in https://www.linkedin.com/school/" .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasLinkedInPage a owl:ObjectProperty ;
+    rdfs:domain [ rdf:type owl:Class ;
+                  owl:unionOf ( cco:ont00001180
+                               cco:ont00001262
+                             )
+                ] ;
+    rdfs:range abi:LinkedInPage ;
+    owl:inverseOf abi:isLinkedInPageOf ;
+    rdfs:label "has LinkedIn Page"@en ;
+    skos:definition "Relates an entity to its LinkedIn page."@en ;
+    skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues."@en .
+
+abi:isLinkedInPageOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range [ rdf:type owl:Class ;
+                 owl:unionOf ( cco:ont00001180
+                              cco:ont00001262
+                            )
+               ] ;
+    owl:inverseOf abi:hasLinkedInPage ;
+    rdfs:label "is LinkedIn Page of"@en ;
+    skos:definition "Relates a LinkedIn page to the entity it represents."@en ;
+    skos:example "A LinkedIn profile page that represents John Doe's professional presence."@en .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:linkedin_id a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn ID"@en ;
+    skos:definition "The ID of the LinkedIn page."@en ;
+    skos:example "The unique ID of John Doe's LinkedIn profile page is 'ACoAAAa5py0Bzrp5_7OmHIsNP6xxxxxxxx'."@en .
+
+abi:linkedin_url a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn URL"@en ;
+    skos:definition "The URL of the LinkedIn page. It uses the LinkedIn ID as a unique identifier."@en ;
+    skos:example "The URL of John Doe's LinkedIn profile page is 'https://www.linkedin.com/in/ACoAAAa5py0Bzrp5_7OmHIsNP6xxxxxxxx'."@en .
+
+abi:linkedin_public_id a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn Public ID"@en ;
+    skos:definition "The public ID of the LinkedIn page. It might change over time."@en ;
+    skos:example "The public ID of John Doe's LinkedIn profile page is 'johndoe'."@en .
+
+abi:linkedin_public_url a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn Public URL"@en ;
+    skos:definition "The public URL of the LinkedIn page. It uses the LinkedIn Public ID as identifier."@en ;
+    skos:example "The public URL of John Doe's LinkedIn profile page is 'https://www.linkedin.com/in/johndoe'."@en .
 ```
 
 ## Ontology Best Practices
 
 1. **Start with existing ontologies**: Avoid reinventing concepts that already exist
 2. **Follow upper ontology principles**: Align with foundation ontologies like BFO
-3. **Use consistent naming**: Follow the pattern `ClassNamesInPascalCase` and `propertyNamesInCamelCase`
-4. **Add documentation**: Include labels, definitions, and examples
+3. **Use consistent naming**: Follow the pattern `ClassNamesInPascalCase`, `propertyNamesInCamelCase`, `datapropertyinlowercase`
+4. **Add documentation**: Include rdfs:label, skos:definition, skos:example for all classes and rdfs:domain, rdfs:range for all properties
 5. **Keep it modular**: Separate domain concepts from application-specific ones
 6. **Test with reasoners**: Validate your ontology for consistency
 7. **Maintain compatibility**: Ensure backward compatibility when updating
-
-## Using Ontologies in Pipelines
-
-Ontologies are primarily used in pipelines to transform data into semantic triples:
-
-```python
-from rdflib import Graph, Namespace, URIRef, Literal
-from rdflib.namespace import RDF, RDFS
-Define namespaces
-YOUR = Namespace("http://ontology.naas.ai/your_module/")
-def transform_to_rdf(data):
-graph = Graph()
-# Bind namespaces
-graph.bind("your", YOUR)
-# Create URIs for entities
-entity_uri = URIRef(f"{YOUR}entity/{data['id']}")
-# Add class assertions
-graph.add((entity_uri, RDF.type, YOUR.YourClass))
-# Add property assertions
-graph.add((entity_uri, YOUR.hasAttribute, Literal(data["attribute"])))
-return graph
-```
-
-## Querying Ontologies with SPARQL
-
-SPARQL is used to query the ontology store:
-
-```python
-def query_entities(ontology_store, store_name):
-sparql_query = """
-PREFIX your: <http://ontology.naas.ai/your_module/>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-SELECT ?entity ?attribute
-WHERE {
-?entity rdf:type your:YourClass ;
-your:hasAttribute ?attribute .
-}
-"""
-return ontology_store.query(store_name=store_name, query=sparql_query)
-```
-
-## Related Resources
-
-- [Integrations](./integrations.md) - Connect to external data sources
-- [Pipelines](./pipelines.md) - Transform data into ontology triples
-- [Workflows](./workflows.md) - Orchestrate semantic data processing

@@ -65,7 +65,7 @@ To use a module from the Marketplace:
 
 4. **Use the module**:
    - The module will be automatically discovered and loaded
-   - Access its assistants, workflows, pipelines, and integrations as you would any custom module
+   - Access its agents, workflows, pipelines, and integrations as you would any custom module
 
 ## Best Practices
 

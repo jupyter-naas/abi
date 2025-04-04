@@ -12,7 +12,7 @@ The **ABI** project aims to provide a open alternative to Palantir by offering a
 
 ## Key Features
 
-- **Assistants**: Configurable AI assistants (also named agents) to handle specific organizational tasks and interact with users.
+- **Agents**: Configurable AI agents (also named agents) to handle specific organizational tasks and interact with users.
 - **Ontology Management**: Define and manage data relationships, structures, and semantic elements.
 - **Integrations**: Seamlessly connect to external data sources and APIs for unified data access.
 - **Pipelines**: Define data processing pipelines to handle and transform data efficiently into the ontological layer.
@@ -54,15 +54,6 @@ You need to build the API before running it. Find out more about the API in the 
 ```bash
 make api
 ```
-
-**Step 5: Build your own module**
-
-```bash
-make build-module
-```
-
-This will build the agent and save it in the `/src/custom/modules` directory.
-
 
 ## Contributing
 

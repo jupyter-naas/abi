@@ -6,7 +6,7 @@ from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_
 from src.core.modules.common.integrations import GithubIntegration, GithubGraphqlIntegration
 from src.core.modules.common.integrations.GithubIntegration import GithubIntegrationConfiguration
 from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A GitHub Assistant with access to GitHub Integration tools."

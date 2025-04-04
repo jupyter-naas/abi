@@ -9,7 +9,7 @@ Designed for flexibility and scalability, ABI provides a customizable framework 
 
 ### API Overview
 The ABI API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
-This document describes the current version of the ABI API, which provides access to assistants, pipelines, workflows, integrations, ontology management and analytics features.
+This document describes the current version of the ABI API, which provides access to agents, pipelines, workflows, integrations, ontology management and analytics features.
         """
     },
     {
@@ -24,7 +24,7 @@ Contact your administrator to get the token.
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion"
+url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion"
 
 headers = {{
     "Authorization": f"Bearer {{token}}"
@@ -39,7 +39,7 @@ print(response.json())
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
+url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion?token=<token>"
 
 response = requests.post(url)
 print(response.json())
@@ -210,36 +210,28 @@ Required:
         """
     },
     {
-        "name": "Assistants",
+        "name": "Agents",
         "description": """
-API endpoints for interacting with ABI's assistant/agents.
+API endpoints for interacting with ABI's agents.
 
-ABI provides three categories of assistants:
-
-### Foundation Assistants:
-- Supervisor: Manages and coordinates other assistants
+### Core Agents:
+- Supervisor: Manages and coordinates other agents
+- Ontology: Manages and coordinates other agents
+- Naas: Manages and coordinates other agents
 - Support: Provides help and guidance for using ABI
 
-### Domain Assistants:
-- Open Data: Specializes in accessing and analyzing open data sources
-- Content: Helps create and manage content
-- Finance: Handles financial analysis and reporting
-- Growth: Focuses on business growth and metrics
-- Operations: Manages operational tasks and processes
-- Sales: Assists with sales-related activities
-
-### Expert Assistants:
-- Custom assistants with deep expertise in specific domains
+### Marketplace Agents:
+- Custom agents with deep expertise in specific domains
 - Can be configured and trained for specialized tasks
 - Extensible through custom tools and knowledge bases
 
-Each assistant can be accessed through dedicated endpoints that allow:
+Each agent can be accessed through dedicated endpoints that allow:
 - Completion requests for generating responses
 - Chat interactions for ongoing conversations
 - Tool execution for specific tasks
 - Configuration updates for customizing behavior
 
-Assistants leverage various tools including integrations, pipelines and workflows to accomplish tasks. They can be extended with custom tools and knowledge to enhance their capabilities.
+Agents leverage various tools including integrations, pipelines and workflows to accomplish tasks. They can be extended with custom tools and knowledge to enhance their capabilities.
 
         """
     },

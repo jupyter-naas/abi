@@ -2,7 +2,7 @@ from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
 from src import secret, config, services
 from fastapi import APIRouter
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 from src.core.modules.common.integrations import AiaIntegration
 from src.core.modules.common.integrations.AiaIntegration import AiaIntegrationConfiguration
@@ -71,7 +71,7 @@ def create_agent(
     JSESSIONID = None
 
     # Init ontology store
-    ontology_store = services.ontology_store_service
+    triple_store = services.triple_store_service
 
     # Add integrations & workflbased on available credentials
     if naas_api_key:
@@ -111,21 +111,21 @@ def create_agent(
         github_issues_pipeline = GithubIssuesPipeline(GithubIssuesPipelineConfiguration(
             github_integration_config=github_integration_config,
             github_graphql_integration_config=github_graphql_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         ))
         tools += github_issues_pipeline.as_tools()
 
         # Add GithubUserDetailsPipeline tool
         github_user_details_pipeline = GithubUserDetailsPipeline(GithubUserDetailsPipelineConfiguration(
             github_integration_config=github_integration_config,
-            ontology_store=ontology_store
+            triple_store=triple_store
         ))
         tools += github_user_details_pipeline.as_tools()
 
-    if ontology_store:
+    if triple_store:
         # Add GetTopPrioritiesWorkflow tool
         get_top_priorities_workflow = GetTopPrioritiesWorkflow(GetTopPrioritiesConfiguration(
-            ontology_store=ontology_store
+            triple_store=triple_store
         ))
         tools += get_top_priorities_workflow.as_tools()
     
