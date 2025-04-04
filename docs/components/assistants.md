@@ -1,13 +1,13 @@
-# Assistants Architecture
+# Agents Architecture
 
-Assistants in ABI are AI agents powered by Large Language Models (LLMs) that provide domain-specific expertise and capabilities. They serve as the primary interface between users and the ABI system's capabilities.
+Agents in ABI are AI agents powered by Large Language Models (LLMs) that provide domain-specific expertise and capabilities. They serve as the primary interface between users and the ABI system's capabilities.
 
 ## Design Philosophy
 
-Assistants are designed to be:
+Agents are designed to be:
 1. **Role-based**: Each assistant has a specific role with defined responsibilities
-2. **Tool-enhanced**: Assistants use tools created from workflows, pipelines, and integrations
-3. **Stateful**: Assistants maintain conversation history and context 
+2. **Tool-enhanced**: Agents use tools created from workflows, pipelines, and integrations
+3. **Stateful**: Agents maintain conversation history and context 
 4. **Configurable**: Customizable through system prompts and model parameters
 
 ## Assistant Structure
@@ -55,7 +55,7 @@ Overall, the Assistant is structured to effectively manage interactions, utilize
 
 ## Implementation Pattern
 
-ABI assistants follow a standardized implementation pattern:
+ABI agents follow a standardized implementation pattern:
 
 ```python
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
@@ -131,28 +131,28 @@ return Agent(configuration)
 
 ## Assistant Roles
 
-ABI includes assistants for various domains and roles, including:
+ABI includes agents for various domains and roles, including:
 
-1. **Core Assistants**:
-   - Supervisor Assistant: Manages other assistants and handles routing
+1. **Core Agents**:
+   - Supervisor Assistant: Manages other agents and handles routing
    - Project Manager: Manages project planning, execution, and tracking
    - Software Engineer: Provides code assistance and software design guidance
 
-2. **Domain-Specific Assistants**:
-   - Finance assistants: Accountant, Financial Controller, Treasurer
-   - Operations assistants: DevOps Engineer, Data Engineer, HR Manager
-   - Support assistants: Customer Support, Internal Support
+2. **Domain-Specific Agents**:
+   - Finance agents: Accountant, Financial Controller, Treasurer
+   - Operations agents: DevOps Engineer, Data Engineer, HR Manager
+   - Support agents: Customer Support, Internal Support
 
 ## Communication Patterns
 
-Assistants can communicate with users through multiple channels:
+Agents can communicate with users through multiple channels:
 1. **Terminal Interface**: Command-line interaction
 2. **API Endpoints**: REST API for chat and completions
 3. **Web Interface**: When integrated with frontend applications
 
 ## LLM Models
 
-Assistants can use various LLM models:
+Agents can use various LLM models:
 - OpenAI models (GPT-4, GPT-3.5)
 - Anthropic models (Claude)
 - Open-source models (when supported by the LangChain framework)

@@ -6,7 +6,7 @@ This guide walks you through the process of creating a new module in the ABI sys
 
 A module in ABI is a self-contained component that encapsulates related functionality. Modules are designed to be pluggable and can include:
 
-- **Assistants**: AI agents that provide specific capabilities
+- **Agents**: AI agents that provide specific capabilities
 - **Workflows**: Sequences of operations for specific tasks
 - **Pipelines**: Data processing flows
 - **Ontologies**: Domain-specific or application-specific ontologies
@@ -19,7 +19,7 @@ A module in ABI is a self-contained component that encapsulates related function
 Before creating a module, plan its structure and purpose:
 
 - **Define the purpose**: What problem will your module solve?
-- **Identify components**: Which components (assistants, workflows, etc.) will you need?
+- **Identify components**: Which components (agents, workflows, etc.) will you need?
 - **Consider dependencies**: What external services or libraries will your module require?
 - **Plan the interface**: How will users interact with your module?
 
@@ -45,7 +45,7 @@ mkdir -p src/custom/modules/your_module_name
 
 ```bash
 cd src/custom/modules/your_module_name
-mkdir -p assistants workflows pipelines integrations apps tests analytics
+mkdir -p agents workflows pipelines integrations apps tests analytics
 ```
 
 3. Create an `__init__.py` file to make the directory a Python package:
@@ -297,11 +297,11 @@ class YourWorkflow(Workflow):
             return self.run(parameters)
 ```
 
-### D. Assistants
+### D. Agents
 
-Assistants provide LLM agent interfaces:
+Agents provide LLM agent interfaces:
 
-1. Create an assistant in `assistants/YourAssistant.py`:
+1. Create an assistant in `agents/YourAssistant.py`:
 
 ```python
 from fastapi import APIRouter
