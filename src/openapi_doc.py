@@ -9,7 +9,7 @@ Designed for flexibility and scalability, ABI provides a customizable framework 
 
 ### API Overview
 The ABI API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
-This document describes the current version of the ABI API, which provides access to assistants, pipelines, workflows, integrations, ontology management and analytics features.
+This document describes the current version of the ABI API, which provides access to agents, pipelines, workflows, integrations, ontology management and analytics features.
         """
     },
     {
@@ -24,7 +24,7 @@ Contact your administrator to get the token.
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion"
+url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion"
 
 headers = {{
     "Authorization": f"Bearer {{token}}"
@@ -39,7 +39,7 @@ print(response.json())
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/assistants/supervisor/completion?token=<token>"
+url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion?token=<token>"
 
 response = requests.post(url)
 print(response.json())
