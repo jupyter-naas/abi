@@ -1,6 +1,6 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src.core.modules.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src import secret, config, services
 from dataclasses import dataclass
@@ -14,7 +14,7 @@ from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
 from typing import Dict
-from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 import pydash as _
 from rdflib import Graph
 
@@ -26,7 +26,7 @@ class CreateClassOntologyYAMLConfiguration(WorkflowConfiguration):
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
     naas_integration_config: NaasIntegrationConfiguration
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class CreateClassOntologyYAMLParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
@@ -41,7 +41,7 @@ class CreateClassOntologyYAMLParameters(WorkflowParameters):
     """
     ontology_name: str = Field(..., description="The name of the ontology store to use")
     label: str = Field(..., description="The label of the ontology")
-    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with assistants, workflows, ontologies, pipelines and integrations.'")
+    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
     level: str ='USE_CASE'
     display_relations_names: bool = True
@@ -72,7 +72,7 @@ class CreateClassOntologyYAML(Workflow):
     def graph_to_yaml(self, parameters: CreateClassOntologyYAMLParameters) -> str:
         # Initialize parameters
         yaml_data = None
-        graph = self.__configuration.ontology_store.get(parameters.ontology_name)
+        graph = self.__configuration.triple_store.get(parameters.ontology_name)
 
         # Get all object properties uri
         query = """
@@ -110,7 +110,7 @@ class CreateClassOntologyYAML(Workflow):
             }}
             ORDER BY ?object
             """
-            results = services.ontology_store_service.query(query)
+            results = services.triple_store_service.query(query)
 
             # Add object properties to graph
             from rdflib import URIRef, RDFS, Literal, RDF, OWL

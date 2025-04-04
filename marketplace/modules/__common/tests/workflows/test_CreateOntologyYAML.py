@@ -1,18 +1,18 @@
-from abi.services.ontology_store.adaptors.secondary.OntologyStoreService__SecondaryAdaptor__Filesystem import OntologyStoreService__SecondaryAdaptor__Filesystem
-from abi.services.ontology_store.OntologyStoreService import OntologyStoreService
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+from abi.services.triple_store.TripleStoreService import TripleStoreService
 from src.core.modules.common.workflows.abi.mappings import COLORS_NODES
 from src.core.modules.common.workflows.abi.CreateOntologyYAML import CreateOntologyYAML, CreateOntologyYAMLConfiguration, CreateOntologyYAMLParameters
 from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src import config, secret
 
 # Initialize configurations
-ontology_store = OntologyStoreService(OntologyStoreService__SecondaryAdaptor__Filesystem(store_path=config.ontology_store_path))
+triple_store = TripleStoreService(TripleStoreService__SecondaryAdaptor__Filesystem(store_path=config.triple_store_path))
 naas_integration_config = NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
 
 # Initialize the workflow
 workflow = CreateOntologyYAML(CreateOntologyYAMLConfiguration(
     naas_integration_config=naas_integration_config,
-    ontology_store=ontology_store
+    triple_store=triple_store
 ))
 
 # Run the workflow

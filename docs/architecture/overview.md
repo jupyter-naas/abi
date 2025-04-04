@@ -19,7 +19,7 @@ ABI follows these core architectural principles:
 1. **Integrations**: Connect to external services and APIs
 2. **Pipelines**: Transform raw data into semantic knowledge
 3. **Workflows**: Implement business logic and specific intents
-4. **Assistants**: AI agents with specific roles using workflows, pipelines, and integrations
+4. **Agents**: AI agents with specific roles using workflows, pipelines, and integrations
 5. **Ontology**: Knowledge representation using RDF/semantic web technologies
 6. **Services**: Core system services following hexagonal architecture
 
@@ -29,10 +29,10 @@ ABI's codebase is organized into two primary module categories:
 
 1. **Core Modules** (`src/core/modules/`): Essential system functionality
 2. **Custom Modules** (`src/custom/modules/`): User-created extensions
-3. **Marketplace**: (`src/custom/marketplace/`) A place for sharing and discovering integrations, pipelines, and workflows, analytics, agents & assistants
+3. **Marketplace**: (`marketplace/`) A place for sharing and discovering integrations, pipelines, and workflows, analytics, agents & agents
 
 Each module follows a standardized directory structure:
-- `assistants/`: AI agent implementations
+- `agents/`: AI agent implementations
 - `analytics/`: Analytics and reporting
 - `workflows/`: Business logic implementations
 - `ontology/`: Ontology management and reasoning

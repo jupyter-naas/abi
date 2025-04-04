@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from lib.abi.services.agent.Agent import Agent
 from typing import Callable, List, Dict, Any
 import os
 import importlib
+import glob
 
 class IModule(ABC):
     """Base interface class for ABI modules.
@@ -14,7 +15,7 @@ class IModule(ABC):
     
     
     The default loading mechanism will:
-    1. Load all agents from the module's 'assistants' directory
+    1. Load all agents from the module's 'agents' directory
     2. Initialize module configuration and state
     
     Attributes:
@@ -23,17 +24,19 @@ class IModule(ABC):
     
     agents: List[Agent]
     triggers: List[tuple[tuple[any, any, any], OntologyEvent, Callable]]
+    ontologies: List[str]
     
     def __init__(self, module_path: str, module_import_path: str):
         self.module_path = module_path
         self.module_import_path = module_import_path
         self.triggers = []
-        
+        self.ontologies = []
         self.agents = []
     
     def load(self):
         self.__load_agents()
         self.__load_triggers()
+        self.__load_ontologies()
     
     def __load_agents(self):
         # Load agents
@@ -51,3 +54,8 @@ class IModule(ABC):
             module = importlib.import_module(self.module_import_path + '.triggers')
             if hasattr(module, 'triggers'):
                 self.triggers = module.triggers
+
+    def __load_ontologies(self):
+        if os.path.exists(os.path.join(self.module_path, 'ontologies')):
+            for file in glob.glob(os.path.join(self.module_path, 'ontologies', '**', '*.ttl'), recursive=True):
+                self.ontologies.append(file)

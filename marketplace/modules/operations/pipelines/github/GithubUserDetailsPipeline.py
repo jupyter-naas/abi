@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from src.core.modules.common.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import Field
@@ -18,12 +18,12 @@ class GithubUserDetailsPipelineConfiguration(PipelineConfiguration):
     
     Attributes:
         github_integration_config (GithubIntegrationConfiguration): The GitHub REST API integration instance
-        ontology_store (IOntologyStoreService): The ontology store service to use
-        ontology_store_name (str): Name of the ontology store to use. Defaults to "github"
+        triple_store (ITripleStoreService): The ontology store service to use
+        triple_store_name (str): Name of the ontology store to use. Defaults to "github"
     """
     github_integration_config: GithubIntegrationConfiguration
-    ontology_store: IOntologyStoreService
-    ontology_store_name: str = "github"
+    triple_store: ITripleStoreService
+    triple_store_name: str = "github"
 
 
 class GithubUserDetailsPipelineParameters(PipelineParameters):
@@ -145,7 +145,7 @@ class GithubUserDetailsPipeline(Pipeline):
         LIMIT 1
         """
         logger.debug(f"Query: {query}")
-        results = self.__configuration.ontology_store.query(query)
+        results = self.__configuration.triple_store.query(query)
         logger.debug(f"Results: {results}")
 
         if len(results) > 0:
@@ -195,7 +195,7 @@ class GithubUserDetailsPipeline(Pipeline):
             graph.add((twitter_account, ABI.hasPlatformUser, person))
 
         # Insert to ontology store
-        self.__configuration.ontology_store.insert(self.__configuration.ontology_store_name, graph)
+        self.__configuration.triple_store.insert(self.__configuration.triple_store_name, graph)
         return graph.serialize(format="turtle")
     
     def as_tools(self) -> list[StructuredTool]:

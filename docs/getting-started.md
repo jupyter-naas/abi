@@ -55,7 +55,7 @@ cp config.yaml.example config.yaml
 ```
 2. Edit the file with your configuration
 3. The config.yaml file is used to configure your workflows, pipelines and the API: 
-- `workspace_id`: Workspace ID linked to all components: assistants, ontologies, pipelines, workflows, etc.
+- `workspace_id`: Workspace ID linked to all components: agents, ontologies, pipelines, workflows, etc.
 - `github_project_repository`: Your Github repository name (e.g. jupyter-naas/abi). It will be used in documentation and API as registry name.
 - `github_support_repository`: A Github repository name (e.g. jupyter-naas/abi) to store support issues. It will be used by the support agent to create all requests or report bugs. It can be the same as `github_project_repository`.
 - `github_project_id`: Your Github project number stored in Github URL (e.g. 1 for https://github.com/jupyter-naas/abi/projects/1). It will be used to assign all your issues to your github project.
@@ -109,16 +109,16 @@ Here is an example of how to run a pipeline in your terminal:
 if __name__ == "__main__":
       from src import secret
       from src.core.modules.common.integrations import YourIntegration
-      from abi.services.ontology_store import OntologyStoreService
+      from abi.services.triple_store import TripleStoreService
       
       # Setup dependencies
       integration = YourIntegration(YourIntegrationConfiguration(...))
-      ontology_store = OntologyStoreService()
+      triple_store = TripleStoreService()
       
       # Create pipeline configuration
       config = YourPipelineConfiguration(
          integration=integration,
-         ontology_store=ontology_store
+         triple_store=triple_store
       )
       
       # Initialize and run pipeline

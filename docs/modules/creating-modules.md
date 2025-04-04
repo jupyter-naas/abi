@@ -6,7 +6,7 @@ This guide walks you through the process of creating a new module in the ABI sys
 
 A module in ABI is a self-contained component that encapsulates related functionality. Modules are designed to be pluggable and can include:
 
-- **Assistants**: AI agents that provide specific capabilities
+- **Agents**: AI agents that provide specific capabilities
 - **Workflows**: Sequences of operations for specific tasks
 - **Pipelines**: Data processing flows
 - **Ontologies**: Domain-specific or application-specific ontologies
@@ -19,7 +19,7 @@ A module in ABI is a self-contained component that encapsulates related function
 Before creating a module, plan its structure and purpose:
 
 - **Define the purpose**: What problem will your module solve?
-- **Identify components**: Which components (assistants, workflows, etc.) will you need?
+- **Identify components**: Which components (agents, workflows, etc.) will you need?
 - **Consider dependencies**: What external services or libraries will your module require?
 - **Plan the interface**: How will users interact with your module?
 
@@ -45,7 +45,7 @@ mkdir -p src/custom/modules/your_module_name
 
 ```bash
 cd src/custom/modules/your_module_name
-mkdir -p assistants workflows pipelines integrations apps tests analytics
+mkdir -p agents workflows pipelines integrations apps tests analytics
 ```
 
 3. Create an `__init__.py` file to make the directory a Python package:
@@ -127,8 +127,8 @@ from ..integrations.YourIntegration import YourIntegration, YourIntegrationConfi
 class YourPipelineConfiguration(PipelineConfiguration):
     """Configuration for YourPipeline."""
     integration: YourIntegration
-    ontology_store: Any  # IOntologyStoreService
-    ontology_store_name: str = "your_store"
+    triple_store: Any  # ITripleStoreService
+    triple_store_name: str = "your_store"
 
 class YourPipelineParameters(PipelineParameters):
     """Parameters for YourPipeline execution."""
@@ -155,9 +155,9 @@ class YourPipeline(Pipeline):
         graph = self.__transform_to_rdf(data)
         
         # Store in triple store
-        self.__configuration.ontology_store.store_graph(
+        self.__configuration.triple_store.store_graph(
             graph, 
-            self.__configuration.ontology_store_name
+            self.__configuration.triple_store_name
         )
         
         return {"status": "success", "triples_count": len(graph)}
@@ -209,8 +209,8 @@ from ..pipelines.YourPipeline import YourPipeline, YourPipelineConfiguration
 class YourWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for YourWorkflow."""
     integration_config: YourIntegrationConfiguration
-    ontology_store: Any  # IOntologyStoreService
-    ontology_store_name: str = "your_store"
+    triple_store: Any  # ITripleStoreService
+    triple_store_name: str = "your_store"
 
 class YourWorkflowParameters(WorkflowParameters):
     """Parameters for YourWorkflow execution."""
@@ -225,8 +225,8 @@ class YourWorkflow(Workflow):
         self.__integration = YourIntegration(self.__configuration.integration_config)
         self.__pipeline = YourPipeline(YourPipelineConfiguration(
             integration=self.__integration,
-            ontology_store=self.__configuration.ontology_store,
-            ontology_store_name=self.__configuration.ontology_store_name
+            triple_store=self.__configuration.triple_store,
+            triple_store_name=self.__configuration.triple_store_name
         ))
 
     def run(self, parameters: YourWorkflowParameters) -> Dict[str, Any]:
@@ -261,8 +261,8 @@ class YourWorkflow(Workflow):
             LIMIT {parameters.limit}
         """
         
-        query_result = self.__configuration.ontology_store.query(
-            store_name=self.__configuration.ontology_store_name,
+        query_result = self.__configuration.triple_store.query(
+            store_name=self.__configuration.triple_store_name,
             query=sparql_query
         )
         
@@ -297,11 +297,11 @@ class YourWorkflow(Workflow):
             return self.run(parameters)
 ```
 
-### D. Assistants
+### D. Agents
 
-Assistants provide LLM agent interfaces:
+Agents provide LLM agent interfaces:
 
-1. Create an assistant in `assistants/YourAssistant.py`:
+1. Create an assistant in `agents/YourAssistant.py`:
 
 ```python
 from fastapi import APIRouter
@@ -426,7 +426,7 @@ your:hasAttribute a owl:DatatypeProperty ;
 Create a `triggers.py` file at the root of your module to define ontology triggers:
 
 ```python
-from abi.services.ontology_store.OntologyStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Namespace
 
 # Define your namespace

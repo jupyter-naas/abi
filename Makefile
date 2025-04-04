@@ -18,12 +18,10 @@ lock:
 	@ docker compose run --rm --remove-orphans abi poetry lock
 
 path=tests/
-test: unit-tests integration-tests
-	@echo "All tests completed successfully!"
+test: 
+	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pytest tests'
 
-# Add a separate target for tests with linting
-test-with-lint: lint unit-tests integration-tests
-	@echo "All tests and linting completed successfully!"
+
 
 sh: .venv
 	@ docker compose run --rm --remove-orphans -it abi bash

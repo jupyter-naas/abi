@@ -963,7 +963,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         ),
         StructuredTool(
             name="naas_get_agents",
-            description="Get all plugins or assistants from workspace",
+            description="Get all plugins or agents from workspace",
             func=lambda workspace_id: integration.get_plugins(workspace_id),
             args_schema=GetPluginsSchema
         ),

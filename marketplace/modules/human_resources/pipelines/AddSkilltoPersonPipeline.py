@@ -1,5 +1,5 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
-from abi.services.ontology_store.OntologyStorePorts import IOntologyStoreService
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
 from dataclasses import dataclass
 from abi import logger
@@ -15,9 +15,9 @@ class AddSkilltoPersonPipelineConfiguration(PipelineConfiguration):
     """Configuration for AddSkilltoPersonPipeline.
     
     Attributes:
-        ontology_store (IOntologyStoreService): The ontology store service to use
+        triple_store (ITripleStoreService): The ontology store service to use
     """
-    ontology_store: IOntologyStoreService
+    triple_store: ITripleStoreService
 
 class AddSkilltoPersonPipelineParameters(PipelineParameters):
     person_uri: str = Field(..., description="Person URI. It must be start with 'http://ontology.naas.ai/abi/'.")
@@ -40,23 +40,23 @@ class AddSkilltoPersonPipeline(Pipeline):
         person_graph_name = "person_ont00001262"
         person_graph = ABIGraph()
         try:
-            person_graph = self.__configuration.ontology_store.get(person_graph_name)
+            person_graph = self.__configuration.triple_store.get(person_graph_name)
         except Exception as e:
             logger.info(f"Error getting person graph: {e}")
 
         person_graph.add((person_uri, ABI.hasSkill, skill_uri))
-        self.__configuration.ontology_store.insert(person_graph_name, person_graph)
+        self.__configuration.triple_store.insert(person_graph_name, person_graph)
 
         # Init skill graph
         skill_graph_name = "skill_ont00000089"
         skill_graph = ABIGraph()
         try:
-            skill_graph = self.__configuration.ontology_store.get(skill_graph_name)
+            skill_graph = self.__configuration.triple_store.get(skill_graph_name)
         except Exception as e:
             logger.info(f"Error getting skill graph: {e}")
 
         skill_graph.add((skill_uri, ABI.isSkillOf, person_uri))
-        self.__configuration.ontology_store.insert(skill_graph_name, skill_graph)
+        self.__configuration.triple_store.insert(skill_graph_name, skill_graph)
     
     def as_tools(self) -> list[StructuredTool]:
         return [

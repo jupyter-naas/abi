@@ -4,7 +4,7 @@ from src import secret
 from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
 from src.core.modules.common.integrations import NewsAPIIntegration
 from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.modules.support.assistants.SupportAssistant import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
 from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
 
 DESCRIPTION = "A NewsAPI Assistant for retrieving news articles and headlines."

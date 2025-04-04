@@ -46,13 +46,13 @@ class GetPersonalWorkspaceParameters(WorkflowParameters):
     """
     pass
 
-class ListAssistantsParameters(WorkflowParameters):
-    """Parameters for ListAssistants execution.
+class ListAgentsParameters(WorkflowParameters):
+    """Parameters for ListAgents execution.
     
     Attributes:
         workspace_id (str): The ID of the workspace to list plugins from.
     """
-    workspace_id: str = Field(description="The ID of the workspace to list assistants from.")
+    workspace_id: str = Field(description="The ID of the workspace to list agents from.")
 
 class GetAssistantParameters(WorkflowParameters):
     """Parameters for GetAssistant execution.
@@ -117,14 +117,14 @@ class NaasWorkspaceWorkflows(Workflow):
         """
         return self.__naas.get_personal_workspace()
     
-    def list_agents(self, parameters: ListAssistantsParameters) -> List[Dict[str, str]]:
-        """Lists the assistants.
+    def list_agents(self, parameters: ListAgentsParameters) -> List[Dict[str, str]]:
+        """Lists the agents.
         
         Returns:
             List[Dict[str, str]]: List of dictionaries containing assistant IDs and names
         """
-        assistants = self.__naas.get_plugins(parameters.workspace_id).get("workspace_plugins", [])
-        return [{"id": assistant["id"], "name": assistant["name"], "description": assistant["description"]} for assistant in assistants]
+        agents = self.__naas.get_plugins(parameters.workspace_id).get("workspace_plugins", [])
+        return [{"id": assistant["id"], "name": assistant["name"], "description": assistant["description"]} for assistant in agents]
     
     def get_agent(self, parameters: GetAssistantParameters) -> Dict[str, str]:
         """Gets the assistant.
@@ -176,9 +176,9 @@ class NaasWorkspaceWorkflows(Workflow):
             ),
             StructuredTool(
                 name="naas_list_workspace_agents",
-                description="List the assistants in a given Naas workspace",
-                func=lambda workspace_id: self.list_agents(ListAssistantsParameters(workspace_id=workspace_id)),
-                args_schema=ListAssistantsParameters
+                description="List the agents in a given Naas workspace",
+                func=lambda workspace_id: self.list_agents(ListAgentsParameters(workspace_id=workspace_id)),
+                args_schema=ListAgentsParameters
             ),
             StructuredTool(
                 name="naas_get_workspace_agent",
