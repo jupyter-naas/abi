@@ -7,7 +7,7 @@ import yaml
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-
+from lib.abi import logger
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
 
 @dataclass
@@ -74,14 +74,17 @@ class Config:
                 space_name=""
             )
 
+logger.debug("Loading config")
 secret = Secret(DotenvSecretSecondaryAdaptor())
 config = Config.from_yaml()
 
+logger.debug("Initializing services")
 services = init_services(config, secret)
 
-# Loading Modules
+logger.debug("Loading modules")
 modules = get_modules()
 
+logger.debug("Loading triggers")
 for module in modules:
     # Loading triggers
     for trigger in module.triggers:

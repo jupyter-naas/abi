@@ -9,7 +9,8 @@ services:
       - cargo-cache:/root/.cargo
     environment:
       - PYTHONPATH=/app
-      - ENV=dev
+    env_file:
+      - .env
     command: ["poetry", "run"]
 
 volumes:

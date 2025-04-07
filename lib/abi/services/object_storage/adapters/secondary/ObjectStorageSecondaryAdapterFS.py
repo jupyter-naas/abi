@@ -1,5 +1,6 @@
 from lib.abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter, Exceptions
-
+from queue import Queue
+from typing import Optional
 import os
 
 class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
@@ -37,6 +38,6 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
         
         os.remove(os.path.join(self.base_path, prefix, key))
     
-    def list_objects(self, prefix: str) -> list[str]:
+    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         self.__path_exists(prefix)
         return [os.path.join(prefix, f) for f in os.listdir(os.path.join(self.base_path, prefix))]
