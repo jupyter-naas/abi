@@ -152,6 +152,7 @@ from src.__modules__ import get_modules
 
 for module in get_modules():
     for agent in module.agents:
+        logger.debug(f"Loading agent: {agent.name}")
         agent.as_api(agents_router)
 
 # Include routers

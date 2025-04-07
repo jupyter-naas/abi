@@ -1,4 +1,6 @@
 from lib.abi.services.object_storage.ObjectStoragePort import IObjectStorageDomain, IObjectStorageAdapter, Exceptions
+from queue import Queue
+from typing import Optional
 
 class ObjectStorageService(IObjectStorageDomain):
     adapter: IObjectStorageAdapter
@@ -15,8 +17,8 @@ class ObjectStorageService(IObjectStorageDomain):
     def delete_object(self, prefix: str, key: str) -> None:
         self.adapter.delete_object(prefix, key)
         
-    def list_objects(self, prefix: str = '') -> list[str]:
+    def list_objects(self, prefix: str = '', queue: Optional[Queue] = None) -> list[str]:
         if prefix == '/':
             prefix = ''
 
-        return self.adapter.list_objects(prefix)
+        return self.adapter.list_objects(prefix, queue)
