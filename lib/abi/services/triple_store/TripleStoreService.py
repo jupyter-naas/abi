@@ -8,7 +8,7 @@ import hashlib
 import os
 import io
 import base64
-
+from lib.abi import logger
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -136,11 +136,17 @@ class TripleStoreService(ITripleStoreService):
     ############################################################
 
     def load_schema(self, filepath: str):
-        # Check if schema with filePath == filepath already exists and grab all triples
-        schema_triples = self.query(f'SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}')
+        logger.debug(f"Loading schema: {filepath}")
         
+        query = f'SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'
+        logger.debug(f"Query: {query}")
+        # Check if schema with filePath == filepath already exists and grab all triples
+        schema_triples = self.query(query)
+        
+        logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
         # If schema with filePath == filepath already exists, we check if the file has been modified.
         schema_exists_in_store = len(list(schema_triples)) == 1
+        logger.debug(f"Schema exists in store: {schema_exists_in_store}")
         if schema_exists_in_store:
             
             subject = list(schema_triples)[0][0]
@@ -166,7 +172,10 @@ class TripleStoreService(ITripleStoreService):
             
             # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
             if schema_dict['hash'] == new_content_hash:
+                logger.debug(f"Schema is up to date, no need to update.")
                 return
+
+            logger.debug(f"Schema is not up to date, updating.")
             
             # Decode old content
             old_content = base64.b64decode(schema_dict['content']).decode('utf-8')
@@ -206,6 +215,8 @@ class TripleStoreService(ITripleStoreService):
             return
         elif not schema_exists_in_store:
 
+            logger.debug(f"Loading schema in graph as it doesn't exist in store.")
+            
             # Open file and get content.
             with open(filepath, 'r') as file:
                 content = file.read()

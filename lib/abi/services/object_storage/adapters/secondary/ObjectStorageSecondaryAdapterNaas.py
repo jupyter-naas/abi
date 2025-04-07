@@ -1,4 +1,6 @@
 from lib.abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter
+from queue import Queue
+from typing import Optional
 
 # Load S3 secondary adapter as we will use it.
 from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import ObjectStorageSecondaryAdapterS3
@@ -94,7 +96,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
         
         return self.__s3_adapter.delete_object(prefix, key)
     
-    def list_objects(self, prefix: str) -> list[str]:
+    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         self.ensure_credentials()
         
-        return self.__s3_adapter.list_objects(prefix)
+        return self.__s3_adapter.list_objects(prefix, queue)

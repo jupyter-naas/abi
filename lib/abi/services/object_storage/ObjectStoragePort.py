@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-
+from queue import Queue
+from typing import Optional
 class Exceptions:
     class ObjectNotFound(Exception):
         pass
@@ -23,7 +24,7 @@ class IObjectStorageAdapter(ABC):
         pass
     
     @abstractmethod
-    def list_objects(self, prefix: str) -> list[str]:
+    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         pass
     
     
@@ -42,7 +43,7 @@ class IObjectStorageDomain(ABC):
         pass
     
     @abstractmethod
-    def list_objects(self, prefix: str) -> list[str]:
+    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         pass
     
     

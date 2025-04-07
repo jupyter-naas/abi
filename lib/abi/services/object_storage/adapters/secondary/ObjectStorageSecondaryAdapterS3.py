@@ -1,6 +1,8 @@
 from lib.abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter, Exceptions
 import boto3
 from botocore.exceptions import ClientError
+from queue import Queue
+from typing import Optional
 
 class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
     """S3 implementation of the Object Storage adapter using boto3."""
@@ -116,7 +118,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             Key=self.__get_full_key(prefix, key)
         )
 
-    def list_objects(self, prefix: str) -> list[str]:
+    def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         """List objects in S3 bucket with given prefix.
         
         Args:
@@ -144,6 +146,8 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                         key = key.replace(f"{self.base_prefix}/", "", 1)
                     if key != '':
                         objects.append(key)
+                        if queue:
+                            queue.put(key)
             
             # Get subfolders at this level
             if 'CommonPrefixes' in page:
@@ -153,4 +157,6 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
                         prefix_key = prefix_key.replace(f"{self.base_prefix}/", "", 1)
                     if prefix_key != '':
                         objects.append(prefix_key)
+                        if queue:
+                            queue.put(prefix_key)
         return objects 
