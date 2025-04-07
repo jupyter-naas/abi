@@ -36,6 +36,7 @@ jobs:
 
       - name: Build Docker image
         run: |
+          touch .env
           make build
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
