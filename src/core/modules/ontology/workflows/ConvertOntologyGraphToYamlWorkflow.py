@@ -1,11 +1,9 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src.core.modules.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src import secret, config, services
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import Field
 from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
@@ -14,22 +12,21 @@ from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
 from typing import Dict
-from abi.services.triple_store.TripleStorePorts import OntologyEvent
 import pydash as _
 from rdflib import Graph
+from src.core.modules.ontology.mappings import COLORS_NODES
 
 @dataclass
-class CreateClassOntologyYAMLConfiguration(WorkflowConfiguration):
-    """Configuration for CreateOntologyYAML workflow.
+class ConvertOntologyGraphToYamlConfiguration(WorkflowConfiguration):
+    """Configuration for ConvertOntologyGraphToYaml workflow.
     
     Attributes:
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
     naas_integration_config: NaasIntegrationConfiguration
-    triple_store: ITripleStoreService
 
-class CreateClassOntologyYAMLParameters(WorkflowParameters):
-    """Parameters for CreateOntologyYAML workflow execution.
+class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
+    """Parameters for ConvertOntologyGraphToYaml workflow execution.
     
     Attributes:
         ontology_name (str): The name of the ontology store to use
@@ -39,93 +36,38 @@ class CreateClassOntologyYAMLParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-    ontology_name: str = Field(..., description="The name of the ontology store to use")
+    graph: str = Field(..., description="The graph serialized as turtle format")
     label: str = Field(..., description="The label of the ontology")
     description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
     level: str ='USE_CASE'
     display_relations_names: bool = True
-    class_colors_mapping: Dict[str, str] = {}
+    class_colors_mapping: Dict[str, str] = COLORS_NODES
 
-class CreateClassOntologyYAML(Workflow):
-    """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
+class ConvertOntologyGraphToYamlWorkflow(Workflow):
+    """Workflow for converting ontology graph to YAML."""
     
-    __configuration: CreateClassOntologyYAMLConfiguration
+    __configuration: ConvertOntologyGraphToYamlConfiguration
 
-    def __init__(self, configuration: CreateClassOntologyYAMLConfiguration):
+    def __init__(self, configuration: ConvertOntologyGraphToYamlConfiguration):
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
 
-    def trigger(self, event: OntologyEvent, ontology_name:str, triple: tuple[Any, Any, Any]) -> Graph:
-        s, p, o = triple
-        logger.info(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}, 'ontology_name': {ontology_name}")
-        if str(event) == str(OntologyEvent.INSERT) and (str(o) == "http://www.w3.org/2002/07/owl#NamedIndividual" or str(p) == "http://ontology.naas.ai/abi/isSkillOf" or str(p) == "http://ontology.naas.ai/abi/hasSkill"):
-            label = " ".join(ontology_name.split("_")[:-1]).capitalize()
-            description = f"Ontology for {label}"
-            return self.graph_to_yaml(CreateClassOntologyYAMLParameters(
-                ontology_name=ontology_name,
-                label=label,
-                description=description,
-            ))
-        return None
-
-    def graph_to_yaml(self, parameters: CreateClassOntologyYAMLParameters) -> str:
+    def graph_to_yaml(self, parameters: ConvertOntologyGraphToYamlParameters) -> str:
         # Initialize parameters
         yaml_data = None
-        graph = self.__configuration.triple_store.get(parameters.ontology_name)
 
-        # Get all object properties uri
-        query = """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-
-        SELECT DISTINCT ?object
-        WHERE {
-        # Find all predicates used in triples
-        ?subject ?predicate ?object .
-        
-        # Only get predicates that are object properties and in URI reference format
-        FILTER(isURI(?object))
-        
-        # Exclude RDF type triples
-        FILTER(?predicate != rdf:type)
-        }
-        ORDER BY ?object
-        """
-        list_uri = [str(object.get("object")) for object in graph.query(query)]
-
-        # Get all object properties label and type
-        if len(list_uri) > 0:
-            uri_filter = "(" + " || ".join([f"?object = <{uri}>" for uri in list_uri]) + ")"
-            query = f"""
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-
-            SELECT DISTINCT ?object ?label ?type
-            WHERE {{
-            ?object rdfs:label ?label .
-            ?object rdf:type ?type .
-            FILTER {uri_filter}
-            }}
-            ORDER BY ?object
-            """
-            results = services.triple_store_service.query(query)
-
-            # Add object properties to graph
-            from rdflib import URIRef, RDFS, Literal, RDF, OWL
-            for row in results:
-                graph.add((URIRef(row.get("object")), RDF.type, URIRef(row.get("type"))))
-                graph.add((URIRef(row.get("object")), RDF.type, OWL.NamedIndividual))
-                graph.add((URIRef(row.get("object")), RDFS.label, Literal(row.get("label"))))
+        # Create Graph from turtle string
+        g = Graph()
+        g.parse(data=parameters.graph, format="turtle")
 
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(
-            data=graph.serialize(format="turtle").encode('utf-8'),  # Convert to bytes
+            data=parameters.graph.encode('utf-8'),  # Use the original turtle string
             workspace_id=config.workspace_id,
             storage_name=config.storage_name,
             prefix="assets",
-            object_name=str(parameters.ontology_name + ".ttl"),
+            object_name=str(parameters.label + ".ttl"),
             visibility="public"
         )
         # Save asset URL to JSON
@@ -136,12 +78,13 @@ class CreateClassOntologyYAML(Workflow):
         # Convert to YAML
         try:
             yaml_data = OntologyYaml.rdf_to_yaml(
-                graph, 
+                g, 
                 display_relations_names=parameters.display_relations_names,
                 class_colors_mapping=parameters.class_colors_mapping
             )
         except Exception as e:
             message = f"Error converting ontology to YAML: {e}"
+            raise e
 
         # Initialize parameters
         if yaml_data is not None:
@@ -171,7 +114,7 @@ class CreateClassOntologyYAML(Workflow):
                     logo_url=onto_logo_url,
                 )
                 ontology_id = _.get(res, "ontology.id")
-                message = f"✅ Ontology '{ontology_id}' successfully created."
+                message = f"✅ Ontology '{onto_label}' ({ontology_id}) successfully created."
             else:
                 # Update existing ontology
                 res = self.__naas_integration.update_ontology(
@@ -183,7 +126,7 @@ class CreateClassOntologyYAML(Workflow):
                     download_url=asset_url,
                     logo_url=onto_logo_url,
                 )
-                message = f"✅ Ontology '{ontology_id}' successfully updated."
+                message = f"✅ Ontology '{onto_label}' ({ontology_id}) successfully updated."
         logger.info(message)
         return ontology_id
 
@@ -191,10 +134,10 @@ class CreateClassOntologyYAML(Workflow):
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
-                name="ontology_create_yaml",
-                description="Convert an ontology file to YAML and push it to Naas workspace.",
-                func=lambda **kwargs: self.graph_to_yaml(CreateClassOntologyYAMLParameters(**kwargs)),
-                args_schema=CreateClassOntologyYAMLParameters
+                name="ontology_convert_graph_to_yaml",
+                description="Convert an ontology graph to YAML.",
+                func=lambda **kwargs: self.graph_to_yaml(ConvertOntologyGraphToYamlParameters(**kwargs)),
+                args_schema=ConvertOntologyGraphToYamlParameters
             )
         ]
 
