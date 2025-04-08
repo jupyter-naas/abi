@@ -261,3 +261,18 @@ class TripleStoreService(ITripleStoreService):
                     internal:fileLastUpdateTime "{file_last_update_time}" ;
                     internal:content "{base64_content}" .
             '''), format='turtle'))
+            
+    def get_schema_graph(self) -> Graph:
+        contents = self.query('SELECT ?s ?o WHERE { ?s internal:content ?o . }')
+        
+        graph = Graph()
+        
+        for s, o in contents:
+            g = Graph().parse(io.StringIO(base64.b64decode(o).decode('utf-8')), format='turtle')
+            
+            graph += g
+            
+            for prefix, namespace in g.namespaces():
+                graph.bind(prefix, namespace)
+                
+        return graph

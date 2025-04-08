@@ -171,3 +171,19 @@ class ITripleStoreService(ABC):
             >>> store.load_schema("path/to/schema.ttl") 
         """
         pass
+    
+    @abstractmethod
+    def get_schema_graph(self) -> Graph:
+        """Get the RDF graph containing just the schema/ontology triples.
+        
+        This method returns an RDFlib Graph containing only the schema/ontology triples
+        that define classes, properties, and other structural elements. It excludes
+        instance data triples.
+        
+        Returns:
+            Graph: An RDF graph containing only the schema/ontology triples
+            
+        Example:
+            >>> schema = store.get_schema_graph()
+        """
+        pass
