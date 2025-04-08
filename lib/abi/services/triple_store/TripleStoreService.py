@@ -9,6 +9,10 @@ import os
 import io
 import base64
 from lib.abi import logger
+
+
+from lib.abi.utils.Workers import WorkerPool, Queue, Job
+
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -65,16 +69,21 @@ class TripleStoreService(ITripleStoreService):
     """
     def __init__(self, ontology_adaptor: ITripleStorePort, views: List[Tuple[str, str, str]] = [
         (None, RDF.type, None)
-    ]):
+    ], trigger_worker_pool_size: int = 10):
         self.__ontology_adaptor = ontology_adaptor
         self.__event_listeners = {}
         self.__views = views
+        
+        self.__trigger_worker_pool = WorkerPool(trigger_worker_pool_size)
         
         # Load SCHEMA_TTL in IOBuffer 
         schema_ttl_buffer = io.StringIO(SCHEMA_TTL)
         self.insert(Graph().parse(schema_ttl_buffer, format='turtle'))
         
         self.init_views()
+
+    def __del__(self):
+        self.__trigger_worker_pool.shutdown()
 
     def init_views(self):
         for view in self.__views:
@@ -90,8 +99,11 @@ class TripleStoreService(ITripleStoreService):
             for ss, sp, so in self.__event_listeners:
                 if (ss is None or str(ss) == str(s)) and (sp is None or str(sp) == str(p)) and (so is None or str(so) == str(o)):
                     if OntologyEvent.INSERT in self.__event_listeners[ss, sp, so]:
-                        for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
-                            callback(OntologyEvent.INSERT, (s, p, o))
+                        for _, callback, background in self.__event_listeners[ss, sp, so][OntologyEvent.INSERT]:
+                            if background:
+                                self.__trigger_worker_pool.submit(Job(None, callback, OntologyEvent.INSERT, (s, p, o)))
+                            else:
+                                callback(OntologyEvent.INSERT, (s, p, o))
                 
     def remove(self, triples: Graph):
         # Remove the triples from the store
@@ -102,8 +114,11 @@ class TripleStoreService(ITripleStoreService):
             for ss, sp, so in self.__event_listeners:
                 if (ss is None or str(ss) == str(s)) and (sp is None or str(sp) == str(p)) and (so is None or str(so) == str(o)):
                     if OntologyEvent.DELETE in self.__event_listeners[ss, sp, so]:
-                        for _, callback in self.__event_listeners[ss, sp, so][OntologyEvent.DELETE]:
-                            callback(OntologyEvent.DELETE, (s, p, o))
+                        for _, callback, background in self.__event_listeners[ss, sp, so][OntologyEvent.DELETE]:
+                            if background:
+                                self.__trigger_worker_pool.submit(Job(None, callback, OntologyEvent.DELETE, (s, p, o)))
+                            else:
+                                callback(OntologyEvent.DELETE, (s, p, o))
 
     def get(self) -> Graph:
         return self.__ontology_adaptor.get()
@@ -114,7 +129,7 @@ class TripleStoreService(ITripleStoreService):
     def query_view(self, view: str, query: str) -> Graph:
         return self.__ontology_adaptor.query_view(view, query)
     
-    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:        
+    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable[[OntologyEvent, Tuple[str, str, str]], None], background: bool = False) -> str:        
         if topic not in self.__event_listeners:
             self.__event_listeners[topic] = {}
         if event_type not in self.__event_listeners[topic]:
@@ -122,7 +137,7 @@ class TripleStoreService(ITripleStoreService):
             
         subscription_id = str(uuid.uuid4())
             
-        self.__event_listeners[topic][event_type].append((subscription_id, callback))
+        self.__event_listeners[topic][event_type].append((subscription_id, callback, background))
         
         return subscription_id
     
