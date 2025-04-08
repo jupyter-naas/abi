@@ -4,6 +4,10 @@ from typing import List, Callable, Dict, Tuple
 from enum import Enum
 
 class Exceptions:
+    
+    class SubjectNotFoundError(Exception):
+        pass
+    
     class SubscriptionNotFoundError(Exception):
             pass
         
@@ -39,6 +43,11 @@ class ITripleStorePort(ABC):
     @abstractmethod
     def query_view(self, view: str, query: str) -> Graph:
         pass
+    
+    @abstractmethod
+    def get_subject_graph(self, subject: str) -> Graph:
+        pass
+    
 
 class ITripleStoreService(ABC):
     
@@ -151,6 +160,21 @@ class ITripleStoreService(ABC):
         
     @abstractmethod
     def query_view(self, view: str, query: str) -> Graph:
+        pass
+    
+    @abstractmethod
+    def get_subject_graph(self, subject: str) -> Graph:
+        """Get the RDF graph containing all triples for a specific subject.
+        
+        This method retrieves and returns an RDFlib Graph containing all triples
+        that have the specified subject.
+        
+        Args:
+            subject (str): The subject to retrieve triples for
+            
+        Returns:
+            Graph: An RDFlib Graph containing all triples for the specified subject
+        """
         pass
     
     @abstractmethod
