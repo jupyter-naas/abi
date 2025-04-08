@@ -11,7 +11,8 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
     CCO,
-    DCTERMS
+    DCTERMS,
+    ABI
 )
 
 @dataclass
@@ -64,8 +65,8 @@ class AddSkillPipeline(Pipeline):
         if parameters.person_uris:
             for person_uri in parameters.person_uris:
                 if person_uri.startswith("http://ontology.naas.ai/abi/"):
-                    graph.add((skill_uri, CCO.isSkillOf, URIRef(person_uri)))
-                    graph.add((URIRef(person_uri), CCO.hasSkill, skill_uri))
+                    graph.add((skill_uri, ABI.isSkillOf, URIRef(person_uri)))
+                    graph.add((URIRef(person_uri), ABI.hasSkill, skill_uri))
                 else:
                     raise ValueError(f"Invalid Person URI: {person_uri}. It must start with 'http://ontology.naas.ai/abi/'.")
         
