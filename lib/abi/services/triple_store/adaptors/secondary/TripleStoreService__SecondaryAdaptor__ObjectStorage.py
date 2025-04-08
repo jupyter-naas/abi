@@ -1,4 +1,4 @@
-from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent
+from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent, Exceptions
 from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
 from lib.abi.services.object_storage.ObjectStoragePort import Exceptions as ObjectStorageExceptions
 from lib.abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import TripleStoreService__SecondaryAdaptor__FileBase
@@ -91,7 +91,16 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(ITripleStorePort, Triple
             self.__live_graph.bind(prefix, namespace)
             
         self.__live_graph -= triples
-    
+
+    def get_subject_graph(self, subject: str) -> Graph:
+        subject_hash = self.iri_hash(subject)
+        
+        try:
+            graph = self.load_triples(subject_hash)
+            return graph
+        except ObjectStorageExceptions.ObjectNotFound:
+            raise Exceptions.SubjectNotFoundError(f"Subject {subject} not found")
+
     def load(self) -> Graph:
         logger.debug("Loading triples from object storage")
         triples = Graph()
