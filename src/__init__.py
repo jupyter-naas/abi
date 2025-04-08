@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from lib.abi import logger
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
+import atexit
 
 @dataclass
 class PipelineConfig:
@@ -94,6 +95,10 @@ for module in modules:
     # Loading ontologies
     for ontology in module.ontologies:
         services.triple_store_service.load_schema(ontology)
+
+@atexit.register
+def shutdown_services():
+    services.triple_store_service.__del__()
 
 if __name__ == "__main__":
     cli()
