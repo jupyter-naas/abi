@@ -1,0 +1,98 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix ns1: <https://www.commoncoreontologies.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+abi:338c7210-92d5-4bfe-9ebb-334bcc29931c a owl:NamedIndividual,
+        ns1:ont00001262 ;
+    rdfs:label "Jeremy Ravenel" ;
+    abi:first_name "Jeremy" ;
+    abi:hasLinkedInPage abi:4cce4718-7750-4ccf-96ff-8744a04068a5 ;
+    abi:last_name "Ravenel" ;
+    ns1:hasSkill abi:58a74f11-db2e-4443-beee-c9d55f726cc5 .
+
+abi:46e9ab9c-19c5-445c-b962-3f6f3d576d21 a owl:NamedIndividual,
+        ns1:ont00001262 ;
+    rdfs:label "Kaan Kabalak" ;
+    abi:first_name "Kaan" ;
+    abi:hasLinkedInPage abi:93818254-a6c5-41f7-87df-53fe368d45e1 ;
+    abi:last_name "Kabalak" .
+
+abi:57b31b73-e1d7-444d-aa08-ac20df45a77c a owl:NamedIndividual,
+        ns1:ont00001262 ;
+    rdfs:label "Vin Vashishta" ;
+    abi:first_name "Vin" ;
+    abi:hasLinkedInPage abi:d33e3abd-bd53-4c7f-b36b-daf9e9175049 ;
+    abi:last_name "Vashishta" .
+
+abi:67503ee8-f577-4603-96d3-dd5ede825314 a owl:NamedIndividual,
+        ns1:ont00001262 ;
+    rdfs:label "Maxime Jublou" ;
+    abi:first_name "Maxime" ;
+    abi:hasLinkedInPage abi:492a4b61-beb9-4527-a036-2ad9c4416bdd,
+        abi:85de42fb-a88d-47f8-b1ce-bb9ef92d8a64 ;
+    abi:hasSkill abi:6e185916-862b-4a85-97ef-a8e1e655603a,
+        abi:d51f1b57-de88-4b4a-a542-7ee9eeb7afaf ;
+    abi:last_name "Jublou" .
+
+abi:83764023-b5d4-4d2d-8465-94d7d4b573a9 a owl:NamedIndividual,
+        ns1:ont00001262 ;
+    rdfs:label "Florent Ravenel" ;
+    abi:first_name "Florent" ;
+    abi:hasLinkedInPage abi:d0457610-8441-4ce6-9796-f98a5e2dcebf ;
+    abi:hasSkill abi:58a74f11-db2e-4443-beee-c9d55f726cc5,
+        abi:886a670c-5903-4e0d-b706-3a2fa88f8d55,
+        abi:d51f1b57-de88-4b4a-a542-7ee9eeb7afaf ;
+    abi:last_name "Ravenel" .
+
+abi:d2f671c0-90b3-4969-8b09-359e3afe27e2 a owl:NamedIndividual,
+        ns1:ont00001262 ;
+    rdfs:label "Anthony Alcaraz" ;
+    abi:first_name "Anthony" ;
+    abi:hasLinkedInPage abi:cca13991-ba8d-4cb2-a753-737b9c978f6f ;
+    abi:last_name "Alcaraz" .
+
+abi:492a4b61-beb9-4527-a036-2ad9c4416bdd a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/maximejublou" .
+
+abi:4cce4718-7750-4ccf-96ff-8744a04068a5 a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/jeremyravenel/" .
+
+abi:6e185916-862b-4a85-97ef-a8e1e655603a a owl:NamedIndividual,
+        ns1:ont00000089 ;
+    rdfs:label "C++" .
+
+abi:85de42fb-a88d-47f8-b1ce-bb9ef92d8a64 a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/ACoAAA6EYJABlJdZG2ZQLuLkpCu2Ny8pqa065b8" .
+
+abi:886a670c-5903-4e0d-b706-3a2fa88f8d55 a owl:NamedIndividual,
+        ns1:ont00000089 ;
+    rdfs:label "Excel" .
+
+abi:93818254-a6c5-41f7-87df-53fe368d45e1 a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/ACoAAC8rni4BTsSJARMuwvb0TADojxFqSuat47M" .
+
+abi:cca13991-ba8d-4cb2-a753-737b9c978f6f a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/ACoAACVPJNABGwj10wdhrBRfHh4644U440jiziM" .
+
+abi:d0457610-8441-4ce6-9796-f98a5e2dcebf a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/florent-ravenel/" .
+
+abi:d33e3abd-bd53-4c7f-b36b-daf9e9175049 a abi:LinkedInProfilePage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/in/ACoAAADS0WQBhQQVMD2eFJNZgjOOjDTH6ptbScU" .
+
+abi:58a74f11-db2e-4443-beee-c9d55f726cc5 a owl:NamedIndividual,
+        ns1:ont00000089 ;
+    rdfs:label "Ontology" .
+
+abi:d51f1b57-de88-4b4a-a542-7ee9eeb7afaf a owl:NamedIndividual,
+        ns1:ont00000089 ;
+    rdfs:label "Python" .
+

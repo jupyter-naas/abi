@@ -17,6 +17,7 @@ from typing import Dict
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 import pydash as _
 from rdflib import Graph
+from abi.utils.SPARQL import results_to_list
 
 @dataclass
 class CreateClassOntologyYAMLConfiguration(WorkflowConfiguration):
@@ -39,7 +40,7 @@ class CreateClassOntologyYAMLParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-    ontology_name: str = Field(..., description="The name of the ontology store to use")
+    class_uri: str = Field(..., description="The URI of the class to convert to YAML")
     label: str = Field(..., description="The label of the ontology")
     description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
     logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
@@ -47,7 +48,7 @@ class CreateClassOntologyYAMLParameters(WorkflowParameters):
     display_relations_names: bool = True
     class_colors_mapping: Dict[str, str] = {}
 
-class CreateClassOntologyYAML(Workflow):
+class CreateClassOntologyYAMLWorkflow(Workflow):
     """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
     
     __configuration: CreateClassOntologyYAMLConfiguration
@@ -56,49 +57,94 @@ class CreateClassOntologyYAML(Workflow):
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
 
+    def get_class_from_uri(uri: str) -> tuple[str, str]:
+        """
+        Get the rdfs:label and class URI for a given URI from the triple store.
+        
+        Args:
+            uri (str): The URI to look up
+            
+        Returns:
+            tuple[str, str]: A tuple containing (label, class_uri) if found, (None, None) otherwise
+        """
+        triple_store = services.triple_store_service
+        id = uri.split("/")[-1]
+        query = f"""
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT ?label ?class
+        WHERE {{
+            abi:{id} rdf:type ?class .
+            ?class rdfs:label ?label .
+            FILTER(?class != owl:NamedIndividual)
+        }}
+        """
+        results = triple_store.query(query)
+        result_list = results_to_list(results)
+        
+        return (result_list[0]['label'], result_list[0]['class']) if result_list else (None, None)
+
     def trigger(self, event: OntologyEvent, ontology_name:str, triple: tuple[Any, Any, Any]) -> Graph:
         s, p, o = triple
-        logger.info(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}, 'ontology_name': {ontology_name}")
-        if str(event) == str(OntologyEvent.INSERT) and (str(o) == "http://www.w3.org/2002/07/owl#NamedIndividual" or str(p) == "http://ontology.naas.ai/abi/isSkillOf" or str(p) == "http://ontology.naas.ai/abi/hasSkill"):
-            label = " ".join(ontology_name.split("_")[:-1]).capitalize()
-            description = f"Ontology for {label}"
+        logger.debug(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}")
+        # Get class type from URI
+        class_label, class_uri = self.get_class_from_uri(s)
+        class_uri_triggers = [
+            "https://www.commoncoreontologies.org/ont00001262", # Person
+            "https://www.commoncoreontologies.org/ont00000443", # Commercial Organization
+        ]
+        if str(event) == str(OntologyEvent.INSERT) and class_uri in class_uri_triggers:
             return self.graph_to_yaml(CreateClassOntologyYAMLParameters(
-                ontology_name=ontology_name,
-                label=label,
-                description=description,
+                class_uri=class_uri,
+                label=class_label,
+                description=f"Ontology for {class_label}",
             ))
         return None
 
     def graph_to_yaml(self, parameters: CreateClassOntologyYAMLParameters) -> str:
         # Initialize parameters
         yaml_data = None
-        graph = self.__configuration.triple_store.get(parameters.ontology_name)
 
-        # Get all object properties uri
-        query = """
+        # Get triples from class uri
+        query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-        SELECT DISTINCT ?object
-        WHERE {
-        # Find all predicates used in triples
-        ?subject ?predicate ?object .
-        
-        # Only get predicates that are object properties and in URI reference format
-        FILTER(isURI(?object))
-        
-        # Exclude RDF type triples
-        FILTER(?predicate != rdf:type)
-        }
-        ORDER BY ?object
+        SELECT DISTINCT ?subject ?predicate ?object
+        WHERE {{
+            ?subject a <{parameters.class_uri}> .
+            ?subject ?predicate ?object .
+        }}
+        ORDER BY ?subject ?predicate
         """
-        list_uri = [str(object.get("object")) for object in graph.query(query)]
+        results = services.triple_store_service.query(query)
+        # Initialize graph
+        from rdflib import Graph, URIRef, RDFS, Literal, RDF, OWL
+        graph = Graph()
+        graph.bind('abi', 'http://ontology.naas.ai/abi/')
+        list_uri = []
+
+        # Add triples to graph
+        for row in results:
+            subject = URIRef(row.get("subject"))
+            predicate = URIRef(row.get("predicate")) 
+            obj = row.get("object")
+
+            # Add triple to graph
+            if isinstance(obj, str) and obj.startswith('http'):
+                obj = URIRef(obj)
+                list_uri.append(obj)
+            else:
+                obj = Literal(obj)
+            logger.debug(f"==> Adding triple to graph: {subject} {predicate} {obj}")
+            graph.add((subject, predicate, obj))
 
         # Get all object properties label and type
         if len(list_uri) > 0:
-            uri_filter = "(" + " || ".join([f"?object = <{uri}>" for uri in list_uri]) + ")"
+            # Filter only ABI URIs
+            abi_uris = [uri for uri in list_uri if str(uri).startswith('http://ontology.naas.ai/abi/')]
+            uri_filter = "(" + " || ".join([f"?object = <{uri}>" for uri in abi_uris]) + ")"
             query = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
@@ -119,13 +165,18 @@ class CreateClassOntologyYAML(Workflow):
                 graph.add((URIRef(row.get("object")), RDF.type, OWL.NamedIndividual))
                 graph.add((URIRef(row.get("object")), RDFS.label, Literal(row.get("label"))))
 
+        # Save graph to file
+        graph_file = f"src/core/modules/ontology/workflows/tests/{parameters.label}.ttl"
+        graph.serialize(destination=graph_file, format="turtle")
+        logger.info(f"==> Saved graph to {graph_file}")
+
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(
             data=graph.serialize(format="turtle").encode('utf-8'),  # Convert to bytes
             workspace_id=config.workspace_id,
             storage_name=config.storage_name,
             prefix="assets",
-            object_name=str(parameters.ontology_name + ".ttl"),
+            object_name=str(parameters.label + ".ttl"),
             visibility="public"
         )
         # Save asset URL to JSON
@@ -142,6 +193,7 @@ class CreateClassOntologyYAML(Workflow):
             )
         except Exception as e:
             message = f"Error converting ontology to YAML: {e}"
+            raise e
 
         # Initialize parameters
         if yaml_data is not None:

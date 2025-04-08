@@ -1,0 +1,102 @@
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+abi:14ecb603-1e11-4986-bfef-2e49516bc7cf a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Forvis Mazars" ;
+    abi:hasWebsite abi:c545487b-aa3e-4bc9-aca0-cec5dff571ab .
+
+abi:2dc52ea6-b0e7-4ef7-8729-1e62d66cc1b4 a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Neo4j" ;
+    abi:hasLinkedInPage abi:b696daef-31f8-4a77-96b9-74fe9056dd54 ;
+    abi:hasWebsite abi:29dd50e8-99a5-42e5-a8ae-07a3b5e5be17 .
+
+abi:2f897665-4a84-4ac9-b59a-4a1221a06587 a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Orange" ;
+    abi:hasLinkedInPage abi:7f42f85c-8a8f-4eda-a863-95b6718912d6 ;
+    abi:hasWebsite abi:48d934d2-453a-4422-ae8b-ec5ae44d9950 .
+
+abi:3458ae32-bdf1-42d6-b307-8945b53356de a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Amazon Web Services (AWS)" ;
+    abi:hasLinkedInPage abi:82ea3885-037e-4e34-8995-145dbac5986b ;
+    abi:hasWebsite abi:f827cf82-e8ed-432c-bb6a-e48734784533 .
+
+abi:3ba6d572-cda3-4a2d-aeef-6e4b2ee2e962 a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Wipro" ;
+    abi:hasLinkedInPage abi:633f6f03-267a-4f85-9430-666e42d873d0 ;
+    abi:hasWebsite abi:27f4b34a-fb13-4e8d-a553-6530186cadf5 .
+
+abi:7f0579a0-1913-406b-b22f-48847a9e708a a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Naas.ai" ;
+    abi:hasLinkedInPage abi:1acd107a-b366-4f1c-9c1e-de7f37c73d9a,
+        abi:7256ba74-795f-4ef9-8ca0-dcd4c0b45357 ;
+    abi:hasWebsite abi:1cdf296c-fa6a-42cd-83b8-fa0c6d77e1d0 .
+
+abi:e370f21d-40c9-47d2-9719-de38f2bfd442 a owl:NamedIndividual,
+        <https://www.commoncoreontologies.org/ont00000443> ;
+    rdfs:label "Omniloy" ;
+    abi:hasLinkedInPage abi:8e8e0515-dd4a-4fc8-95a2-d253ae6306f7 ;
+    abi:hasWebsite abi:12d72b67-332e-49b4-90c5-d1a122254567 .
+
+abi:12d72b67-332e-49b4-90c5-d1a122254567 a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "http://www.omniloy.com" .
+
+abi:1acd107a-b366-4f1c-9c1e-de7f37c73d9a a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/naas-ai/" .
+
+abi:1cdf296c-fa6a-42cd-83b8-fa0c6d77e1d0 a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "http://www.naas.ai/" .
+
+abi:27f4b34a-fb13-4e8d-a553-6530186cadf5 a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "http://www.wipro.com" .
+
+abi:29dd50e8-99a5-42e5-a8ae-07a3b5e5be17 a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "https://neo4j.com/" .
+
+abi:48d934d2-453a-4422-ae8b-ec5ae44d9950 a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.orange.fr/" .
+
+abi:633f6f03-267a-4f85-9430-666e42d873d0 a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/wipro" .
+
+abi:7256ba74-795f-4ef9-8ca0-dcd4c0b45357 a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/naas-ai/" .
+
+abi:7f42f85c-8a8f-4eda-a863-95b6718912d6 a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/orange" .
+
+abi:82ea3885-037e-4e34-8995-145dbac5986b a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/amazon-web-services" .
+
+abi:8e8e0515-dd4a-4fc8-95a2-d253ae6306f7 a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/omniloy" .
+
+abi:b696daef-31f8-4a77-96b9-74fe9056dd54 a abi:LinkedInCompanyPage,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.linkedin.com/company/neo4j" .
+
+abi:c545487b-aa3e-4bc9-aca0-cec5dff571ab a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "https://www.forvismazars.com/" .
+
+abi:f827cf82-e8ed-432c-bb6a-e48734784533 a abi:Website,
+        owl:NamedIndividual ;
+    rdfs:label "http://aws.amazon.com" .
+
