@@ -76,6 +76,14 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(ITripleStorePort, TripleS
     def get(self) -> Graph:
         return self.__live_graph
     
+    def get_subject_graph(self, subject: str) -> Graph:
+        subject_hash = self.iri_hash(subject)
+        
+        if os.path.exists(self.hash_triples_path(subject_hash)):
+            return Graph().parse(self.hash_triples_path(subject_hash), format='turtle')
+
+        raise Exceptions.SubjectNotFoundError(f"Subject {subject} not found")
+    
     def load(self) -> Graph:
         triples = Graph()
         
