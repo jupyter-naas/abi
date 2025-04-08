@@ -14,7 +14,7 @@ from yaml import Dumper
 from typing import Dict
 import pydash as _
 from rdflib import Graph
-from src.core.mappings import COLORS_NODES
+from src.core.modules.ontology.mappings import COLORS_NODES
 
 @dataclass
 class ConvertOntologyGraphToYamlConfiguration(WorkflowConfiguration):
