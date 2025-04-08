@@ -174,6 +174,9 @@ class ITripleStoreService(ABC):
             
         Returns:
             Graph: An RDFlib Graph containing all triples for the specified subject
+            
+        Raises:
+            SubjectNotFoundError: If no triples exist with the specified subject
         """
         pass
     
