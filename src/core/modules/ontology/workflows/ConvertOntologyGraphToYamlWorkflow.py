@@ -127,7 +127,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
                     logo_url=onto_logo_url,
                 )
                 message = f"✅ Ontology '{onto_label}' ({ontology_id}) successfully updated."
-        logger.info(message)
+        logger.debug(message)
         return ontology_id
 
     def as_tools(self) -> list[StructuredTool]:
