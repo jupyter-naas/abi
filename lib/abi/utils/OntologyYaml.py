@@ -1,12 +1,9 @@
-from abi.utils.Graph import ABIGraph, ABI, BFO
-from yaml import load, dump
-from yaml import CLoader as Loader, CDumper as Dumper
 import copy
 import pydash as _
 import random
 from abi import logger
-from rdflib import Graph
-from abi.utils.ConsolidateOntology import consolidate_ontologies
+from src import services
+from rdflib import Graph, RDF, OWL, RDFS, URIRef
 
 class OntologyYaml:
     def __init__(self):
@@ -47,11 +44,36 @@ class Translator:
         self.amount_per_level = {}
         self.mapping_oprop = {}
 
-        # Initialize mapping with standard RDF/RDFS/OWL terms
-        ontology_schemas, mapping = consolidate_ontologies()
-        self.ontology_schemas = ontology_schemas
-        self.mapping = mapping
+        # Init ontology schemas
+        consolidated = services.triple_store_service.get_schema_graph()
+        schema_graph = Graph()
+
+        # Filter for desired types
+        desired_types = {
+            OWL.Class,
+            OWL.DatatypeProperty,
+            OWL.ObjectProperty,
+            OWL.AnnotationProperty
+        }
         
+        # Add all triples where subject is of desired type
+        for s, p, o in consolidated.triples((None, RDF.type, None)):
+            if o in desired_types:
+                # Add the type triple
+                schema_graph.add((s, p, o))
+                # Add all triples where this subject is involved
+                for s2, p2, o2 in consolidated.triples((s, None, None)):
+                    schema_graph.add((s2, p2, o2))
+                for s2, p2, o2 in consolidated.triples((None, None, s)):
+                    schema_graph.add((s2, p2, o2))
+        self.ontology_schemas = schema_graph
+
+        # Init mapping
+        mapping = {}
+        for s, p, o in self.ontology_schemas.triples((None, RDFS.label, None)):
+            if isinstance(s, URIRef):
+                mapping[str(s)] = str(o)
+            
         # Add standard RDF terms
         rdf_terms = {
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": "type",
@@ -94,11 +116,12 @@ class Translator:
         }
         
         # Update mapping with all terms
-        self.mapping.update(rdf_terms)
-        self.mapping.update(rdfs_terms)
-        self.mapping.update(owl_terms)
-        self.mapping.update(skos_terms)
-        self.mapping.update(dc_terms)
+        mapping.update(rdf_terms)
+        mapping.update(rdfs_terms)
+        mapping.update(owl_terms)
+        mapping.update(skos_terms)
+        mapping.update(dc_terms)
+        self.mapping = mapping
 
         # Define logical operators mapping
         self.operators = {
