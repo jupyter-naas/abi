@@ -146,6 +146,10 @@ class TripleStoreService(ITripleStoreService):
             for event_type in self.__event_listeners[topic]:
                 self.__event_listeners[topic][event_type] = pydash.filter_(self.__event_listeners[topic][event_type], lambda x: x[0] != subscription_id)
 
+    def get_subject_graph(self, subject: str) -> Graph:
+        return self.__ontology_adaptor.get_subject_graph(subject)
+
+
     ############################################################
     # Schema Management
     ############################################################
