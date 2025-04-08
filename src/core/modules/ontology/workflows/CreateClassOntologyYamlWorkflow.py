@@ -105,7 +105,6 @@ class CreateClassOntologyYamlWorkflow(Workflow):
                 list_uri.append(obj)
             else:
                 obj = Literal(obj)
-            logger.debug(f"==> Adding triple to graph: {subject} {predicate} {obj}")
             graph.add((subject, predicate, obj))
 
         # Get all object properties label and type
