@@ -5,6 +5,8 @@ from enum import Enum
 import uuid
 import time
 
+from lib.abi import logger
+
 class JobStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -14,7 +16,7 @@ class JobStatus(Enum):
     
 
 class Job:
-    def __init__(self, queue: Queue, func: Callable, *args, **kwargs):
+    def __init__(self, queue: Optional[Queue], func: Callable, *args, **kwargs):
         self.id = str(uuid.uuid4())
         self.queue = queue
         self.func = func
@@ -41,7 +43,8 @@ class Job:
                 self.status = JobStatus.FAILED
         finally:
             self._completion_event.set()
-            self.queue.put(self)
+            if self.queue:
+                self.queue.put(self)
     
     def wait(self, timeout: Optional[float] = None) -> bool:
         """Wait for the job to complete"""
@@ -101,6 +104,7 @@ class WorkerPool:
     
     def shutdown(self):
         """Shutdown the worker pool"""
+        logger.debug("Shutting down worker pool")
         self.shutdown_event.set()
         for worker in self.workers:
             worker.join()

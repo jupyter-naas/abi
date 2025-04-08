@@ -4,6 +4,10 @@ from typing import List, Callable, Dict, Tuple
 from enum import Enum
 
 class Exceptions:
+    
+    class SubjectNotFoundError(Exception):
+        pass
+    
     class SubscriptionNotFoundError(Exception):
             pass
         
@@ -39,6 +43,11 @@ class ITripleStorePort(ABC):
     @abstractmethod
     def query_view(self, view: str, query: str) -> Graph:
         pass
+    
+    @abstractmethod
+    def get_subject_graph(self, subject: str) -> Graph:
+        pass
+    
 
 class ITripleStoreService(ABC):
     
@@ -154,6 +163,24 @@ class ITripleStoreService(ABC):
         pass
     
     @abstractmethod
+    def get_subject_graph(self, subject: str) -> Graph:
+        """Get the RDF graph containing all triples for a specific subject.
+        
+        This method retrieves and returns an RDFlib Graph containing all triples
+        that have the specified subject.
+        
+        Args:
+            subject (str): The subject to retrieve triples for
+            
+        Returns:
+            Graph: An RDFlib Graph containing all triples for the specified subject
+            
+        Raises:
+            SubjectNotFoundError: If no triples exist with the specified subject
+        """
+        pass
+    
+    @abstractmethod
     def load_schema(self, filepath: str):
         """Load an RDF/OWL schema file into the triple store.
         
@@ -169,5 +196,21 @@ class ITripleStoreService(ABC):
             
         Example:
             >>> store.load_schema("path/to/schema.ttl") 
+        """
+        pass
+    
+    @abstractmethod
+    def get_schema_graph(self) -> Graph:
+        """Get the RDF graph containing just the schema/ontology triples.
+        
+        This method returns an RDFlib Graph containing only the schema/ontology triples
+        that define classes, properties, and other structural elements. It excludes
+        instance data triples.
+        
+        Returns:
+            Graph: An RDF graph containing only the schema/ontology triples
+            
+        Example:
+            >>> schema = store.get_schema_graph()
         """
         pass
