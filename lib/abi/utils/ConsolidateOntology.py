@@ -25,7 +25,7 @@ def consolidate_ontologies() -> None:
     custom_path = "src/custom"
     ttl_files = list(Path(core_path).rglob("*.ttl")) + list(Path(custom_path).rglob("*.ttl"))
     
-    logger.info(f"Found {len(ttl_files)} ontology files")
+    logger.debug(f"Found {len(ttl_files)} ontology files")
     
     # Load each ontology file
     for ttl_file in ttl_files:
@@ -62,16 +62,4 @@ def consolidate_ontologies() -> None:
     for s, p, o in filtered.triples((None, RDFS.label, None)):
         if isinstance(s, URIRef):
             mapping[str(s)] = str(o)
-
-    # # Save ontology schemas to TTL file
-    # filtered.serialize(destination="lib/abi/utils/ontology_schemas.ttl", format="turtle")
-
-    # # Save mapping to Python file
-    # with open("lib/abi/utils/mapping.py", "w") as f:
-    #     f.write("# Auto-generated mapping from URI to labels\n")
-    #     f.write("mapping = {\n")
-    #     for uri, label in mapping.items():
-    #         f.write(f"    '{uri}': '{label}',\n")
-    #     f.write("}\n")
-            
     return filtered, mapping

@@ -8,9 +8,9 @@ workflow = CreateClassOntologyYAMLWorkflow(CreateClassOntologyYAMLConfiguration(
 
 # Parameters
 parameters = CreateClassOntologyYAMLParameters(
-    class_uri="https://www.commoncoreontologies.org/ont00001262",
-    label="Person",
-    description="Person Ontology",
+    class_uri="https://www.commoncoreontologies.org/ont00000443",
+    label="Commercial Organization",
+    description="Commercial Organization Ontology",
 )
 
 # Run workflow
