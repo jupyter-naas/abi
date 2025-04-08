@@ -60,7 +60,7 @@ abi:hasLinkedInPage a owl:ObjectProperty ;
                 ] ;
     rdfs:range abi:LinkedInPage ;
     owl:inverseOf abi:isLinkedInPageOf ;
-    rdfs:label "has LinkedIn Page"@en ;
+    rdfs:label "has linkedin page"@en ;
     skos:definition "Relates an entity to its LinkedIn page."@en ;
     skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues."@en .
 
@@ -72,7 +72,7 @@ abi:isLinkedInPageOf a owl:ObjectProperty ;
                             )
                ] ;
     owl:inverseOf abi:hasLinkedInPage ;
-    rdfs:label "is LinkedIn Page of"@en ;
+    rdfs:label "is linkedin page of"@en ;
     skos:definition "Relates a LinkedIn page to the entity it represents."@en ;
     skos:example "A LinkedIn profile page that represents John Doe's professional presence."@en .
 

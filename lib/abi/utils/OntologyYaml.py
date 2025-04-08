@@ -1,15 +1,9 @@
-from abi.utils.Graph import ABIGraph, ABI, BFO
-from yaml import load, dump
-from yaml import CLoader as Loader, CDumper as Dumper
 import copy
 import pydash as _
 import random
 from abi import logger
-import json
-from pathlib import Path
-from marketplace.modules.__common.ontologies.mapping import MAPPING_URL_LABEL
-from rdflib import Graph
-
+from src import services
+from rdflib import Graph, RDF, OWL, RDFS, URIRef
 
 class OntologyYaml:
     def __init__(self):
@@ -18,7 +12,6 @@ class OntologyYaml:
     @staticmethod
     def rdf_to_yaml(
         graph,
-        ontology_schemas: list = ["marketplace/modules/__common/ontologies/ConsolidatedOntology.ttl"],
         class_colors_mapping: dict = {},
         top_level_class: str = 'http://purl.obolibrary.org/obo/BFO_0000001',
         display_relations_names: bool = True,
@@ -27,7 +20,6 @@ class OntologyYaml:
 
         Args:
             graph (Graph): RDF graph to translate.
-            ontology_schemas (list): List of paths to ontology schemas.
             class_colors_mapping (dict): Mapping of classes to colors.
             top_level_class (str): Top level class to compute class levels.
             display_relations_names (bool): Whether to display relations names.
@@ -35,7 +27,6 @@ class OntologyYaml:
         translator = Translator()
         return translator.translate(
             graph,
-            ontology_schemas=ontology_schemas,
             class_colors_mapping=class_colors_mapping,
             top_level_class=top_level_class,
             display_relations_names=display_relations_names
@@ -53,9 +44,36 @@ class Translator:
         self.amount_per_level = {}
         self.mapping_oprop = {}
 
-        # Initialize mapping with standard RDF/RDFS/OWL terms
-        self.mapping = MAPPING_URL_LABEL.copy()
+        # Init ontology schemas
+        consolidated = services.triple_store_service.get_schema_graph()
+        schema_graph = Graph()
+
+        # Filter for desired types
+        desired_types = {
+            OWL.Class,
+            OWL.DatatypeProperty,
+            OWL.ObjectProperty,
+            OWL.AnnotationProperty
+        }
         
+        # Add all triples where subject is of desired type
+        for s, p, o in consolidated.triples((None, RDF.type, None)):
+            if o in desired_types:
+                # Add the type triple
+                schema_graph.add((s, p, o))
+                # Add all triples where this subject is involved
+                for s2, p2, o2 in consolidated.triples((s, None, None)):
+                    schema_graph.add((s2, p2, o2))
+                for s2, p2, o2 in consolidated.triples((None, None, s)):
+                    schema_graph.add((s2, p2, o2))
+        self.ontology_schemas = schema_graph
+
+        # Init mapping
+        mapping = {}
+        for s, p, o in self.ontology_schemas.triples((None, RDFS.label, None)):
+            if isinstance(s, URIRef):
+                mapping[str(s)] = str(o)
+            
         # Add standard RDF terms
         rdf_terms = {
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": "type",
@@ -98,11 +116,12 @@ class Translator:
         }
         
         # Update mapping with all terms
-        self.mapping.update(rdf_terms)
-        self.mapping.update(rdfs_terms)
-        self.mapping.update(owl_terms)
-        self.mapping.update(skos_terms)
-        self.mapping.update(dc_terms)
+        mapping.update(rdf_terms)
+        mapping.update(rdfs_terms)
+        mapping.update(owl_terms)
+        mapping.update(skos_terms)
+        mapping.update(dc_terms)
+        self.mapping = mapping
 
         # Define logical operators mapping
         self.operators = {
@@ -114,7 +133,6 @@ class Translator:
     def translate(
         self, 
         graph,
-        ontology_schemas,
         class_colors_mapping,
         top_level_class,
         display_relations_names
@@ -123,13 +141,12 @@ class Translator:
 
         Args:
             graph (Graph): RDF graph to translate.
-            ontology_schemas (list): List of paths to ontology schemas.
             class_colors_mapping (dict): Mapping of classes to colors.
             top_level_class (str): Top level class to compute class levels.
             display_relations_names (bool): Whether to display relations names.
         """
         # Extract triples from the Graph.
-        self.load_triples(graph, ontology_schemas)
+        self.load_triples(graph)
         
         # Load the classes from the ontology.
         self.load_classes()
@@ -162,29 +179,15 @@ class Translator:
             self.onto_tuples[str(s)] = []
         
         self.onto_tuples[str(s)].append((p, o))
-
-    def __consolidate_graphs(self, file_paths):
-        """Consolidates graph with ConsolidatedOntology.ttl schema.
-
-        Args:
-            g (Graph): Graph to consolidate.
-
-        Returns:
-            Graph: Consolidated graph.
-        """
-        g = Graph()
-        for file_path in file_paths:
-            g += Graph().parse(file_path, format="turtle")
-        return g
     
-    def load_triples(self, g, ontology_schemas):
+    def load_triples(self, g):
         """Load the triples from the graph into the ontology dictionary.
 
         Args:
             graph (_type_): _description_
         """
         # Consolidates graph with ConsolidatedOntology.ttl schema
-        g += self.__consolidate_graphs(ontology_schemas)
+        g += self.ontology_schemas
 
         # Load the triples from the graph into the ontology dictionary.
         for s, p, o in g:
@@ -499,8 +502,8 @@ class Translator:
                 if "BFO_" in uid:
                     classes[uid] = cl
                     
-        logger.info(f"All classes: {len(all_classes)}")
-        logger.info(f"BFO classes: {len(classes)}")
+        logger.debug(f"All classes: {len(all_classes)}")
+        logger.debug(f"BFO classes: {len(classes)}")
         
         # Loop on individuals
         for individual in self.onto_individuals:
