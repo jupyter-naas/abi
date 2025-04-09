@@ -7,9 +7,8 @@ import json
 import os
 from abi import logger
 import jwt
-
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory, ObjectStorageExceptions, ObjectStorageService
-
+import pydash
 
 LOGO_URL = "https://logo.clearbit.com/naas.ai"
 
@@ -703,17 +702,33 @@ class NaasIntegration(Integration):
             key=object_name,
             content=data
         )
-        
+
+        data = {
+            "workspace_id": workspace_id,
+            "asset_creation": {
+                "workspace_id": workspace_id,
+                "storage_name": storage_name,
+                "object_name": os.path.join(prefix, object_name),
+                "visibility": visibility,
+                "content_disposition": content_disposition,
+                "password": password,
+            }
+        }
         # Check if an asset already exists.
-        return self.create_asset(
-            workspace_id=workspace_id,
-            storage_name=storage_name,
-            object_name=os.path.join(prefix, object_name),
-            visibility=visibility,
-            content_disposition=content_disposition,
-            password=password
-        )
-        
+        try:
+            url = f"https://api.naas.ai/workspace/{workspace_id}/asset/"
+            response = requests.post(url, headers=self.headers, json=data)
+            asset = response.json()
+            logger.debug(f"Asset created: {asset}")
+            error_message = pydash.get(asset, 'error.message')
+            if error_message != "Success":
+                asset_id = error_message.split("id:'")[1].split("'")[0].strip()
+                asset = self.get_asset(workspace_id, asset_id)
+        except Exception as e:
+            logger.error(f"Error uploading asset: {e}")
+            asset = {}
+        return asset
+
     def update_asset(self, workspace_id: str, asset_id: str, data: Dict) -> Dict:
         """Update an existing asset.
         
