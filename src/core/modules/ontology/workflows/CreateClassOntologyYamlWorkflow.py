@@ -48,15 +48,19 @@ class CreateClassOntologyYamlWorkflow(Workflow):
 
     def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Graph:
         s, p, o = triple
-        logger.debug(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}")
-
+        # logger.debug(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}")
+        if str(event) != str(OntologyEvent.INSERT) or not str(o).startswith('http') or str(o) == "http://www.w3.org/2002/07/owl#NamedIndividual":
+            # logger.debug(f"==> Skipping class ontology YAML creation for {s} {p} {o}")
+            return None
+        
         # Get class type from URI
         class_uri = get_class_uri_from_individual_uri(s)
         class_uri_triggers = [
             "https://www.commoncoreontologies.org/ont00001262", # Person
             "https://www.commoncoreontologies.org/ont00000443", # Commercial Organization
         ]
-        if str(event) == str(OntologyEvent.INSERT) and class_uri in class_uri_triggers:
+        if class_uri in class_uri_triggers:
+            logger.debug(f"==> Creating class ontology YAML for {class_uri} ({s} {p} {o})")
             return self.graph_to_yaml(CreateClassOntologyYamlParameters(class_uri=class_uri))
         return None
 
@@ -100,7 +104,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             obj = row.get("object")
 
             # Add triple to graph
-            if isinstance(obj, str) and obj.startswith('http'):
+            if isinstance(obj, str) and obj.startswith('http://ontology.naas.ai/abi/'):
                 obj = URIRef(obj)
                 list_uri.append(obj)
             else:
@@ -110,8 +114,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
         # Get all object properties label and type
         if len(list_uri) > 0:
             # Filter only ABI URIs
-            abi_uris = [uri for uri in list_uri if str(uri).startswith('http://ontology.naas.ai/abi/')]
-            uri_filter = "(" + " || ".join([f"?object = <{uri}>" for uri in abi_uris]) + ")"
+            uri_filter = "(" + " || ".join([f"?object = <{uri}>" for uri in list_uri]) + ")"
             query = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
