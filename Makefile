@@ -44,6 +44,15 @@ storage-push: .venv storage-pull
 	@ echo "Pushing storage..."
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
+storage-prod-remove: .venv
+	@ echo "Removing storage..."
+	@ docker compose run --rm -it --remove-orphans  abi bash -c 'poetry run python scripts/storage_remove_prod.py'
+
+storage-prod-override: .venv
+	@ echo "Overriding storage..."
+	@ make storage-push
+	@ docker compose run -it --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_override_prod.py'
+
 clean:
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
