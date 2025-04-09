@@ -49,15 +49,19 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
 
     def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Graph:
         s, p, o = triple
-        logger.debug(f"==> Triggering Create Individual Ontology YAML Workflow: {s} {p} {o}")
-
+        # logger.debug(f"==> Triggering Create Individual Ontology YAML Workflow: {s} {p} {o}")
+        if str(event) != str(OntologyEvent.INSERT) or not str(o).startswith('http') or str(o) == "http://www.w3.org/2002/07/owl#NamedIndividual":
+            # logger.debug(f"==> Skipping individual ontology YAML creation for {s} {p} {o}")
+            return None
+        
         # Get class type from URI
         class_uri = get_class_uri_from_individual_uri(s)
         class_uri_triggers = [
             "https://www.commoncoreontologies.org/ont00001262", # Person
             "https://www.commoncoreontologies.org/ont00000443", # Commercial Organization
         ]
-        if str(event) == str(OntologyEvent.INSERT) and class_uri in class_uri_triggers:
+        if class_uri in class_uri_triggers:
+            logger.debug(f"==> Creating individual ontology YAML for {s} {p} {o}")
             return self.graph_to_yaml(CreateIndividualOntologyYamlParameters(individual_uri=s))
         return None
 

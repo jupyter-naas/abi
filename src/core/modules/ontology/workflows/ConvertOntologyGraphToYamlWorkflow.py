@@ -55,6 +55,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
 
     def graph_to_yaml(self, parameters: ConvertOntologyGraphToYamlParameters) -> str:
         # Initialize parameters
+        logger.debug(f"==> Converting ontology graph to YAML: {parameters.label}")
         yaml_data = None
 
         # Create Graph from turtle string
