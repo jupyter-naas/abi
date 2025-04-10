@@ -2,12 +2,9 @@ from abi.workflow import Workflow, WorkflowConfiguration
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from dataclasses import dataclass
 from pydantic import Field
-from rdflib import Graph
 from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
-import glob
-import os
 from abi.utils.SPARQL import results_to_list
 
 @dataclass
@@ -26,30 +23,6 @@ class SearchClassWorkflow(Workflow):
     def __init__(self, configuration: SearchClassConfigurationWorkflow):
         super().__init__(configuration)
         self.__configuration = configuration
-
-    def merge_ontologies(self) -> Graph:
-        """Merge all ontologies from src/core/** and src/custom/** into a single graph.
-        
-        Returns:
-            Graph: The merged graph containing all ontologies
-        """
-        # Initialize merged graph
-        merged_graph = Graph()
-        
-        # Get all .ttl files from src/core and src/custom
-        ontology_files = []
-        for path in ['src/core', 'src/custom']:
-            ontology_files.extend(glob.glob(os.path.join(path, '**/*.ttl'), recursive=True))
-            
-        # Merge each ontology file into consolidated graph
-        for ontology_file in ontology_files:
-            try:
-                # Parse and merge each ontology file
-                merged_graph.parse(ontology_file, format='turtle')
-            except Exception as e:
-                continue
-                
-        return merged_graph
 
     def search_class(self, parameters: SearchClassWorkflowParameters) -> dict:
         """Find a class URI based on its label with fuzzy matching.
