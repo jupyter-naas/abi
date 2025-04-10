@@ -28,6 +28,8 @@ class SearchWebsiteWorkflow(Workflow):
     def search_website(self, parameters: SearchWebsiteWorkflowParameters) -> dict:
         class_uri = "http://ontology.naas.ai/abi/Website"
         query = f"""
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
             # Filter On Class URI and ensure individual is a NamedIndividual

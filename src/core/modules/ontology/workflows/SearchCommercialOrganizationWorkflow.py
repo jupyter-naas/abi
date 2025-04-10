@@ -27,6 +27,8 @@ class SearchCommercialOrganizationWorkflow(Workflow):
     def search_commercial_organization(self, parameters: SearchCommercialOrganizationWorkflowParameters) -> dict:
         class_uri = "https://www.commoncoreontologies.org/ont00000443"  # URI for Commercial Organization
         query = f"""
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
             # Filter On Class URI and ensure individual is a NamedIndividual
