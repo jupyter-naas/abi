@@ -44,6 +44,18 @@ storage-push: .venv storage-pull
 	@ echo "Pushing storage..."
 	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
 
+triplestore-prod-remove: .venv
+	@ echo "Removing production triplestore..."
+	@ docker compose run --rm -it --remove-orphans  abi bash -c 'poetry run python scripts/triplestore_prod_remove.py'
+
+triplestore-prod-override: .venv
+	@ echo "Overriding production triplestore..."
+	@ docker compose run -it --rm --remove-orphans  abi bash -c 'poetry run python scripts/triplestore_prod_override.py'
+
+triplestore-prod-pull: .venv
+	@ echo "Pulling production triplestore..."
+	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/triplestore_prod_pull.py'
+
 clean:
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
