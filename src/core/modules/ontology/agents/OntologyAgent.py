@@ -106,8 +106,8 @@ def create_agent(
     add_person_pipeline = AddPersonPipeline(add_person_pipeline_configuration)
     tools += add_person_pipeline.as_tools()
 
-    search_person_workflow = SearchPersonWorkflow(SearchPersonConfigurationWorkflow(triple_store))
-    tools += search_person_workflow.as_tools()
+    # search_person_workflow = SearchPersonWorkflow(SearchPersonConfigurationWorkflow(triple_store))
+    # tools += search_person_workflow.as_tools()
 
     add_skill_pipeline_configuration = AddSkillPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_skill_pipeline = AddSkillPipeline(add_skill_pipeline_configuration)
@@ -169,6 +169,10 @@ def create_agent(
     # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
+    
+    # Override tools
+    from src.core.modules.intentmapping import get_tools
+    tools.extend(get_tools())
     
     return OntologyAgent(
         name="ontology_agent", 
