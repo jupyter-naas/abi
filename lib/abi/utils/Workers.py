@@ -39,7 +39,8 @@ class Job:
                 self.status = JobStatus.COMPLETED
         except Exception as e:
             self.error = e
-            logger.error(f"Job {self.id} failed: {e}")
+            import traceback
+            logger.error(f"Job {self.id} failed: {e}\n{traceback.format_exc()}")
             with self._lock:
                 self.status = JobStatus.FAILED
         finally:

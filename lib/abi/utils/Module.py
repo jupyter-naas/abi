@@ -26,17 +26,21 @@ class IModule(ABC):
     triggers: List[tuple[tuple[any, any, any], OntologyEvent, Callable]]
     ontologies: List[str]
     
-    def __init__(self, module_path: str, module_import_path: str):
+    def __init__(self, module_path: str, module_import_path: str, imported_module: Any):
         self.module_path = module_path
         self.module_import_path = module_import_path
+        self.imported_module = imported_module
         self.triggers = []
         self.ontologies = []
         self.agents = []
     
     def load(self):
-        self.__load_agents()
+        # self.__load_agents()
         self.__load_triggers()
         self.__load_ontologies()
+    
+    def load_agents(self):
+        self.__load_agents()
     
     def __load_agents(self):
         # Load agents
@@ -59,3 +63,7 @@ class IModule(ABC):
         if os.path.exists(os.path.join(self.module_path, 'ontologies')):
             for file in glob.glob(os.path.join(self.module_path, 'ontologies', '**', '*.ttl'), recursive=True):
                 self.ontologies.append(file)
+
+    def on_initialized(self):
+        if hasattr(self.imported_module, 'on_initialized'):
+            self.imported_module.on_initialized()
