@@ -1,5 +1,6 @@
 from src import services
 from abi import logger
+from rdflib import URIRef
 
 # Transform SPARQL results to list of dictionaries using the labels as keys
 def results_to_list(results: list[dict]) -> list[dict]:
@@ -25,24 +26,18 @@ def get_class_uri_from_individual_uri(uri: str) -> str:
     """
     if not str(uri).startswith("http://ontology.naas.ai/abi/"):
         return None
-        
-    # Use the full URI in the query instead of trying to extract the ID
-    query = f"""
-    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-    PREFIX owl: <http://www.w3.org/2002/07/owl#>
     
-    SELECT ?class
-    WHERE {{
-        <{uri}> rdf:type ?class .
-        FILTER(?class != owl:NamedIndividual)
-    }}
-    """
-    try:    
-        results = services.triple_store_service.query(query)
-        result_list = results_to_list(results)
-        logger.debug(f"==> Result List: {result_list}")
-        class_uri = result_list[0]['class'] if result_list else None
-        return class_uri
-    except Exception as e:
-        logger.error(f"Error getting class URI from individual URI {uri}: {e}")
-        return None
+    # Init
+    g = services.triple_store_service.get_subject_graph(uri)
+
+    # Get all objects for the subject and predicate
+    subj = URIRef(uri)
+    pred = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+
+    # Get all objects for the subject and predicate
+    objects = list(g.objects(subject=subj, predicate=pred))
+    for obj in objects:
+        if str(obj) != "http://www.w3.org/2002/07/owl#NamedIndividual":
+            return str(obj)
+
+    return None
