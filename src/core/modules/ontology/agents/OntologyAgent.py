@@ -4,9 +4,7 @@ from fastapi import APIRouter
 from src import secret, services
 # Foundational
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import AddIndividualPipeline, AddIndividualPipelineConfiguration
-from src.core.modules.ontology.workflows.SearchClassWorkflow import SearchClassWorkflow, SearchClassConfigurationWorkflow
 from src.core.modules.ontology.workflows.SearchIndividualWorkflow import SearchIndividualWorkflow, SearchIndividualConfigurationWorkflow
-from src.core.modules.ontology.workflows.GetIndividualsFromClassWorkflow import GetIndividualsFromClassWorkflow, GetIndividualsFromClassConfigurationWorkflow
 # Specialized
 from src.core.modules.ontology.pipelines.AddCommercialOrganizationPipeline import AddCommercialOrganizationPipeline, AddCommercialOrganizationPipelineConfiguration
 from src.core.modules.ontology.pipelines.AddLinkedInPagePipeline import AddLinkedInPagePipeline, AddLinkedInPagePipelineConfiguration
@@ -15,17 +13,6 @@ from src.core.modules.ontology.pipelines.AddSkillPipeline import AddSkillPipelin
 from src.core.modules.ontology.pipelines.AddWebsitePipeline import AddWebsitePipeline, AddWebsitePipelineConfiguration
 from src.core.modules.ontology.pipelines.AddLegalNamePipeline import AddLegalNamePipeline, AddLegalNamePipelineConfiguration
 from src.core.modules.ontology.pipelines.AddTickerPipeline import AddTickerPipeline, AddTickerPipelineConfiguration
-
-from src.core.modules.ontology.workflows.SearchPersonWorkflow import SearchPersonWorkflow, SearchPersonConfigurationWorkflow
-from src.core.modules.ontology.workflows.SearchSkillWorkflow import SearchSkillWorkflow, SearchSkillConfigurationWorkflow
-from src.core.modules.ontology.workflows.SearchCommercialOrganizationWorkflow import SearchCommercialOrganizationWorkflow, SearchCommercialOrganizationConfigurationWorkflow
-from src.core.modules.ontology.workflows.SearchWebsitePipeline import SearchWebsiteWorkflow, SearchWebsiteConfigurationWorkflow
-from src.core.modules.ontology.workflows.SearchLinkedInPagePipeline import SearchLinkedInPageWorkflow, SearchLinkedInPageConfigurationWorkflow
-from src.core.modules.ontology.workflows.SearchTickerPipeline import SearchTickerWorkflow, SearchTickerConfigurationWorkflow
-from src.core.modules.ontology.workflows.SearchLegalNamePipeline import SearchLegalNameWorkflow, SearchLegalNameConfigurationWorkflow
-
-from src.core.modules.ontology.workflows.GetPersonsAssociatedwithSkillsWorkflow import GetPersonsAssociatedwithSkillsWorkflow, GetPersonsAssociatedwithSkillsConfigurationWorkflow
-from src.core.modules.ontology.workflows.GetSkillsAssociatedwithPersonsWorkflow import GetSkillsAssociatedwithPersonsWorkflow, GetSkillsAssociatedwithPersonsConfigurationWorkflow
 
 NAME = "Ontology Agent"
 MODEL = "o3-mini"
@@ -92,50 +79,29 @@ def create_agent(
     add_individual_pipeline = AddIndividualPipeline(add_individual_pipeline_configuration)
     tools += add_individual_pipeline.as_tools()
 
-    search_class_workflow = SearchClassWorkflow(SearchClassConfigurationWorkflow(triple_store))
-    tools += search_class_workflow.as_tools()
-
     search_individual_workflow = SearchIndividualWorkflow(SearchIndividualConfigurationWorkflow(triple_store))
     tools += search_individual_workflow.as_tools()
-
-    get_individuals_from_class_workflow = GetIndividualsFromClassWorkflow(GetIndividualsFromClassConfigurationWorkflow(triple_store))
-    tools += get_individuals_from_class_workflow.as_tools()
 
     # Specialized Tools
     add_person_pipeline_configuration = AddPersonPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_person_pipeline = AddPersonPipeline(add_person_pipeline_configuration)
     tools += add_person_pipeline.as_tools()
 
-    # search_person_workflow = SearchPersonWorkflow(SearchPersonConfigurationWorkflow(triple_store))
-    # tools += search_person_workflow.as_tools()
-
     add_skill_pipeline_configuration = AddSkillPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_skill_pipeline = AddSkillPipeline(add_skill_pipeline_configuration)
     tools += add_skill_pipeline.as_tools()
-
-    search_skill_workflow = SearchSkillWorkflow(SearchSkillConfigurationWorkflow(triple_store))
-    tools += search_skill_workflow.as_tools()
 
     add_commercial_organization_pipeline_configuration = AddCommercialOrganizationPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_commercial_organization_pipeline = AddCommercialOrganizationPipeline(add_commercial_organization_pipeline_configuration)
     tools += add_commercial_organization_pipeline.as_tools()
 
-    search_commercial_organization_workflow = SearchCommercialOrganizationWorkflow(SearchCommercialOrganizationConfigurationWorkflow(triple_store))
-    tools += search_commercial_organization_workflow.as_tools()
-
     add_linkedin_page_pipeline_configuration = AddLinkedInPagePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_linkedin_page_pipeline = AddLinkedInPagePipeline(add_linkedin_page_pipeline_configuration)
     tools += add_linkedin_page_pipeline.as_tools()
 
-    search_linkedin_page_workflow = SearchLinkedInPageWorkflow(SearchLinkedInPageConfigurationWorkflow(triple_store))
-    tools += search_linkedin_page_workflow.as_tools()
-
     add_website_pipeline_configuration = AddWebsitePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_website_pipeline = AddWebsitePipeline(add_website_pipeline_configuration)
     tools += add_website_pipeline.as_tools()
-
-    search_website_workflow = SearchWebsiteWorkflow(SearchWebsiteConfigurationWorkflow(triple_store))
-    tools += search_website_workflow.as_tools()
 
     add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_legal_name_pipeline = AddLegalNamePipeline(add_legal_name_pipeline_configuration)
@@ -145,22 +111,13 @@ def create_agent(
     add_ticker_pipeline = AddTickerPipeline(add_ticker_pipeline_configuration)
     tools += add_ticker_pipeline.as_tools()
 
-    search_ticker_workflow = SearchTickerWorkflow(SearchTickerConfigurationWorkflow(triple_store))
-    tools += search_ticker_workflow.as_tools()
-
     add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
     add_legal_name_pipeline = AddLegalNamePipeline(add_legal_name_pipeline_configuration)
     tools += add_legal_name_pipeline.as_tools()
 
-    search_legal_name_workflow = SearchLegalNameWorkflow(SearchLegalNameConfigurationWorkflow(triple_store))
-    tools += search_legal_name_workflow.as_tools()
-    
-
-    get_persons_associated_with_skills_workflow = GetPersonsAssociatedwithSkillsWorkflow(GetPersonsAssociatedwithSkillsConfigurationWorkflow(triple_store))
-    tools += get_persons_associated_with_skills_workflow.as_tools()
-
-    get_skills_associated_with_persons_workflow = GetSkillsAssociatedwithPersonsWorkflow(GetSkillsAssociatedwithPersonsConfigurationWorkflow(triple_store))
-    tools += get_skills_associated_with_persons_workflow.as_tools()
+    # Override tools
+    from src.core.modules.intentmapping import get_tools
+    tools.extend(get_tools())
 
     # Use provided configuration or create default one
     if agent_configuration is None:
@@ -169,11 +126,7 @@ def create_agent(
     # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
-    
-    # Override tools
-    from src.core.modules.intentmapping import get_tools
-    tools.extend(get_tools())
-    
+
     return OntologyAgent(
         name="ontology_agent", 
         description=DESCRIPTION,
