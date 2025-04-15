@@ -57,7 +57,7 @@ class AddIndividualPipeline(Pipeline):
             score = int(search_individual_result[0]['score'])
             if score > 8:
                 individual_uri = search_individual_result[0]['individual_uri']
-                logger.info(f"🔍 Found individual '{parameters.individual_label}' in the ontology: {individual_uri} from class: {parameters.class_uri}")
+                logger.debug(f"🔍 Found individual '{parameters.individual_label}' in the ontology: {individual_uri} from class: {parameters.class_uri}")
                 return URIRef(individual_uri), self.__configuration.triple_store.get_subject_graph(individual_uri)
         
         # Init graph
@@ -73,7 +73,7 @@ class AddIndividualPipeline(Pipeline):
         graph.add((individual_uri, RDF.type, URIRef(parameters.class_uri)))
         graph.add((individual_uri, RDFS.label, Literal(parameters.individual_label)))
         self.__configuration.triple_store.insert(graph)
-        logger.info(f"✅ Added individual '{parameters.individual_label}' to the ontology: {individual_uri} from class: {parameters.class_uri}")
+        logger.debug(f"✅ Added individual '{parameters.individual_label}' to the ontology: {individual_uri} from class: {parameters.class_uri}")
         return individual_uri, graph
     
     def as_tools(self) -> list[StructuredTool]:
