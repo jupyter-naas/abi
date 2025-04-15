@@ -6,29 +6,37 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 from abi.utils.SPARQL import results_to_list
+from abi import logger
 
 @dataclass
-class SearchIndividualConfigurationWorkflow(WorkflowConfiguration):
+class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for SearchIndividual workflow."""
     triple_store: ITripleStoreService
 
 class SearchIndividualWorkflowParameters(WorkflowParameters):
     """Parameters for SearchIndividual workflow."""
-    class_uri: str = Field(..., description="Class URI to use to search for individuals.")
-    search_label: str = Field(..., description="Individual label to search for in the ontology schema.")
+    class_uri: str = Field(
+        ..., 
+        description="Class URI to use to search for individuals.", 
+        pattern="https?:\/\/.*",
+        example="https://www.commoncoreontologies.org/ont00000443"
+    )
+    search_label: str = Field(
+        ..., 
+        description="Individual label to search for in the ontology schema.",
+        example="Naas.ai"
+    )
 
 class SearchIndividualWorkflow(Workflow):
     """Workflow for searching ontology individuals."""
-    __configuration: SearchIndividualConfigurationWorkflow
+    __configuration: SearchIndividualWorkflowConfiguration
     
-    def __init__(self, configuration: SearchIndividualConfigurationWorkflow):
+    def __init__(self, configuration: SearchIndividualWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
 
     def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> dict:
         query = f"""
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
             # Filter On Class URI and ensure individual is a NamedIndividual

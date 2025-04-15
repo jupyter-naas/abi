@@ -11,6 +11,10 @@ from lib.abi import logger
 from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
 import atexit
 
+@atexit.register
+def shutdown_services():
+    services.triple_store_service.__del__()
+
 @dataclass
 class PipelineConfig:
     name: str
@@ -85,6 +89,11 @@ services = init_services(config, secret)
 logger.debug("Loading modules")
 modules = get_modules()
 
+for module in modules:
+    # Loading ontologies
+    for ontology in module.ontologies:
+        services.triple_store_service.load_schema(ontology)
+
 logger.debug("Loading triggers")
 for module in modules:
     # Loading triggers
@@ -96,13 +105,12 @@ for module in modules:
             topic, event_type, callback, background = trigger
             services.triple_store_service.subscribe(topic, event_type, callback, background)
 
-    # Loading ontologies
-    for ontology in module.ontologies:
-        services.triple_store_service.load_schema(ontology)
 
-@atexit.register
-def shutdown_services():
-    services.triple_store_service.__del__()
+for module in modules:
+    module.on_initialized()
+    
+for module in modules:
+    module.load_agents()
 
 if __name__ == "__main__":
     cli()
