@@ -75,12 +75,11 @@ def create_agent(
     triple_store = services.triple_store_service
 
     # Add Foundational Tools
-    add_individual_pipeline_configuration = AddIndividualPipelineConfiguration(triple_store)
-    add_individual_pipeline = AddIndividualPipeline(add_individual_pipeline_configuration)
-    tools += add_individual_pipeline.as_tools()
-
     search_individual_workflow = SearchIndividualWorkflow(SearchIndividualWorkflowConfiguration(triple_store))
     tools += search_individual_workflow.as_tools()
+    add_individual_pipeline_configuration = AddIndividualPipelineConfiguration(triple_store, search_individual_workflow)
+    add_individual_pipeline = AddIndividualPipeline(add_individual_pipeline_configuration)
+    tools += add_individual_pipeline.as_tools()
 
     # Specialized Tools
     add_person_pipeline_configuration = AddPersonPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
