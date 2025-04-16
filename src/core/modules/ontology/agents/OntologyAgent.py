@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from src import secret, services
 # Foundational
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import AddIndividualPipeline, AddIndividualPipelineConfiguration
-from src.core.modules.ontology.workflows.SearchIndividualWorkflow import SearchIndividualWorkflow, SearchIndividualConfigurationWorkflow
+from src.core.modules.ontology.workflows.SearchIndividualWorkflow import SearchIndividualWorkflow, SearchIndividualWorkflowConfiguration
 # Specialized
 from src.core.modules.ontology.pipelines.AddCommercialOrganizationPipeline import AddCommercialOrganizationPipeline, AddCommercialOrganizationPipelineConfiguration
 from src.core.modules.ontology.pipelines.AddLinkedInPagePipeline import AddLinkedInPagePipeline, AddLinkedInPagePipelineConfiguration
@@ -79,7 +79,7 @@ def create_agent(
     add_individual_pipeline = AddIndividualPipeline(add_individual_pipeline_configuration)
     tools += add_individual_pipeline.as_tools()
 
-    search_individual_workflow = SearchIndividualWorkflow(SearchIndividualConfigurationWorkflow(triple_store))
+    search_individual_workflow = SearchIndividualWorkflow(SearchIndividualWorkflowConfiguration(triple_store))
     tools += search_individual_workflow.as_tools()
 
     # Specialized Tools
