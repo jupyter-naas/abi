@@ -14,6 +14,8 @@ Modules provide a way to organize and structure your code in a modular fashion, 
 - **Agents**: AI agents that provide specific capabilities
 - **Workflows**: Sequences of operations that accomplish specific tasks
 - **Pipelines**: Data processing flows that transform and analyze information
+- **Ontologies**: Definitions of concepts and relationships in the domain
+- **Integrations**: APIs and services that provide data and functionality
 - **Tests**: Unit and integration tests for the module's components
 
 ## How Modules Work
@@ -36,29 +38,19 @@ This automatic loading mechanism means that you can add new functionality to the
 A typical module has the following directory structure:
 
 ```
-src/core/modules/your_core_module_name/
-├── agents/           # Contains AI agents
-│   └── YourAssistant.py  # An agent implementation
-├── workflows/            # Contains workflow implementations
-│   └── YourWorkflow.py   # A workflow implementation
-├── pipelines/            # Contains pipeline implementations
-│   └── YourPipeline.py   # A pipeline implementation
-└── tests/                # Contains tests for the module
-    └── test_module.py    # Test implementations
-```
-
-Or for custom modules:
-
-```
-src/custom/modules/your_custom_module_name/
-├── agents/           # Contains AI agents
-│   └── YourAssistant.py  # An agent implementation
-├── workflows/            # Contains workflow implementations
-│   └── YourWorkflow.py   # A workflow implementation
-├── pipelines/            # Contains pipeline implementations
-│   └── YourPipeline.py   # A pipeline implementation
-└── tests/                # Contains tests for the module
-    └── test_module.py    # Test implementations
+src/[core|custom]/modules/your_module_name/
+├── agents/                  # Contains AI agents
+│   └── YourAgent.py         # An agent implementation
+├── integrations/            # Contains integration implementations
+│   └── YourIntegration.py   # An integration implementation
+├── ontologies/              # Contains ontology implementations
+│   └── YourOntology.py      # An ontology implementation
+├── pipelines/               # Contains pipeline implementations
+│   └── YourPipeline.py      # A pipeline implementation
+├── workflows/               # Contains workflow implementations
+│   └── YourWorkflow.py      # A workflow implementation
+└── tests/                   # Contains tests for the module
+    └── test_module.py       # Test implementations
 ```
 
 ### How Components Are Loaded
@@ -83,102 +75,44 @@ To create a new module, follow these steps:
 
 For a core module:
 ```bash
-mkdir -p src/core/modules/your_module_name/{agents,workflows,pipelines,tests}
+mkdir -p src/core/modules/your_module_name/{agents,integrations,ontologies,pipelines,workflows,tests}
 ```
 
 For a custom module:
 ```bash
-mkdir -p src/custom/modules/your_module_name/{agents,workflows,pipelines,tests}
+mkdir -p src/custom/modules/your_module_name/{agents,integrations,ontologies,pipelines,workflows,tests}
 ```
 
-#### 2. Create an Assistant
+#### 2. Create an Integration
 
-Create a file `src/[core|custom]/modules/your_module_name/agents/YourAssistant.py`:
-
-```python
-from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
-from src import secret, services
-
-NAME = "Your Assistant Name"
-DESCRIPTION = "A brief description of what your assistant does."
-MODEL = "o3-mini"  # Or another appropriate model
-TEMPERATURE = 1
-AVATAR_URL = "https://example.com/your_assistant_avatar.png"
-SYSTEM_PROMPT = """Your system prompt that defines the assistant's behavior and capabilities."""
-
-def create_agent(
-    agent_shared_state: AgentSharedState = None, 
-    agent_configuration: AgentConfiguration = None
-) -> Agent:
-    """Creates and returns an instance of your assistant.
-    
-    This function is called by the module loading system to instantiate your assistant.
-    
-    Args:
-        agent_shared_state: Shared state for the agent
-        agent_configuration: Configuration for the agent
-        
-    Returns:
-        An instance of your assistant
-    """
-    # Initialize your assistant here
-    # ...
-    
-    return your_assistant
-```
-
-#### 3. Create a Workflow
-
-Create a file `src/[core|custom]/modules/your_module_name/workflows/YourWorkflow.py`:
+Create a file `src/[core|custom]/modules/your_module_name/integrations/YourIntegration.py`:
 
 ```python
-from abi.workflow import Workflow, WorkflowConfiguration
-from abi.workflow.workflow import WorkflowParameters
+from abi.integration import Integration, IntegrationConfiguration   
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
-from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
-from typing import Any
 
 @dataclass
-class YourWorkflowConfiguration(WorkflowConfiguration):
-    """Configuration for your workflow."""
+class YourIntegrationConfiguration(IntegrationConfiguration):
+    """Configuration for your integration."""
     # Add configuration parameters here
     pass
 
-class YourWorkflowParameters(WorkflowParameters):
-    """Parameters for your workflow execution."""
-    parameter_1: str = Field(..., description="Description of parameter_1")
-    parameter_2: int = Field(..., description="Description of parameter_2")
-
-class YourWorkflow(Workflow):
-    """Your workflow implementation."""
+class YourIntegration(Integration):
+    """Your integration implementation."""
     
-    def __init__(self, configuration: YourWorkflowConfiguration):
+    def __init__(self, configuration: YourIntegrationConfiguration):
         self.__configuration = configuration
-    
-    def run(self, parameters: YourWorkflowParameters) -> Any:
-        # Implement your workflow logic here
-        return "Your result"
-    
+        
     def as_tools(self) -> list[StructuredTool]:
-        """Returns a list of LangChain tools for this workflow."""
-        return [StructuredTool(
-            name="your_workflow_name",
-            description="Description of what your workflow does",
-            func=lambda **kwargs: self.run(YourWorkflowParameters(**kwargs)),
-            args_schema=YourWorkflowParameters
-        )]
+        """Returns a list of LangChain tools for this integration."""
+        return []
     
     def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this workflow to the given router."""
-        @router.post("/your_endpoint")
-        def run_workflow(parameters: YourWorkflowParameters):
-            return self.run(parameters)
+        """Adds API endpoints for this integration to the given router."""
+        pass
 ```
 
-#### 4. Create a Pipeline
+#### 3. Create a Pipeline
 
 Create a file `src/[core|custom]/modules/your_module_name/pipelines/YourPipeline.py`:
 
@@ -230,7 +164,124 @@ class YourPipeline(Pipeline):
         return graph
 ```
 
-#### 5. Add Tests
+#### 4. Create a Workflow
+
+Create a file `src/[core|custom]/modules/your_module_name/workflows/YourWorkflow.py`:
+
+```python
+from abi.workflow import Workflow, WorkflowConfiguration
+from abi.workflow.workflow import WorkflowParameters
+from dataclasses import dataclass
+from pydantic import BaseModel, Field
+from fastapi import APIRouter
+from langchain_core.tools import StructuredTool
+from typing import Any
+
+@dataclass
+class YourWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for your workflow."""
+    # Add configuration parameters here
+    pass
+
+class YourWorkflowParameters(WorkflowParameters):
+    """Parameters for your workflow execution."""
+    parameter_1: str = Field(..., description="Description of parameter_1")
+    parameter_2: int = Field(..., description="Description of parameter_2")
+
+class YourWorkflow(Workflow):
+    """Your workflow implementation."""
+    
+    def __init__(self, configuration: YourWorkflowConfiguration):
+        self.__configuration = configuration
+    
+    def run(self, parameters: YourWorkflowParameters) -> Any:
+        # Implement your workflow logic here
+        return "Your result"
+    
+    def as_tools(self) -> list[StructuredTool]:
+        """Returns a list of LangChain tools for this workflow."""
+        return [StructuredTool(
+            name="your_workflow_name",
+            description="Description of what your workflow does",
+            func=lambda **kwargs: self.run(YourWorkflowParameters(**kwargs)),
+            args_schema=YourWorkflowParameters
+        )]
+    
+    def as_api(self, router: APIRouter) -> None:
+        """Adds API endpoints for this workflow to the given router."""
+        @router.post("/your_endpoint")
+        def run_workflow(parameters: YourWorkflowParameters):
+            return self.run(parameters)
+```
+
+#### 5. Create an Agent
+
+Create a file `src/[core|custom]/modules/your_module_name/agents/YourAgent.py`:
+
+```python
+from langchain_openai import ChatOpenAI
+from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from src import secret
+from fastapi import APIRouter
+
+NAME = "Your Agent"
+MODEL = "o3-mini"
+TEMPERATURE = 1
+DESCRIPTION = "A brief description of what your agent does."
+AVATAR_URL = "https://example.com/your_agent_avatar.png"
+SYSTEM_PROMPT = f"""
+Your system prompt that defines the agent's behavior and capabilities.
+Always be clear and professional in your communication while helping users interact with your agent.
+Always provide all the context (tool response, draft, etc.) to the user in your final response.
+"""
+SUGGESTIONS = []
+
+def create_agent(
+    agent_shared_state: AgentSharedState = None, 
+    agent_configuration: AgentConfiguration = None
+) -> Agent:
+    # Init
+    tools = []
+    agents = []
+
+    # Set model
+    model = ChatOpenAI(
+        model="gpt-4o",
+        temperature=0,
+        api_key=secret.get('OPENAI_API_KEY')
+    )
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+
+    return YourAgent(
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model,
+        tools=tools,
+        agents=agents,  
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver()
+    )
+
+class YourAgent(Agent):
+    def as_api(
+        self, 
+        router: APIRouter, 
+        route_name: str = "your_agent", 
+        name: str = "Your Agent", 
+        description: str = "API endpoints to call the Your agent completion.", 
+        description_stream: str = "API endpoints to call the Your agent stream completion.",
+        tags: list[str] = []
+    ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)
+```
+
+#### 6. Add Tests
 
 Create a file `src/[core|custom]/modules/your_module_name/tests/test_module.py`:
 
