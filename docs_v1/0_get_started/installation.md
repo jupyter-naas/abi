@@ -5,7 +5,7 @@ Get started with ABI - Install, configure and chat with your first agent.
 ## Prerequisites
 
 - **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)**
-- **Create your account on [NAAS](https://naas.ai)**
+- **Create your account on [NAAS](https://naas.ai)** (Optional, only if you want to use the storage system in production)
 
 ## Set Up Repository
 
