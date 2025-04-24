@@ -2,20 +2,21 @@
 
 **Table of Contents**
 
-- [Introduction](#introduction)
-  - [What is ABI?](#what-is-abi)
-  - [Why ABI?](#why-abi)
-  - [Key Features](#key-features)
-  - [Key Capabilities](#key-capabilities)
-- [Installation](#installation)
-  - [Pre-requisites](#pre-requisites)
-  - [Installation Options](#installation-options)
-  - [Setup Environment](#setup-environment)
-  - [Configure YAML](#configure-yaml)
-- [Quickstart](#quickstart)
-  - [Start Chatting](#start-chatting)
-  - [Create Your First Module](#create-your-first-module)
-- [Help & Support](#help--support)
+- [Get Started](#get-started)
+  - [Introduction](#introduction)
+    - [What is ABI?](#what-is-abi)
+    - [Why ABI?](#why-abi)
+    - [Key Features](#key-features)
+    - [Key Capabilities](#key-capabilities)
+  - [Installation](#installation)
+    - [Pre-requisites](#pre-requisites)
+    - [Installation Options](#installation-options)
+    - [Setup Environment](#setup-environment)
+    - [Configure YAML](#configure-yaml)
+  - [Quickstart](#quickstart)
+    - [Start Chatting](#start-chatting)
+    - [Create Your First Module](#create-your-first-module)
+  - [Help \& Support](#help--support)
 
 ## Introduction
 
@@ -118,7 +119,7 @@ cp config.yaml.example config.yaml
 Now, the project is installed and configured, you can start chatting with the core agent by running the following command:
 
 ```bash
-make
+make chat-supervisor-agent
 ```
 
 This command will setup the environment, install the dependencies, initalize your triple store and run the supervisor agent.
