@@ -33,7 +33,3 @@ Welcome to ABI Documentation.
         [Overview](distribution/marketplace/overview.md)
         [Install Module](distribution/marketplace/install_module.md)
         [Publish Module](distribution/marketplace/publish_module.md)
-
-[Use Cases](use_cases/)
-    [Ontology Agent](use_cases/ontology_agent.md)
-    [Naas Agent](use_cases/naas_agent.md)
