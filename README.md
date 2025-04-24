@@ -39,12 +39,18 @@ cp .env.example .env
 ```bash
 make
 ```
-This will run the supervisor agent and the agentic engine.
+This will display a help menu showing all available commands.
 
-For specific agents, you can run them directly with the following command:
+To run a specific agent:
 
 ```bash
 make chat-[name]-agent
+```
+
+For example, to run the supervisor agent:
+
+```bash
+make chat-supervisor-agent
 ```
 
 **Step 4: Build and run the API**

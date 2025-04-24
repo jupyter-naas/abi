@@ -76,6 +76,7 @@ Welcome to ABI Documentation.
     - [API](distribution/devops/api.md)
     - [Deploy API to Production](distribution/devops/deploy_api_to_production.md)
     - [Add Secrets to Production](distribution/devops/add_secrets_to_production.md)
+    - [Makefile](distribution/devops/makefile.md)
   - [Marketplace](distribution/)
     - [Overview](distribution/marketplace/overview.md)
     - [Install Module](distribution/marketplace/install_module.md)

@@ -120,6 +120,14 @@ make api
 
 This will start the API server on `http://localhost:9879`.
 
+If you're new to the project and want to see all available make commands:
+
+```bash
+make
+```
+
+This will display the help menu with all available commands and their descriptions.
+
 ## API Deployment
 
 ### Setup Requirements

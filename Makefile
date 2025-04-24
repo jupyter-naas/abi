@@ -68,6 +68,51 @@ clean:
 	docker compose rm -f
 	rm -rf src/core/modules/common/integrations/siteanalyzer/target
 
+help:
+	@echo "ABI Project Makefile Help"
+	@echo "=========================="
+	@echo ""
+	@echo "ENVIRONMENT SETUP:"
+	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
+	@echo "  dev-build                Build all Docker containers defined in docker-compose.yml"
+	@echo "  install                  Install all dependencies and update the abi package"
+	@echo "  add dep=<package>        Add a new dependency to the project"
+	@echo "  abi-add dep=<package>    Add a new dependency to the lib directory"
+	@echo "  lock                     Update the Poetry lock file without installing packages"
+	@echo ""
+	@echo "DEVELOPMENT:"
+	@echo "  sh                       Open an interactive bash shell in the ABI Docker container"
+	@echo "  api                      Start the API server on port 9879 for local development"
+	@echo "  api-prod                 Build and run the production API server in a Docker container"
+	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
+	@echo ""
+	@echo "TESTING:"
+	@echo "  test                     Run all Python tests using pytest"
+	@echo ""
+	@echo "DATA MANAGEMENT:"
+	@echo "  dvc-login                Set up Data Version Control (DVC) authentication"
+	@echo "  storage-pull             Pull data from the remote storage"
+	@echo "  storage-push             Push local data changes to the remote storage"
+	@echo "  triplestore-prod-remove  Remove the production triplestore data"
+	@echo "  triplestore-prod-override Override the production triplestore with local data"
+	@echo "  triplestore-prod-pull    Pull triplestore data from production"
+	@echo ""
+	@echo "BUILDING:"
+	@echo "  build                    Build the Docker image (alias for build.linux.x86_64)"
+	@echo "  build.linux.x86_64       Build a Docker image for Linux x86_64 architecture"
+	@echo ""
+	@echo "AGENTS:"
+	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
+	@echo "  chat-supervisor-agent    Start the Supervisor agent in terminal mode (default target)"
+	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
+	@echo "  chat-support-agent       Start the Support agent in terminal mode"
+	@echo ""
+	@echo "CLEANUP:"
+	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
+	@echo ""
+	@echo "DEFAULT:"
+	@echo "  The default target is help (running 'make' with no arguments displays this help menu)"
+
 # Docker Build Commands
 # -------------------
 # These commands are used to build the Docker image for the ABI project
@@ -99,6 +144,6 @@ chat-ontology-agent: .venv
 chat-support-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent'
 
-.DEFAULT_GOAL := chat-supervisor-agent
+.DEFAULT_GOAL := help
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help
