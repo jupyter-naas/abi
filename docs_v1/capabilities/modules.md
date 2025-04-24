@@ -72,6 +72,26 @@ mv src/custom/modules/your_module_name src/custom/modules/your_module_name_disab
 
 The system will automatically skip loading modules with "disabled" in their name.
 
+## Create New Module
+
+### Procedure
+
+To create a new custom module, we will use the `create_module` command:
+
+```bash
+make create_module -e MODULE_NAME=your_module_name
+```
+
+This command will duplicate the `src/core/modules/example_module` directory to `src/custom/modules/your_module_name` and update the Makefile to be able to start chat with the agent created in the module.
+
+You can then start developing all components of the module in the `src/custom/modules/your_module_name` directory.
+
+## Test-Driven Development Approach
+1. Start by writing tests in the appropriate `tests` folder
+2. Run the test script to verify expected behavior
+3. Implement the actual component code based on test requirements
+4. Iterate and refine until tests pass
+
 ## Best Practices
 
 1. **Choose the right location**: Place essential system functionality in core modules and extensions in custom modules
@@ -92,3 +112,4 @@ If your module is not being loaded correctly, check the following:
 5. Check for import errors or exceptions during the loading process
 
 By following this guide, you should be able to create and integrate new modules into the ABI system effectively.
+

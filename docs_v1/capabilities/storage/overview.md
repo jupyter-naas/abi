@@ -4,6 +4,12 @@ Storage is managed through service abstractions that allow seamless switching be
 In production, we utilize AWS S3 for storage capabilities.
 For local development, the system defaults to local file storage when ENV=dev is set in the .env configuration file.
 
+## Manage Environment
+
+The environment is managed through the `.env` file and the `ENV` variable.
+By default, the system will use the `dev` environment so everything will be stored locally.
+If you want to use the production environment, you need to set the `ENV` variable to `prod` and the system will use the production storage.
+
 ## Directory Structure
 
 The storage system provides a filesystem-based storage layer that serves as the foundation for several data storage types:
