@@ -1,14 +1,3 @@
-# Services
-
-Services are abstractions that provide a way to interact with the system.
-They are used to manage the system's resources and data.
-
-## Manage Environment
-
-The environment is managed through the `.env` file and the `ENV` variable.
-By default, the system will use the `dev` environment so everything will be stored locally.
-If you want to use the production environment, you need to set the `ENV` variable to `prod` and the system will use the production storage.
-
 ## Object Storage Service
 
 Object storage is agnostic of the data type.
