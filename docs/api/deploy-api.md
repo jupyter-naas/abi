@@ -8,6 +8,24 @@ The API deployment is automated through GitHub Actions. Every time you push to t
 2. The deployment workflow creates/updates a NAAS space with the latest container image
 3. The API will be accessible through the NAAS platform once deployment is complete as the following URL: `https://<github_project_repository.name>-api.default.space.naas.ai/`
 
+#### Local Development
+
+To run the API locally for testing:
+
+```bash
+make api
+```
+
+This will start the API server on `http://localhost:9879`.
+
+To see all available make commands:
+
+```bash
+make
+```
+
+This will display the help menu with all available commands and their descriptions.
+
 #### Setup Requirements
 
 1. **Create a GitHub Classic Personal Access Token**:
