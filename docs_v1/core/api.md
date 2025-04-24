@@ -1,4 +1,24 @@
-## Deploy API
+# API
+
+## Overview
+
+The API is a RESTful API that provides a way to interact with the ABI system.
+
+## API Endpoints
+
+`src/api.py`
+
+## OpenAPI Documentation
+
+`src/openapi_doc.py`
+
+## API Testing
+
+```bash
+make api
+```
+
+## API Deployment
 
 ### Setup Requirements
 
