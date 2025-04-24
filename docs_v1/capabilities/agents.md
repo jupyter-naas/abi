@@ -6,10 +6,10 @@ Agents in ABI are AI agents powered by Large Language Models (LLMs) that provide
 
 Agents are designed to be:
 1. **Role-based**: Each agent has a specific role with defined responsibilities
-2. **Tool-enhanced**: Agents use tools created from integrations, pipelines and workflows.
-3. **Agent-enhanced**: Agents can use other agents to delegate tasks.
-3. **Stateful**: Agents maintain conversation history and context 
-4. **Configurable**: Customizable through system prompts and model parameters
+2. **Tool-enhanced**: Agents use tools created from integrations, pipelines and workflows
+3. **Agent-enhanced**: Agents can use other agents to delegate tasks
+4. **Stateful**: Agents maintain conversation history and context 
+5. **Configurable**: Customizable through system prompts and model parameters
 
 ## Agent Structure
 
@@ -34,7 +34,23 @@ Agents are designed to be:
 
 The agent architecture follows a modular design where components can be configured at initialization time, with support for both synchronous and streaming interactions through API endpoints.
 
-## Implementation Pattern
+## Technical Foundation: LangGraph
+
+ABI agents are built on LangGraph, a framework for building stateful, multi-step applications with LLMs. Each agent uses a state machine with a directed graph that manages the flow of execution:
+
+1. **StateGraph**: Defines the workflow between the model and tools
+2. **Nodes**: 
+   - **Agent Node**: Processes messages using the language model
+   - **Tool Node**: Executes tool actions when requested
+3. **Edges**: Define the transitions between nodes
+4. **Checkpointing**: Allows for conversation history persistence
+
+The workflow typically follows this pattern:
+- Start with the agent node
+- Conditionally route to tools or end based on agent output
+- Route back to the agent after tool usage
+
+## Creating a Basic Agent
 
 ABI agents follow a standardized implementation pattern:
 
@@ -107,6 +123,172 @@ class NaasAgent(Agent):
         tags: list[str] = []
     ):
         return super().as_api(router, route_name, name, description, description_stream, tags)
+```
+
+## Advanced Agent Customization
+
+For more complex use cases, you can interact directly with the underlying LangGraph workflow:
+
+```python
+from abi.services.agent.Agent import Agent
+
+# Create your basic agent
+agent = create_agent()
+
+# Access the underlying workflow to customize it
+workflow = agent.workflow
+
+# Add a custom node
+workflow.add_node("custom_processor", my_custom_function)
+
+# Add custom edges 
+workflow.add_edge("tools", "custom_processor")
+workflow.add_edge("custom_processor", "agent")
+
+# Recompile the workflow to apply changes
+agent.workflow_compile()
+```
+
+### Tool and Response Hooks
+
+You can register callbacks to monitor and process tool usage and responses:
+
+```python
+def on_tool_used(message):
+    # Log when the agent uses a tool
+    print(f"Tool used: {message.tool_calls[0]['name']}")
+
+def on_tool_response(message):
+    # Process tool responses
+    print(f"Tool response: {message.content}")
+
+agent.on_tool_usage(on_tool_used)
+agent.on_tool_response(on_tool_response)
+```
+
+### Agent Duplication
+
+For handling concurrent requests, you can create independent copies of an agent:
+
+```python
+# Create a new agent with the same configuration but independent state
+new_agent = agent.duplicate()
+```
+
+## Exposing Agents as APIs
+
+ABI automatically exposes all properly configured agents as API endpoints. When you create an agent following the module structure, it will be registered with the API system without any additional configuration.
+
+### Automatic API Registration
+
+Agents placed in the proper module structure are automatically registered:
+
+1. Create your agent in a module's `agents` directory:
+   ```
+   src/
+     ├── core/
+     │   └── modules/
+     │       └── your_module/
+     │           └── agents/
+     │               └── your_agent.py
+     └── custom/
+         └── modules/
+             └── your_module/
+                 └── agents/
+                     └── your_agent.py
+   ```
+
+2. Implement a `create_agent()` function that returns your agent instance
+3. Your agent will be automatically available at:
+   - `POST /agents/your_agent/completion` - For synchronous completions
+   - `POST /agents/your_agent/stream-completion` - For streaming completions
+
+### API Request Format
+
+Endpoints accept requests in this format:
+
+```json
+{
+  "prompt": "Your question or instruction for the agent",
+  "thread_id": 1
+}
+```
+
+### Authentication
+
+All API endpoints are protected with Bearer token authentication:
+
+```bash
+curl -X POST "https://your-api-url/agents/your_agent/completion" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Your question here", "thread_id": 1}'
+```
+
+### Custom API Exposure
+
+If you need to customize how your agent is exposed in the API, you can override the `as_api` method:
+
+```python
+class YourAgent(Agent):
+    def as_api(
+        self, 
+        router: APIRouter, 
+        route_name: str = "your_agent", 
+        name: str = "Your Agent", 
+        description: str = "API endpoints for your agent", 
+        description_stream: str = "Streaming endpoints for your agent",
+        tags: list[str] = []
+    ):
+        return super().as_api(router, route_name, name, description, description_stream, tags)
+```
+
+This allows you to specify custom route names, descriptions, and tags that will appear in the API documentation.
+
+### Manual API Registration
+
+For testing or specialized use cases, you can manually register agents with a FastAPI router:
+
+```python
+from fastapi import FastAPI, APIRouter
+
+app = FastAPI()
+router = APIRouter()
+
+# Create your agent
+agent = create_agent()
+
+# Expose agent as API endpoints
+agent.as_api(
+    router=router,
+    route_name="my-agent",
+    name="My Custom Agent",
+    description="API endpoints for my custom agent",
+    description_stream="API endpoints for streaming responses from my custom agent",
+    tags=["agents"]
+)
+
+# Include router in FastAPI app
+app.include_router(router)
+```
+
+## Using Agents as Tools
+
+Agents can be used as tools by other agents, enabling delegation and specialization:
+
+```python
+# Create specialized agents
+data_agent = create_data_agent()
+visualization_agent = create_visualization_agent()
+
+# Create orchestrator agent that can use the specialized agents
+orchestrator = Agent(
+    name="Orchestrator",
+    description="Orchestrates specialized agents",
+    chat_model=model,
+    tools=[],
+    agents=[data_agent, visualization_agent]
+)
 ```
 
 ## LLM Models
