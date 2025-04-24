@@ -29,10 +29,7 @@ The storage backend used is determined by the environment configuration, default
 The Object Storage Service is typically initialized through the application's service manager. The initialization differs between development and production environments:
 
 ```python
-from src.services import init_services
-
-# Initialize all services including storage
-services = init_services(config, secret)
+from src import services
 
 # Access the storage service
 storage = services.storage_service
@@ -46,6 +43,8 @@ In development mode (when `ENV=dev` environment variable is set), the service au
 # Development initialization (happens automatically)
 storage_service = ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
 ```
+
+You can check the loading of the service in [services.py](../../../src/services.py)
 
 #### Production Environment
 
