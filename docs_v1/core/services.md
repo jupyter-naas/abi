@@ -3,6 +3,12 @@
 Services are abstractions that provide a way to interact with the system.
 They are used to manage the system's resources and data.
 
+## Manage Environment
+
+The environment is managed through the `.env` file and the `ENV` variable.
+By default, the system will use the `dev` environment so everything will be stored locally.
+If you want to use the production environment, you need to set the `ENV` variable to `prod` and the system will use the production storage.
+
 ## Object Storage Service
 
 Object storage is agnostic of the data type.
@@ -10,9 +16,7 @@ Therefore it only works with bytes. Learn more about bytes in Python:
 - [Python bytes() documentation](https://docs.python.org/3/library/stdtypes.html#bytes)
 - [Real Python: Understanding Bytes in Python](https://realpython.com/python-strings/#bytes-objects)
 
-Example of usage:
-
-Get object in storage in JSON:
+### Get object in storage in JSON
 
 ```python
 prefix = "datastore/your_module"
@@ -24,7 +28,7 @@ file_content = services.storage_service.get_object(
 data = json.loads(file_content)
 ```
 
-Put object in storage in JSON:
+### Put object in storage in JSON
 
 ```python
 prefix = "datastore/your_module"
@@ -35,7 +39,13 @@ services.storage_service.put_object(
     content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
 )
 ```
+### Delete object in storage
 
+```python
+prefix = "datastore/your_module"
+file_name = "your_file.json"
+services.storage_service.delete_object(prefix=prefix, key=file_name)
+```
 ## Triple Store Service
 
 The Triple Store Service utilizes the Object Storage Service as its backend storage mechanism for RDF triples.
