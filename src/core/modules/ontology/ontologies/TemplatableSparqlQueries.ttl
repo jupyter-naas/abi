@@ -398,4 +398,37 @@ intentMapping:classUriArg a intentMapping:QueryArgument ;
     intentMapping:validationPattern "^[^\\s<>]+$" ;
     intentMapping:validationFormat "class_uri" .
 
+intentMapping:searchPowerPointPresentationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "searchPowerPointPresentationQuery"@en ;
+    intentMapping:intentDescription "Search for PowerPoint presentations in the ontology" ;
+    intentMapping:sparqlTemplate """
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
+        WHERE {
+            # Filter On Class URI and ensure individual is a NamedIndividual
+            ?individual_uri a ?class_uri ;
+                            a owl:NamedIndividual ;
+                            rdfs:label ?label .
+            FILTER(?class_uri = <http://ontology.naas.ai/abi/PowerPointPresentation>)
+            
+            # Calculate scores for perfect and partial matches
+            BIND(IF(LCASE(STR(?label)) = LCASE("{{ search_label }}"), 10, 0) AS ?perfect_score)
+            BIND(IF(CONTAINS(LCASE(STR(?label)), LCASE("{{ search_label }}")), 8, 0) AS ?partial_score)
+            
+            # Use the higher of the two scores
+            BIND(IF(?perfect_score > ?partial_score, ?perfect_score, ?partial_score) AS ?temp_score)
+            
+            # Only include results with a score > 0
+            FILTER(?temp_score > 0)
+        }
+        GROUP BY ?class_uri ?individual_uri ?label
+        ORDER BY DESC(?score) ?label
+    """ ;
+    intentMapping:hasArgument intentMapping:powerPointPresentationSearchLabelArg .
 
+intentMapping:powerPointPresentationSearchLabelArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "search_label" ;
+    intentMapping:argumentDescription "PowerPoint presentation title to search for" ;
+    intentMapping:validationPattern "^[a-zA-Z0-9\\s-]{1,200}$" ;
+    intentMapping:validationFormat "power_point_presentation_title" .
