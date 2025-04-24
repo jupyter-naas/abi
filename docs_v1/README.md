@@ -26,7 +26,7 @@ Welcome to ABI Documentation.
     [Run Python Scripts](developer_tool_chain/run_python_scripts.md)
 
 [Distribution](distribution/)
-    [DevOps](distribution/)
+    [DevOps](distribution/devops/)
         [Local](distribution/devops/local.md)
         [Cloud](distribution/devops/cloud.md)
     [Marketplace](distribution/)
