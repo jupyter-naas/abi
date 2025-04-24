@@ -16,6 +16,7 @@ Welcome to ABI Documentation.
       - [Overview](capabilities/storage/triple_store.md#overview)
       - [Usage](capabilities/storage/triple_store.md#usage)
       - [API Reference](capabilities/storage/triple_store.md#api-reference)
+      - [Events and Subscriptions | Triggers](capabilities/storage/triple_store.md#events-and-subscriptions)
       - [How to create a new secondary adapter](capabilities/storage/triple_store.md#how-to-create-a-new-secondary-adapter)
   - [Integrations](capabilities/integrations.md)
   - [Ontologies](capabilities/ontologies.md)
