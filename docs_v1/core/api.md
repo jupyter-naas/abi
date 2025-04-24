@@ -6,11 +6,11 @@ The API is a RESTful API that provides a way to interact with the ABI system.
 
 ## API Endpoints
 
-`src/api.py`
+The API endpoints are defined in `src/api.py`.
 
 ## OpenAPI Documentation
 
-`src/openapi_doc.py`
+The OpenAPI documentation is located in `src/openapi_doc.py`.
 
 ## API Testing
 
