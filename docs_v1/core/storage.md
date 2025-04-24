@@ -1,5 +1,9 @@
 # Storage
 
+Storage is managed through service abstractions that allow seamless switching between local and production environments. 
+In production, we utilize AWS S3 for storage capabilities.
+For local development, the system defaults to local file storage when ENV=dev is set in the .env configuration file.
+
 ## Directory Structure
 
 The storage system provides a filesystem-based storage layer that serves as the foundation for several data storage types:

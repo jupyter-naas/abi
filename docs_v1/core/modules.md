@@ -58,7 +58,7 @@ src/[core|custom]/modules/your_module_name/
 - **Agents**: The system looks for Python files in the `agents/` directory. Each file should contain a `create_agent()` function that returns an `Agent` instance.
 - **Workflows and Pipelines**: These are made available to the system when they're imported as part of the module loading process.
 
-## Disabling a Module
+### Disabling a Module
 
 To disable a module without removing it from the codebase, simply add "disabled" to the module directory name:
 
