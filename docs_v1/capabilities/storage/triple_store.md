@@ -29,14 +29,13 @@ The storage backend used is determined by the environment configuration, default
 The Triple Store Service is typically initialized through the application's service manager. The initialization differs between development and production environments:
 
 ```python
-from src.services import init_services
-
-# Initialize all services including triple store
-services = init_services(config, secret)
+from src import services
 
 # Access the triple store service
 triple_store = services.triple_store_service
 ```
+
+You can check the loading of the service in [services.py](../../../src/services.py)
 
 #### Development Environment
 
@@ -244,6 +243,10 @@ All adapters may throw these exceptions when operations fail:
 ```python
 from rdflib import Graph, URIRef, Literal, Namespace
 from rdflib.namespace import RDF, RDFS
+from src import services
+
+# Access the triple store service
+triple_store = services.triple_store_service
 
 # Create a graph with triples
 g = Graph()
