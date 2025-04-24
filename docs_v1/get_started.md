@@ -15,7 +15,6 @@
     - [Configure YAML](#configure-yaml)
   - [Quickstart](#quickstart)
     - [Start Chatting](#start-chatting)
-    - [Create Your First Module](#create-your-first-module)
   - [Help \& Support](#help--support)
 
 ## Introduction
@@ -124,22 +123,6 @@ make chat-supervisor-agent
 
 This command will setup the environment, install the dependencies, initalize your triple store and run the supervisor agent.
 It can take a few minutes at the first time you run it.
-
-
-### Create Your First Module
-
-```bash
-make create-module
-```
-
-This process will create a new module in the `src/custom/modules` directory with all the necessary components templates: agents, integrations, ontologies, pipelines and workflows.
-It will also register your agent in the Makefile so you can run it directly with the following command:
-
-```bash
-make chat-[name]-agent
-```
-
-Now, learn how to customize your module by following the [module documentation](../modules/overview.md).
 
 ## Help & Support
 For any questions or support requests, please create an issue on this repository or reach out via [support@naas.ai](mailto:support@naas.ai).

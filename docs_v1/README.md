@@ -62,7 +62,6 @@ Welcome to ABI Documentation.
   - [Modules](capabilities/modules.md)
     - [What is a Module?](capabilities/modules.md#what-is-a-module)
     - [How Modules Work](capabilities/modules.md#how-modules-work)
-    - [Create New Module](capabilities/modules.md#create-new-module)
     - [Test-Driven Development Approach](capabilities/modules.md#test-driven-development-approach)
     - [Best Practices](capabilities/modules.md#best-practices)
     - [Troubleshooting](capabilities/modules.md#troubleshooting)
