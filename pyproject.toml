@@ -49,7 +49,7 @@ jinja2 = "^3.1.6"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
-langchain-openai = "^0.2.9"
+langchain-openai = "^0.3.3"
 rich = "^13.9.4"
 
 [tool.poetry.group.dev.dependencies]
