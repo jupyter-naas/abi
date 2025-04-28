@@ -1,4 +1,4 @@
-# Marketplace Guide
+# Marketplace
 
 ## Overview
 
@@ -16,56 +16,12 @@ The Marketplace serves as a central repository for reusable components that:
 
 ## How It Works
 
-The Marketplace is structured as a directory (`src/marketplace/`) containing self-contained modules that follow the standard ABI module architecture. Each module in the Marketplace is like an "atom" - a fundamental, independent building block that:
+The Marketplace is structured as a directory (`marketplace/`) containing self-contained modules that follow the standard ABI module architecture. Each module in the Marketplace is like an "atom" - a fundamental, independent building block that:
 
 1. Is entirely self-contained and doesn't rely on other custom components
 2. Has clear documentation and example usage
 3. Follows standard ABI module structure
 4. Can be easily installed in any ABI project
-
-## Publishing to the Marketplace
-
-To publish your custom module to the Marketplace:
-
-1. **Prepare your module**:
-   - Ensure it follows the standard directory structure
-   - Include comprehensive documentation in README.md
-   - Add appropriate tests
-   - Make sure all dependencies are documented
-
-2. **Move to Marketplace**:
-   ```bash
-   # From your ABI project root
-   cp -r src/custom/modules/your_module_name/ src/marketplace/
-   ```
-
-3. **Document your module**:
-   - Add a detailed README.md file in your module directory
-   - Include configuration examples, usage instructions, and API documentation
-   - Document any required environment variables or configuration
-
-## Installing from the Marketplace
-
-To use a module from the Marketplace:
-
-1. **Copy the module to your custom modules directory**:
-   ```bash
-   cp -r src/marketplace/module_name/ src/custom/modules/
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   # Check the module's README.md for dependency requirements
-   make add dep="required_package1 required_package2"
-   ```
-
-3. **Configure as needed**:
-   - Update your `config.yaml` file with any required settings
-   - Set any environment variables needed by the module
-
-4. **Use the module**:
-   - The module will be automatically discovered and loaded
-   - Access its agents, workflows, pipelines, and integrations as you would any custom module
 
 ## Best Practices
 
@@ -105,4 +61,4 @@ Future enhancements to the Marketplace may include:
 
 We encourage all users to consider contributing their custom modules to the Marketplace. By sharing your work, you help grow the ABI ecosystem and benefit from community feedback and improvements.
 
-For questions or support with the Marketplace, please reach out via [support@naas.ai](mailto:support@naas.ai) or on our [community forum](https://join.slack.com/t/naas-club/shared_invite/zt-2xmz8c3j8-OH3UAqvwsYkTR3BLRHGXeQ) on Slack.
+For questions or support with the Marketplace, please reach out via [support@naas.ai](mailto:support@naas.ai).
