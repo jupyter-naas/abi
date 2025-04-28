@@ -41,6 +41,33 @@ src/custom/modules/your_module_name/
 └── YourApplicationOntology.ttl # Application-specific ontology
 ```
 
+### Automatic Loading of Ontologies
+
+Ontologies placed in your module's `ontologies/` directory are automatically loaded when ABI starts up. The system:
+
+1. Reads all module definitions
+2. For each module, loads all ontology files listed in the module's `ontologies` list attribute
+3. Adds them to the triple store using `services.triple_store_service.load_schema()`
+
+#### Schema Management
+
+When a turtle file is loaded:
+
+1. **First-time Loading**: 
+   - The entire file is parsed and added to the triple store
+   - A schema record is created with metadata including file path, content hash, and timestamp
+   - The content is stored in base64 format for future comparisons
+
+2. **Updating Existing Files**:
+   - When ABI starts, it checks the hash of each ontology file
+   - If unchanged, the file is skipped
+   - If changed, it:
+     - Compares the old and new versions to determine additions and deletions
+     - Adds only the new triples and removes only the deleted ones
+     - Updates the stored hash, timestamp, and content
+
+This incremental update approach ensures that only the necessary changes are applied to the triple store, making the system more efficient when handling large ontologies.
+
 ### Creating an Ontology File
 
 Ontology files use mostly Turtle (.ttl) format:
