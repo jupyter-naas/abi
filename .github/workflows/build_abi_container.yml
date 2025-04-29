@@ -34,14 +34,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.ACCESS_TOKEN }}
 
+      - name: Set lowercase repository name
+        run: echo "REPO_LOWERCASE=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV # Docker image reference must be lowercase
+
       - name: Build Docker image
         run: |
           touch .env
           make build
-          docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
-          docker tag abi:latest ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
+          docker tag abi:latest ghcr.io/${{ env.REPO_LOWERCASE }}/abi:latest
+          docker tag abi:latest ghcr.io/${{ env.REPO_LOWERCASE }}/abi:${{ github.event.release.tag_name }}
 
       - name: Push Docker image to GitHub Container Registry
         run: |
-          docker push ghcr.io/${{ github.repository }}/abi:${{ github.event.release.tag_name }}
-          docker push ghcr.io/${{ github.repository }}/abi:latest
+          docker push ghcr.io/${{ env.REPO_LOWERCASE }}/abi:${{ github.event.release.tag_name }}
+          docker push ghcr.io/${{ env.REPO_LOWERCASE }}/abi:latest
