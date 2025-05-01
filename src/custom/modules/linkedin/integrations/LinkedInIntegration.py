@@ -179,46 +179,6 @@ class LinkedInIntegration(Integration):
         self._save_to_cache(prefix=prefix, filename=filename, data=data)
         return data
     
-    def get_posts_feed(self, profile_id: str, pagination_token: str = None, count: int = 1) -> Dict:
-        """Get posts feed for a LinkedIn organization.
-        
-        Args:
-            profile_id (str): LinkedIn profile ID (e.g., "ACoAAADS0WQBhQQVMD2eFJNZgjOOjDTH6ptbScU")
-            
-        Returns:
-            Dict: Raw posts feed data from LinkedIn API
-        """
-        prefix = os.path.join("get_posts_feed", profile_id)
-        filename = f"{profile_id}"
-
-        # Get data from cache
-        data = self._get_cached_data(prefix=prefix, filename=filename)
-        if data is not None:
-            return data
-        
-        # Set up parameters for the request
-        params = {
-            "count": count,
-            "includeLongTermHistory": "true",
-            "moduleKey": "member-shares:phone",
-            "profileUrn": f"urn:li:fsd_profile:{profile_id}",
-            "q": "memberShareFeed",
-        }
-        if pagination_token is not None:
-            params["paginationToken"] = pagination_token
-
-        # Requests
-        endpoint = f"/identity/profileUpdatesV2?{urllib.parse.urlencode(params, doseq=True)}"
-        data = self._make_request("GET", endpoint)
-
-        # Get activity ID
-        elements = pydash.get(data, "data.*elements")
-        if elements is not None and isinstance(elements, list):
-            activity_id = elements[0].split("urn:li:activity:")[-1].split(",")[0]
-        self._save_to_cache(prefix=prefix, filename=filename, data=data)
-        return data
-
-    
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
