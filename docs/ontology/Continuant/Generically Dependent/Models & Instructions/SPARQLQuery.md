@@ -1,0 +1,22 @@
+# SPARQLQuery
+
+## Definition
+A SPARQL query is a generically dependent continuant that expresses a formal query pattern used to retrieve or manipulate information from a semantic graph.
+
+## Hierarchy in BFO
+```mermaid
+graph BT
+    BFO_0000001(Entity):::BFO
+    BFO_0000002(Continuant):::BFO-->BFO_0000001
+    BFO_0000031(Generically Dependent<br>Continuant):::BFO-->BFO_0000002
+    
+    ABI_SPARQLQuery(abi:SPARQLQuery):::ABI-->BFO_0000031
+    
+    classDef BFO fill:#97c1fb,color:#060606
+    classDef ABI fill:#48DD82,color:#060606
+```
+
+## Related Classes
+- **abi:OntologyFile** - A generically dependent continuant that provides a formal encoding of domain-specific concepts, relations, and constraints expressed in a semantic web format.
+- **abi:ValidationRule** - A generically dependent continuant that defines a logical constraint used to check whether data or behavior conforms to expectations.
+- **abi:MappingSchema** - A generically dependent continuant that provides a specification defining how elements from one structure correspond to elements in another. 
