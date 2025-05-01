@@ -3,7 +3,7 @@
 > [!WARNING]
 > This folder and the documents in this folder are currently under development. Content may be incomplete or subject to change. Contact us if you have any question: support@naas.ai
 
-This is the root folder for the **ABI Ontology**, a comprehensive enterprise ontology framework built on the Basic Formal Ontology (BFO). The ABI Ontology provides semantic models for representing entities, processes, and relationships across multiple domains of enterprise operations.
+This is the root folder for the **ABI Ontology**, a comprehensive universal ontology framework built on the Basic Formal Ontology (BFO). The ABI Ontology provides semantic models for representing entities, processes, and relationships across multiple domains of enterprise operations.
 
 ## Ontology Structure
 
@@ -105,6 +105,7 @@ The ABI Ontology follows these design principles:
 
 This ontology can be used for:
 
+- AI Management Systems 
 - Enterprise architecture modeling
 - Business process management
 - Information integration
