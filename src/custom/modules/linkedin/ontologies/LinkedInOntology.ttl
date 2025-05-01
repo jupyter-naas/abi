@@ -1,0 +1,270 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/linkedin.ttl> rdf:type owl:Ontology ;
+                                        owl:imports <> ;
+                                        owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/linkedin.ttl> ;
+                                        dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                        dc:description "Application ontology for LinkedIn."@en ;
+                                        dc:license "" ;
+                                        dc:title "LinkedIn Application Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:LinkedInPage a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "LinkedIn Page" ;
+    skos:definition "A LinkedIn page that represents an entity's presence on LinkedIn, containing information specific to that entity type such as professional details, organizational information, or educational programs." ;
+    skos:example "A LinkedIn page could be a profile page showing work experience, a company page with job postings, or a school page highlighting academic programs." ;
+    rdfs:comment "A LinkedIn page must be registered in https://www.linkedin.com/" .
+
+abi:LinkedInProfilePage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn Profile Page" ;
+    skos:definition "A LinkedIn profile page that includes information such as a person's professional history, skills, and endorsements, representing the individual's professional identity on the web." ;
+    skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues." ;
+    rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" .
+
+abi:LinkedInCompanyPage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn Company Page" ;
+    skos:definition "A LinkedIn company page that includes information such as the company's overview, products/services, job postings, and updates, representing the organization's professional presence on LinkedIn." ;
+    skos:example "Microsoft's LinkedIn company page, which showcases their company information, latest news, job opportunities, and employee insights." ;
+    rdfs:comment "A LinkedIn company page must be registered in https://www.linkedin.com/company/" .
+
+abi:LinkedInSchoolPage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn School Page" ;
+    skos:definition "A LinkedIn school page that includes information about the school's programs, faculty, students, and events, representing the educational institution's professional presence on LinkedIn." ;
+    rdfs:comment "A LinkedIn school page must be registered in https://www.linkedin.com/school/" .
+
+abi:ActOfPostingOnLinkedIn a owl:Class ;
+    rdfs:label "Act of Posting on LinkedIn"@en ;
+    rdfs:subClassOf cco:ont00000517 ;
+    skos:definition "A process of creating and publishing content on the LinkedIn platform."@en ;
+    skos:example "When a user composes a post about their recent job promotion and shares it with their professional network on the LinkedIn platform."@en .
+
+abi:LinkedInPost a owl:Class ;
+    rdfs:label "LinkedIn Post"@en ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
+    skos:definition "A social media post with associated content and metrics"@en .
+
+abi:LinkedInIndustry a owl:Class ;
+    rdfs:subClassOf abi:Industry ;
+    rdfs:label "LinkedIn Industry" ;
+    skos:definition "Industry referenced on LinkedIn." ;
+    skos:example "Events Services, Hospitality, Travel Arrangements, etc." .
+
+abi:LinkedInOrganizationSize a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "LinkedIn Organization Size"@en ;
+    skos:definition "Represents a range of staff size within an organization." ;
+    skos:example "Micro Enterprise, Small Enterprise, SMEs, Large Enterprise." ;
+    rdfs:comment "LinkedIn organization sizes are used to categorize the size of an organization." .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasLinkedInPage a owl:ObjectProperty ;
+    rdfs:domain [ rdf:type owl:Class ;
+                  owl:unionOf ( cco:ont00001180
+                               cco:ont00001262
+                             )
+                ] ;
+    rdfs:range abi:LinkedInPage ;
+    owl:inverseOf abi:isLinkedInPageOf ;
+    rdfs:label "has linkedin page"@en ;
+    skos:definition "Relates an entity to its LinkedIn page."@en ;
+    skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues."@en .
+
+abi:isLinkedInPageOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range [ rdf:type owl:Class ;
+                 owl:unionOf ( cco:ont00001180
+                              cco:ont00001262
+                            )
+               ] ;
+    owl:inverseOf abi:hasLinkedInPage ;
+    rdfs:label "is linkedin page of"@en ;
+    skos:definition "Relates a LinkedIn page to the entity it represents."@en ;
+    skos:example "A LinkedIn profile page that represents John Doe's professional presence."@en .
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:page_name a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "Page Name"@en ;
+    skos:definition "The name of the LinkedIn page."@en ;
+    skos:example "The name of John Doe's LinkedIn profile page is 'John Doe'."@en .
+
+abi:linkedin_id a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn ID"@en ;
+    skos:definition "The ID of the LinkedIn page."@en ;
+    skos:example "The unique ID of John Doe's LinkedIn profile page is 'ACoAAAa5py0Bzrp5_7OmHIsNP6xxxxxxxx'."@en .
+
+abi:linkedin_url a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn URL"@en ;
+    skos:definition "The URL of the LinkedIn page. It uses the LinkedIn ID as a unique identifier."@en ;
+    skos:example "The URL of John Doe's LinkedIn profile page is 'https://www.linkedin.com/in/ACoAAAa5py0Bzrp5_7OmHIsNP6xxxxxxxx'."@en .
+
+abi:linkedin_public_id a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn Public ID"@en ;
+    skos:definition "The public ID of the LinkedIn page. It might change over time."@en ;
+    skos:example "The public ID of John Doe's LinkedIn profile page is 'johndoe'."@en .
+
+abi:linkedin_public_url a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "LinkedIn Public URL"@en ;
+    skos:definition "The public URL of the LinkedIn page. It uses the LinkedIn Public ID as identifier."@en ;
+    skos:example "The public URL of John Doe's LinkedIn profile page is 'https://www.linkedin.com/in/johndoe'."@en .
+
+abi:entity_urn a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "Entity URN"@en ;
+    skos:definition "The URN of the entity."@en ;
+    skos:example "The URN of the entity is 'urn:li:fs_normalized_company:1234567890'."@en .
+
+abi:summary a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "Summary"@en ;
+    skos:definition "The summary of the LinkedIn page."@en ;
+    skos:example "The summary of the LinkedIn page is 'This is a summary of the LinkedIn page.'."@en .
+
+abi:title a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "Title"@en ;
+    skos:definition "The title of the LinkedIn post."@en ;
+    skos:example "The title of the LinkedIn post is 'Announcing our new product'."@en .
+
+abi:content a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "Content"@en ;
+    skos:definition "The content of the LinkedIn post."@en ;
+    skos:example "The content of the LinkedIn post is 'We are excited to announce...'."@en .
+
+abi:author a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "Author"@en ;
+    skos:definition "The author of the LinkedIn post."@en ;
+    skos:example "The author of the LinkedIn post is 'John Doe'."@en .
+
+abi:author_url a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "Author URL"@en ;
+    skos:definition "The URL of the author's LinkedIn profile."@en ;
+    skos:example "The author URL is 'https://www.linkedin.com/in/johndoe'."@en .
+
+abi:published_date a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "Published Date"@en ;
+    skos:definition "The date when the LinkedIn post was published."@en ;
+    skos:example "The post was published on 2024-01-01T12:00:00."@en .
+
+abi:views a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Views"@en ;
+    skos:definition "The number of views on the LinkedIn post."@en ;
+    skos:example "The LinkedIn post has 1000 views."@en .
+
+abi:likes a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Likes"@en ;
+    skos:definition "The number of likes on the LinkedIn post."@en ;
+    skos:example "The LinkedIn post has 100 likes."@en .
+
+abi:comments a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Comments"@en ;
+    skos:definition "The number of comments on the LinkedIn post."@en ;
+    skos:example "The LinkedIn post has 50 comments."@en .
+
+abi:shares a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Shares"@en ;
+    skos:definition "The number of shares of the LinkedIn post."@en ;
+    skos:example "The LinkedIn post has 25 shares."@en .
+
+abi:engagements a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Engagements"@en ;
+    skos:definition "The total number of engagements on the LinkedIn post."@en ;
+    skos:example "The LinkedIn post has 175 total engagements."@en .
+
+abi:engagement_score a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:float ;
+    rdfs:label "Engagement Score"@en ;
+    skos:definition "The engagement score of the LinkedIn post."@en ;
+    skos:example "The LinkedIn post has an engagement score of 4.5."@en .
+
+abi:type a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "Type"@en ;
+    skos:definition "The type of the LinkedIn post."@en ;
+    skos:example "The type of the LinkedIn post is 'article'."@en .
+
+abi:length a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Length"@en ;
+    skos:definition "The length of the LinkedIn post content."@en ;
+    skos:example "The LinkedIn post is 500 characters long."@en .
+
+abi:url a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "URL"@en ;
+    skos:definition "The URL of the LinkedIn post."@en ;
+    skos:example "The URL of the LinkedIn post is 'https://www.linkedin.com/posts/johndoe_announcement-activity-123456789'."@en .
+
+abi:date_extract a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:string ;
+    rdfs:label "Date Extract"@en ;
+    skos:definition "The date when the LinkedIn post data was extracted."@en ;
+    skos:example "The post data was extracted on 2024-01-02."@en .
+
+abi:scenario_order a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPost ;
+    rdfs:range xsd:integer ;
+    rdfs:label "Scenario Order"@en ;
+    skos:definition "The order of the post in a scenario."@en ;
+    skos:example "This post is number 3 in the scenario sequence."@en .
+
+
+
+
