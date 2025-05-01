@@ -42,8 +42,11 @@ graph BT
 
 The ontology is divided into domain-specific **Foundries**, each focusing on a particular aspect of enterprise operations:
 
+
 - **Enterprise Management Foundry**: Core business operations, organizational structures, and management processes
 - **Cyber Security Foundry**: Security agents, operations, threats, and protective measures
+
+*Planned Foundries:*
 - **ESG Foundry**: Environmental, Social, and Governance entities and processes
 - **Data & Analytics Foundry**: Information assets, analytics processes, and data governance
 - **Finance & Accounting Foundry**: Financial assets, transactions, and reporting processes
@@ -54,7 +57,7 @@ Each foundry maintains the same BFO-based structure of Continuants and Occurrent
 
 ```
 /docs/ontology/
-├── foundries/                     # Domain-specific ontology modules
+├── foundries/                     # Domain-specific ontology modules (human-maintained)
 │   ├── enterprise_management/     # Business operations and management
 │   │   ├── Continuant/           # Persistent entities (orgs, roles, etc.)
 │   │   └── Occurrent/            # Time-bound processes and events
@@ -65,14 +68,28 @@ Each foundry maintains the same BFO-based structure of Continuants and Occurrent
 │   │
 │   └── [other foundries]/        # Additional domain-specific modules
 │
-├── common/                        # Shared ontology components
-│   ├── upper/                    # Upper-level shared classes
-│   └── patterns/                 # Reusable ontology patterns
-│
-└── reference/                     # Documentation and guidelines
-    ├── modeling_principles/      # Ontology modeling guidelines
-    └── examples/                 # Usage examples and patterns
+└── reference/                     # Auto-generated technical documentation from src codebase
+    ├── top-level/                 # Top-level ontology structures and concepts
+    ├── mid-level/                 # Mid-level ontology bridges and extensions
+    ├── domain-level/              # Domain-specific ontological representations
+    └── application-level/         # Application-specific implementations and uses
 ```
+
+## Documentation Approach
+
+The ABI Ontology documentation follows a dual approach:
+
+1. **Foundry Documentation (Human-Maintained)**
+   - Domain-specific ontology concepts organized by foundry
+   - Human-readable explanations, examples, and usage guidance
+   - Conceptual organization following BFO principles
+   - Maintained manually by ontology engineers and domain experts
+
+2. **Reference Documentation (Auto-Generated)**
+   - Automatically generated from the ontology code in the `src` directory
+   - Technical representation of ontology structures, mappings, and relationships
+   - Links between BFO, CCO (Common Core Ontologies), and external standards
+   - Reflects the actual implementation details of the ontology
 
 ## Key Principles
 
