@@ -69,10 +69,8 @@ Each foundry maintains the same BFO-based structure of Continuants and Occurrent
 │   └── [other foundries]/        # Additional domain-specific modules
 │
 └── reference/                     # Auto-generated technical documentation from src codebase
-    ├── top-level/                 # Top-level ontology structures and concepts
-    ├── mid-level/                 # Mid-level ontology bridges and extensions
-    ├── domain-level/              # Domain-specific ontological representations
-    └── application-level/         # Application-specific implementations and uses
+    ├── model/                     # Generated ontology model and relationships
+    └── ontologies/                 # Domain-specific ontologies by foundry
 ```
 
 ## Documentation Approach
@@ -86,7 +84,7 @@ The ABI Ontology documentation follows a dual approach:
    - Maintained manually by ontology engineers and domain experts
 
 2. **Reference Documentation (Auto-Generated)**
-   - Automatically generated from the ontology code in the `src` directory
+   - Automatically generated from the ontology model in the `src` directory
    - Technical representation of ontology structures, mappings, and relationships
    - Links between BFO, CCO (Common Core Ontologies), and external standards
    - Reflects the actual implementation details of the ontology
