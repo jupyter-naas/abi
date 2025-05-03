@@ -1,7 +1,7 @@
 # ActofCredentialRotation
 
 ## Definition
-An act of credential rotation is an occurrent process that unfolds through time, involving the systematic replacement, refreshing, or updating of authentication secrets, cryptographic materials, access tokens, or digital credentials with new values while preserving authorized access capabilities, typically performed on a scheduled or event-triggered basis to reduce the risk associated with credential compromise, enforce time-bound access policies, maintain compliance with security requirements, and ensure the ongoing integrity of authentication mechanisms.
+An act of credential rotation is an occurrent process that unfolds through time, involving the systematic replacement, refreshment, or updating of authentication secrets, cryptographic materials, access tokens, or digital credentials with new values while preserving authorized access capabilities, typically performed on a scheduled or event-triggered basis to reduce the risk associated with credential compromise, enforce time-bound access policies, maintain compliance with security requirements, and ensure the ongoing integrity of authentication mechanisms.
 
 ## Hierarchy in BFO
 ```mermaid

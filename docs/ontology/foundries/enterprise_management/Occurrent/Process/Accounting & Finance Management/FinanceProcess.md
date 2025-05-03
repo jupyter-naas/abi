@@ -1,7 +1,7 @@
 # FinanceProcess
 
 ## Definition
-A finance process is an occurrent that unfolds through time, involving structured activities, evaluations, and transactions aimed at managing, monitoring, and optimizing an organization's financial resources, obligations, and performance through systematic procedures that ensure compliance, accuracy, and strategic financial alignment.
+A finance process is an occurrent that unfolds through time, involving structured activities, evaluations, and/or transactions aimed at managing, monitoring, and/or optimizing an organization's financial resources, obligations, and/or performance through systematic procedures that ensure compliance, accuracy, and strategic financial alignment.
 
 ## Hierarchy in BFO
 ```mermaid
