@@ -1,0 +1,95 @@
+/* Custom styles for the ABI Streamlit web app */
+
+/* Main container styling */
+.main {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Header styling */
+h1 {
+    color: #4CAF50 !important;
+    font-weight: 700 !important;
+}
+
+/* Chat message styling */
+.stChatMessage {
+    border-radius: 10px;
+    margin-bottom: 0.75rem;
+}
+
+.stChatMessage[data-testid="stChatMessageContent"] {
+    padding: 0.75rem;
+}
+
+/* User message styling */
+.stChatMessage[data-testid="stChatMessage"] > div:first-child {
+    background-color: #2b5ff6 !important;
+}
+
+/* Assistant message styling */
+.stChatMessage[data-testid="stChatMessage"] > div:nth-child(2) {
+    background-color: #f0f2f6 !important;
+}
+
+/* Button styling */
+.stButton > button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.stButton > button:hover {
+    background-color: #3e8e41;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Sidebar styling */
+.sidebar .sidebar-content {
+    background-color: #f9f9f9;
+    padding: 1rem;
+}
+
+/* Info box styling */
+.stAlert {
+    border-radius: 8px;
+    margin: 0.5rem 0;
+}
+
+/* Code block styling */
+code {
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
+pre {
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+/* Input field styling */
+.stTextInput > div > div > input {
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+    padding: 0.5rem;
+}
+
+.stTextInput > div > div > input:focus {
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 1px #4CAF50;
+}
+
+/* Select box styling */
+.stSelectbox > div > div > select {
+    border-radius: 4px;
+}
+
+/* Spinner styling */
+.stSpinner > div {
+    border-color: #4CAF50 !important;
+} 
