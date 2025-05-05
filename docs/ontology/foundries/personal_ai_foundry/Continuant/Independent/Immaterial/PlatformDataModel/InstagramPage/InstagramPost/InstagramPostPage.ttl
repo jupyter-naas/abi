@@ -2,17 +2,28 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix ig: <http://ontology.abi.ai/social_media#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
-# Core Classes
-ig:InstagramPostPage a owl:Class ;
-    rdfs:subClassOf sioc:InstagramPage ;
+#################################################################
+#    Classes
+#################################################################
+
+abi:InstagramPostPage a owl:Class ;
+    rdfs:subClassOf abi:InstagramPage ;
     rdfs:label "Instagram Post Page"@en ;
     skos:definition "A generically dependent continuant that is a view of an Instagram post at a specific point in time, consisting of media content, metadata, and social engagement elements"@en ;
     skos:example "A snapshot of a specific Instagram post viewed on 2023-11-10"@en .
 
-# Core Properties
+#################################################################
+#    Object Properties
+#################################################################
+
+
+#################################################################
+#    Data Properties
+#################################################################
+
 ig:postId a owl:DatatypeProperty ;
     rdfs:domain ig:InstagramPostPage ;
     rdfs:range xsd:string ;
@@ -205,7 +216,10 @@ ig:shoppingTags a owl:ObjectProperty ;
     ig:example ":nikeShoeProduct" ;
     rdfs:comment "Tagged products that link to Instagram Shopping with product information and purchase options." .
 
-# Supporting Classes
+#################################################################
+#    Named Individuals
+#################################################################
+
 ig:MediaItem a owl:Class ;
     rdfs:label "Media Item"@en ;
     skos:definition "A visual element (image or video) that is part of an Instagram post"@en .

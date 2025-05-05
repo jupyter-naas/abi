@@ -2,41 +2,63 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix ig: <http://ontology.abi.ai/social_media#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
+#################################################################
+#    Classes
+#################################################################
 
-# Core Classes
-ig:InstagramProfilePage a owl:Class ;
-    rdfs:subClassOf sioc:InstagramPage ;
+abi:InstagramProfilePage a owl:Class ;
+    rdfs:subClassOf abi:InstagramPage ;
     rdfs:label "Instagram Profile Page"@en ;
-    skos:definition "A generically dependent continuant that is a view of an Instagram profile at a specific point in time, consisting of a unique identifier, visual representation, and metadata about the profile's content and social connections"@en ;
+    skos:definition "An instagram profile page at a specific point in time, consisting of a unique identifier, visual representation, and metadata about the profile's content and social connections"@en ;
     skos:example "A snapshot of John's Instagram profile as viewed on 2023-11-10"@en .
 
-# Core Properties
-ig:profileId a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasInstagramPost a owl:ObjectProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
+    rdfs:range abi:InstagramPostPage ;
+    rdfs:label "has instagram post"@en ;
+    skos:definition "An instagram profile page has an instagram post"@en ;
+    skos:example "John's Instagram profile page has a post about his new book"@en .
+
+abi:hasFollowers a owl:ObjectProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
+    rdfs:range abi:InstagramProfilePage ;
+    rdfs:label "has followers"@en ;
+    skos:definition "An instagram profile page has followers"@en ;
+    skos:example "John's Instagram profile page has followers"@en .
+
+abi:isFollowing a owl:ObjectProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
+    rdfs:range abi:InstagramProfilePage ;
+    rdfs:label "is following"@en ;
+    skos:definition "An instagram profile page is following another instagram profile page"@en ;
+    skos:example "John's Instagram profile page is following Jane's Instagram profile page"@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:profile_id a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:string ;
     rdfs:label "profile id"@en ;
     skos:definition "A string that is the unique identifier for an Instagram profile and is part of the profile's essential identity"@en ;
-    ig:example "jeremy_lvr" ;
+    skos:example "jeremy_lvr" ;
     rdfs:comment "The unique handle that appears in the Instagram profile URL and identifies the account." .
 
-ig:platform a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:platform_name a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:string ;
-    rdfs:label "platform"@en ;
+    rdfs:label "platform name"@en ;
     skos:definition "A string that is the name of the social media platform where the profile exists and is part of the profile's essential identity"@en ;
-    ig:example "Instagram" ;
+    skos:example "Instagram" ;
     rdfs:comment "Always 'Instagram' for Instagram pages, used for cross-platform compatibility." .
-
-ig:viewTimestamp a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
-    rdfs:range xsd:dateTime ;
-    rdfs:label "view timestamp"@en ;
-    skos:definition "A datetime that is the specific point in time when the profile was viewed and is part of the profile's temporal identity"@en ;
-    ig:example "2023-11-10T15:42:36Z"^^xsd:dateTime ;
-    rdfs:comment "Precise datetime of when the page was accessed, used for tracking history of profile changes." .
 
 ig:username a owl:DatatypeProperty ;
     rdfs:domain ig:InstagramPage ;
@@ -46,66 +68,102 @@ ig:username a owl:DatatypeProperty ;
     ig:example "jeremy_lvr" ;
     rdfs:comment "The alphanumeric username that appears with @ symbol, must be unique across Instagram." .
 
-ig:displayName a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:display_name a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:string ;
     rdfs:label "display name"@en ;
     skos:definition "A string that is the public name shown on the Instagram profile and is part of the profile's essential identity"@en ;
-    ig:example "Jeremy Lvr" ;
+    skos:example "Jeremy Lvr" ;
     rdfs:comment "The human-readable name displayed at the top of a profile, does not need to be unique." .
 
-ig:biography a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:biography a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:string ;
     rdfs:label "biography"@en ;
     skos:definition "A string that is a text description of the Instagram profile owner and is part of the profile's essential identity"@en ;
-    ig:example "Don't be dead serious about your life, it's just a play." ;
+    skos:example "Don't be dead serious about your life, it's just a play." ;
     rdfs:comment "Limited to 150 characters, can include emojis and limited formatting." .
 
-ig:hasHashtag a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
-    rdfs:range xsd:string ;
-    rdfs:label "has hashtag"@en ;
-    skos:definition "A string that is a hashtag associated with the Instagram profile and is part of the profile's essential identity"@en ;
-    ig:example "creative" ;
-    rdfs:comment "Hashtags included in the biography that represent themes or topics relevant to the account." .
-
-ig:postCount a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:post_count a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:integer ;
     rdfs:label "post count"@en ;
     skos:definition "An integer that is the number of posts published by the Instagram profile and is part of the profile's essential identity"@en ;
-    ig:example "46"^^xsd:integer ;
+    skos:example "46"^^xsd:integer ;
     rdfs:comment "Total count of posts (photos, videos, carousels) published by the account, excluding archived or deleted posts." .
 
-ig:followerCount a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:follower_count a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:integer ;
     rdfs:label "follower count"@en ;
     skos:definition "An integer that is the number of accounts following this Instagram profile and is part of the profile's essential identity"@en ;
-    ig:example "204"^^xsd:integer ;
+    skos:example "204"^^xsd:integer ;
     rdfs:comment "Number of Instagram accounts that have subscribed to see this account's content in their feed." .
 
-ig:followingCount a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:following_count a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:integer ;
     rdfs:label "following count"@en ;
     skos:definition "An integer that is the number of accounts this Instagram profile follows and is part of the profile's essential identity"@en ;
-    ig:example "410"^^xsd:integer ;
+    skos:example "410"^^xsd:integer ;
     rdfs:comment "Number of other Instagram accounts that this account has subscribed to see in their feed." .
 
-ig:profilePictureUrl a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:profile_picture_url a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:anyURI ;
     rdfs:label "profile picture URL"@en ;
     skos:definition "A URI that is the URL of the profile picture image and is part of the profile's essential identity"@en ;
     ig:example "https://www.instagram.com/jeremy_lvr/profile_pic/" ;
     rdfs:comment "Direct link to the user's profile picture at its highest available resolution." .
 
-ig:isVerified a owl:DatatypeProperty ;
-    rdfs:domain ig:InstagramPage ;
+abi:is_verified a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
     rdfs:range xsd:boolean ;
     rdfs:label "is verified"@en ;
     skos:definition "A boolean that indicates whether the Instagram account has been verified by Instagram as authentic and is part of the profile's essential identity"@en ;
-    ig:example "false"^^xsd:boolean ;
+    skos:example "false"^^xsd:boolean ;
     rdfs:comment "A verified account has a blue checkmark badge indicating Instagram has confirmed it's the authentic presence of the public figure, celebrity, or global brand it represents." .
+
+abi:is_private a owl:DatatypeProperty ;
+    rdfs:domain abi:InstagramProfilePage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is private"@en ;
+    skos:definition "A boolean that indicates whether the Instagram account is private and is part of the profile's essential identity"@en ;
+    skos:example "false"^^xsd:boolean ;
+    rdfs:comment "A private account does not allow other users to view their posts without permission." .
+
+#################################################################
+#    Named Individuals
+#################################################################
+
+ex:jeremy_lvr a abi:InstagramProfilePage ;
+    abi:profile_id "jeremy_lvr" ;
+    abi:platform_name "Instagram" ;
+    ig:username "jeremy_lvr" ;
+    abi:display_name "Jeremy Lvr" ;
+    abi:biography "Don't be dead serious about your life, it's just a play." ;
+    abi:post_count 46 ;
+    abi:follower_count 204 ;
+    abi:following_count 410 ;
+    abi:profile_picture_url "https://www.instagram.com/jeremy_lvr/profile_pic/" ;
+    abi:is_verified false ;
+    abi:is_private false ;
+    abi:has_instagram_post ex:post1 ;
+    abi:has_followers ex:jane_doe ;
+    abi:is_following ex:jane_doe ;
+
+ex:jane_doe a abi:InstagramProfilePage ;
+    abi:profile_id "jane_doe" ;
+    abi:platform_name "Instagram" ;
+    ig:username "jane_doe" ;
+    abi:display_name "Jane Doe" ;
+    abi:biography "I'm a software engineer and I love to code." ;
+    abi:post_count 100 ;
+    abi:follower_count 1000 ;
+    abi:following_count 500 ;
+    abi:profile_picture_url "https://www.instagram.com/jane_doe/profile_pic/" ;
+    abi:is_verified true ;
+    abi:is_private false ;
+    abi:has_instagram_post ex:post2 ;
+    abi:has_followers ex:jeremy_lvr ;
+    abi:is_following ex:jeremy_lvr ;
