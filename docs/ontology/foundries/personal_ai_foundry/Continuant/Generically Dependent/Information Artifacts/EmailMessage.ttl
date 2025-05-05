@@ -1,0 +1,261 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix paf: <http://ontology.abi.ai/personal_ai_foundry#> .
+@prefix cs: <http://ontology.abi.ai/contact_schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cco: <https://www.commoncoreontologies.org/ont#> .
+
+# EmailMessage Class Definition
+cs:EmailMessage a owl:Class ;
+    rdfs:label "Email Message" ;
+    rdfs:subClassOf bfo:0000031, paf:InformationArtifact ; # Generically Dependent Continuant
+    skos:definition "A time-stamped, directed communication artifact used to convey structured or unstructured content between agents, including metadata for routing, identification, and categorization to facilitate effective human-to-human digital communication." ;
+    skos:note "Aligns with CCO:Message (ont00001002) and CCO:EmailMessage (ont00000640)" .
+
+# === Identity Properties ===
+
+# MessageId Property
+cs:messageId a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "message ID" ;
+    skos:definition "Globally unique identifier for the email" .
+
+# ConversationId Property
+cs:conversationId a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "conversation ID" ;
+    skos:definition "Thread identifier grouping related emails" .
+
+# Sender Property
+cs:sender a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:EmailAddress ;
+    rdfs:label "sender" ;
+    skos:definition "The originating address of the message" .
+
+# Recipients Property
+cs:recipients a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:EmailAddress ;
+    rdfs:label "recipients" ;
+    skos:definition "All addresses receiving the message" .
+
+# === Content Properties ===
+
+# Subject Property
+cs:subject a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "subject" ;
+    skos:definition "Email subject line" .
+
+# Body Property
+cs:body a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:EmailContent ;
+    rdfs:label "body" ;
+    skos:definition "The primary content of the message" .
+
+# Attachments Property
+cs:attachments a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:Attachment ;
+    rdfs:label "attachments" ;
+    skos:definition "Files attached to the email" .
+
+# HasSignature Property
+cs:hasSignature a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has signature" ;
+    skos:definition "Whether the email contains a signature block" .
+
+# === Temporal Properties ===
+
+# SentTimestamp Property
+cs:sentTimestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "sent timestamp" ;
+    skos:definition "When the message was sent" .
+
+# ReceivedTimestamp Property
+cs:receivedTimestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "received timestamp" ;
+    skos:definition "When the message was received" .
+
+# ModifiedTimestamp Property
+cs:modifiedTimestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "modified timestamp" ;
+    skos:definition "When the message was last modified" .
+
+# === Organizational Properties ===
+
+# Labels Property
+cs:labels a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:Label ;
+    rdfs:label "labels" ;
+    skos:definition "Service-specific categorization tags" .
+
+# Folder Property
+cs:folder a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "folder" ;
+    skos:definition "Storage location within email system" .
+
+# Priority Property
+cs:priority a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:PriorityLevel ;
+    rdfs:label "priority" ;
+    skos:definition "Message importance designation" .
+
+# ReadStatus Property
+cs:readStatus a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "read status" ;
+    skos:definition "Whether the message has been read" .
+
+# === Relational Properties ===
+
+# InReplyTo Property
+cs:inReplyTo a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:EmailMessage ;
+    rdfs:label "in reply to" ;
+    skos:definition "Reference to the message being replied to" .
+
+# References Property
+cs:references a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:EmailMessage ;
+    rdfs:label "references" ;
+    skos:definition "Chain of message references in a thread" .
+
+# ContactRelationship Property
+cs:contactRelationship a owl:ObjectProperty ;
+    rdfs:domain cs:EmailMessage ;
+    rdfs:range cs:ContactRelationship ;
+    rdfs:label "contact relationship" ;
+    skos:definition "Association with known contact" .
+
+# === Supporting Classes ===
+
+# EmailContent Class
+cs:EmailContent a owl:Class ;
+    rdfs:label "Email Content" ;
+    rdfs:subClassOf paf:InformationArtifact ;
+    skos:definition "The textual content of an email in plain text and/or HTML format" .
+
+# EmailContent Properties
+cs:textContent a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailContent ;
+    rdfs:range xsd:string ;
+    rdfs:label "text content" ;
+    skos:definition "Plain text version of the email content" .
+
+cs:htmlContent a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailContent ;
+    rdfs:range xsd:string ;
+    rdfs:label "HTML content" ;
+    skos:definition "HTML formatted version of the email content" .
+
+# Attachment Class
+cs:Attachment a owl:Class ;
+    rdfs:label "Attachment" ;
+    rdfs:subClassOf paf:InformationArtifact ;
+    skos:definition "A file attached to an email message" .
+
+# Attachment Properties
+cs:filename a owl:DatatypeProperty ;
+    rdfs:domain cs:Attachment ;
+    rdfs:range xsd:string ;
+    rdfs:label "filename" ;
+    skos:definition "Name of the attached file" .
+
+cs:mimeType a owl:DatatypeProperty ;
+    rdfs:domain cs:Attachment ;
+    rdfs:range xsd:string ;
+    rdfs:label "MIME type" ;
+    skos:definition "Media type of the attachment" .
+
+cs:fileSize a owl:DatatypeProperty ;
+    rdfs:domain cs:Attachment ;
+    rdfs:range xsd:integer ;
+    rdfs:label "file size" ;
+    skos:definition "Size of the attachment in bytes" .
+
+# Label Class
+cs:Label a owl:Class ;
+    rdfs:label "Email Label" ;
+    rdfs:subClassOf paf:InformationArtifact ;
+    skos:definition "A categorization tag applied to an email message" .
+
+# Label Properties
+cs:labelName a owl:DatatypeProperty ;
+    rdfs:domain cs:Label ;
+    rdfs:range xsd:string ;
+    rdfs:label "label name" ;
+    skos:definition "Name of the label" .
+
+cs:labelColor a owl:DatatypeProperty ;
+    rdfs:domain cs:Label ;
+    rdfs:range xsd:string ;
+    rdfs:label "label color" ;
+    skos:definition "Color associated with the label" .
+
+# PriorityLevel Class
+cs:PriorityLevel a owl:Class ;
+    rdfs:label "Priority Level" ;
+    rdfs:subClassOf paf:InformationArtifact ;
+    skos:definition "Designation of importance for an email message" .
+
+# PriorityLevel Instances
+cs:LowPriority a cs:PriorityLevel ;
+    rdfs:label "Low Priority" ;
+    skos:definition "Email with low importance or urgency" .
+
+cs:NormalPriority a cs:PriorityLevel ;
+    rdfs:label "Normal Priority" ;
+    skos:definition "Email with standard importance or urgency" .
+
+cs:HighPriority a cs:PriorityLevel ;
+    rdfs:label "High Priority" ;
+    skos:definition "Email with high importance or urgency" .
+
+# ContactRelationship Class
+cs:ContactRelationship a owl:Class ;
+    rdfs:label "Contact Relationship" ;
+    rdfs:subClassOf paf:InformationArtifact ;
+    skos:definition "Association between an email and a known contact" .
+
+# ContactRelationship Properties
+cs:contactId a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactRelationship ;
+    rdfs:range xsd:string ;
+    rdfs:label "contact ID" ;
+    skos:definition "Identifier for the associated contact" .
+
+cs:relationshipType a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactRelationship ;
+    rdfs:range xsd:string ;
+    rdfs:label "relationship type" ;
+    skos:definition "Type of relationship with the contact (e.g., colleague, friend, family)" .
+
+cs:confidence a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactRelationship ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "confidence" ;
+    skos:definition "Confidence score for the contact association" . 

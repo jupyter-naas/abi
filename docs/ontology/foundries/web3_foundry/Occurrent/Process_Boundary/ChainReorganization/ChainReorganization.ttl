@@ -1,0 +1,157 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# ChainReorganization Class Definition
+w3f:ChainReorganization a owl:Class ;
+    rdfs:label "Chain Reorganization" ;
+    rdfs:subClassOf bfo:0000035 ; # Process Boundary
+    skos:definition "A ChainReorganization is an occurrent process boundary entity that represents the instantaneous temporal boundary at which a blockchain network transitions from one version of the canonical chain to another, typically due to the resolution of competing chain branches according to consensus rules." .
+
+# Chain Reorganization Types
+w3f:MinorReorganization a owl:Class ;
+    rdfs:label "Minor Reorganization" ;
+    rdfs:subClassOf w3f:ChainReorganization ;
+    skos:definition "A process boundary representing a chain reorganization that affects a small number of blocks (typically 1-3), which is a common occurrence in Proof of Work blockchains and typically does not indicate malicious intent." .
+
+w3f:MajorReorganization a owl:Class ;
+    rdfs:label "Major Reorganization" ;
+    rdfs:subClassOf w3f:ChainReorganization ;
+    skos:definition "A process boundary representing a chain reorganization that affects a significant number of blocks, which is an uncommon occurrence and may indicate network partition, consensus failure, or hostile action." .
+
+w3f:ForkResolution a owl:Class ;
+    rdfs:label "Fork Resolution" ;
+    rdfs:subClassOf w3f:ChainReorganization ;
+    skos:definition "A process boundary representing the resolution of competing chain forks, determining which branch becomes the canonical chain." .
+
+# Temporal Properties
+w3f:occursAt a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:BlockTimestamp ;
+    rdfs:label "occurs at" ;
+    skos:definition "The specific temporal instant at which this chain reorganization boundary occurs." .
+
+w3f:hasTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp" ;
+    skos:definition "The timestamp at which this chain reorganization boundary occurs." .
+
+# Block Relationships
+w3f:affectsBlocks a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:Block ;
+    rdfs:label "affects blocks" ;
+    skos:definition "The blocks that are affected by this chain reorganization boundary." .
+
+w3f:hasCommonAncestor a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:Block ;
+    rdfs:label "has common ancestor" ;
+    skos:definition "The last common block shared by the competing chain branches involved in this reorganization." .
+
+w3f:orphansBlocks a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:Block ;
+    rdfs:label "orphans blocks" ;
+    skos:definition "The blocks that were previously part of the canonical chain but are orphaned due to this reorganization." .
+
+w3f:adoptsBlocks a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:Block ;
+    rdfs:label "adopts blocks" ;
+    skos:definition "The blocks that become part of the canonical chain as a result of this reorganization." .
+
+w3f:hasReorgDepth a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has reorg depth" ;
+    skos:definition "The number of blocks that are replaced during this chain reorganization." .
+
+# Network Relationships
+w3f:occursOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "occurs on network" ;
+    skos:definition "The blockchain network on which this chain reorganization boundary occurs." .
+
+w3f:followsConsensusRules a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:ConsensusProtocol ;
+    rdfs:label "follows consensus rules" ;
+    skos:definition "The consensus protocol whose rules determine the outcome of this chain reorganization." .
+
+# Transaction Relationships
+w3f:revertsPendingTransactions a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "reverts pending transactions" ;
+    skos:definition "The transactions that were previously confirmed but are returned to pending status due to this reorganization." .
+
+w3f:reconfirmsTransactions a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "reconfirms transactions" ;
+    skos:definition "The transactions that are reconfirmed in the new canonical chain as a result of this reorganization." .
+
+w3f:hasTransactionReversal a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has transaction reversal" ;
+    skos:definition "The number of previously confirmed transactions affected by this chain reorganization." .
+
+# State Transition Properties
+w3f:revertsToDifferentState a owl:ObjectProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range w3f:StateTransition ;
+    rdfs:label "reverts to different state" ;
+    skos:definition "The state transition that results from reverting to an alternative version of the chain history." .
+
+w3f:hasStateInconsistency a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has state inconsistency" ;
+    skos:definition "Whether this chain reorganization causes temporary state inconsistencies across the network." .
+
+# Security Properties
+w3f:hasSecurityImplications a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has security implications" ;
+    skos:definition "Whether this chain reorganization has security implications for the network." .
+
+w3f:isDoublespendRisk a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is doublespend risk" ;
+    skos:definition "Whether this chain reorganization poses a risk of double-spending attacks." .
+
+w3f:hasMaliciousOrigin a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has malicious origin" ;
+    skos:definition "Whether this chain reorganization is determined to have malicious intent rather than being a natural consensus process." .
+
+# Effect Properties
+w3f:hasNetworkImpact a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:string ;
+    rdfs:label "has network impact" ;
+    skos:definition "A description of the impact this chain reorganization has on the overall network." .
+
+w3f:requiresClientAction a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "requires client action" ;
+    skos:definition "Whether this chain reorganization requires intervention from client software beyond normal consensus rules." .
+
+w3f:triggersAlerts a owl:DatatypeProperty ;
+    rdfs:domain w3f:ChainReorganization ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "triggers alerts" ;
+    skos:definition "Whether this chain reorganization triggers network security alerts due to its depth or circumstances." . 

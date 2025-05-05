@@ -1,0 +1,171 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# SmartContract Class Definition
+w3f:SmartContract a owl:Class ;
+    rdfs:label "Smart Contract" ;
+    rdfs:subClassOf bfo:0000141 ; # Immaterial Entity
+    skos:definition "A SmartContract is an independent continuant immaterial entity that represents self-executing code deployed on a blockchain network, which automatically enforces and executes predefined rules and agreements when specific conditions are met, without requiring intermediary involvement." .
+
+# Core Properties
+w3f:hasContractAddress a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has contract address" ;
+    skos:definition "The unique blockchain address where the smart contract is deployed." .
+
+w3f:hasSourceCode a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has source code" ;
+    skos:definition "The human-readable programming code of the smart contract." .
+
+w3f:hasBytecode a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has bytecode" ;
+    skos:definition "The compiled bytecode of the smart contract that executes on the blockchain." .
+
+# Deployment Properties
+w3f:hasDeploymentTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has deployment timestamp" ;
+    skos:definition "The timestamp when the smart contract was deployed to the blockchain." .
+
+w3f:hasDeploymentTransaction a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "has deployment transaction" ;
+    skos:definition "The transaction that deployed the smart contract to the blockchain." .
+
+w3f:deployedBy a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "deployed by" ;
+    skos:definition "The Web3 identity that deployed the smart contract." .
+
+# Technical Properties
+w3f:hasContractVersion a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has contract version" ;
+    skos:definition "The version identifier of the smart contract." .
+
+w3f:hasLanguage a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has language" ;
+    skos:definition "The programming language in which the smart contract is written (e.g., Solidity, Vyper)." .
+
+w3f:hasABI a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has ABI" ;
+    skos:definition "The Application Binary Interface (ABI) that defines how to interact with the smart contract." .
+
+# Network Properties
+w3f:deployedOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "deployed on network" ;
+    skos:definition "The blockchain network on which the smart contract is deployed." .
+
+w3f:hasChainId a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has chain ID" ;
+    skos:definition "The chain identifier of the blockchain network where the smart contract is deployed." .
+
+# State Properties
+w3f:hasContractState a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:ContractState ;
+    rdfs:label "has contract state" ;
+    skos:definition "The current state of the smart contract, including its stored values and balances." .
+
+w3f:hasBalance a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has balance" ;
+    skos:definition "The balance of the native cryptocurrency held by the smart contract." .
+
+# Function Properties
+w3f:hasFunction a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:ContractFunction ;
+    rdfs:label "has function" ;
+    skos:definition "A function defined in the smart contract that can be called to perform specific operations." .
+
+w3f:hasEvent a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:ContractEvent ;
+    rdfs:label "has event" ;
+    skos:definition "An event defined in the smart contract that is emitted when specific actions occur." .
+
+# Access Control Properties
+w3f:hasOwner a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "has owner" ;
+    skos:definition "The Web3 identity that owns the smart contract and has administrative control." .
+
+w3f:hasAdministrator a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "has administrator" ;
+    skos:definition "A Web3 identity with administrative privileges for the smart contract." .
+
+w3f:hasRoleAssignment a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:ContractRole ;
+    rdfs:label "has role assignment" ;
+    skos:definition "A role assignment that grants specific permissions within the smart contract." .
+
+# Asset Management Properties
+w3f:governs a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "governs" ;
+    skos:definition "A digital asset that is created, managed, or governed by this smart contract." ;
+    owl:inverseOf w3f:isGovernedByContract .
+
+w3f:locks a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "locks" ;
+    skos:definition "A digital asset that is locked or held in escrow by this smart contract." ;
+    owl:inverseOf w3f:isLockedInContract .
+
+# Interaction Properties
+w3f:interactedWithBy a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "interacted with by" ;
+    skos:definition "A Web3 identity that has interacted with this smart contract." ;
+    owl:inverseOf w3f:interactsWithContract .
+
+w3f:receivesTransaction a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "receives transaction" ;
+    skos:definition "A transaction directed to this smart contract that invokes its functions." .
+
+# Audit and Security Properties
+w3f:hasSecurityAudit a owl:ObjectProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range w3f:SecurityAudit ;
+    rdfs:label "has security audit" ;
+    skos:definition "A security audit performed on this smart contract to identify vulnerabilities." .
+
+w3f:hasVulnerabilityStatus a owl:DatatypeProperty ;
+    rdfs:domain w3f:SmartContract ;
+    rdfs:range xsd:string ;
+    rdfs:label "has vulnerability status" ;
+    skos:definition "The current vulnerability status of the smart contract based on known issues." . 

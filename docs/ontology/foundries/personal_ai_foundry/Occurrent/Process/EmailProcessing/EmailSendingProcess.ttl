@@ -1,0 +1,499 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix paf: <http://ontology.abi.ai/personal_ai_foundry#> .
+@prefix cs: <http://ontology.abi.ai/contact_schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cco: <https://www.commoncoreontologies.org/ont#> .
+
+# EmailSendingProcess Class Definition
+cs:EmailSendingProcess a owl:Class ;
+    rdfs:label "Email Sending Process"@en ;
+    rdfs:subClassOf cs:EmailProcessingProcess, bfo:0000015 ; # Process
+    skos:definition "An occurrent process that systematically manages the composition, preparation, security validation, transmission, and delivery confirmation of outgoing email messages across multiple account sources, while maintaining a coherent relationship context through integration with contact intelligence."@en ;
+    skos:note "Serves as the output channel for email communications within the personal email management system."@en .
+
+# === Sending Phase Classes ===
+
+# CompositionPhase
+cs:CompositionPhase a owl:Class ;
+    rdfs:label "Composition Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Initial phase for creating and formatting message content."@en .
+
+# PreparationPhase
+cs:PreparationPhase a owl:Class ;
+    rdfs:label "Preparation Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Phase for processing attachments and preparing message structure."@en .
+
+# ValidationPhase
+cs:ValidationPhase a owl:Class ;
+    rdfs:label "Validation Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Phase for validating message content and recipients."@en .
+
+# SecurityPhase
+cs:SecurityPhase a owl:Class ;
+    rdfs:label "Security Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Phase for applying security measures to outgoing messages."@en .
+
+# TransmissionPhase
+cs:TransmissionPhase a owl:Class ;
+    rdfs:label "Transmission Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Phase for transmitting the message to mail servers."@en .
+
+# ConfirmationPhase
+cs:ConfirmationPhase a owl:Class ;
+    rdfs:label "Confirmation Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Phase for confirming message delivery status."@en .
+
+# SynchronizationPhase
+cs:SynchronizationPhase a owl:Class ;
+    rdfs:label "Synchronization Phase"@en ;
+    rdfs:subClassOf cs:EmailSendingProcess ;
+    skos:definition "Final phase for syncing sent messages with providers and updating related data."@en .
+
+# === Input Properties ===
+
+# EmailAccounts Property
+cs:emailAccounts a owl:ObjectProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range cs:EmailAccount ;
+    rdfs:label "email accounts"@en ;
+    skos:definition "Email accounts available for sending messages."@en .
+
+# DefaultSenderAccount Property
+cs:defaultSenderAccount a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "default sender account"@en ;
+    skos:definition "Default account ID for sending emails."@en .
+
+# OutgoingRateLimits Property
+cs:outgoingRateLimits a owl:ObjectProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range cs:RateLimit ;
+    rdfs:label "outgoing rate limits"@en ;
+    skos:definition "Per-account rate limits for outgoing messages."@en .
+
+# SignatureSettings Property
+cs:signatureSettings a owl:ObjectProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range cs:SignatureSettings ;
+    rdfs:label "signature settings"@en ;
+    skos:definition "Email signature configuration."@en .
+
+# SecuritySettings Property
+cs:securitySettings a owl:ObjectProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range cs:SecuritySettings ;
+    rdfs:label "security settings"@en ;
+    skos:definition "Outbound security options."@en .
+
+# DeliveryReporting Property
+cs:deliveryReporting a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "delivery reporting"@en ;
+    skos:definition "Whether to request delivery receipts."@en .
+
+# === Process Properties ===
+
+# MaxAttachmentSize Property
+cs:maxAttachmentSize a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "maximum attachment size"@en ;
+    skos:definition "Maximum attachment size in bytes."@en .
+
+# ConnectTimeout Property
+cs:connectTimeout a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "connect timeout"@en ;
+    skos:definition "Seconds to wait for SMTP connection."@en .
+
+# SendTimeout Property
+cs:sendTimeout a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "send timeout"@en ;
+    skos:definition "Seconds to wait for sending completion."@en .
+
+# RetryAttempts Property
+cs:retryAttempts a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "retry attempts"@en ;
+    skos:definition "Number of retries for failed sends."@en .
+
+# RetryInterval Property
+cs:retryInterval a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "retry interval"@en ;
+    skos:definition "Seconds between retry attempts."@en .
+
+# QueueStrategy Property
+cs:queueStrategy a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "queue strategy"@en ;
+    skos:definition "How to handle message queue."@en .
+
+# ConcurrentSends Property
+cs:concurrentSends a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "concurrent sends"@en ;
+    skos:definition "Maximum simultaneous sends."@en .
+
+# === Output Properties ===
+
+# MessagesSent Property
+cs:messagesSent a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "messages sent"@en ;
+    skos:definition "Total number of messages sent."@en .
+
+# SentMessageIds Property
+cs:sentMessageIds a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "sent message IDs"@en ;
+    skos:definition "IDs of successfully sent messages."@en .
+
+# FailedMessageIds Property
+cs:failedMessageIds a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "failed message IDs"@en ;
+    skos:definition "IDs of messages that failed to send."@en .
+
+# SentByAccount Property
+cs:sentByAccount a owl:ObjectProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range cs:AccountMessageCount ;
+    rdfs:label "sent by account"@en ;
+    skos:definition "Count of messages by sending account."@en .
+
+# DeliveryConfirmations Property
+cs:deliveryConfirmations a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "delivery confirmations"@en ;
+    skos:definition "Number of confirmed deliveries."@en .
+
+# AvgDeliveryTime Property
+cs:avgDeliveryTime a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "average delivery time"@en ;
+    skos:definition "Average time from send to delivery."@en .
+
+# === Supporting Classes ===
+
+# SignatureSettings Class
+cs:SignatureSettings a owl:Class ;
+    rdfs:label "Signature Settings"@en ;
+    rdfs:subClassOf paf:ConfigurationSettings ;
+    skos:definition "Configuration for email signatures."@en .
+
+# SignatureSettings Properties
+cs:enabled a owl:DatatypeProperty ;
+    rdfs:domain cs:SignatureSettings ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "enabled"@en ;
+    skos:definition "Whether signatures are enabled."@en .
+
+cs:format a owl:DatatypeProperty ;
+    rdfs:domain cs:SignatureSettings ;
+    rdfs:range xsd:string ;
+    rdfs:label "format"@en ;
+    skos:definition "Format of the signature (plain/html)."@en .
+
+cs:position a owl:DatatypeProperty ;
+    rdfs:domain cs:SignatureSettings ;
+    rdfs:range xsd:string ;
+    rdfs:label "position"@en ;
+    skos:definition "Position of the signature (top/bottom)."@en .
+
+cs:content a owl:DatatypeProperty ;
+    rdfs:domain cs:SignatureSettings ;
+    rdfs:range xsd:string ;
+    rdfs:label "content"@en ;
+    skos:definition "Content of the signature."@en .
+
+# SecuritySettings Class
+cs:SecuritySettings a owl:Class ;
+    rdfs:label "Security Settings"@en ;
+    rdfs:subClassOf paf:ConfigurationSettings ;
+    skos:definition "Security configuration for outgoing emails."@en .
+
+# SecuritySettings Properties
+cs:signMessages a owl:DatatypeProperty ;
+    rdfs:domain cs:SecuritySettings ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "sign messages"@en ;
+    skos:definition "Whether to digitally sign messages."@en .
+
+cs:encryptSensitive a owl:DatatypeProperty ;
+    rdfs:domain cs:SecuritySettings ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "encrypt sensitive"@en ;
+    skos:definition "Whether to encrypt sensitive content."@en .
+
+cs:securityLevel a owl:DatatypeProperty ;
+    rdfs:domain cs:SecuritySettings ;
+    rdfs:range xsd:string ;
+    rdfs:label "security level"@en ;
+    skos:definition "Overall security level for outgoing messages."@en .
+
+# MessageSentEvent Class
+cs:MessageSentEvent a owl:Class ;
+    rdfs:label "Message Sent Event"@en ;
+    rdfs:subClassOf paf:Event ;
+    skos:definition "An event representing the sending of an email message."@en .
+
+# MessageSentEvent Properties
+cs:eventId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range xsd:string ;
+    rdfs:label "event ID"@en ;
+    skos:definition "Unique identifier for the event."@en .
+
+cs:timestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "timestamp"@en ;
+    skos:definition "When the event occurred."@en .
+
+cs:accountId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range xsd:string ;
+    rdfs:label "account ID"@en ;
+    skos:definition "Identifier for the sending email account."@en .
+
+cs:messageId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range xsd:string ;
+    rdfs:label "message ID"@en ;
+    skos:definition "Identifier for the sent message."@en .
+
+cs:messageDetails a owl:ObjectProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range cs:MessageDetails ;
+    rdfs:label "message details"@en ;
+    skos:definition "Details about the sent message."@en .
+
+cs:securityMeasures a owl:ObjectProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range cs:SecurityMeasures ;
+    rdfs:label "security measures"@en ;
+    skos:definition "Security measures applied to the message."@en .
+
+cs:deliveryStatus a owl:ObjectProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range cs:DeliveryStatus ;
+    rdfs:label "delivery status"@en ;
+    skos:definition "Status of message delivery."@en .
+
+cs:processingStats a owl:ObjectProperty ;
+    rdfs:domain cs:MessageSentEvent ;
+    rdfs:range cs:ProcessingStats ;
+    rdfs:label "processing statistics"@en ;
+    skos:definition "Timing statistics for message processing."@en .
+
+# MessageDetails Class
+cs:MessageDetails a owl:Class ;
+    rdfs:label "Message Details"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Details about a sent email message."@en .
+
+# MessageDetails Properties
+cs:sender a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:string ;
+    rdfs:label "sender"@en ;
+    skos:definition "Email address of the sender."@en .
+
+cs:recipients a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:string ;
+    rdfs:label "recipients"@en ;
+    skos:definition "Email addresses of recipients."@en .
+
+cs:subject a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:string ;
+    rdfs:label "subject"@en ;
+    skos:definition "Subject line of the message."@en .
+
+cs:sentTimestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "sent timestamp"@en ;
+    skos:definition "When the message was sent."@en .
+
+cs:size a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:integer ;
+    rdfs:label "size"@en ;
+    skos:definition "Size of the message in bytes."@en .
+
+cs:hasAttachments a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has attachments"@en ;
+    skos:definition "Whether the message has attachments."@en .
+
+cs:threadId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageDetails ;
+    rdfs:range xsd:string ;
+    rdfs:label "thread ID"@en ;
+    skos:definition "Identifier for the conversation thread."@en .
+
+# SecurityMeasures Class
+cs:SecurityMeasures a owl:Class ;
+    rdfs:label "Security Measures"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Security measures applied to a sent message."@en .
+
+# SecurityMeasures Properties
+cs:dkimSigned a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityMeasures ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "DKIM signed"@en ;
+    skos:definition "Whether the message was DKIM signed."@en .
+
+cs:encrypted a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityMeasures ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "encrypted"@en ;
+    skos:definition "Whether the message was encrypted."@en .
+
+cs:spfAligned a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityMeasures ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "SPF aligned"@en ;
+    skos:definition "Whether the sending domain aligns with SPF records."@en .
+
+# DeliveryStatus Class
+cs:DeliveryStatus a owl:Class ;
+    rdfs:label "Delivery Status"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Status of message delivery."@en .
+
+# DeliveryStatus Properties
+cs:status a owl:DatatypeProperty ;
+    rdfs:domain cs:DeliveryStatus ;
+    rdfs:range xsd:string ;
+    rdfs:label "status"@en ;
+    skos:definition "Delivery status (e.g., delivered, failed)."@en .
+
+cs:deliveredTimestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:DeliveryStatus ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "delivered timestamp"@en ;
+    skos:definition "When the message was delivered."@en .
+
+cs:serverResponse a owl:DatatypeProperty ;
+    rdfs:domain cs:DeliveryStatus ;
+    rdfs:range xsd:string ;
+    rdfs:label "server response"@en ;
+    skos:definition "Response from the receiving mail server."@en .
+
+cs:issue a owl:DatatypeProperty ;
+    rdfs:domain cs:DeliveryStatus ;
+    rdfs:range xsd:string ;
+    rdfs:label "issue"@en ;
+    skos:definition "Description of delivery issue, if any."@en .
+
+# ProcessingStats Class
+cs:ProcessingStats a owl:Class ;
+    rdfs:label "Processing Statistics"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Timing statistics for message processing."@en .
+
+# ProcessingStats Properties
+cs:queueTime a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "queue time"@en ;
+    skos:definition "Time in milliseconds the message spent in queue."@en .
+
+cs:preparationTime a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "preparation time"@en ;
+    skos:definition "Time in milliseconds to prepare the message."@en .
+
+cs:transmissionTime a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "transmission time"@en ;
+    skos:definition "Time in milliseconds to transmit the message."@en .
+
+cs:totalProcessingTime a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "total processing time"@en ;
+    skos:definition "Total time in milliseconds from start to completion."@en .
+
+# === Process Flow Relationships ===
+
+# HasPhase Property
+cs:hasPhase a owl:ObjectProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range cs:EmailSendingProcess ;
+    rdfs:label "has phase"@en ;
+    skos:definition "Relates a sending process to its phases."@en .
+
+# PhaseOrder Property
+cs:phaseOrder a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailSendingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "phase order"@en ;
+    skos:definition "Numerical order of a phase in the process."@en .
+
+# Process Flow Instances
+cs:emailSendingProcess a cs:EmailSendingProcess ;
+    rdfs:label "Email Sending Process"@en ;
+    cs:hasPhase cs:compositionPhase, cs:preparationPhase, cs:validationPhase,
+               cs:securityPhase, cs:transmissionPhase, cs:confirmationPhase,
+               cs:synchronizationPhase .
+
+cs:compositionPhase a cs:CompositionPhase ;
+    rdfs:label "Composition Phase"@en ;
+    cs:phaseOrder 1 .
+
+cs:preparationPhase a cs:PreparationPhase ;
+    rdfs:label "Preparation Phase"@en ;
+    cs:phaseOrder 2 .
+
+cs:validationPhase a cs:ValidationPhase ;
+    rdfs:label "Validation Phase"@en ;
+    cs:phaseOrder 3 .
+
+cs:securityPhase a cs:SecurityPhase ;
+    rdfs:label "Security Phase"@en ;
+    cs:phaseOrder 4 .
+
+cs:transmissionPhase a cs:TransmissionPhase ;
+    rdfs:label "Transmission Phase"@en ;
+    cs:phaseOrder 5 .
+
+cs:confirmationPhase a cs:ConfirmationPhase ;
+    rdfs:label "Confirmation Phase"@en ;
+    cs:phaseOrder 6 .
+
+cs:synchronizationPhase a cs:SynchronizationPhase ;
+    rdfs:label "Synchronization Phase"@en ;
+    cs:phaseOrder 7 . 

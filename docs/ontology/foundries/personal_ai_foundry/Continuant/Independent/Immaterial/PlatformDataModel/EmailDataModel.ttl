@@ -1,0 +1,277 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix paf: <http://ontology.abi.ai/personal_ai_foundry#> .
+@prefix cs: <http://ontology.abi.ai/contact_schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cco: <https://www.commoncoreontologies.org/ont#> .
+
+# EmailDataModel Class Definition
+cs:EmailDataModel a owl:Class ;
+    rdfs:label "Email Data Model" ;
+    rdfs:subClassOf paf:PlatformDataModel, bfo:0000006 ; # Immaterial Entity
+    skos:definition "An immaterial independent continuant that defines the structure, properties, and relationships of email data within email service platforms, standardizing email communication artifacts across providers." ;
+    skos:note "Establishes a canonical data model for email systems across different providers." .
+
+# === Provider-specific Properties ===
+
+# ProviderName Property
+cs:providerName a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "provider name" ;
+    skos:definition "Name of the email service provider" .
+
+# ApiVersion Property
+cs:apiVersion a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "API version" ;
+    skos:definition "Version of provider API being used" .
+
+# DataSchemaUrl Property
+cs:dataSchemaUrl a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "data schema URL" ;
+    skos:definition "Reference to provider's schema documentation" .
+
+# ProtocolSupport Property
+cs:protocolSupport a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "protocol support" ;
+    skos:definition "Email protocols supported by provider" .
+
+# === Structural Properties ===
+
+# FolderHierarchy Property
+cs:folderHierarchy a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "folder hierarchy" ;
+    skos:definition "Whether folders can be nested" .
+
+# LabelSystem Property
+cs:labelSystem a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "label system" ;
+    skos:definition "Whether the system uses labels vs folders" .
+
+# ThreadingModel Property
+cs:threadingModel a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "threading model" ;
+    skos:definition "How messages are grouped into threads" .
+
+# MessageSizeLimit Property
+cs:messageSizeLimit a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:integer ;
+    rdfs:label "message size limit" ;
+    skos:definition "Maximum message size in bytes" .
+
+# AttachmentLimit Property
+cs:attachmentLimit a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:integer ;
+    rdfs:label "attachment limit" ;
+    skos:definition "Maximum attachment size in bytes" .
+
+# === Access Properties ===
+
+# UserAccess Property
+cs:userAccess a owl:ObjectProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range cs:AccessLevel ;
+    rdfs:label "user access" ;
+    skos:definition "User access level to email data" .
+
+# QueryCapabilities Property
+cs:queryCapabilities a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "query capabilities" ;
+    skos:definition "Supported query mechanisms" .
+
+# BatchOperations Property
+cs:batchOperations a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "batch operations" ;
+    skos:definition "Support for batch operations" .
+
+# RateLimits Property
+cs:rateLimits a owl:ObjectProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range cs:RateLimit ;
+    rdfs:label "rate limits" ;
+    skos:definition "API usage restrictions" .
+
+# === Security Properties ===
+
+# AuthenticationMethods Property
+cs:authenticationMethods a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "authentication methods" ;
+    skos:definition "Methods used to authenticate to the email service" .
+
+# DataEncryption Property
+cs:dataEncryption a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "data encryption" ;
+    skos:definition "Encryption methods used for data protection" .
+
+# AccessControl Property
+cs:accessControl a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "access control" ;
+    skos:definition "Access control mechanisms employed" .
+
+# ComplianceStandards Property
+cs:complianceStandards a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range xsd:string ;
+    rdfs:label "compliance standards" ;
+    skos:definition "Regulatory standards the platform complies with" .
+
+# === Supporting Classes ===
+
+# AccessLevel Class
+cs:AccessLevel a owl:Class ;
+    rdfs:label "Access Level" ;
+    rdfs:subClassOf paf:PlatformDataModel ;
+    skos:definition "Level of access granted to email data" .
+
+# AccessLevel Instances
+cs:FullAccess a cs:AccessLevel ;
+    rdfs:label "Full Access" ;
+    skos:definition "Complete access to read and modify all email data" .
+
+cs:ReadOnlyAccess a cs:AccessLevel ;
+    rdfs:label "Read Only Access" ;
+    skos:definition "Permission to read but not modify email data" .
+
+cs:LimitedAccess a cs:AccessLevel ;
+    rdfs:label "Limited Access" ;
+    skos:definition "Restricted access to specific parts of email data" .
+
+# RateLimit Class
+cs:RateLimit a owl:Class ;
+    rdfs:label "Rate Limit" ;
+    rdfs:subClassOf paf:PlatformDataModel ;
+    skos:definition "Restrictions on API usage frequency" .
+
+# RateLimit Properties
+cs:queries a owl:DatatypeProperty ;
+    rdfs:domain cs:RateLimit ;
+    rdfs:range xsd:integer ;
+    rdfs:label "queries" ;
+    skos:definition "Number of allowed queries" .
+
+cs:timeframe a owl:DatatypeProperty ;
+    rdfs:domain cs:RateLimit ;
+    rdfs:range xsd:string ;
+    rdfs:label "timeframe" ;
+    skos:definition "Time period for the rate limit" .
+
+# === Data Element Classes ===
+
+# MessageElements Class
+cs:MessageElements a owl:Class ;
+    rdfs:label "Message Elements" ;
+    rdfs:subClassOf paf:PlatformDataModel ;
+    skos:definition "Core elements that comprise email messages" .
+
+# AccountElements Class
+cs:AccountElements a owl:Class ;
+    rdfs:label "Account Elements" ;
+    rdfs:subClassOf paf:PlatformDataModel ;
+    skos:definition "Core elements that comprise email accounts" .
+
+# Provider Implementation Classes
+cs:ProviderImplementation a owl:Class ;
+    rdfs:label "Provider Implementation" ;
+    rdfs:subClassOf paf:PlatformDataModel ;
+    skos:definition "Specific implementation details for an email provider" .
+
+# Provider Instances
+cs:GmailImplementation a cs:ProviderImplementation ;
+    rdfs:label "Gmail Implementation" ;
+    cs:providerName "Gmail" ;
+    cs:apiVersion "v1" ;
+    cs:dataSchemaUrl "https://developers.google.com/gmail/api/reference/rest"^^xsd:anyURI ;
+    cs:folderHierarchy false ;
+    cs:labelSystem true ;
+    cs:threadingModel "conversation-id based" ;
+    cs:messageSizeLimit 25000000 ;
+    cs:attachmentLimit 25000000 ;
+    cs:batchOperations true .
+
+cs:OutlookImplementation a cs:ProviderImplementation ;
+    rdfs:label "Outlook Implementation" ;
+    cs:providerName "Microsoft Outlook" ;
+    cs:apiVersion "v2.0" ;
+    cs:dataSchemaUrl "https://docs.microsoft.com/en-us/graph/api/resources/message"^^xsd:anyURI ;
+    cs:folderHierarchy true ;
+    cs:labelSystem false ;
+    cs:threadingModel "conversationId based" ;
+    cs:messageSizeLimit 150000000 ;
+    cs:attachmentLimit 150000000 ;
+    cs:batchOperations true .
+
+# === Relationships ===
+
+# HasMessageElements Property
+cs:hasMessageElements a owl:ObjectProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range cs:MessageElements ;
+    rdfs:label "has message elements" ;
+    skos:definition "Relates an email data model to its message elements" .
+
+# HasAccountElements Property
+cs:hasAccountElements a owl:ObjectProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range cs:AccountElements ;
+    rdfs:label "has account elements" ;
+    skos:definition "Relates an email data model to its account elements" .
+
+# HasProviderImplementation Property
+cs:hasProviderImplementation a owl:ObjectProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range cs:ProviderImplementation ;
+    rdfs:label "has provider implementation" ;
+    skos:definition "Relates an email data model to specific provider implementations" .
+
+# HasCapability Property
+cs:hasCapability a owl:ObjectProperty ;
+    rdfs:domain cs:EmailDataModel ;
+    rdfs:range cs:EmailCapability ;
+    rdfs:label "has capability" ;
+    skos:definition "Relates an email data model to its capabilities" .
+
+# EmailCapability Class
+cs:EmailCapability a owl:Class ;
+    rdfs:label "Email Capability" ;
+    rdfs:subClassOf paf:PlatformDataModel ;
+    skos:definition "A capability provided by an email platform" .
+
+# Capability Types
+cs:QueryCapability a cs:EmailCapability ;
+    rdfs:label "Query Capability" ;
+    skos:definition "Ability to search and retrieve email data" .
+
+cs:ModificationCapability a cs:EmailCapability ;
+    rdfs:label "Modification Capability" ;
+    skos:definition "Ability to alter email data" .
+
+cs:AnalyticsCapability a cs:EmailCapability ;
+    rdfs:label "Analytics Capability" ;
+    skos:definition "Ability to analyze email data for insights" . 

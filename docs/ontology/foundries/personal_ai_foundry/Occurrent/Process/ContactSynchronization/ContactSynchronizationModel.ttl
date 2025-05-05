@@ -1,0 +1,354 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/ContactSynchronizationModel> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/ContactSynchronization/ContactSynchronizationModel.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology model for contact synchronization across multiple platforms."@en ;
+    dc:license "MIT" ;
+    dc:title "Contact Synchronization Model Ontology" .
+
+#################################################################
+# BUCKET 1: WHAT/WHO → Material Entities (Independent Continuants)
+#################################################################
+
+# Platform and Device Entities
+
+cs:ContactPlatform a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "Contact Platform"@en ;
+    skos:definition "A digital platform or service that contains contact information."@en ;
+    skos:example "LinkedIn, Instagram, Facebook, email service."@en .
+
+cs:LinkedInPlatform a owl:Class ;
+    rdfs:subClassOf cs:ContactPlatform ;
+    rdfs:label "LinkedIn Platform"@en ;
+    skos:definition "The LinkedIn platform as a source of professional contact information."@en .
+
+cs:FacebookPlatform a owl:Class ;
+    rdfs:subClassOf cs:ContactPlatform ;
+    rdfs:label "Facebook Platform"@en ;
+    skos:definition "The Facebook platform as a source of personal and social contact information."@en .
+
+cs:InstagramPlatform a owl:Class ;
+    rdfs:subClassOf cs:ContactPlatform ;
+    rdfs:label "Instagram Platform"@en ;
+    skos:definition "The Instagram platform as a source of social and creative contact information."@en .
+
+cs:EmailPlatform a owl:Class ;
+    rdfs:subClassOf cs:ContactPlatform ;
+    rdfs:label "Email Platform"@en ;
+    skos:definition "An email service platform containing contact information from email communications."@en ;
+    skos:example "Gmail, Outlook, Yahoo Mail."@en .
+
+cs:SynchronizationDevice a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "Synchronization Device"@en ;
+    skos:definition "A physical device where contact information is synchronized to."@en ;
+    skos:example "iPhone, Android phone, computer."@en .
+
+cs:IPhone a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationDevice ;
+    rdfs:label "iPhone"@en ;
+    skos:definition "An Apple iPhone device where contacts are synchronized to."@en .
+
+# Contact Data Entities
+
+cs:ContactDataRepository a owl:Class ;
+    rdfs:subClassOf paf:PersonalDataStore ;
+    rdfs:label "Contact Data Repository"@en ;
+    skos:definition "A storage system for contact information."@en ;
+    skos:example "iPhone contacts database, platform-specific contact storage."@en .
+
+cs:UnifiedContactRepository a owl:Class ;
+    rdfs:subClassOf cs:ContactDataRepository ;
+    rdfs:label "Unified Contact Repository"@en ;
+    skos:definition "A storage system for deduplicated and merged contact information from multiple sources."@en ;
+    skos:example "iPhone contacts app with integrated data from multiple platforms."@en .
+
+#################################################################
+# BUCKET 2: HOW-IT-IS → Qualities (Specifically Dependent Continuants)
+#################################################################
+
+cs:ContactCompleteness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Contact Completeness"@en ;
+    skos:definition "The quality reflecting how complete the contact information is."@en ;
+    skos:example "Full profile, partial data, minimal information."@en .
+
+cs:SourceReliability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Source Reliability"@en ;
+    skos:definition "The quality reflecting how reliable a contact source is for providing accurate information."@en ;
+    skos:example "Highly reliable, moderately reliable, unreliable."@en .
+
+cs:DataFreshness a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Data Freshness"@en ;
+    skos:definition "The quality reflecting how recent and up-to-date the contact information is."@en ;
+    skos:example "Recently updated, outdated, stale."@en .
+
+cs:IdentityResolutionConfidence a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Identity Resolution Confidence"@en ;
+    skos:definition "The quality reflecting the degree of confidence in determining that two contact records represent the same person."@en ;
+    skos:example "High confidence match, probable match, possible match."@en .
+
+cs:SynchronizationStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Synchronization Status"@en ;
+    skos:definition "The quality reflecting the current state of synchronization for a contact."@en ;
+    skos:example "Fully synced, partially synced, not synced, sync error."@en .
+
+#################################################################
+# BUCKET 3: WHY-POTENTIAL → Realizable Entities (Specifically Dependent Continuants)
+#################################################################
+
+cs:ContactSynchronizationRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
+    rdfs:label "Contact Synchronization Role"@en ;
+    skos:definition "The role of a system in synchronizing contact information across platforms."@en ;
+    skos:example "Source platform role, destination device role, intermediary service role."@en .
+
+cs:ContactDeduplicationFunction a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ; # Function
+    rdfs:label "Contact Deduplication Function"@en ;
+    skos:definition "The function of identifying and merging duplicate contact records."@en .
+
+cs:ContactEnrichmentFunction a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ; # Function
+    rdfs:label "Contact Enrichment Function"@en ;
+    skos:definition "The function of enhancing contact records with additional information from multiple sources."@en .
+
+cs:PlatformAuthorizationFunction a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ; # Function
+    rdfs:label "Platform Authorization Function"@en ;
+    skos:definition "The function of authenticating and obtaining permission to access contact data from a platform."@en .
+
+cs:PrivacyPreservationFunction a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ; # Function
+    rdfs:label "Privacy Preservation Function"@en ;
+    skos:definition "The function of maintaining privacy controls during contact synchronization."@en .
+
+#################################################################
+# BUCKET 4: HOW-IT-HAPPENS → Processes (Occurrents)
+#################################################################
+
+cs:ContactSynchronizationProcess a owl:Class ;
+    rdfs:subClassOf paf:CrossPlatformSynchronization ;
+    rdfs:label "Contact Synchronization Process"@en ;
+    skos:definition "The overall process of synchronizing contacts across multiple platforms."@en .
+
+cs:PlatformAuthenticationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Platform Authentication Process"@en ;
+    skos:definition "The process of authenticating with a platform to gain access to contact data."@en ;
+    skos:example "OAuth authentication, API key validation, credential verification."@en .
+
+cs:ContactDataExtractionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Contact Data Extraction Process"@en ;
+    skos:definition "The process of extracting contact information from a source platform."@en ;
+    skos:example "API calls to retrieve LinkedIn connections, scraping email contacts from Gmail."@en .
+
+cs:IdentityResolutionProcess a owl:Class ;
+    rdfs:subClassOf paf:IdentityResolution ;
+    rdfs:label "Identity Resolution Process"@en ;
+    skos:definition "The process of determining when different contact records represent the same person."@en ;
+    skos:example "Matching email addresses, name similarity analysis, phone number matching."@en .
+
+cs:ContactMergingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Contact Merging Process"@en ;
+    skos:definition "The process of combining information from multiple records of the same contact."@en ;
+    skos:example "Taking professional details from LinkedIn, personal email from Gmail, and birthday from Facebook."@en .
+
+cs:ConflictResolutionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Conflict Resolution Process"@en ;
+    skos:definition "The process of resolving conflicts when different sources have contradicting information for the same contact."@en ;
+    skos:example "Selecting the most recent phone number, preserving both work and personal emails."@en .
+
+cs:ContactWriteProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Contact Write Process"@en ;
+    skos:definition "The process of writing synchronized contact information to the destination device."@en ;
+    skos:example "Adding contacts to iPhone address book, updating existing contact records."@en .
+
+cs:SynchronizationVerificationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Synchronization Verification Process"@en ;
+    skos:definition "The process of verifying that contact synchronization was successful."@en ;
+    skos:example "Counting synced contacts, validating data integrity, checking for sync errors."@en .
+
+#################################################################
+# BUCKET 5: WHEN → Temporal Regions (Occurrents)
+#################################################################
+
+cs:SynchronizationInterval a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Synchronization Interval"@en ;
+    skos:definition "A defined interval of time during which contact synchronization occurs."@en ;
+    skos:example "Daily sync window, manual sync session, periodic update interval."@en .
+
+cs:LastSyncTimestamp a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Last Sync Timestamp"@en ;
+    skos:definition "The specific point in time when a contact or platform was last synchronized."@en .
+
+cs:ContactModificationTimestamp a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Contact Modification Timestamp"@en ;
+    skos:definition "The specific point in time when a contact was last modified on its source platform."@en .
+
+cs:SynchronizationFrequencyPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Synchronization Frequency Period"@en ;
+    skos:definition "A recurring time interval that defines how often synchronization occurs."@en ;
+    skos:example "Hourly, daily, weekly, on-demand."@en .
+
+#################################################################
+# BUCKET 6: WHERE → Spatial Regions (Occurrents)
+#################################################################
+
+cs:PlatformAPIEndpoint a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ; # Spatial Region
+    rdfs:label "Platform API Endpoint"@en ;
+    skos:definition "A digital location where contact data can be accessed from a platform."@en ;
+    skos:example "LinkedIn Connections API, Gmail Contacts API, Facebook Friends API."@en .
+
+cs:ContactStorageLocation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ; # Spatial Region
+    rdfs:label "Contact Storage Location"@en ;
+    skos:definition "A digital location where contact information is stored."@en ;
+    skos:example "iPhone Contacts database, cloud contact storage."@en .
+
+cs:DataTransferChannel a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ; # Spatial Region
+    rdfs:label "Data Transfer Channel"@en ;
+    skos:definition "A communication pathway through which contact data is transferred during synchronization."@en ;
+    skos:example "Secure HTTPS connection, local data transfer, encrypted channel."@en .
+
+#################################################################
+# BUCKET 7: HOW-WE-KNOW/EVIDENCE → Information Content Entities (Generically Dependent Continuants)
+#################################################################
+
+cs:ContactRecord a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Contact Record"@en ;
+    skos:definition "A structured representation of information about a contact."@en ;
+    skos:example "Name, email addresses, phone numbers, social media handles, profile pictures."@en .
+
+cs:ContactMergeRule a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Contact Merge Rule"@en ;
+    skos:definition "A rule defining how to combine information from different sources for the same contact."@en ;
+    skos:example "Priority ordering of sources for each field type, conflict resolution strategies."@en .
+
+cs:SynchronizationLog a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Synchronization Log"@en ;
+    skos:definition "A record of synchronization activities, successes, and failures."@en ;
+    skos:example "Timestamps, contact counts, error messages, platforms accessed."@en .
+
+cs:ContactAttributeProvenance a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Contact Attribute Provenance"@en ;
+    skos:definition "Metadata about the source and history of a specific contact attribute."@en ;
+    skos:example "Email is from LinkedIn, phone number is from Facebook, updated on specific date."@en .
+
+cs:SynchronizationPolicy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Synchronization Policy"@en ;
+    skos:definition "A set of rules governing how contacts are synchronized across platforms."@en ;
+    skos:example "Which platforms to include, which attributes to sync, privacy settings."@en .
+
+#################################################################
+# Key Object Properties
+#################################################################
+
+cs:hasSourcePlatform a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:ContactPlatform ;
+    rdfs:label "has source platform"@en ;
+    skos:definition "Relates a synchronization process to a platform from which contacts are obtained."@en .
+
+cs:hasDestinationDevice a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SynchronizationDevice ;
+    rdfs:label "has destination device"@en ;
+    skos:definition "Relates a synchronization process to the device where contacts will be synchronized to."@en .
+
+cs:hasOriginalSource a owl:ObjectProperty ;
+    rdfs:domain cs:ContactRecord ;
+    rdfs:range cs:ContactPlatform ;
+    rdfs:label "has original source"@en ;
+    skos:definition "Relates a contact record to the platform it originally came from."@en .
+
+cs:hasSynchronizationStatus a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range cs:SynchronizationStatus ;
+    rdfs:label "has synchronization status"@en ;
+    skos:definition "Relates an entity to its current synchronization status."@en .
+
+cs:followsPolicy a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SynchronizationPolicy ;
+    rdfs:label "follows policy"@en ;
+    skos:definition "Relates a synchronization process to the policy it follows."@en .
+
+cs:producesLog a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SynchronizationLog ;
+    rdfs:label "produces log"@en ;
+    skos:definition "Relates a synchronization process to the log it produces."@en .
+
+cs:usesRule a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:ContactMergeRule ;
+    rdfs:label "uses rule"@en ;
+    skos:definition "Relates a contact merging process to the rules it applies."@en .
+
+cs:occursDuring a owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ; # Process
+    rdfs:range cs:SynchronizationInterval ;
+    rdfs:label "occurs during"@en ;
+    skos:definition "Relates a process to the temporal interval during which it occurs."@en .
+
+#################################################################
+# Key Data Properties
+#################################################################
+
+cs:hasLastSyncTime a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has last sync time"@en ;
+    skos:definition "Specifies the date and time when an entity was last synchronized."@en .
+
+cs:hasMatchConfidence a owl:DatatypeProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has match confidence"@en ;
+    skos:definition "Specifies a quantitative score representing the confidence in a contact match."@en .
+
+cs:hasSyncFrequency a owl:DatatypeProperty ;
+    rdfs:domain cs:SynchronizationPolicy ;
+    rdfs:range xsd:string ;
+    rdfs:label "has sync frequency"@en ;
+    skos:definition "Specifies how often synchronization should occur."@en .
+
+cs:hasAttributeSource a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactRecord ;
+    rdfs:range xsd:string ;
+    rdfs:label "has attribute source"@en ;
+    skos:definition "Specifies which platform a specific contact attribute came from."@en . 

@@ -1,0 +1,484 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+
+<http://ontology.naas.ai/abi/personal-ai/PersonalAICore> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/PersonalAICore.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Core ontology for personal AI concepts and capabilities."@en ;
+    dc:license "MIT" ;
+    dc:title "Personal AI Core Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+# CONTINUANT CLASSES
+
+# Independent Continuants
+
+paf:AIAgent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "AI Agent"@en ;
+    skos:definition "A computational entity capable of perceiving its environment and taking actions to accomplish goals."@en ;
+    skos:example "Personal assistant AI, recommendation system, autonomous agent."@en .
+
+paf:UserIdentity a owl:Class ;
+    rdfs:subClassOf cco:ont00001180 ; # Organization
+    rdfs:label "User Identity"@en ;
+    skos:definition "The digital representation of a person's identity that interacts with AI systems."@en ;
+    skos:example "User profile, digital twin, personal data space."@en .
+
+paf:ModelArchitecture a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "Model Architecture"@en ;
+    skos:definition "The structural design and organization of an AI model or system."@en ;
+    skos:example "Transformer architecture, deep neural network, hybrid symbolic-neural system."@en .
+
+paf:PersonalDataStore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "Personal Data Store"@en ;
+    skos:definition "A system or location where personal data is stored, managed, and maintained for AI processing and personalization."@en ;
+    skos:example "Local knowledge base, personal memory system, data vault."@en .
+
+paf:HealthDataStore a owl:Class ;
+    rdfs:subClassOf paf:PersonalDataStore ;
+    rdfs:label "Health Data Store"@en ;
+    skos:definition "A specialized personal data store containing health and wellness information."@en ;
+    skos:example "Fitness tracker data, medical records, sleep patterns, nutritional information."@en .
+
+paf:FinancialDataStore a owl:Class ;
+    rdfs:subClassOf paf:PersonalDataStore ;
+    rdfs:label "Financial Data Store"@en ;
+    skos:definition "A specialized personal data store containing financial information and transactions."@en ;
+    skos:example "Bank account information, spending patterns, investments, budgets."@en .
+
+paf:SocialDataStore a owl:Class ;
+    rdfs:subClassOf paf:PersonalDataStore ;
+    rdfs:label "Social Data Store"@en ;
+    skos:definition "A specialized personal data store containing social connections and interactions."@en ;
+    skos:example "Contact information, social media connections, conversation histories, relationship mapping."@en .
+
+paf:ProductivityDataStore a owl:Class ;
+    rdfs:subClassOf paf:PersonalDataStore ;
+    rdfs:label "Productivity Data Store"@en ;
+    skos:definition "A specialized personal data store containing productivity information and tools."@en ;
+    skos:example "Calendar events, tasks, projects, work habits, time management patterns."@en .
+
+paf:AIContext a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000141 ; # Immaterial Entity
+    rdfs:label "AI Context"@en ;
+    skos:definition "The situational and environmental information that frames AI interactions and decisions."@en ;
+    skos:example "Conversation history, user location, device state, time of day."@en .
+
+paf:InteractionScope a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000141 ; # Immaterial Entity
+    rdfs:label "Interaction Scope"@en ;
+    skos:definition "The defined boundaries and limitations of AI-user interactions and capabilities."@en ;
+    skos:example "Work assistant scope, creative partner scope, restricted domain interaction."@en .
+
+paf:PersonalDataMarketplace a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000141 ; # Immaterial Entity
+    rdfs:label "Personal Data Marketplace"@en ;
+    skos:definition "A controlled environment where personal data can be monetized or exchanged under user-defined terms."@en ;
+    skos:example "API access marketplace, data subscription service, selective data sharing platform."@en .
+
+paf:SecurityBoundary a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000141 ; # Immaterial Entity
+    rdfs:label "Security Boundary"@en ;
+    skos:definition "Defined perimeters that control access to and from AI systems and personal data."@en ;
+    skos:example "Credential vault, encryption boundaries, access control perimeters."@en .
+
+paf:PrivacyBoundary a owl:Class ;
+    rdfs:subClassOf paf:SecurityBoundary ;
+    rdfs:label "Privacy Boundary"@en ;
+    skos:definition "A security boundary specifically defined to protect personal data privacy."@en ;
+    skos:example "Consent-driven access control, data minimization filters, anonymization boundaries."@en .
+
+# Specifically Dependent Continuants
+
+paf:UserRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
+    rdfs:label "User Role"@en ;
+    skos:definition "The role of a person interacting with and utilizing AI systems."@en ;
+    skos:example "Content creator, knowledge worker, learner, decision-maker."@en .
+
+paf:AIRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
+    rdfs:label "AI Role"@en ;
+    skos:definition "The specific purpose, function, or character that an AI system assumes in relation to users."@en ;
+    skos:example "Personal assistant, coach, creative collaborator, fact-checker."@en .
+
+paf:PersonalizationFunction a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ; # Function
+    rdfs:label "Personalization Function"@en ;
+    skos:definition "The function of adapting AI responses and behaviors to match user preferences, history, and characteristics."@en ;
+    skos:example "Content personalization, interaction style adaptation, preference-based recommendations."@en .
+
+paf:AICapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "AI Capability"@en ;
+    skos:definition "The quality reflecting a specific ability or competency of an AI system."@en ;
+    skos:example "Natural language understanding, multimodal reasoning, code generation."@en .
+
+paf:TrustLevel a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Trust Level"@en ;
+    skos:definition "The quality reflecting the assessed degree of trust between a user and an AI system."@en ;
+    skos:example "High trust, calibrated trust, developing trust, low trust."@en .
+
+paf:DataOwnership a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
+    rdfs:label "Data Ownership"@en ;
+    skos:definition "The role of having legal, moral, and control rights over specific data."@en ;
+    skos:example "Personal data ownership, shared ownership, delegated ownership, conditional ownership."@en .
+
+paf:UserConsent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "User Consent"@en ;
+    skos:definition "The quality of having received explicit permission from a user for a specific data use or action."@en ;
+    skos:example "Explicit consent, informed consent, granular consent, revocable consent."@en .
+
+paf:PrivacySensitivity a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Privacy Sensitivity"@en ;
+    skos:definition "The quality reflecting the degree of privacy concern associated with specific data."@en ;
+    skos:example "High sensitivity, medium sensitivity, low sensitivity, contextual sensitivity."@en .
+
+# Generically Dependent Continuants
+
+paf:PersonalizationModel a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Personalization Model"@en ;
+    skos:definition "A model representing user preferences, behaviors, and patterns for AI adaptation."@en ;
+    skos:example "User preference model, behavioral profile, adaptive interaction model."@en .
+
+paf:PromptTemplate a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Prompt Template"@en ;
+    skos:definition "A structured format for generating effective prompts that guide AI behavior and responses."@en ;
+    skos:example "Task definition template, creative writing prompt, system instruction template."@en .
+
+paf:UserMemory a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "User Memory"@en ;
+    skos:definition "Information about user interactions, preferences, and history preserved for future AI interactions."@en ;
+    skos:example "Conversation history, preference records, past collaboration artifacts."@en .
+
+paf:AIExplanation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "AI Explanation"@en ;
+    skos:definition "A formal representation of the rationale, process, or factors behind an AI decision or response."@en ;
+    skos:example "Response justification, thought process articulation, confidence assessment."@en .
+
+paf:LearningMemory a owl:Class ;
+    rdfs:subClassOf paf:UserMemory ;
+    rdfs:label "Learning Memory"@en ;
+    skos:definition "Information about a user's educational progress, knowledge acquisition, and skills development."@en ;
+    skos:example "Course completions, skill assessments, knowledge gaps, learning preferences."@en .
+
+paf:ContentMemory a owl:Class ;
+    rdfs:subClassOf paf:UserMemory ;
+    rdfs:label "Content Memory"@en ;
+    skos:definition "Information about a user's content consumption, creation, and preferences."@en ;
+    skos:example "Media consumption history, content creation patterns, topic interests, engagement metrics."@en .
+
+paf:CredentialVault a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Credential Vault"@en ;
+    skos:definition "A secure collection of authentication credentials and access tokens owned by a user."@en ;
+    skos:example "Password vault, API tokens, biometric templates, authentication certificates."@en .
+
+paf:UniversalContactGraph a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Universal Contact Graph"@en ;
+    skos:definition "A unified representation of a user's social connections across all platforms and contexts."@en ;
+    skos:example "Integrated contact list, relationship network, communication channel inventory."@en .
+
+# OCCURRENT CLASSES
+
+# Processes
+
+paf:AIInteractionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "AI Interaction Process"@en ;
+    skos:definition "The process of exchange and communication between a user and an AI system."@en ;
+    skos:example "Conversation, creative collaboration, decision support interaction."@en .
+
+paf:PersonalizationLearning a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Personalization Learning"@en ;
+    skos:definition "The process by which an AI system adapts to user preferences, behaviors, and needs over time."@en ;
+    skos:example "Preference learning, behavioral pattern recognition, adaptation to feedback."@en .
+
+paf:AIReasoning a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "AI Reasoning"@en ;
+    skos:definition "The process of applying logical, statistical, or heuristic methods to derive conclusions or generate responses."@en ;
+    skos:example "Logical inference, probabilistic reasoning, analogical thinking."@en .
+
+paf:FeedbackCollection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Feedback Collection"@en ;
+    skos:definition "The process of gathering, documenting, and processing user feedback to improve AI performance."@en ;
+    skos:example "Explicit ratings, implicit behavioral signals, natural language feedback."@en .
+
+paf:CrossDomainEnrichmentProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Cross-Domain Enrichment Process"@en ;
+    skos:definition "The process by which data and insights from one life domain enhance understanding and capabilities in another domain."@en ;
+    skos:example "Health data informing learning recommendations, financial status influencing social interactions, productivity patterns optimizing health routines."@en .
+
+paf:DataSovereigntyProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Data Sovereignty Process"@en ;
+    skos:definition "The process of maintaining user control, ownership, and governance over personal data throughout its lifecycle."@en ;
+    skos:example "Consent management, access control enforcement, user-directed data sharing, ownership verification."@en .
+
+paf:DataMonetizationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Data Monetization Process"@en ;
+    skos:definition "The process of deriving economic value from personal data while maintaining user sovereignty and privacy."@en ;
+    skos:example "API access provisioning, anonymized data sharing, insight licensing, controlled third-party access."@en .
+
+paf:CrossPlatformSynchronization a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Cross-Platform Synchronization"@en ;
+    skos:definition "The process of harmonizing personal data across multiple platforms while preserving context and respecting privacy boundaries."@en ;
+    skos:example "Contact list integration, calendar harmonization, credential synchronization, content publishing across platforms."@en .
+
+paf:IdentityResolution a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Identity Resolution"@en ;
+    skos:definition "The process of recognizing and consolidating multiple representations of the same entity across different systems."@en ;
+    skos:example "Contact deduplication, account linking, entity disambiguation, unified profile creation."@en .
+
+paf:PrivacyPreservingProcessing a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Privacy Preserving Processing"@en ;
+    skos:definition "The process of analyzing or transforming data while maintaining privacy protections and minimizing exposure."@en ;
+    skos:example "Differential privacy, federated learning, local processing, secure multi-party computation."@en .
+
+paf:CrossContextReasoning a owl:Class ;
+    rdfs:subClassOf paf:AIReasoning ;
+    rdfs:label "Cross-Context Reasoning"@en ;
+    skos:definition "The process of making inferences and generating insights by connecting information across different life contexts and domains."@en ;
+    skos:example "Health-productivity correlations, financial-social insights, learning-career connections."@en .
+
+# Process Boundaries
+
+paf:InteractionInitiation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Interaction Initiation"@en ;
+    skos:definition "The temporal boundary marking the beginning of an AI-user interaction session."@en ;
+    skos:example "First prompt, system initialization, conversation start."@en .
+
+paf:ModelUpdateEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Model Update Event"@en ;
+    skos:definition "The temporal boundary marking a significant change to the AI's underlying model or personalization."@en ;
+    skos:example "Learning new preference, model version upgrade, capability expansion."@en .
+
+paf:ConsentGrantEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Consent Grant Event"@en ;
+    skos:definition "The temporal boundary marking when a user provides explicit permission for a specific data use or action."@en ;
+    skos:example "Opt-in moment, permission grant, sharing authorization, access approval."@en .
+
+paf:ConsentRevocationEvent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Consent Revocation Event"@en ;
+    skos:definition "The temporal boundary marking when a user withdraws permission for a specific data use or action."@en ;
+    skos:example "Opt-out moment, permission withdrawal, sharing cancellation, access termination."@en .
+
+paf:DataExchangeInitiation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Data Exchange Initiation"@en ;
+    skos:definition "The temporal boundary marking the beginning of a data transfer between systems or entities."@en ;
+    skos:example "API request start, synchronization beginning, data export initiation, sharing start."@en .
+
+# Temporal Regions
+
+paf:InteractionSession a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Interaction Session"@en ;
+    skos:definition "A defined interval of time covering a coherent series of exchanges between user and AI."@en ;
+    skos:example "Single conversation, task completion session, extended collaboration period."@en .
+
+paf:AdaptationPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Adaptation Period"@en ;
+    skos:definition "A defined interval of time during which the AI adapts to user patterns and preferences."@en ;
+    skos:example "Initial learning period, post-feedback adaptation window, continuous learning cycle."@en .
+
+paf:DataRetentionPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Data Retention Period"@en ;
+    skos:definition "A defined interval of time during which specific data is authorized to be kept before requiring deletion or renewal of consent."@en ;
+    skos:example "Legal retention window, consent-based retention period, minimum necessary timeframe."@en .
+
+paf:DomainEnrichmentCycle a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Domain Enrichment Cycle"@en ;
+    skos:definition "A recurring temporal pattern where improvements in one life domain subsequently enhance other domains in sequence."@en ;
+    skos:example "Health-learning-finance-social-content-productivity cycle, personal growth flywheel."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+paf:hasUser a owl:ObjectProperty ;
+    rdfs:domain paf:AIAgent ;
+    rdfs:range paf:UserIdentity ;
+    rdfs:label "has user"@en ;
+    skos:definition "Relates an AI agent to the user identity it serves or interacts with."@en .
+
+paf:hasAIRole a owl:ObjectProperty ;
+    rdfs:domain paf:AIAgent ;
+    rdfs:range paf:AIRole ;
+    rdfs:label "has AI role"@en ;
+    skos:definition "Relates an AI agent to the specific role it assumes in an interaction context."@en .
+
+paf:hasCapability a owl:ObjectProperty ;
+    rdfs:domain paf:AIAgent ;
+    rdfs:range paf:AICapability ;
+    rdfs:label "has capability"@en ;
+    skos:definition "Relates an AI agent to a specific capability it possesses."@en .
+
+paf:storesMemory a owl:ObjectProperty ;
+    rdfs:domain paf:PersonalDataStore ;
+    rdfs:range paf:UserMemory ;
+    rdfs:label "stores memory"@en ;
+    skos:definition "Relates a personal data store to the user memories it contains."@en .
+
+paf:hasTrustLevel a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range paf:TrustLevel ;
+    rdfs:label "has trust level"@en ;
+    skos:definition "Relates an entity to its assessed level of trust."@en .
+
+paf:isInScope a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range paf:InteractionScope ;
+    rdfs:label "is in scope"@en ;
+    skos:definition "Relates an entity to an interaction scope, indicating it is included within the boundaries of AI capabilities."@en .
+
+paf:participatesIn a owl:ObjectProperty ;
+    rdfs:domain [ owl:unionOf (paf:UserIdentity paf:AIAgent) ] ;
+    rdfs:range paf:AIInteractionProcess ;
+    rdfs:label "participates in"@en ;
+    skos:definition "Relates a user or AI agent to the interaction process they engage in."@en .
+
+paf:occursWithin a owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ; # Process
+    rdfs:range bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "occurs within"@en ;
+    skos:definition "Relates a process to the temporal region during which it occurs."@en .
+
+paf:hasOwner a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range paf:UserIdentity ;
+    rdfs:label "has owner"@en ;
+    skos:definition "Relates data or a resource to the user identity that has ownership rights over it."@en .
+
+paf:hasConsent a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range paf:UserConsent ;
+    rdfs:label "has consent"@en ;
+    skos:definition "Relates an action or data usage to the user consent that authorizes it."@en .
+
+paf:enforcesPrivacy a owl:ObjectProperty ;
+    rdfs:domain paf:PrivacyBoundary ;
+    rdfs:range owl:Thing ;
+    rdfs:label "enforces privacy"@en ;
+    skos:definition "Relates a privacy boundary to the entity whose privacy it protects."@en .
+
+paf:enriches a owl:ObjectProperty ;
+    rdfs:domain paf:PersonalDataStore ;
+    rdfs:range paf:PersonalDataStore ;
+    rdfs:label "enriches"@en ;
+    skos:definition "Relates one personal data store to another that it enhances through cross-domain insights."@en .
+
+paf:synchronizesWith a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range owl:Thing ;
+    rdfs:label "synchronizes with"@en ;
+    skos:definition "Relates an entity to another entity with which it maintains synchronized state."@en .
+
+paf:initiatesAt a owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ; # Process
+    rdfs:range bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "initiates at"@en ;
+    skos:definition "Relates a process to its initiation boundary."@en .
+
+paf:terminatesAt a owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ; # Process
+    rdfs:range bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "terminates at"@en ;
+    skos:definition "Relates a process to its termination boundary."@en .
+
+paf:contributesToDomain a owl:ObjectProperty ;
+    rdfs:domain paf:CrossDomainEnrichmentProcess ;
+    rdfs:range paf:PersonalDataStore ;
+    rdfs:label "contributes to domain"@en ;
+    skos:definition "Relates a cross-domain enrichment process to the personal data store it enhances."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+paf:hasLastInteractionDate a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has last interaction date"@en ;
+    skos:definition "Specifies the date and time when the last interaction occurred."@en .
+
+paf:hasConfidenceScore a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has confidence score"@en ;
+    skos:definition "Specifies a quantitative score representing the AI's confidence in a response or decision."@en .
+
+paf:hasVersionIdentifier a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:string ;
+    rdfs:label "has version identifier"@en ;
+    skos:definition "Specifies a version number or identifier for a model, template, or other versioned entity."@en .
+
+paf:hasPriorityRank a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has priority rank"@en ;
+    skos:definition "Specifies a numeric rank indicating priority or importance level."@en .
+
+paf:hasPrivacySensitivityScore a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has privacy sensitivity score"@en ;
+    skos:definition "Specifies a quantitative score representing the privacy sensitivity level of data."@en .
+
+paf:hasTemporalRelevance a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has temporal relevance"@en ;
+    skos:definition "Specifies a quantitative score representing the current relevance of information based on recency and importance."@en .
+
+paf:hasConsentExpirationDate a owl:DatatypeProperty ;
+    rdfs:domain paf:UserConsent ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has consent expiration date"@en ;
+    skos:definition "Specifies the date and time when user consent expires and must be renewed."@en .
+
+paf:hasMonetizationValue a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has monetization value"@en ;
+    skos:definition "Specifies a quantitative value representing the economic value of data or digital assets."@en . 

@@ -1,0 +1,238 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/PlatformAuthenticationProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/PlatformAuthenticationProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the PlatformAuthenticationProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Platform Authentication Process Ontology" .
+
+# Process Definition
+cs:PlatformAuthenticationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Platform Authentication Process"@en ;
+    skos:definition "The process of authenticating with a platform to gain access to contact data."@en .
+
+# Input Properties Classes
+cs:Platform a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Platform"@en ;
+    skos:definition "A digital platform requiring authentication."@en .
+
+cs:AuthenticationCredentials a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authentication Credentials"@en ;
+    skos:definition "Credentials used for authenticating with a platform."@en .
+
+cs:ConsentRequest a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Consent Request"@en ;
+    skos:definition "Request for user consent to access platform data."@en .
+
+cs:AuthenticationScope a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authentication Scope"@en ;
+    skos:definition "The scope of access being requested from the platform."@en .
+
+# Process Properties Classes
+cs:AuthenticationMethod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authentication Method"@en ;
+    skos:definition "Method used for platform authentication."@en .
+
+cs:AuthenticationStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Authentication Status"@en ;
+    skos:definition "Current status of the authentication process."@en .
+
+cs:RetryAttempt a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Retry Attempt"@en ;
+    skos:definition "Attempt to retry authentication after failure."@en .
+
+# Output Properties Classes
+cs:AuthenticationToken a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authentication Token"@en ;
+    skos:definition "Token received upon successful authentication."@en .
+
+cs:TokenExpiry a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Token Expiry"@en ;
+    skos:definition "Expiration time of the authentication token."@en .
+
+cs:AuthorizationGrant a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authorization Grant"@en ;
+    skos:definition "Grant of authorization to access specific platform resources."@en .
+
+cs:AuthenticationError a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authentication Error"@en ;
+    skos:definition "Error encountered during the authentication process."@en .
+
+# Process Stages
+cs:AuthenticationStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Authentication Stage"@en ;
+    skos:definition "A distinct stage in the platform authentication process."@en .
+
+cs:CredentialPreparationStage a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationStage ;
+    rdfs:label "Credential Preparation Stage"@en ;
+    skos:definition "Stage for preparing authentication credentials."@en .
+
+cs:ConsentObtainingStage a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationStage ;
+    rdfs:label "Consent Obtaining Stage"@en ;
+    skos:definition "Stage for obtaining user consent for authentication."@en .
+
+cs:PlatformRequestStage a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationStage ;
+    rdfs:label "Platform Request Stage"@en ;
+    skos:definition "Stage for sending authentication request to the platform."@en .
+
+cs:TokenProcessingStage a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationStage ;
+    rdfs:label "Token Processing Stage"@en ;
+    skos:definition "Stage for processing the received authentication token."@en .
+
+cs:TokenStorageStage a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationStage ;
+    rdfs:label "Token Storage Stage"@en ;
+    skos:definition "Stage for securely storing the authentication token."@en .
+
+# Authentication Methods
+cs:OAuthAuthentication a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationMethod ;
+    rdfs:label "OAuth Authentication"@en ;
+    skos:definition "Authentication using the OAuth protocol."@en .
+
+cs:APIKeyAuthentication a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationMethod ;
+    rdfs:label "API Key Authentication"@en ;
+    skos:definition "Authentication using an API key."@en .
+
+cs:UsernamePasswordAuthentication a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationMethod ;
+    rdfs:label "Username Password Authentication"@en ;
+    skos:definition "Authentication using a username and password."@en .
+
+cs:TokenBasedAuthentication a owl:Class ;
+    rdfs:subClassOf cs:AuthenticationMethod ;
+    rdfs:label "Token Based Authentication"@en ;
+    skos:definition "Authentication using a pre-existing token."@en .
+
+# Relationships
+cs:hasPlatform a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:Platform ;
+    rdfs:label "has platform"@en ;
+    skos:definition "Relates an authentication process to the platform being authenticated with."@en .
+
+cs:hasCredentials a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationCredentials ;
+    rdfs:label "has credentials"@en ;
+    skos:definition "Relates an authentication process to the credentials being used."@en .
+
+cs:hasConsentRequest a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:ConsentRequest ;
+    rdfs:label "has consent request"@en ;
+    skos:definition "Relates an authentication process to its consent request."@en .
+
+cs:hasScope a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationScope ;
+    rdfs:label "has scope"@en ;
+    skos:definition "Relates an authentication process to its requested access scope."@en .
+
+cs:usesMethod a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationMethod ;
+    rdfs:label "uses method"@en ;
+    skos:definition "Relates an authentication process to the method it uses."@en .
+
+cs:hasStatus a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationStatus ;
+    rdfs:label "has status"@en ;
+    skos:definition "Relates an authentication process to its current status."@en .
+
+cs:hasRetryAttempt a owl:DatatypeProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has retry attempt"@en ;
+    skos:definition "Specifies the number of retry attempts made during authentication."@en .
+
+cs:generatesToken a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationToken ;
+    rdfs:label "generates token"@en ;
+    skos:definition "Relates an authentication process to the token it generates."@en .
+
+cs:hasTokenExpiry a owl:ObjectProperty ;
+    rdfs:domain cs:AuthenticationToken ;
+    rdfs:range cs:TokenExpiry ;
+    rdfs:label "has token expiry"@en ;
+    skos:definition "Relates an authentication token to its expiration time."@en .
+
+cs:grantsAuthorization a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthorizationGrant ;
+    rdfs:label "grants authorization"@en ;
+    skos:definition "Relates an authentication process to the authorization it grants."@en .
+
+cs:encountersError a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationError ;
+    rdfs:label "encounters error"@en ;
+    skos:definition "Relates an authentication process to any errors encountered."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:PlatformAuthenticationProcess ;
+    rdfs:range cs:AuthenticationStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates an authentication process to its current stage."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:AuthenticationStage ;
+    rdfs:range cs:AuthenticationStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the authentication process sequence."@en .
+
+cs:hasTokenValue a owl:DatatypeProperty ;
+    rdfs:domain cs:AuthenticationToken ;
+    rdfs:range xsd:string ;
+    rdfs:label "has token value"@en ;
+    skos:definition "Specifies the value of an authentication token."@en .
+
+cs:hasExpiryTime a owl:DatatypeProperty ;
+    rdfs:domain cs:TokenExpiry ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has expiry time"@en ;
+    skos:definition "Specifies the date and time when a token expires."@en .
+
+cs:hasErrorCode a owl:DatatypeProperty ;
+    rdfs:domain cs:AuthenticationError ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error code"@en ;
+    skos:definition "Specifies the error code of an authentication error."@en .
+
+cs:hasErrorMessage a owl:DatatypeProperty ;
+    rdfs:domain cs:AuthenticationError ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error message"@en ;
+    skos:definition "Specifies the error message of an authentication error."@en . 

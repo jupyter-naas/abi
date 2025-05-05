@@ -1,0 +1,544 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix pai: <https://personal-ai-foundry.org/ontology/> .
+@prefix schema: <https://schema.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix li: <https://www.linkedin.com/schema/> .
+
+# Class definition for LinkedInDataModel
+pai:LinkedInDataModel rdf:type owl:Class ;
+    rdfs:subClassOf pai:PlatformDataModel ;
+    rdfs:label "LinkedIn Data Model"@en ;
+    rdfs:comment "An independent continuant immaterial entity that represents the platform-specific structure, semantics, and constraints of LinkedIn's data, including its unique connection degrees, recommendations, skills taxonomy, and professional graph concepts."@en .
+
+# Core Profile Classes
+pai:LinkedInProfile rdf:type owl:Class ;
+    rdfs:subClassOf pai:Contact ;
+    rdfs:label "LinkedIn Profile"@en ;
+    rdfs:comment "A digital representation of an individual's professional identity on LinkedIn."@en .
+
+pai:LinkedInMiniProfile rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInProfile ;
+    rdfs:label "LinkedIn Mini Profile"@en ;
+    rdfs:comment "A simplified representation of a LinkedIn profile with basic information."@en .
+
+# Company and Organization Classes
+pai:LinkedInCompany rdf:type owl:Class ;
+    rdfs:subClassOf pai:Organization ;
+    rdfs:label "LinkedIn Company"@en ;
+    rdfs:comment "A company or organization profile on LinkedIn."@en .
+
+pai:LinkedInMiniCompany rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInCompany ;
+    rdfs:label "LinkedIn Mini Company"@en ;
+    rdfs:comment "A simplified representation of a company on LinkedIn."@en .
+
+# Education Classes
+pai:LinkedInEducation rdf:type owl:Class ;
+    rdfs:subClassOf pai:Education ;
+    rdfs:label "LinkedIn Education"@en ;
+    rdfs:comment "Educational background information in a LinkedIn profile."@en .
+
+pai:LinkedInSchool rdf:type owl:Class ;
+    rdfs:subClassOf pai:EducationalInstitution ;
+    rdfs:label "LinkedIn School"@en ;
+    rdfs:comment "An educational institution listed on LinkedIn."@en .
+
+pai:LinkedInMiniSchool rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInSchool ;
+    rdfs:label "LinkedIn Mini School"@en ;
+    rdfs:comment "A simplified representation of a school on LinkedIn."@en .
+
+pai:LinkedInCourse rdf:type owl:Class ;
+    rdfs:subClassOf pai:Course ;
+    rdfs:label "LinkedIn Course"@en ;
+    rdfs:comment "A course associated with a LinkedIn education entry."@en .
+
+# Career Classes
+pai:LinkedInPosition rdf:type owl:Class ;
+    rdfs:subClassOf pai:Employment ;
+    rdfs:label "LinkedIn Position"@en ;
+    rdfs:comment "Professional experience or position listed on a LinkedIn profile."@en .
+
+pai:LinkedInCertification rdf:type owl:Class ;
+    rdfs:subClassOf pai:Certification ;
+    rdfs:label "LinkedIn Certification"@en ;
+    rdfs:comment "A professional certification listed on a LinkedIn profile."@en .
+
+pai:LinkedInSkill rdf:type owl:Class ;
+    rdfs:subClassOf pai:Skill ;
+    rdfs:label "LinkedIn Skill"@en ;
+    rdfs:comment "A professional skill listed on a LinkedIn profile."@en .
+
+pai:LinkedInLanguage rdf:type owl:Class ;
+    rdfs:subClassOf pai:Language ;
+    rdfs:label "LinkedIn Language"@en ;
+    rdfs:comment "A language proficiency listed on a LinkedIn profile."@en .
+
+# Connection Classes
+pai:LinkedInConnection rdf:type owl:Class ;
+    rdfs:subClassOf pai:Relationship ;
+    rdfs:label "LinkedIn Connection"@en ;
+    rdfs:comment "A professional connection relationship on LinkedIn."@en .
+
+pai:FirstDegreeConnection rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInConnection ;
+    rdfs:label "First Degree Connection"@en ;
+    rdfs:comment "A direct connection with mutual acceptance on LinkedIn."@en .
+
+pai:SecondDegreeConnection rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInConnection ;
+    rdfs:label "Second Degree Connection"@en ;
+    rdfs:comment "A connection of connection (no direct relationship) on LinkedIn."@en .
+
+pai:ThirdDegreePlusConnection rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInConnection ;
+    rdfs:label "Third Degree Plus Connection"@en ;
+    rdfs:comment "A more distant network relationship on LinkedIn."@en .
+
+pai:OutOfNetworkConnection rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInConnection ;
+    rdfs:label "Out of Network Connection"@en ;
+    rdfs:comment "No connection path within visible network on LinkedIn."@en .
+
+pai:FollowOnlyRelationship rdf:type owl:Class ;
+    rdfs:subClassOf pai:LinkedInConnection ;
+    rdfs:label "Follow-Only Relationship"@en ;
+    rdfs:comment "One-way following without connection on LinkedIn."@en .
+
+# Endorsement and Recommendation Classes
+pai:LinkedInEndorsement rdf:type owl:Class ;
+    rdfs:subClassOf pai:Endorsement ;
+    rdfs:label "LinkedIn Endorsement"@en ;
+    rdfs:comment "A validation of a specific skill on LinkedIn."@en .
+
+pai:LinkedInRecommendation rdf:type owl:Class ;
+    rdfs:subClassOf pai:Endorsement ;
+    rdfs:label "LinkedIn Recommendation"@en ;
+    rdfs:comment "A professional endorsement with text on LinkedIn."@en .
+
+# ====== PROPERTIES ======
+
+# Profile Properties
+pai:hasProfileId rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has profile ID"@en ;
+    rdfs:comment "The unique identifier for a LinkedIn profile."@en .
+
+pai:hasPublicIdentifier rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has public identifier"@en ;
+    rdfs:comment "The custom LinkedIn profile URL identifier."@en .
+
+pai:hasHeadline rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has headline"@en ;
+    rdfs:comment "The professional headline shown under the name on LinkedIn."@en .
+
+pai:hasIndustry rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has industry"@en ;
+    rdfs:comment "The LinkedIn industry classification."@en .
+
+pai:hasProfilePicture rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has profile picture"@en ;
+    rdfs:comment "URL of the profile picture on LinkedIn."@en .
+
+pai:hasBackgroundImage rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has background image"@en ;
+    rdfs:comment "URL of the background image on LinkedIn."@en .
+
+pai:hasProfileSummary rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has profile summary"@en ;
+    rdfs:comment "The summary or about section of a LinkedIn profile."@en .
+
+pai:hasBirthDate rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:date ;
+    rdfs:label "has birth date"@en ;
+    rdfs:comment "The birth date of the LinkedIn profile owner."@en .
+
+# Location Properties
+pai:hasLocationName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has location name"@en ;
+    rdfs:comment "The location name on a LinkedIn profile."@en .
+
+pai:hasCountry rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range xsd:string ;
+    rdfs:label "has country"@en ;
+    rdfs:comment "The country listed on a LinkedIn profile."@en .
+
+# Company Properties
+pai:hasCompanyId rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range xsd:string ;
+    rdfs:label "has company ID"@en ;
+    rdfs:comment "The unique identifier for a LinkedIn company."@en .
+
+pai:hasCompanyName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range xsd:string ;
+    rdfs:label "has company name"@en ;
+    rdfs:comment "The name of a LinkedIn company."@en .
+
+pai:hasCompanyLogo rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has company logo"@en ;
+    rdfs:comment "URL of the logo of a LinkedIn company."@en .
+
+pai:hasUniversalName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range xsd:string ;
+    rdfs:label "has universal name"@en ;
+    rdfs:comment "The universal name of a LinkedIn company."@en .
+
+pai:isActive rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is active"@en ;
+    rdfs:comment "Whether a LinkedIn company is active."@en .
+
+pai:isShowcase rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is showcase"@en ;
+    rdfs:comment "Whether a LinkedIn company is a showcase page."@en .
+
+pai:hasEmployeeCountRange rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInCompany ;
+    rdfs:range pai:EmployeeCountRange ;
+    rdfs:label "has employee count range"@en ;
+    rdfs:comment "The range of employee count for a LinkedIn company."@en .
+
+# School Properties
+pai:hasSchoolId rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInSchool ;
+    rdfs:range xsd:string ;
+    rdfs:label "has school ID"@en ;
+    rdfs:comment "The unique identifier for a LinkedIn school."@en .
+
+pai:hasSchoolName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInSchool ;
+    rdfs:range xsd:string ;
+    rdfs:label "has school name"@en ;
+    rdfs:comment "The name of a LinkedIn school."@en .
+
+pai:hasSchoolLogo rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInSchool ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has school logo"@en ;
+    rdfs:comment "URL of the logo of a LinkedIn school."@en .
+
+# Position Properties
+pai:hasPositionTitle rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range xsd:string ;
+    rdfs:label "has position title"@en ;
+    rdfs:comment "The job title in a LinkedIn position."@en .
+
+pai:hasPositionDescription rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range xsd:string ;
+    rdfs:label "has position description"@en ;
+    rdfs:comment "The description of a LinkedIn position."@en .
+
+pai:hasPositionStartDate rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range pai:DateWithPrecision ;
+    rdfs:label "has position start date"@en ;
+    rdfs:comment "The start date of a LinkedIn position."@en .
+
+pai:hasPositionEndDate rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range pai:DateWithPrecision ;
+    rdfs:label "has position end date"@en ;
+    rdfs:comment "The end date of a LinkedIn position."@en .
+
+pai:isCurrent rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is current"@en ;
+    rdfs:comment "Whether a LinkedIn position is current."@en .
+
+pai:hasPositionLocation rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range xsd:string ;
+    rdfs:label "has position location"@en ;
+    rdfs:comment "The location of a LinkedIn position."@en .
+
+pai:hasCompany rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInPosition ;
+    rdfs:range pai:LinkedInCompany ;
+    rdfs:label "has company"@en ;
+    rdfs:comment "The company associated with a LinkedIn position."@en .
+
+# Education Properties
+pai:hasDegreeName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range xsd:string ;
+    rdfs:label "has degree name"@en ;
+    rdfs:comment "The degree name in a LinkedIn education entry."@en .
+
+pai:hasFieldOfStudy rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range xsd:string ;
+    rdfs:label "has field of study"@en ;
+    rdfs:comment "The field of study in a LinkedIn education entry."@en .
+
+pai:hasGrade rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range xsd:string ;
+    rdfs:label "has grade"@en ;
+    rdfs:comment "The grade in a LinkedIn education entry."@en .
+
+pai:hasEducationDescription rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range xsd:string ;
+    rdfs:label "has education description"@en ;
+    rdfs:comment "The description of a LinkedIn education entry."@en .
+
+pai:hasEducationStartDate rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range pai:DateWithPrecision ;
+    rdfs:label "has education start date"@en ;
+    rdfs:comment "The start date of a LinkedIn education entry."@en .
+
+pai:hasEducationEndDate rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range pai:DateWithPrecision ;
+    rdfs:label "has education end date"@en ;
+    rdfs:comment "The end date of a LinkedIn education entry."@en .
+
+pai:hasSchool rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range pai:LinkedInSchool ;
+    rdfs:label "has school"@en ;
+    rdfs:comment "The school associated with a LinkedIn education entry."@en .
+
+pai:hasCourse rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInEducation ;
+    rdfs:range pai:LinkedInCourse ;
+    rdfs:label "has course"@en ;
+    rdfs:comment "A course associated with a LinkedIn education entry."@en .
+
+# Course Properties
+pai:hasCourseName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCourse ;
+    rdfs:range xsd:string ;
+    rdfs:label "has course name"@en ;
+    rdfs:comment "The name of a LinkedIn course."@en .
+
+pai:hasCourseNumber rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCourse ;
+    rdfs:range xsd:string ;
+    rdfs:label "has course number"@en ;
+    rdfs:comment "The number of a LinkedIn course."@en .
+
+# Certification Properties
+pai:hasCertificationName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCertification ;
+    rdfs:range xsd:string ;
+    rdfs:label "has certification name"@en ;
+    rdfs:comment "The name of a LinkedIn certification."@en .
+
+pai:hasCertificationAuthority rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCertification ;
+    rdfs:range xsd:string ;
+    rdfs:label "has certification authority"@en ;
+    rdfs:comment "The issuing authority of a LinkedIn certification."@en .
+
+pai:hasCertificationTimePeriod rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInCertification ;
+    rdfs:range pai:DateRange ;
+    rdfs:label "has certification time period"@en ;
+    rdfs:comment "The time period of a LinkedIn certification."@en .
+
+pai:hasCertificationUrl rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCertification ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has certification URL"@en ;
+    rdfs:comment "The URL of a LinkedIn certification."@en .
+
+pai:hasLicenseNumber rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInCertification ;
+    rdfs:range xsd:string ;
+    rdfs:label "has license number"@en ;
+    rdfs:comment "The license number of a LinkedIn certification."@en .
+
+# Language Properties
+pai:hasLanguageName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInLanguage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has language name"@en ;
+    rdfs:comment "The name of a language in a LinkedIn profile."@en .
+
+pai:hasProficiency rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInLanguage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has proficiency"@en ;
+    rdfs:comment "The proficiency level of a language in a LinkedIn profile."@en .
+
+# Skill Properties
+pai:hasSkillName rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInSkill ;
+    rdfs:range xsd:string ;
+    rdfs:label "has skill name"@en ;
+    rdfs:comment "The name of a skill in a LinkedIn profile."@en .
+
+pai:hasEndorsementCount rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInSkill ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has endorsement count"@en ;
+    rdfs:comment "The number of endorsements for a skill in a LinkedIn profile."@en .
+
+# Connection Properties
+pai:hasConnectionDegree rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInConnection ;
+    rdfs:range xsd:string ;
+    rdfs:label "has connection degree"@en ;
+    rdfs:comment "The degree of connection on LinkedIn (1st, 2nd, 3rd+)."@en .
+
+pai:hasConnectionDate rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInConnection ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has connection date"@en ;
+    rdfs:comment "The date when a LinkedIn connection was established."@en .
+
+pai:hasMutualConnectionCount rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:LinkedInConnection ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has mutual connection count"@en ;
+    rdfs:comment "The number of mutual connections on LinkedIn."@en .
+
+pai:hasMutualConnection rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInConnection ;
+    rdfs:range pai:LinkedInProfile ;
+    rdfs:label "has mutual connection"@en ;
+    rdfs:comment "A mutual connection on LinkedIn."@en .
+
+# Relationship Properties
+pai:hasPosition rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range pai:LinkedInPosition ;
+    rdfs:label "has position"@en ;
+    rdfs:comment "A position associated with a LinkedIn profile."@en .
+
+pai:hasEducation rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range pai:LinkedInEducation ;
+    rdfs:label "has education"@en ;
+    rdfs:comment "An education entry associated with a LinkedIn profile."@en .
+
+pai:hasLanguage rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range pai:LinkedInLanguage ;
+    rdfs:label "has language"@en ;
+    rdfs:comment "A language proficiency associated with a LinkedIn profile."@en .
+
+pai:hasSkill rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range pai:LinkedInSkill ;
+    rdfs:label "has skill"@en ;
+    rdfs:comment "A skill associated with a LinkedIn profile."@en .
+
+pai:hasCertification rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range pai:LinkedInCertification ;
+    rdfs:label "has certification"@en ;
+    rdfs:comment "A certification associated with a LinkedIn profile."@en .
+
+pai:hasConnection rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:LinkedInProfile ;
+    rdfs:range pai:LinkedInConnection ;
+    rdfs:label "has connection"@en ;
+    rdfs:comment "A connection associated with a LinkedIn profile."@en .
+
+# Support Classes
+
+pai:DateWithPrecision rdf:type owl:Class ;
+    rdfs:subClassOf pai:TemporalEntity ;
+    rdfs:label "Date With Precision"@en ;
+    rdfs:comment "A date with year and optional month precision, as used in LinkedIn."@en .
+
+pai:hasYear rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:DateWithPrecision ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has year"@en ;
+    rdfs:comment "The year component of a date with precision."@en .
+
+pai:hasMonth rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:DateWithPrecision ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has month"@en ;
+    rdfs:comment "The month component of a date with precision."@en .
+
+pai:DateRange rdf:type owl:Class ;
+    rdfs:subClassOf pai:TemporalEntity ;
+    rdfs:label "Date Range"@en ;
+    rdfs:comment "A time period with start and end dates, as used in LinkedIn."@en .
+
+pai:hasStartDate rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:DateRange ;
+    rdfs:range pai:DateWithPrecision ;
+    rdfs:label "has start date"@en ;
+    rdfs:comment "The start date of a date range."@en .
+
+pai:hasEndDate rdf:type owl:ObjectProperty ;
+    rdfs:domain pai:DateRange ;
+    rdfs:range pai:DateWithPrecision ;
+    rdfs:label "has end date"@en ;
+    rdfs:comment "The end date of a date range."@en .
+
+pai:EmployeeCountRange rdf:type owl:Class ;
+    rdfs:subClassOf owl:Thing ;
+    rdfs:label "Employee Count Range"@en ;
+    rdfs:comment "A range representing the number of employees in a LinkedIn company."@en .
+
+pai:hasEmployeeCountStart rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:EmployeeCountRange ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has employee count start"@en ;
+    rdfs:comment "The lower bound of an employee count range."@en .
+
+pai:hasEmployeeCountEnd rdf:type owl:DatatypeProperty ;
+    rdfs:domain pai:EmployeeCountRange ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has employee count end"@en ;
+    rdfs:comment "The upper bound of an employee count range."@en .
+
+# Schema.org and vCard Mappings
+
+pai:hasProfileId owl:equivalentProperty schema:identifier .
+pai:hasHeadline owl:equivalentProperty schema:jobTitle .
+pai:hasCompanyName owl:equivalentProperty schema:name .
+pai:hasSchoolName owl:equivalentProperty schema:name .
+pai:hasPositionTitle owl:equivalentProperty schema:jobTitle .
+pai:hasDegreeName owl:equivalentProperty schema:degreeType .
+pai:hasFieldOfStudy owl:equivalentProperty schema:field .
+pai:hasSkillName owl:equivalentProperty schema:skills .
+pai:hasLanguageName owl:equivalentProperty schema:knowsLanguage .
+
+pai:LinkedInProfile owl:equivalentClass schema:Person .
+pai:LinkedInCompany owl:equivalentClass schema:Organization .
+pai:LinkedInSchool owl:equivalentClass schema:EducationalOrganization .
+pai:LinkedInPosition owl:equivalentClass schema:WorkPosition .
+pai:LinkedInEducation owl:equivalentClass schema:EducationalOccupationalCredential .
+pai:LinkedInCertification owl:equivalentClass schema:Credential . 

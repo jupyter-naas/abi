@@ -1,0 +1,127 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cco: <https://www.commoncoreontologies.org/ont> .
+
+# EmailMessage Class Definition
+abi:EmailMessage a owl:Class ;
+    rdfs:label "Email Message" ;
+    rdfs:subClassOf bfo:0000031, cco:00001002 ; # Generically Dependent Continuant, CCO Message
+    skos:definition "An email message is a generically dependent continuant that provides a time-stamped, directed communication artifact used to convey structured or unstructured content between agents." ;
+    skos:note "Aligns with CCO:Message (ont00001002) and CCO:EmailMessage (ont00000640)" ;
+    owl:equivalentClass cco:00000640 . # CCO EmailMessage
+
+# Core Properties
+abi:hasSender a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:Agent ;
+    rdfs:label "has sender" .
+
+abi:hasRecipient a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:Agent ;
+    rdfs:label "has recipient" .
+
+abi:hasTimestamp a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp" .
+
+abi:hasSubject a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has subject" .
+
+# Content Properties
+abi:hasContent a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:InformationContentEntity ;
+    rdfs:label "has content" .
+
+abi:hasAttachment a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:DigitalArtifact ;
+    rdfs:label "has attachment" .
+
+# Metadata Properties
+abi:hasMessageID a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has message ID" .
+
+abi:hasThreadID a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has thread ID" .
+
+# Relational Properties
+abi:isReplyTo a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:EmailMessage ;
+    rdfs:label "is reply to" .
+
+abi:isForwardOf a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:EmailMessage ;
+    rdfs:label "is forward of" .
+
+# Communication Context Properties
+abi:hasPriority a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has priority" .
+
+abi:hasConfidentiality a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:ConfidentialityLevel ;
+    rdfs:label "has confidentiality" .
+
+# Status Properties
+abi:hasDeliveryStatus a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has delivery status" .
+
+abi:hasReadStatus a owl:DatatypeProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has read status" .
+
+# Relation to other Communication Artifacts
+abi:partOfThread a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:ConversationThread ;
+    rdfs:label "part of thread" .
+
+# CCO Integration Properties
+abi:isTransmittedToEmailBox a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:EmailBox ;
+    rdfs:label "is transmitted to email box" ;
+    skos:definition "Relates an email message to the recipient's email box, aligning with CCO EmailMessage definition." ;
+    skos:note "Derived from CCO EmailMessage definition: 'A Message that is transmitted to the recipient's Email Box.'" .
+
+# Alignment with CCO Message properties
+abi:bearsInformationContent a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:InformationContentEntity ;
+    rdfs:label "bears information content" ;
+    skos:definition "Relates an email message to the specific information content it bears, aligning with CCO Message definition." ;
+    skos:note "Derived from CCO Message definition: 'designed to bear some specific Information Content Entity'" .
+
+# Additional CCO-aligned properties
+abi:hasSenderEmailAddress a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:EmailAddress ;
+    rdfs:label "has sender email address" ;
+    skos:definition "Relates an email message to the email address of the sender." .
+
+abi:hasRecipientEmailAddress a owl:ObjectProperty ;
+    rdfs:domain abi:EmailMessage ;
+    rdfs:range abi:EmailAddress ;
+    rdfs:label "has recipient email address" ;
+    skos:definition "Relates an email message to the email address of the recipient." .

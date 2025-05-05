@@ -1,0 +1,175 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# HardFork Class Definition
+w3f:HardFork a owl:Class ;
+    rdfs:label "Hard Fork" ;
+    rdfs:subClassOf bfo:0000035 ; # Process Boundary
+    skos:definition "A HardFork is an occurrent process boundary entity that represents the instantaneous temporal boundary at which a blockchain network undergoes a backwards-incompatible protocol change, potentially resulting in the creation of two distinct and divergent chains that share a common history up to the fork point." .
+
+# Fork Types
+w3f:PlannedHardFork a owl:Class ;
+    rdfs:label "Planned Hard Fork" ;
+    rdfs:subClassOf w3f:HardFork ;
+    skos:definition "A process boundary representing a hard fork that is pre-planned, communicated to the community, and achieved through social consensus for network upgrades." .
+
+w3f:ContentiousHardFork a owl:Class ;
+    rdfs:label "Contentious Hard Fork" ;
+    rdfs:subClassOf w3f:HardFork ;
+    skos:definition "A process boundary representing a hard fork that results from community disagreement, leading to a permanent split in the blockchain network and the creation of two distinct cryptocurrencies." .
+
+w3f:EmergencyHardFork a owl:Class ;
+    rdfs:label "Emergency Hard Fork" ;
+    rdfs:subClassOf w3f:HardFork ;
+    skos:definition "A process boundary representing a hard fork implemented rapidly in response to critical security vulnerabilities or exploits." .
+
+# Related Classes
+w3f:SoftFork a owl:Class ;
+    rdfs:label "Soft Fork" ;
+    rdfs:subClassOf bfo:0000035 ; # Process Boundary
+    skos:definition "A process boundary representing a backwards-compatible protocol change where non-upgraded nodes still recognize blocks created by upgraded nodes as valid, but not vice versa." .
+
+# Temporal Properties
+w3f:occursAt a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:BlockTimestamp ;
+    rdfs:label "occurs at" ;
+    skos:definition "The specific temporal instant at which the hard fork boundary occurs." .
+
+w3f:hasActivationTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has activation timestamp" ;
+    skos:definition "The timestamp at which the hard fork activates." .
+
+w3f:hasActivationBlockHeight a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has activation block height" ;
+    skos:definition "The block height at which the hard fork activates." .
+
+# Protocol Properties
+w3f:changesProtocol a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:ProtocolVersion ;
+    rdfs:label "changes protocol" ;
+    skos:definition "The protocol version change that is implemented by this hard fork." .
+
+w3f:introducesFeatures a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:string ;
+    rdfs:label "introduces features" ;
+    skos:definition "The new features or changes introduced by this hard fork." .
+
+w3f:modifiesConsensusRules a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:ConsensusProtocol ;
+    rdfs:label "modifies consensus rules" ;
+    skos:definition "The consensus protocol rules that are modified by this hard fork." .
+
+w3f:hasCompatibilityBreak a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:string ;
+    rdfs:label "has compatibility break" ;
+    skos:definition "The specific backwards-incompatible changes implemented by this hard fork." .
+
+# Network Relationships
+w3f:occursOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "occurs on network" ;
+    skos:definition "The blockchain network on which this hard fork occurs." .
+
+w3f:createsNewNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "creates new network" ;
+    skos:definition "The new blockchain network that is created as a result of this hard fork (for contentious forks)." .
+
+w3f:hasMiningAlgorithmChange a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has mining algorithm change" ;
+    skos:definition "Whether this hard fork changes the mining or validation algorithm." .
+
+# Community and Governance Properties
+w3f:hasCommunitySupport a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has community support" ;
+    skos:definition "The estimated level of community support for this hard fork, expressed as a percentage or ratio." .
+
+w3f:hasExchangeSupport a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has exchange support" ;
+    skos:definition "The percentage of major exchanges that support this hard fork." .
+
+w3f:governedBy a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:GovernanceModel ;
+    rdfs:label "governed by" ;
+    skos:definition "The governance model that determined the implementation of this hard fork." .
+
+# Technical Implementation Properties
+w3f:requiresClientUpgrade a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "requires client upgrade" ;
+    skos:definition "Whether network participants need to upgrade their client software to remain on the forked chain." .
+
+w3f:implementsEIP a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:string ;
+    rdfs:label "implements EIP" ;
+    skos:definition "The Ethereum Improvement Proposals (or equivalent) implemented by this hard fork." .
+
+w3f:hasTestnetImplementation a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has testnet implementation" ;
+    skos:definition "Whether this hard fork was first implemented on a test network." .
+
+# Asset Properties
+w3f:affectsAssets a owl:ObjectProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "affects assets" ;
+    skos:definition "The digital assets affected by this hard fork." .
+
+w3f:createsDuplicateAssets a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "creates duplicate assets" ;
+    skos:definition "Whether this hard fork results in holders having duplicate assets on both resulting chains." .
+
+w3f:modifiesMonetaryPolicy a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "modifies monetary policy" ;
+    skos:definition "Whether this hard fork changes the monetary policy (issuance, inflation) of the network." .
+
+# Post-Fork Properties
+w3f:hasHashpowerSplit a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:string ;
+    rdfs:label "has hashpower split" ;
+    skos:definition "The distribution of mining power between the original and forked chains after a contentious hard fork." .
+
+w3f:hasMarketValueImpact a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:string ;
+    rdfs:label "has market value impact" ;
+    skos:definition "The impact of this hard fork on the market value of the affected assets." .
+
+w3f:hasCommunityDivision a owl:DatatypeProperty ;
+    rdfs:domain w3f:HardFork ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has community division" ;
+    skos:definition "Whether this hard fork resulted in a significant division in the community." . 

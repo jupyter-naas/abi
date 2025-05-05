@@ -1,0 +1,376 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix paf: <http://ontology.abi.ai/personal_ai_foundry#> .
+@prefix cs: <http://ontology.abi.ai/contact_schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cco: <https://www.commoncoreontologies.org/ont#> .
+
+# EmailProcessingProcess Class Definition
+cs:EmailProcessingProcess a owl:Class ;
+    rdfs:label "Email Processing Process" ;
+    rdfs:subClassOf paf:DataProcessingProcess, bfo:0000015 ; # Process
+    skos:definition "An occurrent process that systematically aggregates, analyzes, and prioritizes email communications from multiple sources based on contact intelligence, enabling efficient information processing and relationship-driven email management." ;
+    skos:note "Core process for managing email overload through contact-driven prioritization." .
+
+# === Sub-Processes ===
+
+# EmailAuthenticationProcess
+cs:EmailAuthenticationProcess a owl:Class ;
+    rdfs:label "Email Authentication Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that securely authenticates with email providers to gain authorized access to email accounts." .
+
+# EmailExtractionProcess
+cs:EmailExtractionProcess a owl:Class ;
+    rdfs:label "Email Extraction Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that retrieves email data from provider APIs, handling pagination and rate limits." .
+
+# EmailAggregationProcess
+cs:EmailAggregationProcess a owl:Class ;
+    rdfs:label "Email Aggregation Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that combines emails from multiple sources into a unified view, reconstructing threads and eliminating duplicates." .
+
+# ContactAssociationProcess
+cs:ContactAssociationProcess a owl:Class ;
+    rdfs:label "Contact Association Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that links emails with contact records to establish relationship context." .
+
+# EmailAnalysisProcess
+cs:EmailAnalysisProcess a owl:Class ;
+    rdfs:label "Email Analysis Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that examines email content and metadata to extract meaning and relevance." .
+
+# EmailPrioritizationProcess
+cs:EmailPrioritizationProcess a owl:Class ;
+    rdfs:label "Email Prioritization Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that ranks emails based on contact relationships, content relevance, and temporal factors." .
+
+# EmailCategorizationProcess
+cs:EmailCategorizationProcess a owl:Class ;
+    rdfs:label "Email Categorization Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that organizes emails into meaningful categories based on content and context." .
+
+# EmailPresentationProcess
+cs:EmailPresentationProcess a owl:Class ;
+    rdfs:label "Email Presentation Process" ;
+    rdfs:subClassOf cs:EmailProcessingProcess ;
+    skos:definition "A process that prepares and displays processed emails in a user-friendly interface." .
+
+# === Input Properties ===
+
+# EmailAccounts Property
+cs:emailAccounts a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:EmailAccount ;
+    rdfs:label "email accounts" ;
+    skos:definition "Email accounts to be processed." .
+
+# ScanDepth Property
+cs:scanDepth a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "scan depth" ;
+    skos:definition "Number of days to look back for emails." .
+
+# ContactContext Property
+cs:contactContext a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "contact context" ;
+    skos:definition "Whether to use contact data for prioritization." .
+
+# ProcessingRules Property
+cs:processingRules a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:ProcessingRule ;
+    rdfs:label "processing rules" ;
+    skos:definition "Custom rules for email categorization." .
+
+# ExcludedLabels Property
+cs:excludedLabels a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "excluded labels" ;
+    skos:definition "Email labels/folders to exclude from processing." .
+
+# === Process Properties ===
+
+# BatchSize Property
+cs:batchSize a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "batch size" ;
+    skos:definition "Number of emails processed in each batch." .
+
+# PrioritizationAlgorithm Property
+cs:prioritizationAlgorithm a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "prioritization algorithm" ;
+    skos:definition "Algorithm used for ranking emails." .
+
+# ParallelAccounts Property
+cs:parallelAccounts a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "parallel accounts" ;
+    skos:definition "Whether accounts are processed in parallel." .
+
+# DeduplicationEnabled Property
+cs:deduplicationEnabled a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "deduplication enabled" ;
+    skos:definition "Whether to merge duplicate emails." .
+
+# EnrichmentSources Property
+cs:enrichmentSources a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "enrichment sources" ;
+    skos:definition "Additional data sources for enrichment." .
+
+# === Output Properties ===
+
+# ProcessedEmails Property
+cs:processedEmails a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "processed emails" ;
+    skos:definition "Total number of emails processed." .
+
+# PriorityDistribution Property
+cs:priorityDistribution a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:PriorityDistribution ;
+    rdfs:label "priority distribution" ;
+    skos:definition "Count of emails by priority level." .
+
+# ContactMappings Property
+cs:contactMappings a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:ContactMapping ;
+    rdfs:label "contact mappings" ;
+    skos:definition "Emails grouped by contact." .
+
+# CategorizedEmails Property
+cs:categorizedEmails a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:CategoryMapping ;
+    rdfs:label "categorized emails" ;
+    skos:definition "Emails grouped by category." .
+
+# ProcessingDuration Property
+cs:processingDuration a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "processing duration" ;
+    skos:definition "Time taken to complete processing." .
+
+# === Supporting Classes ===
+
+# EmailAccount Class
+cs:EmailAccount a owl:Class ;
+    rdfs:label "Email Account" ;
+    rdfs:subClassOf paf:DataSource ;
+    skos:definition "An email account with provider-specific details." .
+
+# EmailAccount Properties
+cs:provider a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailAccount ;
+    rdfs:range xsd:string ;
+    rdfs:label "provider" ;
+    skos:definition "Email service provider name." .
+
+cs:email a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailAccount ;
+    rdfs:range xsd:string ;
+    rdfs:label "email" ;
+    skos:definition "Email address of the account." .
+
+# ProcessingRule Class
+cs:ProcessingRule a owl:Class ;
+    rdfs:label "Processing Rule" ;
+    rdfs:subClassOf paf:Rule ;
+    skos:definition "A rule for email categorization and prioritization." .
+
+# ProcessingRule Properties
+cs:condition a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "condition" ;
+    skos:definition "Condition that triggers the rule." .
+
+cs:action a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "action" ;
+    skos:definition "Action to take when the condition is met." .
+
+# PriorityDistribution Class
+cs:PriorityDistribution a owl:Class ;
+    rdfs:label "Priority Distribution" ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Distribution of emails across priority levels." .
+
+# ContactMapping Class
+cs:ContactMapping a owl:Class ;
+    rdfs:label "Contact Mapping" ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Mapping between contacts and their associated emails." .
+
+# CategoryMapping Class
+cs:CategoryMapping a owl:Class ;
+    rdfs:label "Category Mapping" ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Mapping between categories and their associated emails." .
+
+# ProcessedEmail Class
+cs:ProcessedEmail a owl:Class ;
+    rdfs:label "Processed Email" ;
+    rdfs:subClassOf paf:ProcessedData ;
+    skos:definition "An email that has been processed, prioritized, and categorized." .
+
+# ProcessedEmail Properties
+cs:emailId a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessedEmail ;
+    rdfs:range xsd:string ;
+    rdfs:label "email ID" ;
+    skos:definition "Unique identifier for the processed email." .
+
+cs:sourceAccountId a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessedEmail ;
+    rdfs:range xsd:string ;
+    rdfs:label "source account ID" ;
+    skos:definition "Identifier for the source email account." .
+
+cs:originalId a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessedEmail ;
+    rdfs:range xsd:string ;
+    rdfs:label "original ID" ;
+    skos:definition "Original message ID from the email provider." .
+
+cs:senderContact a owl:ObjectProperty ;
+    rdfs:domain cs:ProcessedEmail ;
+    rdfs:range cs:Contact ;
+    rdfs:label "sender contact" ;
+    skos:definition "Contact record associated with the sender." .
+
+cs:emailPriority a owl:ObjectProperty ;
+    rdfs:domain cs:ProcessedEmail ;
+    rdfs:range cs:EmailPriority ;
+    rdfs:label "email priority" ;
+    skos:definition "Priority assigned to the email." .
+
+cs:emailCategories a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessedEmail ;
+    rdfs:range xsd:string ;
+    rdfs:label "email categories" ;
+    skos:definition "Categories assigned to the email." .
+
+# EmailPriority Class
+cs:EmailPriority a owl:Class ;
+    rdfs:label "Email Priority" ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Priority level and scoring details for an email." .
+
+# EmailPriority Properties
+cs:priorityLevel a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailPriority ;
+    rdfs:range xsd:string ;
+    rdfs:label "priority level" ;
+    skos:definition "Categorical priority level (high, medium, low)." .
+
+cs:priorityScore a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailPriority ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "priority score" ;
+    skos:definition "Numerical score representing the email's priority." .
+
+cs:priorityFactors a owl:ObjectProperty ;
+    rdfs:domain cs:EmailPriority ;
+    rdfs:range cs:PriorityFactor ;
+    rdfs:label "priority factors" ;
+    skos:definition "Factors contributing to the priority score." .
+
+# PriorityFactor Class
+cs:PriorityFactor a owl:Class ;
+    rdfs:label "Priority Factor" ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "A factor contributing to an email's priority score." .
+
+# PriorityFactor Properties
+cs:factorType a owl:DatatypeProperty ;
+    rdfs:domain cs:PriorityFactor ;
+    rdfs:range xsd:string ;
+    rdfs:label "factor type" ;
+    skos:definition "Type of the priority factor." .
+
+cs:factorWeight a owl:DatatypeProperty ;
+    rdfs:domain cs:PriorityFactor ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "factor weight" ;
+    skos:definition "Weight of the factor in the priority calculation." .
+
+cs:factorScore a owl:DatatypeProperty ;
+    rdfs:domain cs:PriorityFactor ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "factor score" ;
+    skos:definition "Score for this specific factor." .
+
+# === Process Flow Relationships ===
+
+# HasSubProcess Property
+cs:hasSubProcess a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:EmailProcessingProcess ;
+    rdfs:label "has sub-process" ;
+    skos:definition "Relates a process to its sub-processes." .
+
+# PrecedesProcess Property
+cs:precedesProcess a owl:ObjectProperty ;
+    rdfs:domain cs:EmailProcessingProcess ;
+    rdfs:range cs:EmailProcessingProcess ;
+    rdfs:label "precedes process" ;
+    skos:definition "Indicates that one process occurs before another in the workflow." .
+
+# Process Flow Instances
+cs:authenticationProcess a cs:EmailAuthenticationProcess ;
+    rdfs:label "Authentication Process" ;
+    cs:precedesProcess cs:extractionProcess .
+
+cs:extractionProcess a cs:EmailExtractionProcess ;
+    rdfs:label "Extraction Process" ;
+    cs:precedesProcess cs:aggregationProcess .
+
+cs:aggregationProcess a cs:EmailAggregationProcess ;
+    rdfs:label "Aggregation Process" ;
+    cs:precedesProcess cs:contactAssociationProcess .
+
+cs:contactAssociationProcess a cs:ContactAssociationProcess ;
+    rdfs:label "Contact Association Process" ;
+    cs:precedesProcess cs:analysisProcess .
+
+cs:analysisProcess a cs:EmailAnalysisProcess ;
+    rdfs:label "Analysis Process" ;
+    cs:precedesProcess cs:prioritizationProcess .
+
+cs:prioritizationProcess a cs:EmailPrioritizationProcess ;
+    rdfs:label "Prioritization Process" ;
+    cs:precedesProcess cs:categorizationProcess .
+
+cs:categorizationProcess a cs:EmailCategorizationProcess ;
+    rdfs:label "Categorization Process" ;
+    cs:precedesProcess cs:presentationProcess .
+
+cs:presentationProcess a cs:EmailPresentationProcess ;
+    rdfs:label "Presentation Process" . 

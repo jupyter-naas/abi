@@ -1,0 +1,281 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/ContactMergingProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/ContactMergingProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the ContactMergingProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Contact Merging Process Ontology" .
+
+# Process Definition
+cs:ContactMergingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Contact Merging Process"@en ;
+    skos:definition "The process of combining information from multiple records of the same contact."@en .
+
+# Input Properties Classes
+cs:MatchedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Matched Contacts"@en ;
+    skos:definition "Sets of contact records identified as representing the same entity."@en .
+
+cs:MergeRules a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merge Rules"@en ;
+    skos:definition "Rules defining how to combine attributes from different contact records."@en .
+
+cs:AttributePreferences a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Attribute Preferences"@en ;
+    skos:definition "Preferences for which source to prefer for specific attributes."@en .
+
+cs:MergeConflictStrategy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merge Conflict Strategy"@en ;
+    skos:definition "Strategy for resolving conflicts during the merging process."@en .
+
+# Process Properties Classes
+cs:MergeStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Merge Status"@en ;
+    skos:definition "Current status of the merging process."@en .
+
+cs:MergeProgress a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Merge Progress"@en ;
+    skos:definition "Progress percentage of the merging process."@en .
+
+cs:UserInterventionRequirement a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "User Intervention Requirement"@en ;
+    skos:definition "Indicator of whether user intervention is required for resolution."@en .
+
+cs:ActiveConflictResolution a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Active Conflict Resolution"@en ;
+    skos:definition "Active process of resolving conflicts during merging."@en .
+
+# Output Properties Classes
+cs:MergedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merged Contacts"@en ;
+    skos:definition "Contact records resulting from the merging process."@en .
+
+cs:AttributeProvenance a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Attribute Provenance"@en ;
+    skos:definition "Record of the source of each attribute in a merged contact."@en .
+
+cs:MergeConflicts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merge Conflicts"@en ;
+    skos:definition "Conflicts encountered during the merging process."@en .
+
+cs:MergeMetadata a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merge Metadata"@en ;
+    skos:definition "Metadata about the merging process."@en .
+
+cs:MergeError a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merge Error"@en ;
+    skos:definition "Error encountered during the merging process."@en .
+
+# Process Stages
+cs:MergeStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Merge Stage"@en ;
+    skos:definition "A distinct stage in the contact merging process."@en .
+
+cs:MergeInitializationStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Merge Initialization Stage"@en ;
+    skos:definition "Stage for setting up the merging process."@en .
+
+cs:AttributeAnalysisStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Attribute Analysis Stage"@en ;
+    skos:definition "Stage for analyzing attributes from different sources."@en .
+
+cs:ConflictDetectionStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Conflict Detection Stage"@en ;
+    skos:definition "Stage for detecting conflicts between source records."@en .
+
+cs:AttributeSelectionStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Attribute Selection Stage"@en ;
+    skos:definition "Stage for selecting which attributes to include in the merged record."@en .
+
+cs:ContactConstructionStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Contact Construction Stage"@en ;
+    skos:definition "Stage for constructing the merged contact record."@en .
+
+cs:ProvenanceRecordingStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Provenance Recording Stage"@en ;
+    skos:definition "Stage for recording the provenance of merged attributes."@en .
+
+cs:MergeValidationStage a owl:Class ;
+    rdfs:subClassOf cs:MergeStage ;
+    rdfs:label "Merge Validation Stage"@en ;
+    skos:definition "Stage for validating the merged contact record."@en .
+
+# Merge Rules
+cs:SourcePriorityRule a owl:Class ;
+    rdfs:subClassOf cs:MergeRules ;
+    rdfs:label "Source Priority Rule"@en ;
+    skos:definition "Rule defining priority order of sources for attribute selection."@en .
+
+cs:FreshnessRule a owl:Class ;
+    rdfs:subClassOf cs:MergeRules ;
+    rdfs:label "Freshness Rule"@en ;
+    skos:definition "Rule preferring more recently updated attributes."@en .
+
+cs:CompletenessRule a owl:Class ;
+    rdfs:subClassOf cs:MergeRules ;
+    rdfs:label "Completeness Rule"@en ;
+    skos:definition "Rule preferring more complete attributes."@en .
+
+cs:AttributeSpecificRule a owl:Class ;
+    rdfs:subClassOf cs:MergeRules ;
+    rdfs:label "Attribute Specific Rule"@en ;
+    skos:definition "Rule specific to certain types of attributes (email, phone, etc.)."@en .
+
+cs:MultiValueRule a owl:Class ;
+    rdfs:subClassOf cs:MergeRules ;
+    rdfs:label "Multi-Value Rule"@en ;
+    skos:definition "Rule for handling multiple values for the same attribute type."@en .
+
+# Relationships
+cs:hasMatchedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MatchedContacts ;
+    rdfs:label "has matched contacts"@en ;
+    skos:definition "Relates a merging process to the matched contacts it processes."@en .
+
+cs:hasMergeRules a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeRules ;
+    rdfs:label "has merge rules"@en ;
+    skos:definition "Relates a merging process to its merging rules."@en .
+
+cs:hasAttributePreferences a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:AttributePreferences ;
+    rdfs:label "has attribute preferences"@en ;
+    skos:definition "Relates a merging process to its attribute preferences."@en .
+
+cs:hasConflictStrategy a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeConflictStrategy ;
+    rdfs:label "has conflict strategy"@en ;
+    skos:definition "Relates a merging process to its conflict resolution strategy."@en .
+
+cs:hasStatus a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeStatus ;
+    rdfs:label "has status"@en ;
+    skos:definition "Relates a merging process to its current status."@en .
+
+cs:hasProgress a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has progress"@en ;
+    skos:definition "Specifies the completion percentage of the merging process."@en .
+
+cs:requiresUserIntervention a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "requires user intervention"@en ;
+    skos:definition "Specifies whether the merging process requires user intervention."@en .
+
+cs:hasActiveConflictResolution a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:ActiveConflictResolution ;
+    rdfs:label "has active conflict resolution"@en ;
+    skos:definition "Relates a merging process to its active conflict resolution."@en .
+
+cs:producesMergedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergedContacts ;
+    rdfs:label "produces merged contacts"@en ;
+    skos:definition "Relates a merging process to the merged contacts it produces."@en .
+
+cs:recordsAttributeProvenance a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:AttributeProvenance ;
+    rdfs:label "records attribute provenance"@en ;
+    skos:definition "Relates a merging process to the attribute provenance it records."@en .
+
+cs:identifiesConflicts a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeConflicts ;
+    rdfs:label "identifies conflicts"@en ;
+    skos:definition "Relates a merging process to the conflicts it identifies."@en .
+
+cs:generatesMetadata a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeMetadata ;
+    rdfs:label "generates metadata"@en ;
+    skos:definition "Relates a merging process to the metadata it generates."@en .
+
+cs:encountersError a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeError ;
+    rdfs:label "encounters error"@en ;
+    skos:definition "Relates a merging process to any errors it encounters."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:ContactMergingProcess ;
+    rdfs:range cs:MergeStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates a merging process to its current stage."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:MergeStage ;
+    rdfs:range cs:MergeStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the merging process sequence."@en .
+
+cs:hasSourcePriority a owl:DatatypeProperty ;
+    rdfs:domain cs:SourcePriorityRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "has source priority"@en ;
+    skos:definition "Specifies the priority order of sources for a rule."@en .
+
+cs:hasAttributeSource a owl:DatatypeProperty ;
+    rdfs:domain cs:AttributeProvenance ;
+    rdfs:range xsd:string ;
+    rdfs:label "has attribute source"@en ;
+    skos:definition "Specifies the source platform for an attribute."@en .
+
+cs:hasConfidenceValue a owl:DatatypeProperty ;
+    rdfs:domain cs:AttributeProvenance ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has confidence value"@en ;
+    skos:definition "Specifies the confidence value for an attribute selection."@en .
+
+cs:hasErrorCode a owl:DatatypeProperty ;
+    rdfs:domain cs:MergeError ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error code"@en ;
+    skos:definition "Specifies the error code of a merging error."@en .
+
+cs:hasErrorMessage a owl:DatatypeProperty ;
+    rdfs:domain cs:MergeError ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error message"@en ;
+    skos:definition "Specifies the error message of a merging error."@en . 

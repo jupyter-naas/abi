@@ -1,0 +1,189 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# Mining/Validation Process Class Definition
+w3f:MiningProcess a owl:Class ;
+    rdfs:label "Mining Process" ;
+    rdfs:subClassOf bfo:0000015 ; # Process
+    skos:definition "A MiningProcess is an occurrent process entity that represents the activity of validating transactions, creating new blocks, and securing a blockchain network through computational work or stake-based participation, resulting in consensus on the canonical state of the ledger." .
+
+# Validation Process as a broader concept
+w3f:ValidationProcess a owl:Class ;
+    rdfs:label "Validation Process" ;
+    rdfs:subClassOf bfo:0000015 ; # Process
+    skos:definition "A ValidationProcess is an occurrent process entity that represents the activity of verifying transactions and blocks according to consensus rules to maintain the integrity of a blockchain network." .
+
+# Establishing subclass relationships
+w3f:MiningProcess rdfs:subClassOf w3f:ValidationProcess .
+w3f:StakingProcess rdfs:subClassOf w3f:ValidationProcess .
+
+# Staking Process Definition
+w3f:StakingProcess a owl:Class ;
+    rdfs:label "Staking Process" ;
+    rdfs:subClassOf bfo:0000015 ; # Process
+    skos:definition "A StakingProcess is an occurrent process entity that represents the activity of depositing and locking cryptocurrency as collateral to participate in blockchain validation and earn rewards for maintaining network security." .
+
+# Participant Properties
+w3f:performedBy a owl:ObjectProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range w3f:Validator ;
+    rdfs:label "performed by" ;
+    skos:definition "The validator that performs the validation process." .
+
+w3f:usesMiner a owl:ObjectProperty ;
+    rdfs:domain w3f:MiningProcess ;
+    rdfs:range w3f:Miner ;
+    rdfs:label "uses miner" ;
+    skos:definition "The miner that performs the mining process." .
+
+w3f:usesStaker a owl:ObjectProperty ;
+    rdfs:domain w3f:StakingProcess ;
+    rdfs:range w3f:Staker ;
+    rdfs:label "uses staker" ;
+    skos:definition "The staker that performs the staking process." .
+
+# Network Properties
+w3f:securesNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "secures network" ;
+    skos:definition "The blockchain network that is secured by this validation process." .
+
+w3f:followsConsensusProtocol a owl:ObjectProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range w3f:ConsensusProtocol ;
+    rdfs:label "follows consensus protocol" ;
+    skos:definition "The consensus protocol that governs this validation process." .
+
+# Process Specific Properties - Mining
+w3f:usesHashingAlgorithm a owl:DatatypeProperty ;
+    rdfs:domain w3f:MiningProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "uses hashing algorithm" ;
+    skos:definition "The cryptographic hashing algorithm used in the mining process (e.g., SHA-256, Ethash)." .
+
+w3f:hasHashRate a owl:DatatypeProperty ;
+    rdfs:domain w3f:MiningProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has hash rate" ;
+    skos:definition "The computational power used in the mining process, measured in hashes per second." .
+
+w3f:hasDifficulty a owl:DatatypeProperty ;
+    rdfs:domain w3f:MiningProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has difficulty" ;
+    skos:definition "The difficulty target that a successful mining solution must meet." .
+
+w3f:hasEnergyConsumption a owl:DatatypeProperty ;
+    rdfs:domain w3f:MiningProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has energy consumption" ;
+    skos:definition "The energy consumed by the mining process, typically measured in kilowatt-hours." .
+
+# Process Specific Properties - Staking
+w3f:hasStakedAmount a owl:DatatypeProperty ;
+    rdfs:domain w3f:StakingProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has staked amount" ;
+    skos:definition "The amount of cryptocurrency staked to participate in the validation process." .
+
+w3f:hasStakingDuration a owl:DatatypeProperty ;
+    rdfs:domain w3f:StakingProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has staking duration" ;
+    skos:definition "The time duration for which assets are staked." .
+
+w3f:hasLockupPeriod a owl:DatatypeProperty ;
+    rdfs:domain w3f:StakingProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has lockup period" ;
+    skos:definition "The time duration during which staked assets cannot be withdrawn." .
+
+# Reward Properties
+w3f:earnsReward a owl:ObjectProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range w3f:ValidationReward ;
+    rdfs:label "earns reward" ;
+    skos:definition "The reward earned for successful validation." .
+
+w3f:hasRewardAmount a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has reward amount" ;
+    skos:definition "The amount of cryptocurrency rewarded for successful validation." .
+
+w3f:hasRewardFrequency a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has reward frequency" ;
+    skos:definition "The frequency at which rewards are distributed for validation activities." .
+
+# Block Creation Properties
+w3f:createsBlock a owl:ObjectProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range w3f:Block ;
+    rdfs:label "creates block" ;
+    skos:definition "The block created as a result of the validation process." .
+
+w3f:validatesTransaction a owl:ObjectProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "validates transaction" ;
+    skos:definition "A transaction that is validated during the validation process." .
+
+w3f:hasBlockCreationTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has block creation time" ;
+    skos:definition "The time taken to create a new block through the validation process." .
+
+# Performance Properties
+w3f:hasSuccessRate a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has success rate" ;
+    skos:definition "The rate of successful block validations relative to attempts." .
+
+w3f:hasSlashingPenalty a owl:DatatypeProperty ;
+    rdfs:domain w3f:StakingProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has slashing penalty" ;
+    skos:definition "The penalty imposed for malicious or improper validation behavior in proof-of-stake systems." .
+
+# Temporal Properties
+w3f:hasStartTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has start time" ;
+    skos:definition "The time at which the validation process begins." .
+
+w3f:hasEndTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has end time" ;
+    skos:definition "The time at which the validation process ends." .
+
+w3f:hasDuration a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has duration" ;
+    skos:definition "The duration of the validation process." .
+
+# Status Properties
+w3f:hasValidationStatus a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "has validation status" ;
+    skos:definition "The current status of the validation process (e.g., active, complete, failed)." .
+
+w3f:hasParticipationStatus a owl:DatatypeProperty ;
+    rdfs:domain w3f:ValidationProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "has participation status" ;
+    skos:definition "The status of the validator's participation in the consensus process (e.g., active, jailed, unstaking)." . 

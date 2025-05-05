@@ -1,0 +1,157 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# DigitalAsset Class Definition
+w3f:DigitalAsset a owl:Class ;
+    rdfs:label "Digital Asset" ;
+    rdfs:subClassOf bfo:0000141 ; # Immaterial Entity
+    skos:definition "A DigitalAsset is an independent continuant immaterial entity that represents tokenized value on a blockchain network, which can be owned, transferred, and managed through cryptographic mechanisms, and may embody rights, value, or utility within digital ecosystems." .
+
+# Core Properties
+w3f:hasAssetIdentifier a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:string ;
+    rdfs:label "has asset identifier" ;
+    skos:definition "The unique identifier for the digital asset on its blockchain (e.g., contract address, asset ID)." .
+
+w3f:hasTokenSymbol a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:string ;
+    rdfs:label "has token symbol" ;
+    skos:definition "The abbreviated symbol representing the digital asset (e.g., BTC, ETH, USDC)." .
+
+w3f:hasDecimalPlaces a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has decimal places" ;
+    skos:definition "The number of decimal places used to represent fractional amounts of the asset." .
+
+# Supply Properties
+w3f:hasTotalSupply a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has total supply" ;
+    skos:definition "The total number of units of the asset that exist or will ever exist." .
+
+w3f:hasCirculatingSupply a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has circulating supply" ;
+    skos:definition "The number of units of the asset that are currently in circulation and available to the public." .
+
+w3f:hasMaxSupply a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has max supply" ;
+    skos:definition "The maximum number of units of the asset that can ever exist, if there is a cap." .
+
+# Economic Properties
+w3f:hasMarketValue a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has market value" ;
+    skos:definition "The current market value of one unit of the asset, typically in a fiat currency reference." .
+
+w3f:hasMarketCapitalization a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has market capitalization" ;
+    skos:definition "The total market value of the asset, calculated as price per unit multiplied by circulating supply." .
+
+w3f:hasTradingVolume a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has trading volume" ;
+    skos:definition "The volume of the asset traded within a specific time period, typically 24 hours." .
+
+# Fungibility Properties
+w3f:isFungible a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is fungible" ;
+    skos:definition "Whether units of the asset are interchangeable with each other (true for fungible tokens, false for non-fungible tokens)." .
+
+w3f:hasTokenStandard a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:string ;
+    rdfs:label "has token standard" ;
+    skos:definition "The technical standard or interface specification that the digital asset follows (e.g., ERC-20, ERC-721, ERC-1155)." .
+
+# Ownership Properties
+w3f:isOwnedBy a owl:ObjectProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "is owned by" ;
+    skos:definition "The Web3 identity that currently owns this digital asset." ;
+    owl:inverseOf w3f:ownsDigitalAsset .
+
+w3f:isPreviouslyOwnedBy a owl:ObjectProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "is previously owned by" ;
+    skos:definition "A Web3 identity that previously owned this digital asset, forming its provenance history." .
+
+# Content Properties (for NFTs)
+w3f:hasMetadata a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:string ;
+    rdfs:label "has metadata" ;
+    skos:definition "The metadata associated with the digital asset, typically stored as JSON describing the asset's attributes." .
+
+w3f:hasContentURI a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has content URI" ;
+    skos:definition "The URI pointing to the content or media associated with the digital asset." .
+
+w3f:hasContentHash a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:string ;
+    rdfs:label "has content hash" ;
+    skos:definition "A cryptographic hash of the content associated with the digital asset, ensuring its integrity." .
+
+# Network Relationships
+w3f:existsOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "exists on network" ;
+    skos:definition "The blockchain network on which this digital asset exists." ;
+    owl:inverseOf w3f:hostsDigitalAsset .
+
+w3f:isBridgedTo a owl:ObjectProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "is bridged to" ;
+    skos:definition "A relationship to an equivalent representation of this digital asset on another blockchain network." .
+
+# Smart Contract Relationships
+w3f:isGovernedByContract a owl:ObjectProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range w3f:SmartContract ;
+    rdfs:label "is governed by contract" ;
+    skos:definition "The smart contract that defines and governs the behavior of this digital asset." .
+
+w3f:isLockedInContract a owl:ObjectProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range w3f:SmartContract ;
+    rdfs:label "is locked in contract" ;
+    skos:definition "A smart contract in which this digital asset is currently locked or escrowed." .
+
+# Utility Properties
+w3f:providesGovernanceRights a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "provides governance rights" ;
+    skos:definition "Whether the digital asset provides governance voting rights in a protocol or DAO." .
+
+w3f:providesUtilityAccess a owl:DatatypeProperty ;
+    rdfs:domain w3f:DigitalAsset ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "provides utility access" ;
+    skos:definition "Whether the digital asset provides access to specific utilities, features, or services." . 

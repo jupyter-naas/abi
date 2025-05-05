@@ -1,0 +1,280 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/ConflictResolutionProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/ConflictResolutionProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the ConflictResolutionProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Conflict Resolution Process Ontology" .
+
+# Process Definition
+cs:ConflictResolutionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Conflict Resolution Process"@en ;
+    skos:definition "The process of resolving conflicts when different sources have contradicting information for the same contact."@en .
+
+# Input Properties Classes
+cs:ConflictingData a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Conflicting Data"@en ;
+    skos:definition "Contradictory data elements requiring resolution."@en .
+
+cs:ResolutionStrategy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolution Strategy"@en ;
+    skos:definition "Strategy for resolving conflicting information."@en .
+
+cs:DataSourceMetadata a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Data Source Metadata"@en ;
+    skos:definition "Metadata about the sources of conflicting data."@en .
+
+cs:UserPreferences a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "User Preferences"@en ;
+    skos:definition "User-defined preferences for conflict resolution."@en .
+
+cs:DataAttributeType a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Data Attribute Type"@en ;
+    skos:definition "Type of the data attribute with conflict."@en .
+
+# Process Properties Classes
+cs:ResolutionStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Resolution Status"@en ;
+    skos:definition "Current status of the conflict resolution process."@en .
+
+cs:ResolutionMethod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolution Method"@en ;
+    skos:definition "Method used to resolve a specific conflict."@en .
+
+cs:UserInteractionRequired a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "User Interaction Required"@en ;
+    skos:definition "Indicator of whether user interaction is required for resolution."@en .
+
+cs:SelectedSource a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Selected Source"@en ;
+    skos:definition "Source selected as authoritative for a particular conflict."@en .
+
+# Output Properties Classes
+cs:ResolvedData a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolved Data"@en ;
+    skos:definition "Data resulting from the conflict resolution process."@en .
+
+cs:ResolutionDecision a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolution Decision"@en ;
+    skos:definition "Decision made to resolve a conflict."@en .
+
+cs:ResolutionJustification a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolution Justification"@en ;
+    skos:definition "Justification for a resolution decision."@en .
+
+cs:UnresolvedConflicts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Unresolved Conflicts"@en ;
+    skos:definition "Conflicts that could not be automatically resolved."@en .
+
+cs:ResolutionMetadata a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolution Metadata"@en ;
+    skos:definition "Metadata about the resolution process."@en .
+
+# Process Stages
+cs:ResolutionStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Resolution Stage"@en ;
+    skos:definition "A distinct stage in the conflict resolution process."@en .
+
+cs:ConflictIdentificationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Conflict Identification Stage"@en ;
+    skos:definition "Stage for identifying specific conflicts to resolve."@en .
+
+cs:StrategySelectionStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Strategy Selection Stage"@en ;
+    skos:definition "Stage for selecting the appropriate resolution strategy."@en .
+
+cs:DataAnalysisStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Data Analysis Stage"@en ;
+    skos:definition "Stage for analyzing the conflicting data elements."@en .
+
+cs:DecisionMakingStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Decision Making Stage"@en ;
+    skos:definition "Stage for making resolution decisions."@en .
+
+cs:UserConsultationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "User Consultation Stage"@en ;
+    skos:definition "Stage for consulting the user for manual resolution."@en .
+
+cs:ResolutionImplementationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Resolution Implementation Stage"@en ;
+    skos:definition "Stage for implementing the resolution decision."@en .
+
+cs:ResolutionVerificationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Resolution Verification Stage"@en ;
+    skos:definition "Stage for verifying the resolved data."@en .
+
+# Resolution Strategies
+cs:SourcePriorityStrategy a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStrategy ;
+    rdfs:label "Source Priority Strategy"@en ;
+    skos:definition "Resolution based on predefined source priority."@en .
+
+cs:MostRecentDataStrategy a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStrategy ;
+    rdfs:label "Most Recent Data Strategy"@en ;
+    skos:definition "Resolution by selecting the most recently updated data."@en .
+
+cs:MostCompleteDataStrategy a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStrategy ;
+    rdfs:label "Most Complete Data Strategy"@en ;
+    skos:definition "Resolution by selecting the most complete data."@en .
+
+cs:UserManualSelectionStrategy a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStrategy ;
+    rdfs:label "User Manual Selection Strategy"@en ;
+    skos:definition "Resolution through direct user selection."@en .
+
+cs:AttributeSpecificStrategy a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStrategy ;
+    rdfs:label "Attribute Specific Strategy"@en ;
+    skos:definition "Resolution using rules specific to the attribute type."@en .
+
+# Relationships
+cs:hasConflictingData a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ConflictingData ;
+    rdfs:label "has conflicting data"@en ;
+    skos:definition "Relates a resolution process to the conflicting data it processes."@en .
+
+cs:usesResolutionStrategy a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolutionStrategy ;
+    rdfs:label "uses resolution strategy"@en ;
+    skos:definition "Relates a resolution process to the strategy it employs."@en .
+
+cs:hasDataSourceMetadata a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:DataSourceMetadata ;
+    rdfs:label "has data source metadata"@en ;
+    skos:definition "Relates a resolution process to metadata about the data sources."@en .
+
+cs:considersUserPreferences a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:UserPreferences ;
+    rdfs:label "considers user preferences"@en ;
+    skos:definition "Relates a resolution process to the user preferences it considers."@en .
+
+cs:resolvesAttributeType a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:DataAttributeType ;
+    rdfs:label "resolves attribute type"@en ;
+    skos:definition "Relates a resolution process to the type of attribute being resolved."@en .
+
+cs:hasResolutionStatus a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolutionStatus ;
+    rdfs:label "has resolution status"@en ;
+    skos:definition "Relates a resolution process to its current status."@en .
+
+cs:usesResolutionMethod a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolutionMethod ;
+    rdfs:label "uses resolution method"@en ;
+    skos:definition "Relates a resolution process to the method it uses."@en .
+
+cs:requiresUserInteraction a owl:DatatypeProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "requires user interaction"@en ;
+    skos:definition "Specifies whether the resolution process requires user interaction."@en .
+
+cs:selectsSource a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:SelectedSource ;
+    rdfs:label "selects source"@en ;
+    skos:definition "Relates a resolution process to the source it selects as authoritative."@en .
+
+cs:producesResolvedData a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolvedData ;
+    rdfs:label "produces resolved data"@en ;
+    skos:definition "Relates a resolution process to the resolved data it produces."@en .
+
+cs:makesResolutionDecision a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolutionDecision ;
+    rdfs:label "makes resolution decision"@en ;
+    skos:definition "Relates a resolution process to the decision it makes."@en .
+
+cs:providesJustification a owl:ObjectProperty ;
+    rdfs:domain cs:ResolutionDecision ;
+    rdfs:range cs:ResolutionJustification ;
+    rdfs:label "provides justification"@en ;
+    skos:definition "Relates a resolution decision to its justification."@en .
+
+cs:hasUnresolvedConflicts a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:UnresolvedConflicts ;
+    rdfs:label "has unresolved conflicts"@en ;
+    skos:definition "Relates a resolution process to conflicts it could not resolve."@en .
+
+cs:generatesMetadata a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolutionMetadata ;
+    rdfs:label "generates metadata"@en ;
+    skos:definition "Relates a resolution process to the metadata it generates."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:ConflictResolutionProcess ;
+    rdfs:range cs:ResolutionStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates a resolution process to its current stage."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:ResolutionStage ;
+    rdfs:range cs:ResolutionStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the resolution process sequence."@en .
+
+cs:hasStrategyPriority a owl:DatatypeProperty ;
+    rdfs:domain cs:SourcePriorityStrategy ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has strategy priority"@en ;
+    skos:definition "Specifies the priority level of a resolution strategy."@en .
+
+cs:hasDecisionRationale a owl:DatatypeProperty ;
+    rdfs:domain cs:ResolutionJustification ;
+    rdfs:range xsd:string ;
+    rdfs:label "has decision rationale"@en ;
+    skos:definition "Specifies the rationale for a resolution decision."@en .
+
+cs:hasConfidenceLevel a owl:DatatypeProperty ;
+    rdfs:domain cs:ResolutionDecision ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has confidence level"@en ;
+    skos:definition "Specifies the confidence level for a resolution decision."@en . 

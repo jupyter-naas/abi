@@ -1,0 +1,354 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix pai: <http://ontology.abi.ai/personalai/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+
+# AppleContactDataModel Class Definition
+pai:AppleContactDataModel a owl:Class ;
+    rdfs:label "Apple Contact Data Model" ;
+    rdfs:subClassOf bfo:0000141, pai:PlatformDataModel ; # Immaterial Entity, Platform Data Model
+    skos:definition "An AppleContactDataModel is an independent continuant immaterial entity that represents the structured data format used by Apple operating systems to store, manage, and synchronize contact information across devices within the Apple ecosystem." .
+
+# Core Contact Classes
+pai:AppleContact a owl:Class ;
+    rdfs:label "Apple Contact" ;
+    rdfs:subClassOf pai:PlatformContact, pai:AppleContactDataModel ;
+    skos:definition "A digital representation of a person or organization within the Apple Contact framework, containing personal details and communication methods." ;
+    owl:equivalentClass vcard:Individual .
+
+pai:AppleContactGroup a owl:Class ;
+    rdfs:label "Apple Contact Group" ;
+    rdfs:subClassOf pai:AppleContactDataModel ;
+    skos:definition "A collection of Apple Contacts organized together for common handling or categorization." ;
+    owl:equivalentClass vcard:Group .
+
+# Identification Properties
+pai:hasContactIdentifier a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has contact identifier" ;
+    skos:definition "The unique identifier for the contact in the Apple ecosystem, typically a UUID." .
+
+pai:hasUUID a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has UUID" ;
+    skos:definition "The Universally Unique Identifier assigned to the contact record." .
+
+# Contact Type Properties
+pai:isCompany a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is company" ;
+    skos:definition "Indicates whether the contact represents an organization rather than an individual." .
+
+pai:isMe a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is me" ;
+    skos:definition "Indicates whether the contact represents the device owner's own contact information." .
+
+# Name Properties
+pai:hasNameComponent a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:ContactNameComponent ;
+    rdfs:label "has name component" ;
+    skos:definition "The structured name component of the contact record." .
+
+pai:hasGivenName a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has given name" ;
+    skos:definition "The first or given name of the contact." ;
+    owl:equivalentProperty vcard:given-name .
+
+pai:hasFamilyName a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has family name" ;
+    skos:definition "The last or family name of the contact." ;
+    owl:equivalentProperty vcard:family-name .
+
+pai:hasMiddleName a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has middle name" ;
+    skos:definition "The middle name of the contact." ;
+    owl:equivalentProperty vcard:additional-name .
+
+pai:hasNamePrefix a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has name prefix" ;
+    skos:definition "The honorific prefix of the contact's name (e.g., Dr., Mr., Ms.)." ;
+    owl:equivalentProperty vcard:honorific-prefix .
+
+pai:hasNameSuffix a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has name suffix" ;
+    skos:definition "The honorific suffix of the contact's name (e.g., Ph.D., Jr., Sr.)." ;
+    owl:equivalentProperty vcard:honorific-suffix .
+
+pai:hasNickname a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has nickname" ;
+    skos:definition "The informal name or nickname of the contact." ;
+    owl:equivalentProperty vcard:nickname .
+
+pai:hasPhoneticGivenName a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has phonetic given name" ;
+    skos:definition "The phonetic representation of the first name, typically used for non-Latin script names." .
+
+pai:hasPhoneticFamilyName a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has phonetic family name" ;
+    skos:definition "The phonetic representation of the last name, typically used for non-Latin script names." .
+
+# Organization Properties
+pai:hasOrganization a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has organization" ;
+    skos:definition "The organization or company associated with the contact." ;
+    owl:equivalentProperty vcard:organization-name .
+
+pai:hasDepartment a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has department" ;
+    skos:definition "The department within the organization associated with the contact." .
+
+pai:hasJobTitle a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has job title" ;
+    skos:definition "The job title or position of the contact." ;
+    owl:equivalentProperty vcard:title .
+
+# Communication Properties
+pai:hasEmailAddress a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:EmailAddress ;
+    rdfs:label "has email address" ;
+    skos:definition "An email address associated with the contact." ;
+    owl:equivalentProperty vcard:hasEmail .
+
+pai:hasPhoneNumber a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:PhoneNumber ;
+    rdfs:label "has phone number" ;
+    skos:definition "A phone number associated with the contact." ;
+    owl:equivalentProperty vcard:hasTelephone .
+
+pai:hasPostalAddress a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:PostalAddress ;
+    rdfs:label "has postal address" ;
+    skos:definition "A physical address associated with the contact." ;
+    owl:equivalentProperty vcard:hasAddress .
+
+pai:hasURL a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:URL ;
+    rdfs:label "has URL" ;
+    skos:definition "A URL associated with the contact such as website, homepage, or social profile." ;
+    owl:equivalentProperty vcard:hasURL .
+
+pai:hasInstantMessagingAddress a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:InstantMessagingAddress ;
+    rdfs:label "has instant messaging address" ;
+    skos:definition "An instant messaging handle or identifier associated with the contact." .
+
+pai:hasSocialProfile a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:SocialProfile ;
+    rdfs:label "has social profile" ;
+    skos:definition "A social media profile associated with the contact." .
+
+# Value Type Properties
+pai:hasLabel a owl:DatatypeProperty ;
+    rdfs:domain [owl:unionOf (pai:EmailAddress pai:PhoneNumber pai:PostalAddress pai:URL pai:InstantMessagingAddress pai:SocialProfile)] ;
+    rdfs:range xsd:string ;
+    rdfs:label "has label" ;
+    skos:definition "The user-defined or predefined label for the communication method (e.g., Home, Work, Other)." .
+
+pai:hasValue a owl:DatatypeProperty ;
+    rdfs:domain [owl:unionOf (pai:EmailAddress pai:PhoneNumber pai:PostalAddress pai:URL pai:InstantMessagingAddress pai:SocialProfile)] ;
+    rdfs:range xsd:string ;
+    rdfs:label "has value" ;
+    skos:definition "The actual value of the communication method (e.g., the email address, phone number, or URL string)." .
+
+# Address Component Properties
+pai:hasStreet a owl:DatatypeProperty ;
+    rdfs:domain pai:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "has street" ;
+    skos:definition "The street address component of a postal address." ;
+    owl:equivalentProperty vcard:street-address .
+
+pai:hasCity a owl:DatatypeProperty ;
+    rdfs:domain pai:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "has city" ;
+    skos:definition "The city component of a postal address." ;
+    owl:equivalentProperty vcard:locality .
+
+pai:hasState a owl:DatatypeProperty ;
+    rdfs:domain pai:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "has state" ;
+    skos:definition "The state or province component of a postal address." ;
+    owl:equivalentProperty vcard:region .
+
+pai:hasPostalCode a owl:DatatypeProperty ;
+    rdfs:domain pai:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "has postal code" ;
+    skos:definition "The zip or postal code component of a postal address." ;
+    owl:equivalentProperty vcard:postal-code .
+
+pai:hasCountry a owl:DatatypeProperty ;
+    rdfs:domain pai:PostalAddress ;
+    rdfs:range xsd:string ;
+    rdfs:label "has country" ;
+    skos:definition "The country component of a postal address." ;
+    owl:equivalentProperty vcard:country-name .
+
+# Additional Apple-specific Properties
+pai:hasImageData a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:base64Binary ;
+    rdfs:label "has image data" ;
+    skos:definition "The binary representation of the contact's associated image or photo." ;
+    owl:equivalentProperty vcard:photo .
+
+pai:hasNote a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has note" ;
+    skos:definition "Free-form notes associated with the contact." ;
+    owl:equivalentProperty vcard:note .
+
+pai:hasBirthday a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:date ;
+    rdfs:label "has birthday" ;
+    skos:definition "The birth date of the contact." ;
+    owl:equivalentProperty vcard:bday .
+
+pai:hasAnniversary a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:date ;
+    rdfs:label "has anniversary" ;
+    skos:definition "An anniversary date associated with the contact." ;
+    owl:equivalentProperty vcard:anniversary .
+
+pai:hasDateAdded a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has date added" ;
+    skos:definition "The date and time when the contact was added to the address book." .
+
+pai:hasDateModified a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has date modified" ;
+    skos:definition "The date and time when the contact was last modified." .
+
+# Synchronization Properties
+pai:hasiCloudSyncState a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has iCloud sync state" ;
+    skos:definition "The current synchronization state of the contact with iCloud." .
+
+pai:hasSourceAccount a owl:DatatypeProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has source account" ;
+    skos:definition "The account source from which the contact was created or synchronized (e.g., iCloud, Exchange, Google)." .
+
+# Relationship Properties
+pai:belongsToGroup a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:AppleContactGroup ;
+    rdfs:label "belongs to group" ;
+    skos:definition "Indicates that a contact is a member of a specific contact group." .
+
+pai:hasRelatedContact a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:AppleContact ;
+    rdfs:label "has related contact" ;
+    skos:definition "Indicates a relationship between contacts, such as spouse, child, parent, or friend." .
+
+pai:hasRelationshipType a owl:DatatypeProperty ;
+    rdfs:domain pai:hasRelatedContact ;
+    rdfs:range xsd:string ;
+    rdfs:label "has relationship type" ;
+    skos:definition "The type of relationship between related contacts (e.g., spouse, parent, child, friend)." .
+
+# Integration with Other Apple Services
+pai:linkToCalendar a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:CalendarEvent ;
+    rdfs:label "link to calendar" ;
+    skos:definition "Associates a contact with calendar events in Apple Calendar." .
+
+pai:linkToMessages a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:MessageConversation ;
+    rdfs:label "link to messages" ;
+    skos:definition "Associates a contact with message conversations in Apple Messages." .
+
+pai:linkToFaceTime a owl:ObjectProperty ;
+    rdfs:domain pai:AppleContact ;
+    rdfs:range pai:FaceTimeCall ;
+    rdfs:label "link to FaceTime" ;
+    skos:definition "Associates a contact with FaceTime call history." .
+
+# Platform-specific Classes
+pai:ContactNameComponent a owl:Class ;
+    rdfs:label "Contact Name Component" ;
+    rdfs:subClassOf pai:AppleContactDataModel ;
+    skos:definition "A component of a contact's name, such as given name, family name, or prefix." .
+
+pai:EmailAddress a owl:Class ;
+    rdfs:label "Email Address" ;
+    rdfs:subClassOf pai:AppleContactDataModel, pai:DigitalContactMethod ;
+    skos:definition "An email address associated with a contact, including both the address value and its label." .
+
+pai:PhoneNumber a owl:Class ;
+    rdfs:label "Phone Number" ;
+    rdfs:subClassOf pai:AppleContactDataModel, pai:DigitalContactMethod ;
+    skos:definition "A phone number associated with a contact, including both the number value and its label." .
+
+pai:PostalAddress a owl:Class ;
+    rdfs:label "Postal Address" ;
+    rdfs:subClassOf pai:AppleContactDataModel, pai:PhysicalContactMethod ;
+    skos:definition "A physical address associated with a contact, including the address components and label." .
+
+pai:URL a owl:Class ;
+    rdfs:label "URL" ;
+    rdfs:subClassOf pai:AppleContactDataModel, pai:DigitalContactMethod ;
+    skos:definition "A URL associated with a contact, such as a website, homepage, or profile, including both the URL value and its label." .
+
+pai:InstantMessagingAddress a owl:Class ;
+    rdfs:label "Instant Messaging Address" ;
+    rdfs:subClassOf pai:AppleContactDataModel, pai:DigitalContactMethod ;
+    skos:definition "An instant messaging handle or identifier associated with a contact, including both the address value and its label." .
+
+pai:SocialProfile a owl:Class ;
+    rdfs:label "Social Profile" ;
+    rdfs:subClassOf pai:AppleContactDataModel, pai:DigitalContactMethod ;
+    skos:definition "A social media profile associated with a contact, including the service type, username, and URL." . 

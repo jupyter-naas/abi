@@ -1,0 +1,154 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# BlockCreation Class Definition
+w3f:BlockCreation a owl:Class ;
+    rdfs:label "Block Creation" ;
+    rdfs:subClassOf bfo:0000035 ; # Process Boundary
+    skos:definition "A BlockCreation is an occurrent process boundary entity that represents the instantaneous temporal boundary at which a block is finalized and appended to the blockchain, marking the transition from a candidate block to a confirmed block in the distributed ledger." .
+
+# Block Boundary Types
+w3f:BlockFinalization a owl:Class ;
+    rdfs:label "Block Finalization" ;
+    rdfs:subClassOf w3f:BlockCreation ;
+    skos:definition "A process boundary representing the instantaneous temporal boundary at which a block achieves consensus-based finality and is permanently added to the canonical chain." .
+
+w3f:BlockProposal a owl:Class ;
+    rdfs:label "Block Proposal" ;
+    rdfs:subClassOf w3f:BlockCreation ;
+    skos:definition "A process boundary representing the instantaneous temporal boundary at which a candidate block is initially proposed to the network for validation." .
+
+# Temporal Properties
+w3f:occursAt a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:BlockTimestamp ;
+    rdfs:label "occurs at" ;
+    skos:definition "The specific temporal instant at which this block creation boundary occurs." .
+
+w3f:hasTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp" ;
+    skos:definition "The timestamp at which this block creation boundary occurs." .
+
+# Block Relationships
+w3f:createsBlock a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:Block ;
+    rdfs:label "creates block" ;
+    skos:definition "The block that is created at this process boundary." .
+
+w3f:hasBlockNumber a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has block number" ;
+    skos:definition "The sequential number of the block created at this process boundary." .
+
+w3f:hasPreviousBlock a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:Block ;
+    rdfs:label "has previous block" ;
+    skos:definition "The parent block that immediately precedes the block being created at this process boundary." .
+
+# Process Relationships
+w3f:boundsValidationProcess a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:ValidationProcess ;
+    rdfs:label "bounds validation process" ;
+    skos:definition "The validation process that this block creation process boundary concludes." .
+
+w3f:boundsMiningProcess a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:MiningProcess ;
+    rdfs:label "bounds mining process" ;
+    skos:definition "The mining process that this block creation process boundary concludes." .
+
+w3f:initiatesChainReorganization a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:ChainReorganization ;
+    rdfs:label "initiates chain reorganization" ;
+    skos:definition "The chain reorganization process that may be initiated by this block creation boundary (in forking scenarios)." .
+
+# Network Relationships
+w3f:occursOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "occurs on network" ;
+    skos:definition "The blockchain network on which this block creation boundary occurs." .
+
+w3f:followsConsensusProtocol a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:ConsensusProtocol ;
+    rdfs:label "follows consensus protocol" ;
+    skos:definition "The consensus protocol that governs this block creation boundary." .
+
+# Transaction Relationships
+w3f:confirmsTransactions a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "confirms transactions" ;
+    skos:definition "The transactions that are confirmed at this block creation boundary." .
+
+w3f:hasTransactionCount a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has transaction count" ;
+    skos:definition "The number of transactions included in the block at this creation boundary." .
+
+# Technical Properties
+w3f:hasBlockHash a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:string ;
+    rdfs:label "has block hash" ;
+    skos:definition "The cryptographic hash of the block created at this process boundary." .
+
+w3f:hasDifficulty a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has difficulty" ;
+    skos:definition "The network difficulty at which this block creation boundary occurs (for Proof of Work networks)." .
+
+w3f:hasValidatorSignatures a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has validator signatures" ;
+    skos:definition "The number of validator signatures that finalized the block at this creation boundary (for Proof of Stake networks)." .
+
+# State Transition Properties
+w3f:producesStateTransition a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:StateTransition ;
+    rdfs:label "produces state transition" ;
+    skos:definition "The state transition that results from the block creation at this process boundary." .
+
+w3f:hasStateDelta a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:string ;
+    rdfs:label "has state delta" ;
+    skos:definition "A representation of the changes to the blockchain state resulting from this block creation." .
+
+# Reward Properties
+w3f:distributesMiningReward a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:ValidationReward ;
+    rdfs:label "distributes mining reward" ;
+    skos:definition "The mining reward that is distributed at this block creation boundary." .
+
+w3f:hasRewardAmount a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has reward amount" ;
+    skos:definition "The amount of cryptocurrency rewarded at this block creation boundary." .
+
+# Event Properties
+w3f:emitsBlockEvent a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockCreation ;
+    rdfs:range w3f:BlockEvent ;
+    rdfs:label "emits block event" ;
+    skos:definition "The block event that is emitted at this process boundary." . 

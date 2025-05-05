@@ -1,0 +1,187 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# BlockchainNetwork Class Definition
+w3f:BlockchainNetwork a owl:Class ;
+    rdfs:label "Blockchain Network" ;
+    rdfs:subClassOf bfo:0000040, w3f:DistributedSystem ; # Material Entity, Distributed System
+    skos:definition "A BlockchainNetwork is an independent continuant material entity that represents a distributed computing infrastructure composed of physically distributed nodes that collectively maintain a shared, append-only ledger of cryptographically secured and linked data blocks according to a consensus protocol." .
+
+# Base Class for Hierarchical Structure
+w3f:DistributedSystem a owl:Class ;
+    rdfs:label "Distributed System" ;
+    rdfs:subClassOf bfo:0000040 ; # Material Entity
+    skos:definition "A distributed system is a material entity comprising multiple physically separate computational nodes that communicate and coordinate their actions to achieve a common purpose." .
+
+# Physical Properties
+w3f:hasNodeCount a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has node count" ;
+    skos:definition "The total number of participating nodes in the blockchain network." .
+
+w3f:hasGeographicDistribution a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:string ;
+    rdfs:label "has geographic distribution" ;
+    skos:definition "The distribution of nodes by geography, typically represented as a JSON map." .
+
+w3f:hasHashingPower a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has hashing power" ;
+    skos:definition "The total computational power securing the network, typically measured in hashes per second." .
+
+w3f:hasEnergyConsumption a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has energy consumption" ;
+    skos:definition "The energy used by the network, typically measured in kilowatt-hours or terawatt-hours per year." .
+
+# Technical Properties
+w3f:hasConsensusMechanism a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:string ;
+    rdfs:label "has consensus mechanism" ;
+    skos:definition "The method used for achieving agreement on the state of the blockchain (e.g., Proof of Work, Proof of Stake)." .
+
+w3f:hasBlockTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has block time" ;
+    skos:definition "The average time between blocks being added to the blockchain." .
+
+w3f:hasTransactionCapacity a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has transaction capacity" ;
+    skos:definition "The number of transactions the network can process per time unit, typically per second." .
+
+w3f:hasChainLength a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has chain length" ;
+    rdfs:comment "Also known as block height." ;
+    skos:definition "The current number of blocks in the blockchain." .
+
+w3f:hasGenesisTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has genesis timestamp" ;
+    skos:definition "The timestamp of the genesis (first) block of the blockchain." .
+
+w3f:hasProtocolVersion a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:string ;
+    rdfs:label "has protocol version" ;
+    skos:definition "The current version of the blockchain protocol." .
+
+# Economic Properties
+w3f:hasNativeAsset a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "has native asset" ;
+    skos:definition "The primary token or cryptocurrency native to the blockchain network." .
+
+w3f:hasMarketCapitalization a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has market capitalization" ;
+    skos:definition "The total market value of the native asset, calculated as price per unit multiplied by circulating supply." .
+
+w3f:hasAverageFee a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has average fee" ;
+    skos:definition "The average cost per transaction on the network." .
+
+w3f:hasTotalValueLocked a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has total value locked" ;
+    skos:definition "The total value of assets secured or locked in the blockchain network's protocols or applications." .
+
+# Node Relationships
+w3f:hasNode a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:BlockchainNode ;
+    rdfs:label "has node" ;
+    skos:definition "A node that is part of the blockchain network." .
+
+w3f:hasValidator a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:Validator ;
+    rdfs:label "has validator" ;
+    skos:definition "A specialized node that participates in the consensus process to validate transactions and create blocks." .
+
+w3f:hasMiner a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:Miner ;
+    rdfs:label "has miner" ;
+    skos:definition "A specialized node that performs computational work to secure a Proof of Work blockchain and create new blocks." .
+
+# Protocol Relationships
+w3f:implementsConsensusProtocol a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:ConsensusProtocol ;
+    rdfs:label "implements consensus protocol" ;
+    skos:definition "The consensus protocol implemented by the blockchain network to achieve agreement on the state of the blockchain." .
+
+w3f:supportsCryptographicPrimitive a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:CryptographicPrimitive ;
+    rdfs:label "supports cryptographic primitive" ;
+    skos:definition "A cryptographic primitive or function supported by the blockchain network for security purposes." .
+
+# Asset and Contract Relationships
+w3f:supportsSmartContract a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:SmartContract ;
+    rdfs:label "supports smart contract" ;
+    skos:definition "Indicates that the blockchain network supports the deployment and execution of smart contracts." .
+
+w3f:hostsDigitalAsset a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "hosts digital asset" ;
+    skos:definition "A digital asset that exists on the blockchain network." .
+
+# Network Relationships
+w3f:connectedToNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "connected to network" ;
+    skos:definition "A relationship to another blockchain network through bridges, sidechains, or other interoperability mechanisms." .
+
+w3f:parentOfNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "parent of network" ;
+    skos:definition "Indicates that this blockchain network is the parent (Layer 1) of another blockchain network (Layer 2 or sidechain)." ;
+    owl:inverseOf w3f:childOfNetwork .
+
+w3f:childOfNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "child of network" ;
+    skos:definition "Indicates that this blockchain network is a child (Layer 2 or sidechain) of another blockchain network (Layer 1)." ;
+    owl:inverseOf w3f:parentOfNetwork .
+
+# State Properties
+w3f:hasNetworkState a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:NetworkState ;
+    rdfs:label "has network state" ;
+    skos:definition "The current state of the blockchain network, including the blockchain and mempool." .
+
+w3f:hasConsensusState a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockchainNetwork ;
+    rdfs:range w3f:ConsensusState ;
+    rdfs:label "has consensus state" ;
+    skos:definition "The current state of agreement among nodes in the blockchain network." . 

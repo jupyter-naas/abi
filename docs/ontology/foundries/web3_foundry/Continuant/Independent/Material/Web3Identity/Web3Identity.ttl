@@ -1,0 +1,124 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# Web3Identity Class Definition
+w3f:Web3Identity a owl:Class ;
+    rdfs:label "Web3 Identity" ;
+    rdfs:subClassOf bfo:0000040 ; # Material Entity
+    skos:definition "A Web3Identity is an independent continuant material entity that represents a cryptographic identity with associated keys capable of performing signed operations on decentralized networks without requiring centralized authorization." .
+
+# Core Properties
+w3f:hasPublicAddress a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has public address" ;
+    skos:definition "The public blockchain address associated with this Web3 identity." .
+
+w3f:hasPublicKey a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has public key" ;
+    skos:definition "The public cryptographic key associated with this Web3 identity." .
+
+w3f:hasKeyType a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has key type" ;
+    skos:definition "The cryptographic algorithm used for this identity's key pair (e.g., ECDSA, EdDSA)." .
+
+# Network Properties
+w3f:operatesOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "operates on network" ;
+    skos:definition "The blockchain network(s) on which this identity operates." .
+
+w3f:hasNetworkSpecificAddress a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has network specific address" ;
+    skos:definition "A network-specific representation of the address (e.g., formatted for a particular blockchain)." .
+
+# Asset Ownership Properties
+w3f:ownsDigitalAsset a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "owns digital asset" ;
+    skos:definition "A digital asset owned by this Web3 identity." .
+
+w3f:hasAssetBalance a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has asset balance" ;
+    skos:definition "The balance of a specific asset held by this identity." .
+
+# Smart Contract Interaction Properties
+w3f:interactsWithContract a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:SmartContract ;
+    rdfs:label "interacts with contract" ;
+    skos:definition "A smart contract with which this identity has interacted." .
+
+w3f:hasContractPermission a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:SmartContractPermission ;
+    rdfs:label "has contract permission" ;
+    skos:definition "A permission or role granted to this identity within a specific smart contract." .
+
+# Identity Verification Properties
+w3f:hasVerificationMethod a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:VerificationMethod ;
+    rdfs:label "has verification method" ;
+    skos:definition "A method used to verify control of this identity." .
+
+w3f:hasENSName a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has ENS name" ;
+    skos:definition "The Ethereum Name Service name associated with this identity." .
+
+# Governance Properties
+w3f:participatesInDAO a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:DAO ;
+    rdfs:label "participates in DAO" ;
+    skos:definition "A Decentralized Autonomous Organization in which this identity participates." .
+
+w3f:hasVotingPower a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has voting power" ;
+    skos:definition "The voting power or governance tokens held by this identity." .
+
+# Transaction Properties
+w3f:initiatesTransaction a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "initiates transaction" ;
+    skos:definition "A transaction initiated by this Web3 identity." .
+
+w3f:receivesTransaction a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "receives transaction" ;
+    skos:definition "A transaction received by this Web3 identity." .
+
+# Reputation Properties
+w3f:hasReputationScore a owl:DatatypeProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has reputation score" ;
+    skos:definition "A numerical score representing the reputation of this identity within a specific system." .
+
+w3f:holdsCredential a owl:ObjectProperty ;
+    rdfs:domain w3f:Web3Identity ;
+    rdfs:range w3f:VerifiableCredential ;
+    rdfs:label "holds credential" ;
+    skos:definition "A verifiable credential held by this Web3 identity." . 

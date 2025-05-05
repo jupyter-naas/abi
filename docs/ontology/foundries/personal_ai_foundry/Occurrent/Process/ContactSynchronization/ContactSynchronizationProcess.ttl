@@ -1,0 +1,262 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/ContactSynchronizationProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/ContactSynchronizationProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the ContactSynchronizationProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Contact Synchronization Process Ontology" .
+
+# Process Definition
+cs:ContactSynchronizationProcess a owl:Class ;
+    rdfs:subClassOf paf:SynchronizationProcess, bfo:BFO_0000015 ;
+    rdfs:label "Contact Synchronization Process"@en ;
+    skos:definition "An occurrent process that manages the systematic coordination, comparison, and harmonization of contact information across multiple digital platforms and sources, ensuring a coherent, up-to-date representation of contacts while preserving user data sovereignty."@en .
+
+# Input Properties Classes
+cs:SourcePlatforms a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Source Platforms"@en ;
+    skos:definition "Platforms to synchronize contacts from."@en .
+
+cs:TargetPlatforms a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Target Platforms"@en ;
+    skos:definition "Platforms to synchronize contacts to."@en .
+
+cs:ContactSelectionCriteria a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Contact Selection Criteria"@en ;
+    skos:definition "Criteria defining which contacts to include in synchronization."@en .
+
+cs:SyncScope a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Synchronization Scope"@en ;
+    skos:definition "Data fields to include in synchronization."@en .
+
+cs:SyncTrigger a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Synchronization Trigger"@en ;
+    skos:definition "Event or action that initiated the synchronization."@en .
+
+# Process Properties Classes
+cs:SyncDirection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Synchronization Direction"@en ;
+    skos:definition "Direction of data flow during synchronization."@en .
+
+cs:ConflictResolutionStrategy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Conflict Resolution Strategy"@en ;
+    skos:definition "Strategy for resolving conflicting contact information."@en .
+
+cs:ChangeThreshold a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Change Threshold"@en ;
+    skos:definition "Minimum change percentage required to trigger synchronization."@en .
+
+cs:BatchSize a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Batch Size"@en ;
+    skos:definition "Number of contacts processed per synchronization batch."@en .
+
+cs:PrioritySchema a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Priority Schema"@en ;
+    skos:definition "Schema defining processing priorities for contacts."@en .
+
+# Output Properties Classes
+cs:CompletionStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Completion Status"@en ;
+    skos:definition "Status indicating the completion level of synchronization."@en .
+
+cs:SyncResult a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Synchronization Result"@en ;
+    skos:definition "Result of synchronization for an individual contact."@en .
+
+cs:ErrorLog a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Error Log"@en ;
+    skos:definition "Log of errors encountered during synchronization."@en .
+
+cs:SyncSummary a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Synchronization Summary"@en ;
+    skos:definition "Summary statistics of the synchronization process."@en .
+
+cs:NextScheduledSync a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Next Scheduled Synchronization"@en ;
+    skos:definition "Scheduled time for the next synchronization."@en .
+
+# Process Stages
+cs:SynchronizationStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Synchronization Stage"@en ;
+    skos:definition "A distinct stage in the contact synchronization process."@en .
+
+cs:InitializationStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Initialization Stage"@en ;
+    skos:definition "Initial setup and parameter validation stage."@en .
+
+cs:SourceConnectionStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Source Connection Stage"@en ;
+    skos:definition "Stage for authenticating and connecting to data sources."@en .
+
+cs:DataAcquisitionStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Data Acquisition Stage"@en ;
+    skos:definition "Stage for retrieving contact data from sources."@en .
+
+cs:ChangeDetectionStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Change Detection Stage"@en ;
+    skos:definition "Stage for identifying differences since last synchronization."@en .
+
+cs:IdentityResolutionStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Identity Resolution Stage"@en ;
+    skos:definition "Stage for matching contacts across platforms."@en .
+
+cs:ConflictResolutionStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Conflict Resolution Stage"@en ;
+    skos:definition "Stage for resolving contradictory information."@en .
+
+cs:UpdatePreparationStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Update Preparation Stage"@en ;
+    skos:definition "Stage for preparing changes for target platforms."@en .
+
+cs:UpdateApplicationStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Update Application Stage"@en ;
+    skos:definition "Stage for applying changes to target platforms."@en .
+
+cs:VerificationStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Verification Stage"@en ;
+    skos:definition "Stage for confirming successful updates."@en .
+
+cs:ReportingStage a owl:Class ;
+    rdfs:subClassOf cs:SynchronizationStage ;
+    rdfs:label "Reporting Stage"@en ;
+    skos:definition "Stage for generating synchronization reports."@en .
+
+# Relationships
+cs:hasInputSourcePlatforms a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SourcePlatforms ;
+    rdfs:label "has input source platforms"@en ;
+    skos:definition "Relates a synchronization process to its source platforms."@en .
+
+cs:hasInputTargetPlatforms a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:TargetPlatforms ;
+    rdfs:label "has input target platforms"@en ;
+    skos:definition "Relates a synchronization process to its target platforms."@en .
+
+cs:hasInputSelectionCriteria a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:ContactSelectionCriteria ;
+    rdfs:label "has input selection criteria"@en ;
+    skos:definition "Relates a synchronization process to its contact selection criteria."@en .
+
+cs:hasInputSyncScope a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SyncScope ;
+    rdfs:label "has input sync scope"@en ;
+    skos:definition "Relates a synchronization process to its synchronization scope."@en .
+
+cs:hasInputSyncTrigger a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SyncTrigger ;
+    rdfs:label "has input sync trigger"@en ;
+    skos:definition "Relates a synchronization process to its triggering event."@en .
+
+cs:hasSyncDirection a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SyncDirection ;
+    rdfs:label "has sync direction"@en ;
+    skos:definition "Relates a synchronization process to its data flow direction."@en .
+
+cs:hasConflictStrategy a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:ConflictResolutionStrategy ;
+    rdfs:label "has conflict strategy"@en ;
+    skos:definition "Relates a synchronization process to its conflict resolution strategy."@en .
+
+cs:hasChangeThreshold a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has change threshold"@en ;
+    skos:definition "Specifies the minimum change percentage required for synchronization."@en .
+
+cs:hasBatchSize a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has batch size"@en ;
+    skos:definition "Specifies the number of contacts in each synchronization batch."@en .
+
+cs:hasPrioritySchema a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:PrioritySchema ;
+    rdfs:label "has priority schema"@en ;
+    skos:definition "Relates a synchronization process to its prioritization schema."@en .
+
+cs:hasCompletionStatus a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:CompletionStatus ;
+    rdfs:label "has completion status"@en ;
+    skos:definition "Relates a synchronization process to its completion status."@en .
+
+cs:hasSyncResults a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SyncResult ;
+    rdfs:label "has sync results"@en ;
+    skos:definition "Relates a synchronization process to its per-contact results."@en .
+
+cs:hasErrorLog a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:ErrorLog ;
+    rdfs:label "has error log"@en ;
+    skos:definition "Relates a synchronization process to its error log."@en .
+
+cs:hasSyncSummary a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SyncSummary ;
+    rdfs:label "has sync summary"@en ;
+    skos:definition "Relates a synchronization process to its summary statistics."@en .
+
+cs:hasNextScheduledSync a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:NextScheduledSync ;
+    rdfs:label "has next scheduled sync"@en ;
+    skos:definition "Relates a synchronization process to its next scheduled execution."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:ContactSynchronizationProcess ;
+    rdfs:range cs:SynchronizationStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates a synchronization process to one of its stages."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationStage ;
+    rdfs:range cs:SynchronizationStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the synchronization process sequence."@en . 
