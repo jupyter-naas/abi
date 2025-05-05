@@ -1,6 +1,6 @@
 # InstagramDataModel
 
-## Definition
+## Definition (Specificiation: skos:definition)
 An InstagramDataModel is an independent continuant immaterial entity that represents the platform-specific structure, semantics, and constraints of Instagram's data, including its unique following/follower dynamics, visual content paradigms, engagement mechanisms, and social graph concepts.
 
 ## Hierarchy in BFO

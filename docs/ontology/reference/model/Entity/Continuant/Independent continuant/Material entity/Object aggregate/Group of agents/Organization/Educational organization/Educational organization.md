@@ -1,8 +1,75 @@
-# Educational Organization (https://www.commoncoreontologies.org/ont00000564)
+# Educational organization
 
-## Definition
+## Overview
+
+### Definition
 An Organization whose primary purpose is to provide training or otherwise facilitate learning or the acquisition of knowledge, Skills, values, beliefs, or habits.
 
-## Subclass Of
+### Examples
+Not defined.
+
+### Aliases
+Not defined.
+
+### URI
+https://www.commoncoreontologies.org/ont00000564
+
+### Subclass Of
 - https://www.commoncoreontologies.org/ont00001180
 
+### Ontology Reference
+- https://www.commoncoreontologies.org/AgentOntology
+
+### Hierarchy
+```mermaid
+graph BT
+    ont00000564(Educational<br>organization<br>ont00000564):::ABI-->ont00001180
+    ont00001180(Organization<br>ont00001180):::ABI-->ont00000300
+    ont00000300(Group<br>of<br>agents<br>ont00000300):::BFO-->BFO_0000027
+    BFO_0000027(Object<br>aggregate<br>BFO_0000027):::BFO-->BFO_0000040
+    BFO_0000040(Material<br>entity<br>BFO_0000040):::BFO-->BFO_0000004
+    BFO_0000004(Independent<br>continuant<br>BFO_0000004):::BFO-->BFO_0000002
+    BFO_0000002(Continuant<br>BFO_0000002):::BFO-->BFO_0000001
+    BFO_0000001(Entity):::BFO
+    
+    classDef BFO fill:#97c1fb,color:#060606
+    classDef CCO fill:#e4c51e,color:#060606
+    classDef ABI fill:#48DD82,color:#060606
+```
+
+## Properties
+### Data Properties
+| Predicate | Domain | Range | Label | Definition | Example |
+|-----------|---------|--------|---------|------------|----------|
+
+### Object Properties
+| Predicate | Domain | Range | Label | Definition | Example | Inverse Of |
+|-----------|---------|--------|---------|------------|----------|------------|
+| http://ontology.naas.ai/abi/hasLegalName | ['https://www.commoncoreontologies.org/ont00001180'] | ['https://www.commoncoreontologies.org/ont00001331'] | has legal name | Relates an Organization to its legal name, which is a formally registered designation of the organization. |  | None |
+| http://ontology.naas.ai/abi/hasTickerSymbol | ['https://www.commoncoreontologies.org/ont00001180'] | ['http://ontology.naas.ai/abi/Ticker'] | has ticker | Relates an Organization to its ticker, which is a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges. |  | None |
+| http://ontology.naas.ai/abi/hasWebsite | ['https://www.commoncoreontologies.org/ont00001180'] | ['http://ontology.naas.ai/abi/Website'] | has website | Relates an organization to its website. | Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries. | None |
+| http://purl.obolibrary.org/obo/BFO_0000108 | ['http://purl.obolibrary.org/obo/BFO_0000001'] | ['http://purl.obolibrary.org/obo/BFO_0000008'] | exists at | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | None |
+| http://purl.obolibrary.org/obo/BFO_0000115 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000040'] | has member part | b has member part c =Def c member part of b |  | ['http://purl.obolibrary.org/obo/BFO_0000129'] |
+| http://purl.obolibrary.org/obo/BFO_0000127 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000016'] | material basis of | b material basis of c =Def c has material basis b |  | ['http://purl.obolibrary.org/obo/BFO_0000218'] |
+| http://purl.obolibrary.org/obo/BFO_0000129 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000040'] | member part of | b member part of c =Def b is an object & c is a material entity & there is some time t such that b continuant part of c at t & there is a mutually exhaustive and pairwise disjoint partition of c into objects x1, ..., xn (for some n ≠ 1) with b = xi (for some 1 <= i <= n) |  | None |
+| http://purl.obolibrary.org/obo/BFO_0000176 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000002'] | continuant part of | b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t | Milk teeth continuant part of human; surgically removed tumour continuant part of organism | ['http://purl.obolibrary.org/obo/BFO_0000178'] |
+| http://purl.obolibrary.org/obo/BFO_0000178 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000002'] | has continuant part | b has continuant part c =Def c continuant part of b |  | None |
+| http://purl.obolibrary.org/obo/BFO_0000185 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000182'] | has history | b has history c =Def c history of b | This organism has history this life | None |
+| https://www.commoncoreontologies.org/ont00001775 | ['http://purl.obolibrary.org/obo/BFO_0000004'] | ['http://purl.obolibrary.org/obo/BFO_0000004'] | is successor of | A continuant c2 is a successor of some continuant c1 iff there is some process p1 and c1 is an input to p1 and c2 is an output of p1. Inverse of is predecessor.  |  | ['https://www.commoncoreontologies.org/ont00001928'] |
+| https://www.commoncoreontologies.org/ont00001782 | ['http://purl.obolibrary.org/obo/BFO_0000027'] | [{'and': {'and': ['http://purl.obolibrary.org/obo/BFO_0000004']}}] | has all members located in | x has all members located in y iff x is an instance of Object Aggregate and y is an instance of independent continuant but not a spatial region, and every member of x is located in y. |  | None |
+| https://www.commoncoreontologies.org/ont00001794 | ['https://www.commoncoreontologies.org/ont00001180'] | ['https://www.commoncoreontologies.org/ont00001180'] | has subsidiary | An Organization o1 has_subsidiary Organization o2 iff o1 controls o2 by having the capacity to determine the outcome of decisions about o2's financial and operating policies. |  | ['https://www.commoncoreontologies.org/ont00001815'] |
+| https://www.commoncoreontologies.org/ont00001815 | ['https://www.commoncoreontologies.org/ont00001180'] | ['https://www.commoncoreontologies.org/ont00001180'] | is subsidiary of | An Organization o2 is_subsidiary_of Organization o1 iff o1 controls o2 by having the capacity to determine the outcome of decisions about o2's financial and operating policies.  |  | None |
+| https://www.commoncoreontologies.org/ont00001816 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is output of | x is_output_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the end of y is a necessary condition for the completion of y. |  | ['https://www.commoncoreontologies.org/ont00001986'] |
+| https://www.commoncoreontologies.org/ont00001832 | ['http://purl.obolibrary.org/obo/BFO_0000027'] | [{'and': {'and': ['http://purl.obolibrary.org/obo/BFO_0000004']}}] | has some member located in | x has some member located in y iff x is an instance of Object Aggregate and y is an instance of independent continuant but not a spatial region, and at least one member of x is located in y. |  | None |
+| https://www.commoncoreontologies.org/ont00001836 | ['http://purl.obolibrary.org/obo/BFO_0000027'] | [{'or': {'or': ['http://purl.obolibrary.org/obo/BFO_0000020']}}] | aggregate bearer of | x aggregate_bearer_of y iff x is an instance of Object Aggregate and y is an instance of Specifically Dependent Continuant and z is an instance of Object, such that z bearer of y, and all other members of x are bearers of a unique instance of the same type as y. |  | None |
+| https://www.commoncoreontologies.org/ont00001841 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is input of | x is_input_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the beginning of y is a necessary condition for the start of y. |  | ['https://www.commoncoreontologies.org/ont00001921'] |
+| https://www.commoncoreontologies.org/ont00001846 | ['https://www.commoncoreontologies.org/ont00001180'] | ['http://purl.obolibrary.org/obo/BFO_0000023'] | is organizational context of | x is_organizational_context_of y iff x is an instance of an Organization and y is an instance of a Role and z is an instance of a Person, such that z's affiliation with x is a prerequisite for z bearing y, or x ascribes y to the bearer of y. |  | ['https://www.commoncoreontologies.org/ont00001992'] |
+| https://www.commoncoreontologies.org/ont00001852 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | accessory in | y is_accessory_in x iff x is an instance of Process and y is an instance of Agent, such that y assists another agent in the commission of x, and y was not located at the location of x when x occurred, and y was not an agent_in x. |  | ['https://www.commoncoreontologies.org/ont00001949'] |
+| https://www.commoncoreontologies.org/ont00001859 | ['https://www.commoncoreontologies.org/ont00001180'] | ['https://www.commoncoreontologies.org/ont00001203'] | is delimited by | An instance of Organization o1 is_delimited_by some Delimiting Domain dd1 iff dd1 is the area within which o1 can legally operate. |  | ['https://www.commoncoreontologies.org/ont00001864'] |
+| https://www.commoncoreontologies.org/ont00001886 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is affected by | x is_affected_by y iff x is an instance of Continuant and y is an instance of Process, and y influences x in some manner, most often by producing a change in x. |  | None |
+| https://www.commoncoreontologies.org/ont00001895 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | accomplice in | An agent a1 is accomplice_in some Processual Entity p1 iff a1 assists in the commission of p1, is located at the location of p1, but is not agent_in p1. |  | None |
+| https://www.commoncoreontologies.org/ont00001898 | ['https://www.commoncoreontologies.org/ont00000300'] | ['https://www.commoncoreontologies.org/ont00001379'] | aggregate has capability | x aggregate_has_capability y iff x is an instance of Object Aggregate and y is an instance of Agent Capability, such that x is aggregate bearer of y. |  | None |
+| https://www.commoncoreontologies.org/ont00001901 | ['http://purl.obolibrary.org/obo/BFO_0000027'] | ['http://purl.obolibrary.org/obo/BFO_0000023'] | aggregate has role | x aggregate_has_role y iff x is an instance of Object Aggregate and y is an instance of Role, such that x aggregate_bearer_of y. |  | None |
+| https://www.commoncoreontologies.org/ont00001907 | ['http://purl.obolibrary.org/obo/BFO_0000027'] | ['http://purl.obolibrary.org/obo/BFO_0000019'] | aggregate has quality | x aggregate_has_quality y iff x is an instance of Object Aggregate and y is an instance of Quality, such that x aggregate_bearer_of y. |  | None |
+| https://www.commoncoreontologies.org/ont00001928 | ['http://purl.obolibrary.org/obo/BFO_0000004'] | ['http://purl.obolibrary.org/obo/BFO_0000004'] | is predecessor of | A continuant c1 is a predecessor of some continuant c2 iff there is some process p1 and c1 is an input to p1 and c2 is an output of p1. |  | None |
+| https://www.commoncoreontologies.org/ont00001956 | ['http://purl.obolibrary.org/obo/BFO_0000027'] | ['http://purl.obolibrary.org/obo/BFO_0000016'] | aggregate has disposition | x aggregate_has_disposition y iff x is an instance of Object Aggregate and y is an instance of Disposition, such that x aggregate_bearer_of y. |  | None |
