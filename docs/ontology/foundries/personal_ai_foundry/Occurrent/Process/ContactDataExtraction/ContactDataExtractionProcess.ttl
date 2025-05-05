@@ -1,0 +1,291 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/ContactDataExtractionProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/ContactDataExtractionProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the ContactDataExtractionProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Contact Data Extraction Process Ontology" .
+
+# Process Definition
+cs:ContactDataExtractionProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Contact Data Extraction Process"@en ;
+    skos:definition "The process of extracting contact information from a source platform."@en .
+
+# Input Properties Classes
+cs:SourcePlatform a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Source Platform"@en ;
+    skos:definition "A platform from which contact data is extracted."@en .
+
+cs:ExtractionFilter a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Extraction Filter"@en ;
+    skos:definition "Filter defining which contacts to extract."@en .
+
+cs:DataFields a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Data Fields"@en ;
+    skos:definition "Fields to extract for each contact."@en .
+
+cs:AuthenticationToken a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Authentication Token"@en ;
+    skos:definition "Token used for authenticating with the source platform."@en .
+
+cs:ExtractionBatchSize a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Extraction Batch Size"@en ;
+    skos:definition "Number of contacts to extract in a single batch."@en .
+
+# Process Properties Classes
+cs:ExtractionMethod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Extraction Method"@en ;
+    skos:definition "Method used for extracting contact data."@en .
+
+cs:ExtractionStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Extraction Status"@en ;
+    skos:definition "Current status of the extraction process."@en .
+
+cs:ExtractionProgress a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Extraction Progress"@en ;
+    skos:definition "Progress percentage of the extraction process."@en .
+
+cs:RateLimitStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Rate Limit Status"@en ;
+    skos:definition "Status of rate limiting for platform API calls."@en .
+
+cs:PrivacyFilter a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Privacy Filter"@en ;
+    skos:definition "Filter applying privacy constraints during extraction."@en .
+
+# Output Properties Classes
+cs:ExtractedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Extracted Contacts"@en ;
+    skos:definition "Contacts extracted from the source platform."@en .
+
+cs:ExtractionMetadata a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Extraction Metadata"@en ;
+    skos:definition "Metadata about the extraction process."@en .
+
+cs:ExtractionError a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Extraction Error"@en ;
+    skos:definition "Error encountered during the extraction process."@en .
+
+cs:ContactCount a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Contact Count"@en ;
+    skos:definition "Count of contacts extracted from the source."@en .
+
+cs:LimitedExtractionWarning a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Limited Extraction Warning"@en ;
+    skos:definition "Warning indicating that extraction was limited by platform constraints."@en .
+
+# Process Stages
+cs:ExtractionStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Extraction Stage"@en ;
+    skos:definition "A distinct stage in the contact data extraction process."@en .
+
+cs:InitializationStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Initialization Stage"@en ;
+    skos:definition "Stage for setting up the extraction process."@en .
+
+cs:APIConnectionStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "API Connection Stage"@en ;
+    skos:definition "Stage for connecting to the platform API."@en .
+
+cs:DataRequestStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Data Request Stage"@en ;
+    skos:definition "Stage for sending data requests to the platform."@en .
+
+cs:DataReceptionStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Data Reception Stage"@en ;
+    skos:definition "Stage for receiving data from the platform."@en .
+
+cs:DataTransformationStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Data Transformation Stage"@en ;
+    skos:definition "Stage for transforming received data to standard format."@en .
+
+cs:PrivacyFilteringStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Privacy Filtering Stage"@en ;
+    skos:definition "Stage for applying privacy filters to extracted data."@en .
+
+cs:ValidationStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Validation Stage"@en ;
+    skos:definition "Stage for validating extracted contact data."@en .
+
+cs:StorageStage a owl:Class ;
+    rdfs:subClassOf cs:ExtractionStage ;
+    rdfs:label "Storage Stage"@en ;
+    skos:definition "Stage for storing extracted contacts for further processing."@en .
+
+# Extraction Methods
+cs:APIExtractionMethod a owl:Class ;
+    rdfs:subClassOf cs:ExtractionMethod ;
+    rdfs:label "API Extraction Method"@en ;
+    skos:definition "Extraction using the platform's API."@en .
+
+cs:FileImportMethod a owl:Class ;
+    rdfs:subClassOf cs:ExtractionMethod ;
+    rdfs:label "File Import Method"@en ;
+    skos:definition "Extraction by importing contact files."@en .
+
+cs:WebScrapingMethod a owl:Class ;
+    rdfs:subClassOf cs:ExtractionMethod ;
+    rdfs:label "Web Scraping Method"@en ;
+    skos:definition "Extraction using web scraping techniques."@en .
+
+cs:EmailParsingMethod a owl:Class ;
+    rdfs:subClassOf cs:ExtractionMethod ;
+    rdfs:label "Email Parsing Method"@en ;
+    skos:definition "Extraction by parsing email content."@en .
+
+# Relationships
+cs:hasSourcePlatform a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:SourcePlatform ;
+    rdfs:label "has source platform"@en ;
+    skos:definition "Relates an extraction process to the platform it extracts from."@en .
+
+cs:hasExtractionFilter a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractionFilter ;
+    rdfs:label "has extraction filter"@en ;
+    skos:definition "Relates an extraction process to its contact filter."@en .
+
+cs:hasDataFields a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:DataFields ;
+    rdfs:label "has data fields"@en ;
+    skos:definition "Relates an extraction process to the fields it extracts."@en .
+
+cs:usesAuthenticationToken a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:AuthenticationToken ;
+    rdfs:label "uses authentication token"@en ;
+    skos:definition "Relates an extraction process to the token it uses."@en .
+
+cs:hasBatchSize a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has batch size"@en ;
+    skos:definition "Specifies the number of contacts in each extraction batch."@en .
+
+cs:usesExtractionMethod a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractionMethod ;
+    rdfs:label "uses extraction method"@en ;
+    skos:definition "Relates an extraction process to the method it uses."@en .
+
+cs:hasStatus a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractionStatus ;
+    rdfs:label "has status"@en ;
+    skos:definition "Relates an extraction process to its current status."@en .
+
+cs:hasProgress a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has progress"@en ;
+    skos:definition "Specifies the completion percentage of the extraction process."@en .
+
+cs:hasRateLimitStatus a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:RateLimitStatus ;
+    rdfs:label "has rate limit status"@en ;
+    skos:definition "Relates an extraction process to its rate limit status."@en .
+
+cs:appliesPrivacyFilter a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:PrivacyFilter ;
+    rdfs:label "applies privacy filter"@en ;
+    skos:definition "Relates an extraction process to its privacy filter."@en .
+
+cs:producesExtractedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractedContacts ;
+    rdfs:label "produces extracted contacts"@en ;
+    skos:definition "Relates an extraction process to the contacts it extracts."@en .
+
+cs:generatesMetadata a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractionMetadata ;
+    rdfs:label "generates metadata"@en ;
+    skos:definition "Relates an extraction process to the metadata it generates."@en .
+
+cs:encountersError a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractionError ;
+    rdfs:label "encounters error"@en ;
+    skos:definition "Relates an extraction process to any errors encountered."@en .
+
+cs:hasContactCount a owl:DatatypeProperty ;
+    rdfs:domain cs:ExtractedContacts ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has contact count"@en ;
+    skos:definition "Specifies the number of contacts extracted."@en .
+
+cs:generatesWarning a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:LimitedExtractionWarning ;
+    rdfs:label "generates warning"@en ;
+    skos:definition "Relates an extraction process to any warnings generated."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:ContactDataExtractionProcess ;
+    rdfs:range cs:ExtractionStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates an extraction process to its current stage."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:ExtractionStage ;
+    rdfs:range cs:ExtractionStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the extraction process sequence."@en .
+
+cs:hasFieldName a owl:DatatypeProperty ;
+    rdfs:domain cs:DataFields ;
+    rdfs:range xsd:string ;
+    rdfs:label "has field name"@en ;
+    skos:definition "Specifies the name of a data field to extract."@en .
+
+cs:hasErrorCode a owl:DatatypeProperty ;
+    rdfs:domain cs:ExtractionError ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error code"@en ;
+    skos:definition "Specifies the error code of an extraction error."@en .
+
+cs:hasErrorMessage a owl:DatatypeProperty ;
+    rdfs:domain cs:ExtractionError ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error message"@en ;
+    skos:definition "Specifies the error message of an extraction error."@en . 

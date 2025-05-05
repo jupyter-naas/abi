@@ -1,0 +1,223 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ig: <http://ontology.abi.ai/social_media#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# Core Classes
+ig:InstagramPostPage a owl:Class ;
+    rdfs:subClassOf sioc:InstagramPage ;
+    rdfs:label "Instagram Post Page"@en ;
+    skos:definition "A generically dependent continuant that is a view of an Instagram post at a specific point in time, consisting of media content, metadata, and social engagement elements"@en ;
+    skos:example "A snapshot of a specific Instagram post viewed on 2023-11-10"@en .
+
+# Core Properties
+ig:postId a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "post id"@en ;
+    skos:definition "A string that is the unique identifier for an Instagram post and is part of the post's essential identity"@en ;
+    ig:example "CqX2y5roPm9" ;
+    rdfs:comment "The unique code that appears in the Instagram post URL and identifies the specific content item." .
+
+ig:postTimestamp a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "post timestamp"@en ;
+    skos:definition "A datetime that is when the post was originally published and is part of the post's temporal identity"@en ;
+    ig:example "2023-05-12T14:23:17Z"^^xsd:dateTime ;
+    rdfs:comment "The exact time when the post was first shared on the Instagram platform." .
+
+ig:postType a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "post type"@en ;
+    skos:definition "A string that indicates the type of Instagram post and is part of the post's essential identity"@en ;
+    ig:example "carousel" ;
+    rdfs:comment "Can be 'single_image', 'video', 'carousel' (multiple images/videos), or 'reel'." .
+
+ig:caption a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "caption"@en ;
+    skos:definition "A string that is the text description accompanying the Instagram post and is part of the post's content"@en ;
+    ig:example "Beautiful sunset at the beach with friends! #sunset #beach #summer" ;
+    rdfs:comment "Text description that can include hashtags, mentions, and emojis, limited to 2,200 characters." .
+
+ig:likeCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "like count"@en ;
+    skos:definition "An integer that represents the number of likes received by the Instagram post and is part of the post's engagement metrics"@en ;
+    ig:example "1250"^^xsd:integer ;
+    rdfs:comment "The total number of users who have liked the post at the time it was viewed." .
+
+ig:commentCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "comment count"@en ;
+    skos:definition "An integer that represents the number of comments on the Instagram post and is part of the post's engagement metrics"@en ;
+    ig:example "42"^^xsd:integer ;
+    rdfs:comment "The total number of comments on the post at the time it was viewed, including replies." .
+
+ig:hasHashtag a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has hashtag"@en ;
+    skos:definition "A string that is a hashtag included in the post caption and is part of the post's metadata"@en ;
+    ig:example "sunset" ;
+    rdfs:comment "Hashtags are preceded by # and link the post to topical collections, improving discoverability." .
+
+ig:location a owl:ObjectProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range ig:Location ;
+    rdfs:label "location"@en ;
+    skos:definition "An object that represents the geographic location tagged in the Instagram post and is part of the post's metadata"@en ;
+    ig:example ":malibuBeach" ;
+    rdfs:comment "Geographic location associated with the post, which links to Instagram's location database." .
+
+ig:author a owl:ObjectProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range ig:InstagramProfile ;
+    rdfs:label "author"@en ;
+    skos:definition "The Instagram profile that created and published the post and is part of the post's essential identity"@en ;
+    ig:example ":jeremyLvrProfile" ;
+    rdfs:comment "The Instagram account that created and owns the post, with authority to edit or delete it." .
+
+ig:hasMedia a owl:ObjectProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range ig:MediaItem ;
+    rdfs:label "has media"@en ;
+    skos:definition "Media content (images, videos) contained within the Instagram post and is part of the post's essential content"@en ;
+    ig:example ":sunsetImage1" ;
+    rdfs:comment "Visual content that can be a single image, video, or multiple items in a carousel." .
+
+ig:hasTaggedUser a owl:ObjectProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range ig:InstagramProfile ;
+    rdfs:label "has tagged user"@en ;
+    skos:definition "An Instagram profile that is tagged in the post's content and is part of the post's social connections"@en ;
+    ig:example ":sarahSmithProfile" ;
+    rdfs:comment "Users who are visually identified in the post's media content, linking to their profiles." .
+
+ig:hasComment a owl:ObjectProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range ig:Comment ;
+    rdfs:label "has comment"@en ;
+    skos:definition "A comment left on the Instagram post and is part of the post's engagement content"@en ;
+    ig:example ":comment12345" ;
+    rdfs:comment "Text responses from other users, which can include mentions, hashtags, and emojis." .
+
+ig:isSaved a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is saved"@en ;
+    skos:definition "A boolean indicating whether the viewing user has saved the post and is part of the post's user-specific state"@en ;
+    ig:example "true"^^xsd:boolean ;
+    rdfs:comment "Personal state indicating if the current viewer has bookmarked the post for later reference." .
+
+ig:isLiked a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is liked"@en ;
+    skos:definition "A boolean indicating whether the viewing user has liked the post and is part of the post's user-specific state"@en ;
+    ig:example "false"^^xsd:boolean ;
+    rdfs:comment "Personal state indicating if the current viewer has liked the post." .
+
+ig:viewCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "view count"@en ;
+    skos:definition "An integer representing the number of views for video content and is part of the post's engagement metrics"@en ;
+    ig:example "5427"^^xsd:integer ;
+    rdfs:comment "For video posts and reels only, shows how many times the video has been played." .
+
+ig:shareCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "share count"@en ;
+    skos:definition "An integer representing the number of times the post has been shared and is part of the post's engagement metrics"@en ;
+    ig:example "84"^^xsd:integer ;
+    rdfs:comment "Number of times the post has been shared through direct messages or to stories." .
+
+ig:engagementRate a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "engagement rate"@en ;
+    skos:definition "A decimal representing the ratio of engagement to reach and is part of the post's performance metrics"@en ;
+    ig:example "0.052"^^xsd:decimal ;
+    rdfs:comment "Calculated metric showing engagement (likes, comments, saves, shares) as a proportion of post reach." .
+
+ig:hasFilter a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has filter"@en ;
+    skos:definition "A string indicating the visual filter applied to the post's media and is part of the post's content attributes"@en ;
+    ig:example "Clarendon" ;
+    rdfs:comment "Instagram visual effect applied to the post's media content, modifying colors and tones." .
+
+ig:aspectRatio a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "aspect ratio"@en ;
+    skos:definition "A string representing the width-to-height ratio of the post's visual content and is part of the post's technical attributes"@en ;
+    ig:example "4:5" ;
+    rdfs:comment "Common values include square (1:1), portrait (4:5), or landscape (1.91:1) formats." .
+
+ig:isSponsored a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is sponsored"@en ;
+    skos:definition "A boolean indicating whether the post is paid promotional content and is part of the post's business attributes"@en ;
+    ig:example "true"^^xsd:boolean ;
+    rdfs:comment "Indicates if the post is a paid advertisement or contains paid partnership disclosures." .
+
+ig:isArchivedByViewer a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is archived by viewer"@en ;
+    skos:definition "A boolean indicating whether the viewing user has archived the post and is part of the post's user-specific state"@en ;
+    ig:example "false"^^xsd:boolean ;
+    rdfs:comment "For post author only, indicates if they have moved this post to their private archive." .
+
+ig:restrictedAudience a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "restricted audience"@en ;
+    skos:definition "A boolean indicating if the post has audience restrictions and is part of the post's visibility settings"@en ;
+    ig:example "true"^^xsd:boolean ;
+    rdfs:comment "Indicates if the post is visible only to close friends or a limited audience segment." .
+
+ig:allowsComments a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "allows comments"@en ;
+    skos:definition "A boolean indicating whether commenting is enabled for the post and is part of the post's interaction settings"@en ;
+    ig:example "true"^^xsd:boolean ;
+    rdfs:comment "Controlled by the post author, determines if users can leave comments on the post." .
+
+ig:shoppingTags a owl:ObjectProperty ;
+    rdfs:domain ig:InstagramPostPage ;
+    rdfs:range ig:ProductTag ;
+    rdfs:label "shopping tags"@en ;
+    skos:definition "Shopping or product tags attached to items in the post's media and is part of the post's commercial attributes"@en ;
+    ig:example ":nikeShoeProduct" ;
+    rdfs:comment "Tagged products that link to Instagram Shopping with product information and purchase options." .
+
+# Supporting Classes
+ig:MediaItem a owl:Class ;
+    rdfs:label "Media Item"@en ;
+    skos:definition "A visual element (image or video) that is part of an Instagram post"@en .
+
+ig:Comment a owl:Class ;
+    rdfs:label "Comment"@en ;
+    skos:definition "A text response to an Instagram post from a user"@en .
+
+ig:Location a owl:Class ;
+    rdfs:label "Location"@en ;
+    skos:definition "A geographic place associated with an Instagram post"@en .
+
+ig:ProductTag a owl:Class ;
+    rdfs:label "Product Tag"@en ;
+    skos:definition "A shopping tag linking to a purchasable product in Instagram Shopping"@en . 

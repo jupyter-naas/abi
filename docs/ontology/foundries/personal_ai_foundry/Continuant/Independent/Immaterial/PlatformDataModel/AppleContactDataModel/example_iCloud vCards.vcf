@@ -1,0 +1,51 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Smith;John;;;
+FN:John Smith
+BDAY;VALUE=date:1990-01-01
+NOTE:Software engineer passionate about building scalable systems and AI applications
+item1.ADR;TYPE=HOME;TYPE=pref:;;123\nMAIN\nSTREET;SAN FRANCISCO;CA;94105;USA
+item1.X-ABADR:us
+TEL;TYPE=CELL;TYPE=pref;TYPE=VOICE:+1 555 123 4567
+item2.X-ABRELATEDNAMES;TYPE=pref:Jane Smith
+item2.X-ABLABEL:_$!<Spouse>!$_
+item3.X-ABRELATEDNAMES:Robert Smith
+item3.X-ABLABEL:_$!<Father>!$_
+item4.X-ABRELATEDNAMES:Mary Smith
+item4.X-ABLABEL:_$!<Mother>!$_
+item5.X-ABRELATEDNAMES:Michael Smith
+item5.X-ABLABEL:_$!<Brother>!$_
+item6.X-ABRELATEDNAMES:David Johnson
+item6.X-ABLABEL:Colleague @techcorp
+item7.X-ABRELATEDNAMES:Sarah Williams
+item7.X-ABLABEL:Colleague @techcorp
+item8.URL;TYPE=pref:http://www.johnsmith.com/
+item8.X-ABLABEL:_$!<HomePage>!$_
+item9.X-MSN;TYPE=pref:john.smith@example.com
+item9.X-ABLABEL:MSN
+item10.IMPP;X-SERVICE-TYPE=MSN;TYPE=pref:msnim:john.smith@example.com
+item10.X-ABLABEL:MSN
+EMAIL;TYPE=HOME;TYPE=pref;TYPE=INTERNET:john.smith@gmail.com
+EMAIL;TYPE=WORK;TYPE=INTERNET:john.smith@techcorp.com
+item11.EMAIL;TYPE=INTERNET:john.smith@alumni.edu
+item11.X-ABLABEL:_$!<School>!$_
+EMAIL;TYPE=WORK;TYPE=INTERNET:john.smith@startup.com
+EMAIL;TYPE=WORK;TYPE=INTERNET:john.smith@consulting.com
+item12.X-ABDATE;TYPE=pref:1990-01-01
+item12.X-ABLABEL:_$!<Anniversary>!$_
+item13.X-ABDATE:2015-06-15
+item13.X-ABLABEL:Wedding
+item14.X-ABDATE:2018-03-10
+item14.X-ABLABEL:Child1
+item15.X-ABDATE:2020-11-20
+item15.X-ABLABEL:Child2
+item16.X-ABDATE:1992-05-15
+item16.X-ABLABEL:Spouse
+X-SOCIALPROFILE;X-USER=johnsmith;TYPE=twitter:https://twitter.com/johnsmith
+X-SOCIALPROFILE;X-USER=johnsmith;TYPE=facebook:https://www.facebook.com/johnsmith
+X-SOCIALPROFILE;X-USER=johnsmith;TYPE=linkedin:https://www.linkedin.com/in/johnsmith
+item17.X-SOCIALPROFILE:x-apple:john_smith
+item17.X-ABLABEL:Instagram
+PRODID:-//Apple Inc.//iCloud Web Address Book 2512B4//EN
+REV:2025-05-04T21:44:43Z
+END:VCARD

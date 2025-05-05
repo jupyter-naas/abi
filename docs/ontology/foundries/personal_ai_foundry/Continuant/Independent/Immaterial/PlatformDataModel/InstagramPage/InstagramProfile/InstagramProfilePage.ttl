@@ -1,0 +1,111 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ig: <http://ontology.abi.ai/social_media#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+
+# Core Classes
+ig:InstagramProfilePage a owl:Class ;
+    rdfs:subClassOf sioc:InstagramPage ;
+    rdfs:label "Instagram Profile Page"@en ;
+    skos:definition "A generically dependent continuant that is a view of an Instagram profile at a specific point in time, consisting of a unique identifier, visual representation, and metadata about the profile's content and social connections"@en ;
+    skos:example "A snapshot of John's Instagram profile as viewed on 2023-11-10"@en .
+
+# Core Properties
+ig:profileId a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "profile id"@en ;
+    skos:definition "A string that is the unique identifier for an Instagram profile and is part of the profile's essential identity"@en ;
+    ig:example "jeremy_lvr" ;
+    rdfs:comment "The unique handle that appears in the Instagram profile URL and identifies the account." .
+
+ig:platform a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "platform"@en ;
+    skos:definition "A string that is the name of the social media platform where the profile exists and is part of the profile's essential identity"@en ;
+    ig:example "Instagram" ;
+    rdfs:comment "Always 'Instagram' for Instagram pages, used for cross-platform compatibility." .
+
+ig:viewTimestamp a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "view timestamp"@en ;
+    skos:definition "A datetime that is the specific point in time when the profile was viewed and is part of the profile's temporal identity"@en ;
+    ig:example "2023-11-10T15:42:36Z"^^xsd:dateTime ;
+    rdfs:comment "Precise datetime of when the page was accessed, used for tracking history of profile changes." .
+
+ig:username a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "username"@en ;
+    skos:definition "A string that is the unique handle used to identify the profile on Instagram and is part of the profile's essential identity"@en ;
+    ig:example "jeremy_lvr" ;
+    rdfs:comment "The alphanumeric username that appears with @ symbol, must be unique across Instagram." .
+
+ig:displayName a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "display name"@en ;
+    skos:definition "A string that is the public name shown on the Instagram profile and is part of the profile's essential identity"@en ;
+    ig:example "Jeremy Lvr" ;
+    rdfs:comment "The human-readable name displayed at the top of a profile, does not need to be unique." .
+
+ig:biography a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "biography"@en ;
+    skos:definition "A string that is a text description of the Instagram profile owner and is part of the profile's essential identity"@en ;
+    ig:example "Don't be dead serious about your life, it's just a play." ;
+    rdfs:comment "Limited to 150 characters, can include emojis and limited formatting." .
+
+ig:hasHashtag a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "has hashtag"@en ;
+    skos:definition "A string that is a hashtag associated with the Instagram profile and is part of the profile's essential identity"@en ;
+    ig:example "creative" ;
+    rdfs:comment "Hashtags included in the biography that represent themes or topics relevant to the account." .
+
+ig:postCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "post count"@en ;
+    skos:definition "An integer that is the number of posts published by the Instagram profile and is part of the profile's essential identity"@en ;
+    ig:example "46"^^xsd:integer ;
+    rdfs:comment "Total count of posts (photos, videos, carousels) published by the account, excluding archived or deleted posts." .
+
+ig:followerCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "follower count"@en ;
+    skos:definition "An integer that is the number of accounts following this Instagram profile and is part of the profile's essential identity"@en ;
+    ig:example "204"^^xsd:integer ;
+    rdfs:comment "Number of Instagram accounts that have subscribed to see this account's content in their feed." .
+
+ig:followingCount a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:integer ;
+    rdfs:label "following count"@en ;
+    skos:definition "An integer that is the number of accounts this Instagram profile follows and is part of the profile's essential identity"@en ;
+    ig:example "410"^^xsd:integer ;
+    rdfs:comment "Number of other Instagram accounts that this account has subscribed to see in their feed." .
+
+ig:profilePictureUrl a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "profile picture URL"@en ;
+    skos:definition "A URI that is the URL of the profile picture image and is part of the profile's essential identity"@en ;
+    ig:example "https://www.instagram.com/jeremy_lvr/profile_pic/" ;
+    rdfs:comment "Direct link to the user's profile picture at its highest available resolution." .
+
+ig:isVerified a owl:DatatypeProperty ;
+    rdfs:domain ig:InstagramPage ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is verified"@en ;
+    skos:definition "A boolean that indicates whether the Instagram account has been verified by Instagram as authentic and is part of the profile's essential identity"@en ;
+    ig:example "false"^^xsd:boolean ;
+    rdfs:comment "A verified account has a blue checkmark badge indicating Instagram has confirmed it's the authentic presence of the public figure, celebrity, or global brand it represents." .

@@ -1,0 +1,462 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix paf: <http://ontology.abi.ai/personal_ai_foundry#> .
+@prefix cs: <http://ontology.abi.ai/contact_schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix cco: <https://www.commoncoreontologies.org/ont#> .
+
+# EmailReceptionProcess Class Definition
+cs:EmailReceptionProcess a owl:Class ;
+    rdfs:label "Email Reception Process"@en ;
+    rdfs:subClassOf cs:EmailProcessingProcess, bfo:0000015 ; # Process
+    skos:definition "An occurrent process that systematically monitors, retrieves, validates, and processes incoming email messages from multiple account sources, enabling real-time awareness of new communications while preparing them for subsequent prioritization based on contact intelligence."@en ;
+    skos:note "Serves as the entry point for all external email communications into the personal email management system."@en .
+
+# === Reception Phase Classes ===
+
+# ConnectionPhase
+cs:ConnectionPhase a owl:Class ;
+    rdfs:label "Connection Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Initial phase that establishes secure connections with email providers."@en .
+
+# DetectionPhase
+cs:DetectionPhase a owl:Class ;
+    rdfs:label "Detection Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Phase that identifies new messages through polling or push notifications."@en .
+
+# RetrievalPhase
+cs:RetrievalPhase a owl:Class ;
+    rdfs:label "Retrieval Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Phase that fetches message content from providers."@en .
+
+# ValidationPhase
+cs:ValidationPhase a owl:Class ;
+    rdfs:label "Validation Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Phase that verifies message authenticity and security."@en .
+
+# ProcessingPhase
+cs:ProcessingPhase a owl:Class ;
+    rdfs:label "Processing Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Phase that handles message structure and content parsing."@en .
+
+# StoragePhase
+cs:StoragePhase a owl:Class ;
+    rdfs:label "Storage Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Phase that persists messages to local storage."@en .
+
+# NotificationPhase
+cs:NotificationPhase a owl:Class ;
+    rdfs:label "Notification Phase"@en ;
+    rdfs:subClassOf cs:EmailReceptionProcess ;
+    skos:definition "Final phase that alerts the user and triggers downstream processes."@en .
+
+# === Input Properties ===
+
+# EmailAccounts Property
+cs:emailAccounts a owl:ObjectProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range cs:EmailAccount ;
+    rdfs:label "email accounts"@en ;
+    skos:definition "Email accounts to be monitored for new messages."@en .
+
+# PollingInterval Property
+cs:pollingInterval a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "polling interval"@en ;
+    skos:definition "Seconds between checks for new messages when using polling."@en .
+
+# PushNotificationsEnabled Property
+cs:pushNotificationsEnabled a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "push notifications enabled"@en ;
+    skos:definition "Whether to use push notifications when available for real-time updates."@en .
+
+# MaxHistorySync Property
+cs:maxHistorySync a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "maximum history synchronization"@en ;
+    skos:definition "Maximum days of email history to sync on initial connection."@en .
+
+# FilterCriteria Property
+cs:filterCriteria a owl:ObjectProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range cs:FilterRule ;
+    rdfs:label "filter criteria"@en ;
+    skos:definition "Rules for pre-filtering incoming mail during reception."@en .
+
+# RetrievalBatchSize Property
+cs:retrievalBatchSize a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "retrieval batch size"@en ;
+    skos:definition "Number of messages to fetch in each retrieval batch."@en .
+
+# === Process Properties ===
+
+# ConnectionTimeout Property
+cs:connectionTimeout a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "connection timeout"@en ;
+    skos:definition "Seconds to wait before timing out a provider connection."@en .
+
+# AutoRetryAttempts Property
+cs:autoRetryAttempts a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "automatic retry attempts"@en ;
+    skos:definition "Number of retries for failed message retrievals."@en .
+
+# AutoDownloadAttachments Property
+cs:autoDownloadAttachments a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "auto-download attachments"@en ;
+    skos:definition "Whether to automatically download message attachments."@en .
+
+# ValidateSPF Property
+cs:validateSPF a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "validate SPF"@en ;
+    skos:definition "Whether to validate Sender Policy Framework records."@en .
+
+# ValidateDKIM Property
+cs:validateDKIM a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "validate DKIM"@en ;
+    skos:definition "Whether to validate DomainKeys Identified Mail signatures."@en .
+
+# ValidateDARC Property
+cs:validateDARC a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "validate DARC"@en ;
+    skos:definition "Whether to validate Domain-based Authentication, Reporting and Conformance policies."@en .
+
+# MaxConcurrentConnections Property
+cs:maxConcurrentConnections a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "maximum concurrent connections"@en ;
+    skos:definition "Maximum number of simultaneous provider connections."@en .
+
+# === Output Properties ===
+
+# MessagesReceived Property
+cs:messagesReceived a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "messages received"@en ;
+    skos:definition "Total number of new messages received."@en .
+
+# ReceivedMessageIds Property
+cs:receivedMessageIds a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:string ;
+    rdfs:label "received message IDs"@en ;
+    skos:definition "IDs of newly received messages."@en .
+
+# ReceivedByAccount Property
+cs:receivedByAccount a owl:ObjectProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range cs:AccountMessageCount ;
+    rdfs:label "received by account"@en ;
+    skos:definition "Count of messages received per account."@en .
+
+# FailedRetrievals Property
+cs:failedRetrievals a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "failed retrievals"@en ;
+    skos:definition "Count of message retrievals that failed."@en .
+
+# SuccessRate Property
+cs:successRate a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:float ;
+    rdfs:label "success rate"@en ;
+    skos:definition "Percentage of successful message retrievals."@en .
+
+# ProcessingLatency Property
+cs:processingLatency a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "processing latency"@en ;
+    skos:definition "Time from message detection to processing completion."@en .
+
+# === Supporting Classes ===
+
+# FilterRule Class
+cs:FilterRule a owl:Class ;
+    rdfs:label "Filter Rule"@en ;
+    rdfs:subClassOf paf:Rule ;
+    skos:definition "A rule for filtering incoming messages during reception."@en .
+
+# FilterRule Properties
+cs:field a owl:DatatypeProperty ;
+    rdfs:domain cs:FilterRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "field"@en ;
+    skos:definition "Message field to apply the filter to."@en .
+
+cs:operator a owl:DatatypeProperty ;
+    rdfs:domain cs:FilterRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "operator"@en ;
+    skos:definition "Comparison operator for the filter."@en .
+
+cs:value a owl:DatatypeProperty ;
+    rdfs:domain cs:FilterRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "value"@en ;
+    skos:definition "Value to compare against."@en .
+
+# AccountMessageCount Class
+cs:AccountMessageCount a owl:Class ;
+    rdfs:label "Account Message Count"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "A count of messages associated with an email account."@en .
+
+# AccountMessageCount Properties
+cs:account a owl:DatatypeProperty ;
+    rdfs:domain cs:AccountMessageCount ;
+    rdfs:range xsd:string ;
+    rdfs:label "account"@en ;
+    skos:definition "Email account identifier."@en .
+
+cs:count a owl:DatatypeProperty ;
+    rdfs:domain cs:AccountMessageCount ;
+    rdfs:range xsd:integer ;
+    rdfs:label "count"@en ;
+    skos:definition "Number of messages."@en .
+
+# MessageReceivedEvent Class
+cs:MessageReceivedEvent a owl:Class ;
+    rdfs:label "Message Received Event"@en ;
+    rdfs:subClassOf paf:Event ;
+    skos:definition "An event representing the reception of an email message."@en .
+
+# MessageReceivedEvent Properties
+cs:eventId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range xsd:string ;
+    rdfs:label "event ID"@en ;
+    skos:definition "Unique identifier for the event."@en .
+
+cs:timestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "timestamp"@en ;
+    skos:definition "When the event occurred."@en .
+
+cs:accountId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range xsd:string ;
+    rdfs:label "account ID"@en ;
+    skos:definition "Identifier for the source email account."@en .
+
+cs:messageId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range xsd:string ;
+    rdfs:label "message ID"@en ;
+    skos:definition "Identifier for the received message."@en .
+
+cs:messageMetadata a owl:ObjectProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range cs:MessageMetadata ;
+    rdfs:label "message metadata"@en ;
+    skos:definition "Basic metadata about the received message."@en .
+
+cs:securityChecks a owl:ObjectProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range cs:SecurityChecks ;
+    rdfs:label "security checks"@en ;
+    skos:definition "Results of security validations."@en .
+
+cs:processingStats a owl:ObjectProperty ;
+    rdfs:domain cs:MessageReceivedEvent ;
+    rdfs:range cs:ProcessingStats ;
+    rdfs:label "processing statistics"@en ;
+    skos:definition "Timing statistics for message processing."@en .
+
+# MessageMetadata Class
+cs:MessageMetadata a owl:Class ;
+    rdfs:label "Message Metadata"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Basic metadata about an email message."@en .
+
+# MessageMetadata Properties
+cs:sender a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:string ;
+    rdfs:label "sender"@en ;
+    skos:definition "Email address of the sender."@en .
+
+cs:subject a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:string ;
+    rdfs:label "subject"@en ;
+    skos:definition "Subject line of the message."@en .
+
+cs:receivedTimestamp a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "received timestamp"@en ;
+    skos:definition "When the message was received by the email server."@en .
+
+cs:size a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:integer ;
+    rdfs:label "size"@en ;
+    skos:definition "Size of the message in bytes."@en .
+
+cs:hasAttachments a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "has attachments"@en ;
+    skos:definition "Whether the message has attachments."@en .
+
+cs:isThreadStart a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "is thread start"@en ;
+    skos:definition "Whether this message starts a new thread."@en .
+
+cs:threadId a owl:DatatypeProperty ;
+    rdfs:domain cs:MessageMetadata ;
+    rdfs:range xsd:string ;
+    rdfs:label "thread ID"@en ;
+    skos:definition "Identifier for the conversation thread."@en .
+
+# SecurityChecks Class
+cs:SecurityChecks a owl:Class ;
+    rdfs:label "Security Checks"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Results of security validations for an email message."@en .
+
+# SecurityChecks Properties
+cs:spfResult a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityChecks ;
+    rdfs:range xsd:string ;
+    rdfs:label "SPF result"@en ;
+    skos:definition "Result of SPF validation."@en .
+
+cs:dkimResult a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityChecks ;
+    rdfs:range xsd:string ;
+    rdfs:label "DKIM result"@en ;
+    skos:definition "Result of DKIM validation."@en .
+
+cs:dmarcResult a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityChecks ;
+    rdfs:range xsd:string ;
+    rdfs:label "DMARC result"@en ;
+    skos:definition "Result of DMARC validation."@en .
+
+cs:spamProbability a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityChecks ;
+    rdfs:range xsd:float ;
+    rdfs:label "spam probability"@en ;
+    skos:definition "Calculated probability of the message being spam."@en .
+
+cs:securityIssue a owl:DatatypeProperty ;
+    rdfs:domain cs:SecurityChecks ;
+    rdfs:range xsd:string ;
+    rdfs:label "security issue"@en ;
+    skos:definition "Identified security issues with the message."@en .
+
+# ProcessingStats Class
+cs:ProcessingStats a owl:Class ;
+    rdfs:label "Processing Statistics"@en ;
+    rdfs:subClassOf paf:DataStructure ;
+    skos:definition "Timing statistics for message processing."@en .
+
+# ProcessingStats Properties
+cs:detectionLatency a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "detection latency"@en ;
+    skos:definition "Time in milliseconds to detect the new message."@en .
+
+cs:retrievalLatency a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "retrieval latency"@en ;
+    skos:definition "Time in milliseconds to retrieve the message content."@en .
+
+cs:processingLatency a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "processing latency"@en ;
+    skos:definition "Time in milliseconds to process message structure."@en .
+
+cs:totalProcessingTime a owl:DatatypeProperty ;
+    rdfs:domain cs:ProcessingStats ;
+    rdfs:range xsd:integer ;
+    rdfs:label "total processing time"@en ;
+    skos:definition "Total time in milliseconds from detection to completion."@en .
+
+# === Process Flow Relationships ===
+
+# HasPhase Property
+cs:hasPhase a owl:ObjectProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range cs:EmailReceptionProcess ;
+    rdfs:label "has phase"@en ;
+    skos:definition "Relates a reception process to its phases."@en .
+
+# PhaseOrder Property
+cs:phaseOrder a owl:DatatypeProperty ;
+    rdfs:domain cs:EmailReceptionProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "phase order"@en ;
+    skos:definition "Numerical order of a phase in the process."@en .
+
+# Process Flow Instances
+cs:emailReceptionProcess a cs:EmailReceptionProcess ;
+    rdfs:label "Email Reception Process"@en ;
+    cs:hasPhase cs:connectionPhase, cs:detectionPhase, cs:retrievalPhase,
+               cs:validationPhase, cs:processingPhase, cs:storagePhase,
+               cs:notificationPhase .
+
+cs:connectionPhase a cs:ConnectionPhase ;
+    rdfs:label "Connection Phase"@en ;
+    cs:phaseOrder 1 .
+
+cs:detectionPhase a cs:DetectionPhase ;
+    rdfs:label "Detection Phase"@en ;
+    cs:phaseOrder 2 .
+
+cs:retrievalPhase a cs:RetrievalPhase ;
+    rdfs:label "Retrieval Phase"@en ;
+    cs:phaseOrder 3 .
+
+cs:validationPhase a cs:ValidationPhase ;
+    rdfs:label "Validation Phase"@en ;
+    cs:phaseOrder 4 .
+
+cs:processingPhase a cs:ProcessingPhase ;
+    rdfs:label "Processing Phase"@en ;
+    cs:phaseOrder 5 .
+
+cs:storagePhase a cs:StoragePhase ;
+    rdfs:label "Storage Phase"@en ;
+    cs:phaseOrder 6 .
+
+cs:notificationPhase a cs:NotificationPhase ;
+    rdfs:label "Notification Phase"@en ;
+    cs:phaseOrder 7 . 

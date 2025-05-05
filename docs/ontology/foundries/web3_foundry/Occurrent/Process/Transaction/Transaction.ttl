@@ -1,0 +1,204 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# Transaction Class Definition
+w3f:Transaction a owl:Class ;
+    rdfs:label "Transaction" ;
+    rdfs:subClassOf bfo:0000015 ; # Process
+    skos:definition "A Transaction is an occurrent process entity that represents the atomic transfer of assets, data, or function calls between Web3 identities or smart contracts on a blockchain network, which is cryptographically signed, validated by consensus, and immutably recorded on the distributed ledger." .
+
+# Identification Properties
+w3f:hasTransactionHash a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has transaction hash" ;
+    skos:definition "The unique cryptographic hash that identifies the transaction on the blockchain." .
+
+w3f:hasTransactionIndex a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has transaction index" ;
+    skos:definition "The index position of the transaction within its containing block." .
+
+w3f:hasNonce a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has nonce" ;
+    skos:definition "The sequence number used to prevent transaction replay and track transaction order from a specific address." .
+
+# Temporal Properties
+w3f:hasTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp" ;
+    skos:definition "The timestamp indicating when the transaction was included in a block." .
+
+w3f:hasConfirmationTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has confirmation time" ;
+    skos:definition "The time duration between transaction broadcast and its confirmation in a block." .
+
+w3f:occupiesBlockTime a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:BlockTime ;
+    rdfs:label "occupies block time" ;
+    skos:definition "The temporal region representing the block time in which this transaction was included." .
+
+# Block Relationship
+w3f:includedInBlock a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:Block ;
+    rdfs:label "included in block" ;
+    skos:definition "The block in which this transaction is included." .
+
+w3f:hasBlockNumber a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has block number" ;
+    skos:definition "The number of the block in which this transaction is included." .
+
+w3f:hasConfirmations a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has confirmations" ;
+    skos:definition "The number of blocks built on top of the block containing this transaction, indicating its finality." .
+
+# Participant Properties
+w3f:hasSender a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "has sender" ;
+    skos:definition "The Web3 identity that initiated and signed the transaction." .
+
+w3f:hasRecipient a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:Web3Identity ;
+    rdfs:label "has recipient" ;
+    skos:definition "The Web3 identity that received the assets or was the target of the transaction." .
+
+w3f:invokesContract a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:SmartContract ;
+    rdfs:label "invokes contract" ;
+    skos:definition "The smart contract that is invoked by this transaction." .
+
+# Transaction Content
+w3f:transfersAsset a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:DigitalAsset ;
+    rdfs:label "transfers asset" ;
+    skos:definition "The digital asset being transferred in this transaction." .
+
+w3f:hasValue a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" ;
+    skos:definition "The amount of native cryptocurrency being transferred in this transaction." .
+
+w3f:hasTransferAmount a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has transfer amount" ;
+    skos:definition "The amount of a token or asset being transferred in this transaction." .
+
+w3f:hasInputData a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has input data" ;
+    skos:definition "The call data or input parameters included in the transaction, particularly for contract interactions." .
+
+# Function Call Properties
+w3f:callsFunction a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "calls function" ;
+    skos:definition "The name or signature of the function being called in the transaction." .
+
+w3f:hasFunctionArguments a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has function arguments" ;
+    skos:definition "The arguments or parameters passed to the function being called." .
+
+w3f:hasCallResult a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has call result" ;
+    skos:definition "The result or return value of the function call executed in the transaction." .
+
+# Fee Properties
+w3f:hasGasLimit a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has gas limit" ;
+    skos:definition "The maximum amount of computational resources (gas) that the transaction is allowed to consume." .
+
+w3f:hasGasPrice a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has gas price" ;
+    skos:definition "The price per unit of gas that the sender is willing to pay for the transaction." .
+
+w3f:hasGasUsed a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has gas used" ;
+    skos:definition "The actual amount of computational resources (gas) consumed by the execution of the transaction." .
+
+w3f:hasFee a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has fee" ;
+    skos:definition "The total fee paid for the transaction, typically calculated as gasUsed * gasPrice." .
+
+# Execution Properties
+w3f:hasStatus a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has status" ;
+    skos:definition "The execution status of the transaction (e.g., success, failure, pending)." .
+
+w3f:hasErrorMessage a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error message" ;
+    skos:definition "The error message if the transaction execution failed." .
+
+w3f:triggersEvent a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:ContractEvent ;
+    rdfs:label "triggers event" ;
+    skos:definition "An event that is emitted as a result of this transaction's execution." .
+
+# Network Properties
+w3f:executedOnNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "executed on network" ;
+    skos:definition "The blockchain network on which this transaction is executed." .
+
+w3f:hasChainId a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has chain ID" ;
+    skos:definition "The chain identifier of the blockchain network where the transaction is executed." .
+
+# Cryptographic Properties
+w3f:hasSignature a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has signature" ;
+    skos:definition "The cryptographic signature that proves the transaction was authorized by the sender." .
+
+w3f:hasPublicKey a owl:DatatypeProperty ;
+    rdfs:domain w3f:Transaction ;
+    rdfs:range xsd:string ;
+    rdfs:label "has public key" ;
+    skos:definition "The public key used to verify the transaction signature." . 

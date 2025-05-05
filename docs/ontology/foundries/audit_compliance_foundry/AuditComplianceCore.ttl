@@ -1,0 +1,256 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix acf: <http://ontology.naas.ai/abi/audit-compliance/> .
+
+<http://ontology.naas.ai/abi/audit-compliance/AuditComplianceCore> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/audit_compliance_foundry/AuditComplianceCore.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Core ontology for audit and compliance concepts."@en ;
+    dc:license "MIT" ;
+    dc:title "Audit & Compliance Core Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+# CONTINUANT CLASSES
+
+# Independent Continuants
+
+acf:RegulatoryAuthority a owl:Class ;
+    rdfs:subClassOf cco:ont00001180 ; # Organization
+    rdfs:label "Regulatory Authority"@en ;
+    skos:definition "A government or industry body with the authority to establish and enforce regulations and standards."@en ;
+    skos:example "Securities and Exchange Commission, European Data Protection Board, Financial Conduct Authority."@en .
+
+acf:ComplianceTeam a owl:Class ;
+    rdfs:subClassOf cco:ont00001180 ; # Organization
+    rdfs:label "Compliance Team"@en ;
+    skos:definition "An organizational unit responsible for ensuring compliance with applicable laws, regulations, and internal policies."@en ;
+    skos:example "Corporate Compliance Department, Regulatory Affairs Team."@en .
+
+acf:ControlSystem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "Control System"@en ;
+    skos:definition "A system implemented to ensure compliance with requirements, manage risks, and provide reasonable assurance regarding achievement of objectives."@en ;
+    skos:example "Access control system, transaction approval workflow, compliance monitoring system."@en .
+
+acf:EvidenceRepository a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ; # Material Entity
+    rdfs:label "Evidence Repository"@en ;
+    skos:definition "A system or location where evidence artifacts are stored, managed, and maintained for audit and compliance purposes."@en ;
+    skos:example "Document management system, evidence vault, compliance documentation database."@en .
+
+acf:ComplianceDomain a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000141 ; # Immaterial Entity
+    rdfs:label "Compliance Domain"@en ;
+    skos:definition "A conceptual area or sphere of regulatory or compliance focus, typically organized around a specific set of requirements or obligations."@en ;
+    skos:example "Data privacy, financial reporting, environmental compliance, healthcare regulations."@en .
+
+acf:AuditScope a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000141 ; # Immaterial Entity
+    rdfs:label "Audit Scope"@en ;
+    skos:definition "The defined boundaries, extent, and limitations of an audit engagement or investigation."@en ;
+    skos:example "The audit scope includes all financial transactions for FY2023 but excludes subsidiary operations."@en .
+
+# Specifically Dependent Continuants
+
+acf:AuditorRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
+    rdfs:label "Auditor Role"@en ;
+    skos:definition "The role of a person or organization that conducts a systematic examination of records, procedures, or operations to verify their accuracy, effectiveness, or compliance with standards."@en ;
+    skos:example "Internal auditor, external auditor, compliance auditor."@en .
+
+acf:ComplianceOfficerRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ; # Role
+    rdfs:label "Compliance Officer Role"@en ;
+    skos:definition "The role of an individual responsible for overseeing and managing compliance within an organization."@en ;
+    skos:example "Chief Compliance Officer, Data Protection Officer, Ethics and Compliance Manager."@en .
+
+acf:ComplianceMonitoringFunction a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ; # Function
+    rdfs:label "Compliance Monitoring Function"@en ;
+    skos:definition "The function of continuously or periodically assessing and verifying compliance with requirements and standards."@en ;
+    skos:example "Automated compliance checking, periodic control testing, ongoing monitoring of policy adherence."@en .
+
+acf:ComplianceStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Compliance Status"@en ;
+    skos:definition "The quality of being in a state of compliance or non-compliance with applicable requirements or standards."@en ;
+    skos:example "Compliant, non-compliant, partially compliant, under remediation."@en .
+
+acf:RiskLevel a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ; # Quality
+    rdfs:label "Risk Level"@en ;
+    skos:definition "The quality reflecting the assessed magnitude of risk based on likelihood and impact."@en ;
+    skos:example "High risk, medium risk, low risk, critical risk."@en .
+
+# Generically Dependent Continuants
+
+acf:ComplianceFramework a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Compliance Framework"@en ;
+    skos:definition "A structured set of guidelines, standards, and practices designed to ensure compliance with laws, regulations, or internal policies."@en ;
+    skos:example "NIST Cybersecurity Framework, COSO Internal Control Framework, ISO 27001."@en .
+
+acf:PolicyDocument a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Policy Document"@en ;
+    skos:definition "A formal document establishing organizational rules, principles, guidelines, or protocols to ensure compliance with requirements."@en ;
+    skos:example "Data protection policy, code of conduct, information security policy."@en .
+
+acf:AuditEvidence a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Audit Evidence"@en ;
+    skos:definition "Information used by the auditor to arrive at conclusions on which the audit opinion is based."@en ;
+    skos:example "Records, documents, confirmations, observations, analytical procedures results."@en .
+
+acf:AuditReport a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Audit Report"@en ;
+    skos:definition "A formal document presenting the findings, conclusions, and recommendations resulting from an audit engagement."@en ;
+    skos:example "Annual financial audit report, compliance audit report, internal control assessment report."@en .
+
+# OCCURRENT CLASSES
+
+# Processes
+
+acf:AuditProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Audit Process"@en ;
+    skos:definition "The systematic process of obtaining and evaluating evidence regarding assertions about organizational activities to ascertain the degree of correspondence between assertions and established criteria."@en ;
+    skos:example "Financial audit, compliance audit, operational audit."@en .
+
+acf:ComplianceMonitoring a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Compliance Monitoring"@en ;
+    skos:definition "The continuous or periodic process of verifying adherence to relevant laws, regulations, standards, or internal policies."@en ;
+    skos:example "Ongoing policy compliance checks, control testing, regulatory monitoring."@en .
+
+acf:ControlTesting a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Control Testing"@en ;
+    skos:definition "The process of evaluating the design and operating effectiveness of controls to determine if they are functioning as intended."@en ;
+    skos:example "Test of design, test of operating effectiveness, control validation."@en .
+
+acf:EvidenceCollection a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ; # Process
+    rdfs:label "Evidence Collection"@en ;
+    skos:definition "The process of gathering, documenting, and preserving information to support audit findings or demonstrate compliance."@en ;
+    skos:example "Document sampling, interview process, system log extraction."@en .
+
+# Process Boundaries
+
+acf:AuditInitiation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Audit Initiation"@en ;
+    skos:definition "The temporal boundary marking the beginning of an audit engagement or process."@en ;
+    skos:example "Issuance of audit engagement letter, kickoff meeting, initial planning session."@en .
+
+acf:ComplianceStatusChange a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000035 ; # Process Boundary
+    rdfs:label "Compliance Status Change"@en ;
+    skos:definition "The temporal boundary marking a transition from one compliance state to another."@en ;
+    skos:example "Transition from non-compliant to compliant, compliance violation event, remediation completion."@en .
+
+# Temporal Regions
+
+acf:AuditPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Audit Period"@en ;
+    skos:definition "A defined interval of time covered by an audit engagement."@en ;
+    skos:example "Fiscal year audit period, quarterly audit period, project audit timeframe."@en .
+
+acf:CompliancePeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "Compliance Period"@en ;
+    skos:definition "A defined interval of time during which specific compliance requirements are applicable and compliance is assessed."@en ;
+    skos:example "Quarterly reporting period, annual certification period, regulatory reporting cycle."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+acf:hasRegulator a owl:ObjectProperty ;
+    rdfs:domain acf:ComplianceFramework ;
+    rdfs:range acf:RegulatoryAuthority ;
+    rdfs:label "has regulator"@en ;
+    skos:definition "Relates a compliance framework to the regulatory authority that establishes or enforces it."@en .
+
+acf:isRegulatorOf a owl:ObjectProperty ;
+    rdfs:domain acf:RegulatoryAuthority ;
+    rdfs:range acf:ComplianceFramework ;
+    rdfs:label "is regulator of"@en ;
+    skos:definition "Relates a regulatory authority to the compliance frameworks it establishes or enforces."@en .
+
+acf:hasComplianceStatus a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range acf:ComplianceStatus ;
+    rdfs:label "has compliance status"@en ;
+    skos:definition "Relates an entity to its assessed compliance status."@en .
+
+acf:providesEvidenceFor a owl:ObjectProperty ;
+    rdfs:domain acf:AuditEvidence ;
+    rdfs:range owl:Thing ;
+    rdfs:label "provides evidence for"@en ;
+    skos:definition "Relates audit evidence to the assertion, control, requirement, or compliance status it supports or demonstrates."@en .
+
+acf:hasRiskLevel a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range acf:RiskLevel ;
+    rdfs:label "has risk level"@en ;
+    skos:definition "Relates an entity to its assessed level of risk."@en .
+
+acf:isInScope a owl:ObjectProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range acf:AuditScope ;
+    rdfs:label "is in scope"@en ;
+    skos:definition "Relates an entity to an audit scope, indicating it is included within the boundaries of the audit."@en .
+
+acf:performsAudit a owl:ObjectProperty ;
+    rdfs:domain [ owl:unionOf (cco:ont00000045 acf:ComplianceTeam) ] ; # Person or Compliance Team
+    rdfs:range acf:AuditProcess ;
+    rdfs:label "performs audit"@en ;
+    skos:definition "Relates an auditor or audit team to the audit process they conduct."@en .
+
+acf:occursWithin a owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ; # Process
+    rdfs:range bfo:BFO_0000008 ; # Temporal Region
+    rdfs:label "occurs within"@en ;
+    skos:definition "Relates a process to the temporal region during which it occurs."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+acf:hasEffectiveDate a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:date ;
+    rdfs:label "has effective date"@en ;
+    skos:definition "Specifies the date when a policy, regulation, framework, or control became or becomes effective."@en .
+
+acf:hasExpirationDate a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:date ;
+    rdfs:label "has expiration date"@en ;
+    skos:definition "Specifies the date when a policy, certification, attestation, or control expires or ceases to be valid."@en .
+
+acf:hasRiskScore a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has risk score"@en ;
+    skos:definition "Specifies a quantitative score representing the assessed level of risk."@en .
+
+acf:hasVersionIdentifier a owl:DatatypeProperty ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:string ;
+    rdfs:label "has version identifier"@en ;
+    skos:definition "Specifies a version number or identifier for a document, framework, policy, or other versioned entity."@en .

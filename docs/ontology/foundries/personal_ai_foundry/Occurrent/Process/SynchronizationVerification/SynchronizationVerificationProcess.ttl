@@ -1,0 +1,297 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/SynchronizationVerificationProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/SynchronizationVerificationProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the SynchronizationVerificationProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Synchronization Verification Process Ontology" .
+
+# Process Definition
+cs:SynchronizationVerificationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Synchronization Verification Process"@en ;
+    skos:definition "The process of verifying that contact synchronization was successful."@en .
+
+# Input Properties Classes
+cs:WriteResults a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Write Results"@en ;
+    skos:definition "Results of the contact write process to be verified."@en .
+
+cs:SourceContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Source Contacts"@en ;
+    skos:definition "Original contact data from source platforms."@en .
+
+cs:DestinationSystem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Destination System"@en ;
+    skos:definition "System where contacts were written and need verification."@en .
+
+cs:VerificationCriteria a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verification Criteria"@en ;
+    skos:definition "Criteria for determining successful synchronization."@en .
+
+cs:VerificationAccessCredentials a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verification Access Credentials"@en ;
+    skos:definition "Credentials required for accessing systems during verification."@en .
+
+# Process Properties Classes
+cs:VerificationStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Verification Status"@en ;
+    skos:definition "Current status of the verification process."@en .
+
+cs:VerificationProgress a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Verification Progress"@en ;
+    skos:definition "Progress percentage of the verification process."@en .
+
+cs:VerificationMethod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verification Method"@en ;
+    skos:definition "Method used for verifying synchronization success."@en .
+
+cs:SamplingStrategy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Sampling Strategy"@en ;
+    skos:definition "Strategy for sampling contacts during verification."@en .
+
+cs:ToleranceThreshold a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Tolerance Threshold"@en ;
+    skos:definition "Threshold for acceptable differences during verification."@en .
+
+# Output Properties Classes
+cs:VerificationResults a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verification Results"@en ;
+    skos:definition "Results of the verification process."@en .
+
+cs:VerifiedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verified Contacts"@en ;
+    skos:definition "Contacts verified as correctly synchronized."@en .
+
+cs:VerificationDiscrepancies a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verification Discrepancies"@en ;
+    skos:definition "Discrepancies found during verification."@en .
+
+cs:VerificationSummary a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Verification Summary"@en ;
+    skos:definition "Summary of the verification process results."@en .
+
+cs:SynchronizationConfidenceScore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Synchronization Confidence Score"@en ;
+    skos:definition "Confidence score for the overall synchronization process."@en .
+
+# Process Stages
+cs:VerificationStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Verification Stage"@en ;
+    skos:definition "A distinct stage in the synchronization verification process."@en .
+
+cs:InitializationStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Initialization Stage"@en ;
+    skos:definition "Stage for setting up the verification process."@en .
+
+cs:DataAccessStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Data Access Stage"@en ;
+    skos:definition "Stage for accessing data to be verified."@en .
+
+cs:CountVerificationStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Count Verification Stage"@en ;
+    skos:definition "Stage for verifying contact counts match expectations."@en .
+
+cs:AttributeVerificationStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Attribute Verification Stage"@en ;
+    skos:definition "Stage for verifying contact attributes match expectations."@en .
+
+cs:DiscrepancyAnalysisStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Discrepancy Analysis Stage"@en ;
+    skos:definition "Stage for analyzing any discrepancies found."@en .
+
+cs:ConfidenceCalculationStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Confidence Calculation Stage"@en ;
+    skos:definition "Stage for calculating overall synchronization confidence."@en .
+
+cs:ReportGenerationStage a owl:Class ;
+    rdfs:subClassOf cs:VerificationStage ;
+    rdfs:label "Report Generation Stage"@en ;
+    skos:definition "Stage for generating verification reports."@en .
+
+# Verification Methods
+cs:CountComparisonMethod a owl:Class ;
+    rdfs:subClassOf cs:VerificationMethod ;
+    rdfs:label "Count Comparison Method"@en ;
+    skos:definition "Verification by comparing contact counts."@en .
+
+cs:AttributeComparisonMethod a owl:Class ;
+    rdfs:subClassOf cs:VerificationMethod ;
+    rdfs:label "Attribute Comparison Method"@en ;
+    skos:definition "Verification by comparing contact attributes."@en .
+
+cs:SampledVerificationMethod a owl:Class ;
+    rdfs:subClassOf cs:VerificationMethod ;
+    rdfs:label "Sampled Verification Method"@en ;
+    skos:definition "Verification using a sample of contacts rather than all."@en .
+
+cs:ChecksumVerificationMethod a owl:Class ;
+    rdfs:subClassOf cs:VerificationMethod ;
+    rdfs:label "Checksum Verification Method"@en ;
+    skos:definition "Verification using checksums of contact data."@en .
+
+cs:IdMatchingVerificationMethod a owl:Class ;
+    rdfs:subClassOf cs:VerificationMethod ;
+    rdfs:label "ID Matching Verification Method"@en ;
+    skos:definition "Verification by matching contact identifiers."@en .
+
+# Relationships
+cs:verifiesWriteResults a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:WriteResults ;
+    rdfs:label "verifies write results"@en ;
+    skos:definition "Relates a verification process to the write results it verifies."@en .
+
+cs:hasSourceContacts a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:SourceContacts ;
+    rdfs:label "has source contacts"@en ;
+    skos:definition "Relates a verification process to original source contacts."@en .
+
+cs:verifyInDestinationSystem a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:DestinationSystem ;
+    rdfs:label "verify in destination system"@en ;
+    skos:definition "Relates a verification process to the destination system."@en .
+
+cs:usesVerificationCriteria a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationCriteria ;
+    rdfs:label "uses verification criteria"@en ;
+    skos:definition "Relates a verification process to its criteria."@en .
+
+cs:hasAccessCredentials a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationAccessCredentials ;
+    rdfs:label "has access credentials"@en ;
+    skos:definition "Relates a verification process to the credentials it uses."@en .
+
+cs:hasVerificationStatus a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationStatus ;
+    rdfs:label "has verification status"@en ;
+    skos:definition "Relates a verification process to its current status."@en .
+
+cs:hasVerificationProgress a owl:DatatypeProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has verification progress"@en ;
+    skos:definition "Specifies the completion percentage of the verification process."@en .
+
+cs:usesVerificationMethod a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationMethod ;
+    rdfs:label "uses verification method"@en ;
+    skos:definition "Relates a verification process to the method it uses."@en .
+
+cs:usesSamplingStrategy a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:SamplingStrategy ;
+    rdfs:label "uses sampling strategy"@en ;
+    skos:definition "Relates a verification process to its sampling strategy."@en .
+
+cs:hasToleranceThreshold a owl:DatatypeProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has tolerance threshold"@en ;
+    skos:definition "Specifies the tolerance threshold for acceptable differences."@en .
+
+cs:producesVerificationResults a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationResults ;
+    rdfs:label "produces verification results"@en ;
+    skos:definition "Relates a verification process to the results it produces."@en .
+
+cs:hasVerifiedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:VerificationResults ;
+    rdfs:range cs:VerifiedContacts ;
+    rdfs:label "has verified contacts"@en ;
+    skos:definition "Relates verification results to successfully verified contacts."@en .
+
+cs:hasDiscrepancies a owl:ObjectProperty ;
+    rdfs:domain cs:VerificationResults ;
+    rdfs:range cs:VerificationDiscrepancies ;
+    rdfs:label "has discrepancies"@en ;
+    skos:definition "Relates verification results to discrepancies found."@en .
+
+cs:generatesSummary a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationSummary ;
+    rdfs:label "generates summary"@en ;
+    skos:definition "Relates a verification process to the summary it generates."@en .
+
+cs:calculatesConfidenceScore a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:SynchronizationConfidenceScore ;
+    rdfs:label "calculates confidence score"@en ;
+    skos:definition "Relates a verification process to the confidence score it calculates."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:SynchronizationVerificationProcess ;
+    rdfs:range cs:VerificationStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates a verification process to its current stage."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:VerificationStage ;
+    rdfs:range cs:VerificationStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the verification process sequence."@en .
+
+cs:hasVerifiedCount a owl:DatatypeProperty ;
+    rdfs:domain cs:VerifiedContacts ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has verified count"@en ;
+    skos:definition "Specifies the number of contacts successfully verified."@en .
+
+cs:hasDiscrepancyCount a owl:DatatypeProperty ;
+    rdfs:domain cs:VerificationDiscrepancies ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has discrepancy count"@en ;
+    skos:definition "Specifies the number of discrepancies found."@en .
+
+cs:hasConfidenceValue a owl:DatatypeProperty ;
+    rdfs:domain cs:SynchronizationConfidenceScore ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has confidence value"@en ;
+    skos:definition "Specifies the numeric value of the confidence score."@en .
+
+cs:hasDiscrepancyDescription a owl:DatatypeProperty ;
+    rdfs:domain cs:VerificationDiscrepancies ;
+    rdfs:range xsd:string ;
+    rdfs:label "has discrepancy description"@en ;
+    skos:definition "Provides a description of verification discrepancies."@en . 

@@ -1,7 +1,7 @@
 # ABI Ontology
 
 > [!WARNING]
-> This folder and the documents in this folder are currently under development. Content may be incomplete or subject to change. Contact us if you have any question: support@naas.ai
+> This folder and the documents in this folder are currently under development using human + AI capabilities. Content may be incomplete or subject to change. Contact us if you have any question: support@naas.ai
 
 This is the root folder for the **ABI Ontology**, a comprehensive universal ontology framework built on the Basic Formal Ontology (BFO). The ABI Ontology provides semantic models for representing entities, processes, and relationships across multiple domains of enterprise operations.
 
@@ -45,11 +45,10 @@ The ontology is divided into domain-specific **Foundries**, each focusing on a p
 
 - **Enterprise Management Foundry**: Core business operations, organizational structures, and management processes
 - **Cyber Security Foundry**: Security agents, operations, threats, and protective measures
+- **Web3 Foundry**: Blockchain networks, cryptographic identities, digital assets, smart contracts, and decentralized applications
+- **Audit & Compliance Foundry**: Regulatory requirements, audit processes, control frameworks, and governance structures
+- **Personal AI Foundry**: Personal AI agents, knowledge bases, learning processes, and human-AI interaction patterns
 
-*Planned Foundries:*
-- **ESG Foundry**: Environmental, Social, and Governance entities and processes
-- **Data & Analytics Foundry**: Information assets, analytics processes, and data governance
-- **Finance & Accounting Foundry**: Financial assets, transactions, and reporting processes
 
 Each foundry maintains the same BFO-based structure of Continuants and Occurrents, but applies it to domain-specific concepts.
 

@@ -1,0 +1,229 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix paf: <http://ontology.abi.ai/personal_ai_foundry#> .
+@prefix cs: <http://ontology.abi.ai/contact_schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# Email Sending Process Instance
+cs:freelanceContractEmailProcess a cs:EmailSendingProcess ;
+    rdfs:label "Freelance Contract Email Sending Process"@en ;
+    cs:processId "esp-2023-09-15-102843-12345" ;
+    cs:status "completed" ;
+    cs:timestamp "2023-09-15T10:28:43Z"^^xsd:dateTime ;
+    
+    # Process Metadata
+    cs:metadata [
+        a cs:ProcessMetadata ;
+        cs:priority "high" ;
+        cs:sensitivity "confidential" ;
+        cs:userInitiated true ;
+        cs:processedBy "email_service_v2.3"
+    ] ;
+    
+    # Source Account
+    cs:sourceAccount [
+        a cs:EmailAccount ;
+        cs:accountId "acc_12345" ;
+        cs:provider "Gmail" ;
+        cs:email "alice.manager@company.com" ;
+        cs:displayName "Alice Manager"
+    ] ;
+    
+    # Message Content
+    cs:message [
+        a cs:EmailMessage ;
+        cs:messageId "<CAE+iOf9PDGWMZxP3=1-h7qBA@mail.gmail.com>" ;
+        cs:conversationId "conv_6789" ;
+        cs:subject "CONFIDENTIAL: Freelance Contract Start Date Confirmation" ;
+        
+        # Sender
+        cs:sender [
+            a cs:EmailParticipant ;
+            cs:email "alice.manager@company.com" ;
+            cs:name "Alice Manager" ;
+            cs:title "Project Manager" ;
+            cs:department "Engineering" ;
+            cs:contactId "contact_alice_001" ;
+            cs:relationshipStrength 0.95
+        ] ;
+        
+        # Recipients
+        cs:recipients [
+            a cs:Recipients ;
+            
+            # To Recipients
+            cs:to [
+                a cs:EmailParticipant ;
+                cs:email "bob.freelancer@gmail.com" ;
+                cs:name "Bob Freelancer" ;
+                cs:title "Data Analyst" ;
+                cs:contactId "contact_bob_002" ;
+                cs:relationshipStrength 0.75
+            ] ;
+            
+            # CC Recipients
+            cs:cc [
+                a cs:EmailParticipant ;
+                cs:email "hr@company.com" ;
+                cs:name "Human Resources" ;
+                cs:department "HR" ;
+                cs:contactId "contact_hr_003" ;
+                cs:relationshipStrength 0.6
+            ] ;
+            
+            # BCC Recipients
+            cs:bcc [
+                a cs:EmailParticipant ;
+                cs:email "legal@company.com" ;
+                cs:name "Legal Department" ;
+                cs:department "Legal" ;
+                cs:contactId "contact_legal_004" ;
+                cs:relationshipStrength 0.5
+            ]
+        ] ;
+        
+        # Content
+        cs:content [
+            a cs:EmailContent ;
+            cs:text """Hi Bob,
+
+I'm confirming our agreement on the start date of October 2, 2023 for the Data Analytics Integration project. The attached contract reflects this date and all terms we discussed.
+
+Please review, sign, and return the contract by September 22.
+
+Let me know if you have any questions.
+
+Best regards,
+Alice Manager
+Project Manager | Engineering
+Company, Inc.""" ;
+            
+            cs:html """<div>
+<p>Hi Bob,</p>
+<p>I'm confirming our agreement on the start date of <strong>October 2, 2023</strong> for the Data Analytics Integration project. The attached contract reflects this date and all terms we discussed.</p>
+<p>Please review, sign, and return the contract by <em>September 22</em>.</p>
+<p>Let me know if you have any questions.</p>
+<p>Best regards,<br>
+Alice Manager<br>
+Project Manager | Engineering<br>
+Company, Inc.</p>
+</div>""" ;
+            
+            cs:containsConfidentialContent true ;
+            cs:containsMentionOf "contract", "start date", "Data Analytics", "October 2", "sign"
+        ] ;
+        
+        # Attachments
+        cs:attachments [
+            a cs:Attachment ;
+            cs:id "att_34567" ;
+            cs:filename "Freelance_Contract_Bob_Oct2023.pdf" ;
+            cs:mimeType "application/pdf" ;
+            cs:size 1247890 ;
+            cs:isEncrypted true ;
+            cs:hash "sha256:a1b2c3d4e5f6..." ;
+            cs:scanStatus "clean" ;
+            
+            cs:attachmentMetadata [
+                a cs:AttachmentMetadata ;
+                cs:pages 12 ;
+                cs:containsSignatureFields true ;
+                cs:documentType "contract"
+            ]
+        ] ;
+        
+        # Headers
+        cs:headers [
+            a cs:EmailHeaders ;
+            rdfs:label "Standard SMTP headers"
+        ] ;
+        
+        # Flags
+        cs:flags [
+            a cs:EmailFlags ;
+            cs:confidential true ;
+            cs:requiresResponse true ;
+            cs:hasDeadline true ;
+            cs:deadlineDate "2023-09-22T23:59:59Z"^^xsd:dateTime
+        ]
+    ] ;
+    
+    # Security Measures
+    cs:securityMeasures [
+        a cs:SecurityMeasures ;
+        cs:smimeSigned true ;
+        cs:transportEncryption "TLS 1.3" ;
+        cs:contentEncryption "none" ;
+        cs:attachmentEncryption "AES-256" ;
+        cs:accessRestricted true ;
+        cs:dlpChecked true ;
+        cs:dlpStatus "passed" ;
+        
+        cs:sensitiveDataDetected [
+            a cs:SensitiveDataDetection ;
+            rdfs:label "Contract terms detected"
+        ]
+    ] ;
+    
+    # Delivery Details
+    cs:deliveryDetails [
+        a cs:DeliveryDetails ;
+        cs:transportMethod "SMTP" ;
+        cs:serverName "smtp.gmail.com" ;
+        
+        # Recipient Statuses
+        cs:recipientStatuses [
+            a cs:RecipientStatus ;
+            cs:recipient "bob.freelancer@gmail.com" ;
+            cs:deliveryStatus [
+                a cs:DeliveryStatus ;
+                rdfs:label "Delivered to recipient server"
+            ]
+        ], [
+            a cs:RecipientStatus ;
+            cs:recipient "hr@company.com" ;
+            cs:deliveryStatus [
+                a cs:DeliveryStatus ;
+                rdfs:label "Delivered to recipient server"
+            ]
+        ], [
+            a cs:RecipientStatus ;
+            cs:recipient "legal@company.com" ;
+            cs:deliveryStatus [
+                a cs:DeliveryStatus ;
+                rdfs:label "Delivered to recipient server"
+            ]
+        ] ;
+        
+        # Read Receipts
+        cs:readReceipts [
+            a cs:ReadReceipt ;
+            cs:recipient "bob.freelancer@gmail.com" ;
+            cs:timestamp "2023-09-15T11:05:22Z"^^xsd:dateTime
+        ]
+    ] ;
+    
+    # Processing Stats
+    cs:processingStats [
+        a cs:ProcessingStats ;
+        cs:securityCheckTime 235 ;
+        cs:retryCount 0
+    ] ;
+    
+    # Contact Updates
+    cs:contactUpdates [
+        a cs:ContactUpdates ;
+        cs:interactionRecorded true ;
+        cs:contactIds "contact_bob_002", "contact_hr_003", "contact_legal_004" ;
+        
+        cs:relationshipMetrics [
+            a cs:RelationshipMetrics ;
+            cs:correspondenceCount 5 ;
+            cs:averageResponseTime 12600 ;
+            cs:lastInteraction "2023-09-15T10:28:43Z"^^xsd:dateTime ;
+            cs:relationshipTags "contract", "business", "active"
+        ]
+    ] . s

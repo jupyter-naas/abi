@@ -1,0 +1,153 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix w3f: <http://ontology.abi.ai/web3foundry/> .
+@prefix abi: <http://ontology.abi.ai/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# BlockTime Class Definition
+w3f:BlockTime a owl:Class ;
+    rdfs:label "Block Time" ;
+    rdfs:subClassOf bfo:0000008 ; # Temporal Region
+    skos:definition "A BlockTime is an occurrent temporal region entity that represents the period between the creation of consecutive blocks in a blockchain network, defining the chronological cadence at which the distributed ledger is updated with new transactions and state changes." .
+
+# Block Interval Class - A specific type of BlockTime
+w3f:BlockInterval a owl:Class ;
+    rdfs:label "Block Interval" ;
+    rdfs:subClassOf w3f:BlockTime ;
+    skos:definition "A BlockInterval is a temporal region representing the targeted or average time period between blocks on a blockchain network, as defined by the consensus protocol parameters." .
+
+# BlockTimestamp Class - A specific point in time
+w3f:BlockTimestamp a owl:Class ;
+    rdfs:label "Block Timestamp" ;
+    rdfs:subClassOf bfo:0000148 ; # Temporal Instant
+    skos:definition "A BlockTimestamp is a zero-dimensional temporal region representing the specific moment when a block was created and added to the blockchain." .
+
+# Time Measurement Properties
+w3f:hasDuration a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has duration" ;
+    skos:definition "The time duration of this block time, representing how long it took between blocks." .
+
+w3f:hasTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp" ;
+    skos:definition "The specific date and time that this block timestamp represents." .
+
+w3f:hasUnixTimestamp a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has unix timestamp" ;
+    skos:definition "The Unix timestamp (seconds since January 1, 1970) that this block timestamp represents." .
+
+# Network Properties
+w3f:belongsToNetwork a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range w3f:BlockchainNetwork ;
+    rdfs:label "belongs to network" ;
+    skos:definition "The blockchain network to which this block time applies." .
+
+w3f:governedByConsensusProtocol a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range w3f:ConsensusProtocol ;
+    rdfs:label "governed by consensus protocol" ;
+    skos:definition "The consensus protocol that determines this block time." .
+
+# Block Relationships
+w3f:measuredBetweenBlocks a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range w3f:Block ;
+    rdfs:label "measured between blocks" ;
+    skos:definition "The blocks between which this block time is measured." .
+
+w3f:associatedWithBlock a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range w3f:Block ;
+    rdfs:label "associated with block" ;
+    skos:definition "The block with which this block timestamp is associated." .
+
+w3f:hasBlockNumber a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has block number" ;
+    skos:definition "The block number with which this block timestamp is associated." .
+
+# Statistical Properties
+w3f:hasTargetTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockInterval ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has target time" ;
+    skos:definition "The target time between blocks as defined by the consensus protocol." .
+
+w3f:hasAverageTime a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockInterval ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has average time" ;
+    skos:definition "The average time between blocks observed over a period." .
+
+w3f:hasVariance a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockInterval ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has variance" ;
+    skos:definition "The statistical variance of block times, measuring consistency." .
+
+# Temporal Relations
+w3f:occursBeforeTime a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range w3f:BlockTimestamp ;
+    rdfs:label "occurs before time" ;
+    skos:definition "Indicates that this block timestamp occurs chronologically before another block timestamp." .
+
+w3f:occursAfterTime a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range w3f:BlockTimestamp ;
+    rdfs:label "occurs after time" ;
+    skos:definition "Indicates that this block timestamp occurs chronologically after another block timestamp." .
+
+w3f:occursWithinPeriod a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTimestamp ;
+    rdfs:range w3f:BlockTime ;
+    rdfs:label "occurs within period" ;
+    skos:definition "Indicates that this block timestamp occurs within a specific block time period." .
+
+# Process Relationships
+w3f:timeOfMining a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range w3f:MiningProcess ;
+    rdfs:label "time of mining" ;
+    skos:definition "The mining process that occurred during this block time." .
+
+w3f:timeOfValidation a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range w3f:ValidationProcess ;
+    rdfs:label "time of validation" ;
+    skos:definition "The validation process that occurred during this block time." .
+
+w3f:containsTransactions a owl:ObjectProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range w3f:Transaction ;
+    rdfs:label "contains transactions" ;
+    skos:definition "The transactions that were processed during this block time." .
+
+# Network State Properties
+w3f:hasDifficulty a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has difficulty" ;
+    skos:definition "The network difficulty during this block time (for Proof of Work networks)." .
+
+w3f:hasNetworkHashrate a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has network hashrate" ;
+    skos:definition "The total computational power of the network during this block time (for Proof of Work networks)." .
+
+w3f:hasActiveValidators a owl:DatatypeProperty ;
+    rdfs:domain w3f:BlockTime ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has active validators" ;
+    skos:definition "The number of active validators during this block time (for Proof of Stake networks)." . 

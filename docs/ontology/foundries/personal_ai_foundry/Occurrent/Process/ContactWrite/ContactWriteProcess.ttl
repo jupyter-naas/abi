@@ -1,0 +1,297 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/ContactWriteProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/ContactWriteProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the ContactWriteProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Contact Write Process Ontology" .
+
+# Process Definition
+cs:ContactWriteProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Contact Write Process"@en ;
+    skos:definition "The process of writing synchronized contact information to the destination device."@en .
+
+# Input Properties Classes
+cs:MergedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Merged Contacts"@en ;
+    skos:definition "Unified contact records to be written to the destination."@en .
+
+cs:DestinationSystem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Destination System"@en ;
+    skos:definition "System where contact information will be written."@en .
+
+cs:WriteMode a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Write Mode"@en ;
+    skos:definition "Mode for writing contacts (create, update, merge, etc.)."@en .
+
+cs:WriteAccessCredentials a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Write Access Credentials"@en ;
+    skos:definition "Credentials required for accessing the destination system."@en .
+
+cs:ContactFormatSpec a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Contact Format Specification"@en ;
+    skos:definition "Specification of the format required by the destination system."@en .
+
+# Process Properties Classes
+cs:WriteStatus a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Write Status"@en ;
+    skos:definition "Current status of the contact write process."@en .
+
+cs:WriteProgress a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Write Progress"@en ;
+    skos:definition "Progress percentage of the contact write process."@en .
+
+cs:WriteBatchSize a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Write Batch Size"@en ;
+    skos:definition "Number of contacts to write in a single batch."@en .
+
+cs:SystemResponseTime a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "System Response Time"@en ;
+    skos:definition "Time taken by the destination system to respond to write requests."@en .
+
+cs:RetryMechanism a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Retry Mechanism"@en ;
+    skos:definition "Mechanism for retrying failed write operations."@en .
+
+# Output Properties Classes
+cs:WriteResults a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Write Results"@en ;
+    skos:definition "Results of the contact write process."@en .
+
+cs:SuccessfulWrites a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Successful Writes"@en ;
+    skos:definition "Contacts successfully written to the destination."@en .
+
+cs:FailedWrites a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Failed Writes"@en ;
+    skos:definition "Contacts that failed to be written to the destination."@en .
+
+cs:WriteOperationLog a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Write Operation Log"@en ;
+    skos:definition "Log of write operations performed during the process."@en .
+
+cs:ContactIdentifiers a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Contact Identifiers"@en ;
+    skos:definition "Identifiers assigned to contacts in the destination system."@en .
+
+# Process Stages
+cs:WriteStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Write Stage"@en ;
+    skos:definition "A distinct stage in the contact write process."@en .
+
+cs:AuthenticationStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Authentication Stage"@en ;
+    skos:definition "Stage for authenticating with the destination system."@en .
+
+cs:FormatTransformationStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Format Transformation Stage"@en ;
+    skos:definition "Stage for transforming contacts to the destination format."@en .
+
+cs:ExistingContactCheckStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Existing Contact Check Stage"@en ;
+    skos:definition "Stage for checking if contacts already exist in the destination."@en .
+
+cs:WriteOperationStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Write Operation Stage"@en ;
+    skos:definition "Stage for performing the actual write operations."@en .
+
+cs:VerificationStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Verification Stage"@en ;
+    skos:definition "Stage for verifying successful write operations."@en .
+
+cs:ErrorHandlingStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Error Handling Stage"@en ;
+    skos:definition "Stage for handling errors encountered during writing."@en .
+
+cs:CleanupStage a owl:Class ;
+    rdfs:subClassOf cs:WriteStage ;
+    rdfs:label "Cleanup Stage"@en ;
+    skos:definition "Stage for cleaning up resources after write completion."@en .
+
+# Write Modes
+cs:CreateMode a owl:Class ;
+    rdfs:subClassOf cs:WriteMode ;
+    rdfs:label "Create Mode"@en ;
+    skos:definition "Mode for creating new contacts only."@en .
+
+cs:UpdateMode a owl:Class ;
+    rdfs:subClassOf cs:WriteMode ;
+    rdfs:label "Update Mode"@en ;
+    skos:definition "Mode for updating existing contacts only."@en .
+
+cs:CreateOrUpdateMode a owl:Class ;
+    rdfs:subClassOf cs:WriteMode ;
+    rdfs:label "Create or Update Mode"@en ;
+    skos:definition "Mode for creating new contacts or updating existing ones."@en .
+
+cs:DeleteMode a owl:Class ;
+    rdfs:subClassOf cs:WriteMode ;
+    rdfs:label "Delete Mode"@en ;
+    skos:definition "Mode for deleting contacts from the destination."@en .
+
+cs:MergeMode a owl:Class ;
+    rdfs:subClassOf cs:WriteMode ;
+    rdfs:label "Merge Mode"@en ;
+    skos:definition "Mode for merging with existing contacts in the destination."@en .
+
+# Relationships
+cs:hasMergedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:MergedContacts ;
+    rdfs:label "has merged contacts"@en ;
+    skos:definition "Relates a write process to the merged contacts it processes."@en .
+
+cs:hasDestinationSystem a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:DestinationSystem ;
+    rdfs:label "has destination system"@en ;
+    skos:definition "Relates a write process to the system it writes to."@en .
+
+cs:usesWriteMode a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:WriteMode ;
+    rdfs:label "uses write mode"@en ;
+    skos:definition "Relates a write process to the mode it operates in."@en .
+
+cs:hasAccessCredentials a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:WriteAccessCredentials ;
+    rdfs:label "has access credentials"@en ;
+    skos:definition "Relates a write process to the credentials it uses."@en .
+
+cs:usesFormatSpec a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:ContactFormatSpec ;
+    rdfs:label "uses format spec"@en ;
+    skos:definition "Relates a write process to the format specification it follows."@en .
+
+cs:hasWriteStatus a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:WriteStatus ;
+    rdfs:label "has write status"@en ;
+    skos:definition "Relates a write process to its current status."@en .
+
+cs:hasWriteProgress a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has write progress"@en ;
+    skos:definition "Specifies the completion percentage of the write process."@en .
+
+cs:hasBatchSize a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has batch size"@en ;
+    skos:definition "Specifies the number of contacts in each write batch."@en .
+
+cs:hasResponseTime a owl:DatatypeProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has response time"@en ;
+    skos:definition "Specifies the response time of the destination system."@en .
+
+cs:usesRetryMechanism a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:RetryMechanism ;
+    rdfs:label "uses retry mechanism"@en ;
+    skos:definition "Relates a write process to its retry mechanism for failures."@en .
+
+cs:producesWriteResults a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:WriteResults ;
+    rdfs:label "produces write results"@en ;
+    skos:definition "Relates a write process to the results it produces."@en .
+
+cs:hasSuccessfulWrites a owl:ObjectProperty ;
+    rdfs:domain cs:WriteResults ;
+    rdfs:range cs:SuccessfulWrites ;
+    rdfs:label "has successful writes"@en ;
+    skos:definition "Relates write results to successfully written contacts."@en .
+
+cs:hasFailedWrites a owl:ObjectProperty ;
+    rdfs:domain cs:WriteResults ;
+    rdfs:range cs:FailedWrites ;
+    rdfs:label "has failed writes"@en ;
+    skos:definition "Relates write results to contacts that failed to write."@en .
+
+cs:generatesOperationLog a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:WriteOperationLog ;
+    rdfs:label "generates operation log"@en ;
+    skos:definition "Relates a write process to the operation log it generates."@en .
+
+cs:assignsContactIdentifiers a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:ContactIdentifiers ;
+    rdfs:label "assigns contact identifiers"@en ;
+    skos:definition "Relates a write process to the identifiers it assigns to contacts."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:ContactWriteProcess ;
+    rdfs:range cs:WriteStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates a write process to its current stage."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:WriteStage ;
+    rdfs:range cs:WriteStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the write process sequence."@en .
+
+cs:hasOperationCount a owl:DatatypeProperty ;
+    rdfs:domain cs:WriteResults ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has operation count"@en ;
+    skos:definition "Specifies the total number of write operations performed."@en .
+
+cs:hasSuccessCount a owl:DatatypeProperty ;
+    rdfs:domain cs:SuccessfulWrites ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has success count"@en ;
+    skos:definition "Specifies the number of successful write operations."@en .
+
+cs:hasFailureCount a owl:DatatypeProperty ;
+    rdfs:domain cs:FailedWrites ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has failure count"@en ;
+    skos:definition "Specifies the number of failed write operations."@en .
+
+cs:hasErrorMessage a owl:DatatypeProperty ;
+    rdfs:domain cs:FailedWrites ;
+    rdfs:range xsd:string ;
+    rdfs:label "has error message"@en ;
+    skos:definition "Specifies the error message for failed write operations."@en . 

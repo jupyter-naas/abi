@@ -1,0 +1,301 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix paf: <http://ontology.naas.ai/abi/personal-ai/> .
+@prefix cs: <http://ontology.naas.ai/abi/personal-ai/contact-sync/> .
+
+<http://ontology.naas.ai/abi/personal-ai/contact-sync/IdentityResolutionProcess> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/main/docs/ontology/foundries/personal_ai_foundry/Occurrent/Process/IdentityResolutionProcess.ttl> ;
+    dc11:contributor "Jeremy Ravenel" ;
+    dc:description "Ontology definition for the IdentityResolutionProcess."@en ;
+    dc:license "MIT" ;
+    dc:title "Identity Resolution Process Ontology" .
+
+# Process Definition
+cs:IdentityResolutionProcess a owl:Class ;
+    rdfs:subClassOf paf:IdentityResolution, bfo:BFO_0000015 ;
+    rdfs:label "Identity Resolution Process"@en ;
+    skos:definition "An occurrent process that systematically analyzes and compares contact records from different sources to determine when they represent the same real-world entity, using multiple matching strategies with confidence scoring."@en .
+
+# Input Properties Classes
+cs:SourceContactRecords a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Source Contact Records"@en ;
+    skos:definition "Collection of contact records to analyze for identity resolution."@en .
+
+cs:MatchingThreshold a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Matching Threshold"@en ;
+    skos:definition "Minimum confidence level required for considering records as matching."@en .
+
+cs:MatchingStrategy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Matching Strategy"@en ;
+    skos:definition "Strategy applied for matching contact records across sources."@en .
+
+cs:PreviousMatches a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Previous Matches"@en ;
+    skos:definition "Results from previous identity resolution processes."@en .
+
+cs:UserConfirmedMatches a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "User Confirmed Matches"@en ;
+    skos:definition "Contact matches explicitly confirmed by the user."@en .
+
+cs:UserRejectedMatches a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "User Rejected Matches"@en ;
+    skos:definition "Contact matches explicitly rejected by the user."@en .
+
+# Process Properties Classes
+cs:ProcessStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Process Stage"@en ;
+    skos:definition "Current stage of the identity resolution process."@en .
+
+cs:Progress a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Progress"@en ;
+    skos:definition "Progress percentage of the identity resolution process."@en .
+
+cs:ActiveStrategy a owl:Class ;
+    rdfs:subClassOf cs:MatchingStrategy ;
+    rdfs:label "Active Strategy"@en ;
+    skos:definition "Currently active matching strategy in the identity resolution process."@en .
+
+cs:ProcessingTime a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Processing Time"@en ;
+    skos:definition "Time spent in the identity resolution process."@en .
+
+cs:ProcessError a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Process Error"@en ;
+    skos:definition "Error encountered during the identity resolution process."@en .
+
+# Output Properties Classes
+cs:MatchResult a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Match Result"@en ;
+    skos:definition "Result of the matching process for a pair of contacts."@en .
+
+cs:ResolvedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Resolved Contacts"@en ;
+    skos:definition "Mapping of contacts determined to be the same entity."@en .
+
+cs:ConfidenceScore a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Confidence Score"@en ;
+    skos:definition "Confidence score for a particular attribute match."@en .
+
+cs:UnresolvedContacts a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Unresolved Contacts"@en ;
+    skos:definition "Contacts that couldn't be confidently matched with others."@en .
+
+cs:SuggestedMatches a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Suggested Matches"@en ;
+    skos:definition "Potential matches below the confidence threshold for review."@en .
+
+# Process Stages
+cs:ResolutionStage a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Resolution Stage"@en ;
+    skos:definition "A distinct stage in the identity resolution process."@en .
+
+cs:DataPreparationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Data Preparation Stage"@en ;
+    skos:definition "Stage for standardizing formats and preparing comparison structures."@en .
+
+cs:AttributeComparisonStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Attribute Comparison Stage"@en ;
+    skos:definition "Stage for comparing each attribute using appropriate algorithms."@en .
+
+cs:ConfidenceCalculationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Confidence Calculation Stage"@en ;
+    skos:definition "Stage for applying weighting to attribute scores and calculating overall confidence."@en .
+
+cs:MatchDecisionStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Match Decision Stage"@en ;
+    skos:definition "Stage for applying threshold rules to confidence scores and determining matches."@en .
+
+cs:ResultProcessingStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Result Processing Stage"@en ;
+    skos:definition "Stage for generating resolution records and preparing match metadata."@en .
+
+cs:UserReviewStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "User Review Stage"@en ;
+    skos:definition "Stage for user review of ambiguous matches requiring manual confirmation."@en .
+
+cs:LearningAdaptationStage a owl:Class ;
+    rdfs:subClassOf cs:ResolutionStage ;
+    rdfs:label "Learning Adaptation Stage"@en ;
+    skos:definition "Stage for incorporating user feedback to improve future matching."@en .
+
+# Matching Algorithm Classes
+cs:MatchingAlgorithm a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Matching Algorithm"@en ;
+    skos:definition "Algorithm used for comparing contact attributes."@en .
+
+cs:DeterministicMatching a owl:Class ;
+    rdfs:subClassOf cs:MatchingAlgorithm ;
+    rdfs:label "Deterministic Matching"@en ;
+    skos:definition "Exact matching on email, phone, or unique identifiers."@en .
+
+cs:ProbabilisticMatching a owl:Class ;
+    rdfs:subClassOf cs:MatchingAlgorithm ;
+    rdfs:label "Probabilistic Matching"@en ;
+    skos:definition "Statistical likelihood based on multiple attributes."@en .
+
+cs:FuzzyMatching a owl:Class ;
+    rdfs:subClassOf cs:MatchingAlgorithm ;
+    rdfs:label "Fuzzy Matching"@en ;
+    skos:definition "Levenshtein distance and phonetic algorithms for names."@en .
+
+cs:PatternMatching a owl:Class ;
+    rdfs:subClassOf cs:MatchingAlgorithm ;
+    rdfs:label "Pattern Matching"@en ;
+    skos:definition "Recognition of naming patterns and variations."@en .
+
+cs:SocialNetworkAnalysis a owl:Class ;
+    rdfs:subClassOf cs:MatchingAlgorithm ;
+    rdfs:label "Social Network Analysis"@en ;
+    skos:definition "Graph-based relationship matching."@en .
+
+# Relationships
+cs:hasSourceContactRecords a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:SourceContactRecords ;
+    rdfs:label "has source contact records"@en ;
+    skos:definition "Relates an identity resolution process to the contact records it analyzes."@en .
+
+cs:hasMatchingThreshold a owl:DatatypeProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has matching threshold"@en ;
+    skos:definition "Specifies the minimum confidence level required for a match."@en .
+
+cs:hasMatchingStrategies a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:MatchingStrategy ;
+    rdfs:label "has matching strategies"@en ;
+    skos:definition "Relates an identity resolution process to its matching strategies."@en .
+
+cs:hasPreviousMatches a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:PreviousMatches ;
+    rdfs:label "has previous matches"@en ;
+    skos:definition "Relates an identity resolution process to results from previous runs."@en .
+
+cs:hasUserConfirmedMatches a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:UserConfirmedMatches ;
+    rdfs:label "has user confirmed matches"@en ;
+    skos:definition "Relates an identity resolution process to matches confirmed by users."@en .
+
+cs:hasUserRejectedMatches a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:UserRejectedMatches ;
+    rdfs:label "has user rejected matches"@en ;
+    skos:definition "Relates an identity resolution process to matches rejected by users."@en .
+
+cs:hasStage a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:ResolutionStage ;
+    rdfs:label "has stage"@en ;
+    skos:definition "Relates an identity resolution process to its current stage."@en .
+
+cs:hasProgress a owl:DatatypeProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has progress"@en ;
+    skos:definition "Specifies the completion percentage of the process."@en .
+
+cs:hasActiveStrategy a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:ActiveStrategy ;
+    rdfs:label "has active strategy"@en ;
+    skos:definition "Relates an identity resolution process to its currently active matching strategy."@en .
+
+cs:hasProcessingTime a owl:DatatypeProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range xsd:duration ;
+    rdfs:label "has processing time"@en ;
+    skos:definition "Specifies the duration spent on the resolution process."@en .
+
+cs:hasError a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:ProcessError ;
+    rdfs:label "has error"@en ;
+    skos:definition "Relates an identity resolution process to any errors encountered."@en .
+
+cs:hasMatchResults a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:MatchResult ;
+    rdfs:label "has match results"@en ;
+    skos:definition "Relates an identity resolution process to its match results."@en .
+
+cs:hasResolvedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:ResolvedContacts ;
+    rdfs:label "has resolved contacts"@en ;
+    skos:definition "Relates an identity resolution process to its resolved contact mappings."@en .
+
+cs:hasConfidenceScores a owl:ObjectProperty ;
+    rdfs:domain cs:MatchResult ;
+    rdfs:range cs:ConfidenceScore ;
+    rdfs:label "has confidence scores"@en ;
+    skos:definition "Relates a match result to its confidence scores by attribute."@en .
+
+cs:hasUnresolvedContacts a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:UnresolvedContacts ;
+    rdfs:label "has unresolved contacts"@en ;
+    skos:definition "Relates an identity resolution process to contacts that couldn't be matched."@en .
+
+cs:hasSuggestedMatches a owl:ObjectProperty ;
+    rdfs:domain cs:IdentityResolutionProcess ;
+    rdfs:range cs:SuggestedMatches ;
+    rdfs:label "has suggested matches"@en ;
+    skos:definition "Relates an identity resolution process to potential matches for review."@en .
+
+cs:usesAlgorithm a owl:ObjectProperty ;
+    rdfs:domain cs:MatchingStrategy ;
+    rdfs:range cs:MatchingAlgorithm ;
+    rdfs:label "uses algorithm"@en ;
+    skos:definition "Relates a matching strategy to the algorithm it employs."@en .
+
+cs:hasConfidenceValue a owl:DatatypeProperty ;
+    rdfs:domain cs:ConfidenceScore ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has confidence value"@en ;
+    skos:definition "Specifies the numerical confidence score for a match."@en .
+
+cs:hasAttributeName a owl:DatatypeProperty ;
+    rdfs:domain cs:ConfidenceScore ;
+    rdfs:range xsd:string ;
+    rdfs:label "has attribute name"@en ;
+    skos:definition "Specifies the name of the attribute being scored."@en .
+
+cs:hasStageSequence a owl:ObjectProperty ;
+    rdfs:domain cs:ResolutionStage ;
+    rdfs:range cs:ResolutionStage ;
+    rdfs:label "has stage sequence"@en ;
+    skos:definition "Specifies the next stage in the identity resolution process sequence."@en . 
