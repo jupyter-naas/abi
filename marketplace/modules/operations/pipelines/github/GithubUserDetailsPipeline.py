@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
-from src.core.modules.common.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
+from src.core.modules.common.integrations.GithubIntegration import (
+    GithubIntegration,
+    GithubIntegrationConfiguration,
+)
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
@@ -12,15 +15,17 @@ from abi import logger
 
 LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
 
+
 @dataclass
 class GithubUserDetailsPipelineConfiguration(PipelineConfiguration):
     """Configuration for Github user details pipeline.
-    
+
     Attributes:
         github_integration_config (GithubIntegrationConfiguration): The GitHub REST API integration instance
         triple_store (ITripleStoreService): The ontology store service to use
         triple_store_name (str): Name of the ontology store to use. Defaults to "github"
     """
+
     github_integration_config: GithubIntegrationConfiguration
     triple_store: ITripleStoreService
     triple_store_name: str = "github"
@@ -28,28 +33,36 @@ class GithubUserDetailsPipelineConfiguration(PipelineConfiguration):
 
 class GithubUserDetailsPipelineParameters(PipelineParameters):
     """Parameters for GithubUserDetailsPipeline execution.
-    
+
     Attributes:
         github_username (str): Username of the Github user to fetch details for
     """
-    github_username: str = Field(..., description="GitHub username, ID or URL to fetch details for")
+
+    github_username: str = Field(
+        ..., description="GitHub username, ID or URL to fetch details for"
+    )
 
 
 class GithubUserDetailsPipeline(Pipeline):
     """Pipeline for adding a GitHub user to the ontology."""
+
     __configuration: GithubUserDetailsPipelineConfiguration
-    
+
     def __init__(self, configuration: GithubUserDetailsPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
+        self.__github_integration = GithubIntegration(
+            self.__configuration.github_integration_config
+        )
 
     def run(self, parameters: GithubUserDetailsPipelineParameters) -> Graph:
         # Init graph
         graph = ABIGraph()
         if parameters.github_username.startswith("https://github.com/"):
-            parameters.github_username = parameters.github_username.split("/")[-1].split("?")[0]
-        
+            parameters.github_username = parameters.github_username.split("/")[
+                -1
+            ].split("?")[0]
+
         # Get user details from GithubIntegration
         # Schema for user details response:
         # {
@@ -150,7 +163,7 @@ class GithubUserDetailsPipeline(Pipeline):
 
         if len(results) > 0:
             # Use existing person
-            person = results[0]['person']
+            person = results[0]["person"]
         else:
             # Create new person
             person = graph.add_individual_to_prefix(
@@ -195,31 +208,36 @@ class GithubUserDetailsPipeline(Pipeline):
             graph.add((twitter_account, ABI.hasPlatformUser, person))
 
         # Insert to ontology store
-        self.__configuration.triple_store.insert(self.__configuration.triple_store_name, graph)
+        self.__configuration.triple_store.insert(
+            self.__configuration.triple_store_name, graph
+        )
         return graph.serialize(format="turtle")
-    
+
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this pipeline.
-        
+
         Returns:
             list[StructuredTool]: List containing the pipeline tool
         """
-        return [StructuredTool(
-            name="github_user_details",
-            description="Fetches GitHub user details based on username",
-            func=lambda **kwargs: self.run(GithubUserDetailsPipelineParameters(**kwargs)),
-            args_schema=GithubUserDetailsPipelineParameters
-        )]
-
+        return [
+            StructuredTool(
+                name="github_user_details",
+                description="Fetches GitHub user details based on username",
+                func=lambda **kwargs: self.run(
+                    GithubUserDetailsPipelineParameters(**kwargs)
+                ),
+                args_schema=GithubUserDetailsPipelineParameters,
+            )
+        ]
 
     def as_api(
-            self, 
-            router: APIRouter, 
-            route_name: str = "githubuserdetails", 
-            name: str = "Github User Details to Ontology", 
-            description: str = "Fetches a GitHub user's details and maps them to the ontology as a GitHub user.", 
-            tags: list[str] = []
-        ) -> None:
+        self,
+        router: APIRouter,
+        route_name: str = "githubuserdetails",
+        name: str = "Github User Details to Ontology",
+        description: str = "Fetches a GitHub user's details and maps them to the ontology as a GitHub user.",
+        tags: list[str] = [],
+    ) -> None:
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubUserDetailsPipelineParameters):
             return self.run(parameters).serialize(format="turtle")

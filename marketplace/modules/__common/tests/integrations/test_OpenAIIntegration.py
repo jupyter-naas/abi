@@ -1,4 +1,7 @@
-from src.core.modules.common.integrations.OpenAIIntegration import OpenAIIntegration, OpenAIIntegrationConfiguration
+from src.core.modules.common.integrations.OpenAIIntegration import (
+    OpenAIIntegration,
+    OpenAIIntegrationConfiguration,
+)
 from src import secret
 from abi import logger
 from pydantic import BaseModel, Field
@@ -16,10 +19,12 @@ completion = integration.create_chat_completion(
 )
 logger.info(completion)
 
+
 # Create chat completion beta
 class Response(BaseModel):
     answer: str = Field(description="The answer to the question")
     source: str = Field(description="The source of the answer")
+
 
 completion = integration.create_chat_completion_beta(
     prompt="What is the capital of France? Please respond in JSON format.",

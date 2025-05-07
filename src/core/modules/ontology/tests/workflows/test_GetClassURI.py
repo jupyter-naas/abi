@@ -73,5 +73,9 @@ for row in results:
 
 print(data)
 import json
-with open(f"src/core/modules/ontology/tests/workflows/test_GetClassURI_{searchLabel}.json", "w") as f:
+
+with open(
+    f"src/core/modules/ontology/tests/workflows/test_GetClassURI_{searchLabel}.json",
+    "w",
+) as f:
     json.dump(data, f, indent=4, ensure_ascii=False)

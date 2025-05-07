@@ -1,11 +1,20 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from dataclasses import dataclass
-from src.core.modules.common.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
+from src.core.modules.common.integrations.GithubIntegration import (
+    GithubIntegration,
+    GithubIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.GithubGraphqlIntegration import (
+    GithubGraphqlIntegration,
+    GithubGraphqlIntegrationConfiguration,
+)
 from abi.utils.Graph import ABIGraph, ABI, BFO
 from rdflib import Graph
 from datetime import datetime, timedelta
-from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
+from abi.services.triple_store.TripleStorePorts import (
+    ITripleStoreService,
+    OntologyEvent,
+)
 import pydash as _
 from abi import logger
 from langchain_core.tools import StructuredTool
@@ -16,16 +25,18 @@ from src import secret, config
 
 LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
 
+
 @dataclass
 class GithubIssuePipelineConfiguration(PipelineConfiguration):
     """Configuration for GithubIssuePipeline.
-    
+
     Attributes:
         github_integration_config (GithubIntegrationConfiguration): The GitHub REST API integration instance
         github_graphql_integration_config (GithubGraphqlIntegrationConfiguration): The GitHub GraphQL API integration instance
         triple_store (ITripleStoreService): The ontology store service to use
         triple_store_name (str): Name of the ontology store to use. Defaults to "github"
     """
+
     github_integration_config: GithubIntegrationConfiguration
     github_graphql_integration_config: GithubGraphqlIntegrationConfiguration
     triple_store: ITripleStoreService
@@ -33,26 +44,37 @@ class GithubIssuePipelineConfiguration(PipelineConfiguration):
 
 
 class GithubIssuePipelineParameters(PipelineParameters):
-    github_repository: str = Field(..., description="GitHub repository in format owner/repo")
+    github_repository: str = Field(
+        ..., description="GitHub repository in format owner/repo"
+    )
     github_issue_id: str = Field(..., description="GitHub issue ID")
     github_project_id: Optional[int] = Field(default=0, description="GitHub project ID")
-    github_project_node_id: Optional[str] = Field(default="", description="GitHub project node ID")
+    github_project_node_id: Optional[str] = Field(
+        default="", description="GitHub project node ID"
+    )
 
 
 class GithubIssuePipeline(Pipeline):
     """Pipeline for adding a GitHub issue to the ontology."""
+
     __configuration: GithubIssuePipelineConfiguration
-    
+
     def __init__(self, configuration: GithubIssuePipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
-        self.__github_graphql_integration = GithubGraphqlIntegration(self.__configuration.github_graphql_integration_config)
+        self.__github_integration = GithubIntegration(
+            self.__configuration.github_integration_config
+        )
+        self.__github_graphql_integration = GithubGraphqlIntegration(
+            self.__configuration.github_graphql_integration_config
+        )
 
     def run(self, parameters: GithubIssuePipelineParameters) -> Graph:
         # Init graph
-        try:    
-            existing_graph = self.__configuration.triple_store.get(self.__configuration.triple_store_name)
+        try:
+            existing_graph = self.__configuration.triple_store.get(
+                self.__configuration.triple_store_name
+            )
             # Create new ABIGraph and merge existing data
             graph = ABIGraph()
             for triple in existing_graph:
@@ -64,11 +86,11 @@ class GithubIssuePipeline(Pipeline):
         # Get issue data from GithubIntegration
         # GitHub Issue API Response Schema:
         # {
-        #   "url": "API URL for the issue", 
+        #   "url": "API URL for the issue",
         #   "repository_url": "API URL for the repository",
         #   "labels_url": "Template URL for labels with {/name} parameter",
         #   "comments_url": "API URL for comments",
-        #   "events_url": "API URL for events", 
+        #   "events_url": "API URL for events",
         #   "html_url": "Web URL for the issue",
         #   "id": "Unique identifier",
         #   "node_id": "Global node ID",
@@ -88,7 +110,7 @@ class GithubIssuePipeline(Pipeline):
         #   "assignees": "Array of assignee user objects",
         #   "comments": "Number of comments",
         #   "created_at": "Creation timestamp",
-        #   "updated_at": "Last update timestamp", 
+        #   "updated_at": "Last update timestamp",
         #   "closed_at": "Close timestamp if closed",
         #   "author_association": "Author's association with repository",
         #   "body": "Issue description",
@@ -101,7 +123,9 @@ class GithubIssuePipeline(Pipeline):
         # }
 
         # Get issue metadata
-        issue_data = self.__github_integration.get_issue(parameters.github_repository, parameters.github_issue_id)
+        issue_data = self.__github_integration.get_issue(
+            parameters.github_repository, parameters.github_issue_id
+        )
         issue_id = issue_data.get("id")
         issue_label = issue_data.get("title")
         issue_node_id = issue_data.get("node_id")
@@ -109,9 +133,17 @@ class GithubIssuePipeline(Pipeline):
         issue_url = issue_data.get("html_url")
         issue_state = issue_data.get("state")
         issue_labels = ", ".join([x.get("name") for x in issue_data.get("labels")])
-        issue_created_at = datetime.strptime(issue_data['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-        issue_updated_at = datetime.strptime(issue_data['updated_at'], "%Y-%m-%dT%H:%M:%SZ")
-        issue_closed_at = datetime.strptime(issue_data['closed_at'], "%Y-%m-%dT%H:%M:%SZ") if issue_data.get("closed_at") else None
+        issue_created_at = datetime.strptime(
+            issue_data["created_at"], "%Y-%m-%dT%H:%M:%SZ"
+        )
+        issue_updated_at = datetime.strptime(
+            issue_data["updated_at"], "%Y-%m-%dT%H:%M:%SZ"
+        )
+        issue_closed_at = (
+            datetime.strptime(issue_data["closed_at"], "%Y-%m-%dT%H:%M:%SZ")
+            if issue_data.get("closed_at")
+            else None
+        )
         issue_pull_request = issue_data.get("pull_request")
         logger.debug(f"Issue: {issue_label} - {issue_url}")
 
@@ -124,16 +156,24 @@ class GithubIssuePipeline(Pipeline):
         if parameters.github_project_id != 0:
             # Get project data from GithubGraphqlIntegration
             organization = parameters.github_repository.split("/")[0]
-            project_data : dict = self.__github_graphql_integration.get_project_node_id(organization, parameters.github_project_id) # type: ignore
+            project_data: dict = self.__github_graphql_integration.get_project_node_id(
+                organization, parameters.github_project_id
+            )  # type: ignore
             project_node_id = _.get(project_data, "data.organization.projectV2.id")
             logger.debug(f"Project node ID: {project_node_id}")
-        
+
         if project_node_id != "":
             # Get item id from node id from GithubGraphqlIntegration
-            project_item = dict = self.__github_graphql_integration.get_item_id_from_node_id(issue_node_id) # type: ignore
+            project_item = dict = (
+                self.__github_graphql_integration.get_item_id_from_node_id(
+                    issue_node_id
+                )
+            )  # type: ignore
             logger.debug(f"Project item: {project_item}")
             item_id = None
-            for x in project_item.get("data").get("node").get("projectItems").get("nodes"):
+            for x in (
+                project_item.get("data").get("node").get("projectItems").get("nodes")
+            ):
                 if x.get("project", {}).get("id") == project_node_id:
                     item_id = _.get(x, "id")
                     break
@@ -141,12 +181,19 @@ class GithubIssuePipeline(Pipeline):
 
             if item_id:
                 # Get item data from GithubGraphqlIntegration
-                item_data : dict = self.__github_graphql_integration.get_item_details(item_id) # type: ignore
+                item_data: dict = self.__github_graphql_integration.get_item_details(
+                    item_id
+                )  # type: ignore
                 issue_iteration = {}
                 issue_eta = ""
 
                 # Iterate through the field values
-                for field_value in item_data.get("data", {}).get("node", {}).get("fieldValues", {}).get("nodes", []):
+                for field_value in (
+                    item_data.get("data", {})
+                    .get("node", {})
+                    .get("fieldValues", {})
+                    .get("nodes", [])
+                ):
                     if field_value:
                         field_name = field_value.get("field", {}).get("name")
                         if field_name == "Status":
@@ -159,7 +206,7 @@ class GithubIssuePipeline(Pipeline):
                             issue_iteration = {
                                 "title": field_value.get("title"),
                                 "startDate": field_value.get("startDate"),
-                                "duration": field_value.get("duration")
+                                "duration": field_value.get("duration"),
                             }
                         elif field_name == "Estimate":
                             issue_estimate = field_value.get("number")
@@ -171,8 +218,12 @@ class GithubIssuePipeline(Pipeline):
                 # Calculate due date if eta is empty
                 issue_due_date = issue_eta
                 if not issue_eta and issue_iteration:
-                    start_date = datetime.strptime(issue_iteration["startDate"], "%Y-%m-%d")
-                    issue_due_date = start_date + timedelta(days=issue_iteration["duration"])
+                    start_date = datetime.strptime(
+                        issue_iteration["startDate"], "%Y-%m-%d"
+                    )
+                    issue_due_date = start_date + timedelta(
+                        days=issue_iteration["duration"]
+                    )
                     issue_due_date = issue_due_date.strftime("%Y-%m-%d")
                 logger.debug(f"Issue due date: {issue_due_date}")
 
@@ -198,7 +249,7 @@ class GithubIssuePipeline(Pipeline):
             estimate=issue_estimate,
             due_date=issue_due_date,
             updated_date=issue_updated_at,
-            ontology_group=str(ABI.TaskCompletion).split("/")[-1]
+            ontology_group=str(ABI.TaskCompletion).split("/")[-1],
         )
 
         # Add GDC: GitHubIssue
@@ -217,7 +268,7 @@ class GithubIssuePipeline(Pipeline):
             estimate=issue_estimate,
             due_date=issue_due_date,
             updated_date=issue_updated_at,
-            ontology_group=str(issue_class).split("/")[-1]
+            ontology_group=str(issue_class).split("/")[-1],
         )
         graph.add((task_completion, BFO.BFO_0000058, github_issue))
         graph.add((github_issue, BFO.BFO_0000059, task_completion))
@@ -231,7 +282,7 @@ class GithubIssuePipeline(Pipeline):
             label=repo_name,
             is_a=ABI.GitHubRepository,
             url=repo_url,
-            ontology_group=str(ABI.GitHubRepository).split("/")[-1]
+            ontology_group=str(ABI.GitHubRepository).split("/")[-1],
         )
         graph.add((task_completion, BFO.BFO_0000058, github_repo))
         graph.add((github_repo, BFO.BFO_0000059, task_completion))
@@ -242,7 +293,7 @@ class GithubIssuePipeline(Pipeline):
             uid=str(int(issue_created_at.timestamp())),
             label=issue_created_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
             is_a=BFO.BFO_0000203,
-            ontology_group="TemporalRegion"
+            ontology_group="TemporalRegion",
         )
         graph.add((task_completion, BFO.BFO_0000222, first_instant))
 
@@ -251,10 +302,10 @@ class GithubIssuePipeline(Pipeline):
                 prefix=ABI,
                 uid=str(int(issue_closed_at.timestamp())),
                 label=issue_closed_at.strftime("%Y-%m-%dT%H:%M:%S%z"),
-                is_a=BFO.BFO_0000203
+                is_a=BFO.BFO_0000203,
             )
             graph.add((task_completion, BFO.BFO_0000224, last_instant))
-            
+
         # Add User to Agent
         user = issue_data.get("user")
         user_id = user.get("id")
@@ -266,7 +317,7 @@ class GithubIssuePipeline(Pipeline):
             label=user_label,
             is_a=ABI.GitHubUser,
             url=user_url,
-            ontology_group=str(ABI.GitHubUser).split("/")[-1]
+            ontology_group=str(ABI.GitHubUser).split("/")[-1],
         )
         graph.add((task_completion, ABI.hasCreator, github_user))
 
@@ -282,55 +333,71 @@ class GithubIssuePipeline(Pipeline):
                 label=assignee_label,
                 is_a=ABI.GitHubUser,
                 url=assignee_url,
-                ontology_group=str(ABI.GitHubUser).split("/")[-1]
+                ontology_group=str(ABI.GitHubUser).split("/")[-1],
             )
             graph.add((task_completion, ABI.hasAssignee, github_assignee))
-        
-        self.__configuration.triple_store.store(self.__configuration.triple_store_name, graph)
-        
+
+        self.__configuration.triple_store.store(
+            self.__configuration.triple_store_name, graph
+        )
+
         return graph
-    
+
     def as_tools(self) -> list[StructuredTool]:
         return [
             StructuredTool(
                 name="github_issue_pipeline",
                 description="Adds an issue to the ontology",
                 func=lambda **kwargs: self.run(GithubIssuePipelineParameters(**kwargs)),
-                args_schema=GithubIssuePipelineParameters
+                args_schema=GithubIssuePipelineParameters,
             )
         ]
 
     def as_api(
-        self, 
-        router: APIRouter, 
-        route_name: str = "githubissue", 
-        name: str = "Github Issue to Ontology", 
+        self,
+        router: APIRouter,
+        route_name: str = "githubissue",
+        name: str = "Github Issue to Ontology",
         description: str = "Fetches a specific GitHub issue by repository and issue ID, extracts its metadata including title, description, labels, assignees, and project details, then maps it to the ontology as a task completion with temporal information and agent relationships.",
-        tags: list[str] = []
+        tags: list[str] = [],
     ) -> None:
         @router.post(f"/{route_name}", name=name, description=description, tags=tags)
         def run(parameters: GithubIssuePipelineParameters):
             return self.run(parameters).serialize(format="turtle")
-        
+
+
 if __name__ == "__main__":
-    from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+    from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
+        TripleStoreService__SecondaryAdaptor__Filesystem,
+    )
     from abi.services.triple_store.TripleStoreService import TripleStoreService
+
     # Initialize ontology store
-    triple_store = TripleStoreService(TripleStoreService__SecondaryAdaptor__Filesystem(store_path=config.triple_store_path))
+    triple_store = TripleStoreService(
+        TripleStoreService__SecondaryAdaptor__Filesystem(
+            store_path=config.triple_store_path
+        )
+    )
 
     # Initialize Github integration
-    github_integration_config = GithubIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
+    github_integration_config = GithubIntegrationConfiguration(
+        access_token=secret.get("GITHUB_ACCESS_TOKEN")
+    )
 
     # Initialize Github GraphQL integration
-    github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(access_token=secret.get("GITHUB_ACCESS_TOKEN"))
+    github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(
+        access_token=secret.get("GITHUB_ACCESS_TOKEN")
+    )
 
     # Initialize pipeline
-    pipeline = GithubIssuePipeline(GithubIssuePipelineConfiguration(
-        github_integration_config=github_integration_config,
-        github_graphql_integration_config=github_graphql_integration_config,
-        triple_store=triple_store,
-        triple_store_name="github"
-    ))
+    pipeline = GithubIssuePipeline(
+        GithubIssuePipelineConfiguration(
+            github_integration_config=github_integration_config,
+            github_graphql_integration_config=github_graphql_integration_config,
+            triple_store=triple_store,
+            triple_store_name="github",
+        )
+    )
 
     # Run pipeline
     pipeline.run(

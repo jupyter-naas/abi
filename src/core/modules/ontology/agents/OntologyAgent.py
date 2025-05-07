@@ -1,23 +1,59 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from src import secret, services
+
 # Foundational
-from src.core.modules.ontology.pipelines.AddIndividualPipeline import AddIndividualPipeline, AddIndividualPipelineConfiguration
-from src.core.modules.ontology.workflows.SearchIndividualWorkflow import SearchIndividualWorkflow, SearchIndividualWorkflowConfiguration
+from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
+    AddIndividualPipeline,
+    AddIndividualPipelineConfiguration,
+)
+from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
+    SearchIndividualWorkflow,
+    SearchIndividualWorkflowConfiguration,
+)
+
 # Specialized
-from src.core.modules.ontology.pipelines.AddCommercialOrganizationPipeline import AddCommercialOrganizationPipeline, AddCommercialOrganizationPipelineConfiguration
-from src.core.modules.ontology.pipelines.AddLinkedInPagePipeline import AddLinkedInPagePipeline, AddLinkedInPagePipelineConfiguration
-from src.core.modules.ontology.pipelines.AddPersonPipeline import AddPersonPipeline, AddPersonPipelineConfiguration
-from src.core.modules.ontology.pipelines.AddSkillPipeline import AddSkillPipeline, AddSkillPipelineConfiguration
-from src.core.modules.ontology.pipelines.AddWebsitePipeline import AddWebsitePipeline, AddWebsitePipelineConfiguration
-from src.core.modules.ontology.pipelines.AddLegalNamePipeline import AddLegalNamePipeline, AddLegalNamePipelineConfiguration
-from src.core.modules.ontology.pipelines.AddTickerPipeline import AddTickerPipeline, AddTickerPipelineConfiguration
+from src.core.modules.ontology.pipelines.AddCommercialOrganizationPipeline import (
+    AddCommercialOrganizationPipeline,
+    AddCommercialOrganizationPipelineConfiguration,
+)
+from src.core.modules.ontology.pipelines.AddLinkedInPagePipeline import (
+    AddLinkedInPagePipeline,
+    AddLinkedInPagePipelineConfiguration,
+)
+from src.core.modules.ontology.pipelines.AddPersonPipeline import (
+    AddPersonPipeline,
+    AddPersonPipelineConfiguration,
+)
+from src.core.modules.ontology.pipelines.AddSkillPipeline import (
+    AddSkillPipeline,
+    AddSkillPipelineConfiguration,
+)
+from src.core.modules.ontology.pipelines.AddWebsitePipeline import (
+    AddWebsitePipeline,
+    AddWebsitePipelineConfiguration,
+)
+from src.core.modules.ontology.pipelines.AddLegalNamePipeline import (
+    AddLegalNamePipeline,
+    AddLegalNamePipelineConfiguration,
+)
+from src.core.modules.ontology.pipelines.AddTickerPipeline import (
+    AddTickerPipeline,
+    AddTickerPipelineConfiguration,
+)
 
 NAME = "Ontology Agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+AVATAR_URL = (
+    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+)
 DESCRIPTION = "A Ontology Agent that helps users to work with ontologies."
 SYSTEM_PROMPT = f"""You are a Ontology Agent that helps users to work with ontologies.
 You have the possibility to add or retrieve data from triple store with your tools.
@@ -42,23 +78,21 @@ Always provide all the context (tool response, draft, etc.) to the user in your 
 """
 
 SUGGESTIONS = [
-    {
-        "label": "Learn About Ontology",
-        "value": "What's the ontology about?"
-    },
+    {"label": "Learn About Ontology", "value": "What's the ontology about?"},
     {
         "label": "Ontology Object Explorer",
-        "value": "What is a {{Github Issue}} in the ontology?"
+        "value": "What is a {{Github Issue}} in the ontology?",
     },
     {
         "label": "Add Data To Ontology",
-        "value": "Add the following data in ontology: {{Data}}"
-    }
+        "value": "Add the following data in ontology: {{Data}}",
+    },
 ]
 
+
 def create_agent(
-    agent_shared_state: AgentSharedState = None, 
-    agent_configuration: AgentConfiguration = None
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None,
 ) -> Agent:
     # Init
     tools = []
@@ -67,85 +101,121 @@ def create_agent(
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE, 
-        api_key=secret.get('OPENAI_API_KEY')
+        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
     )
     # Init store
     triple_store = services.triple_store_service
 
     # Add Foundational Tools
-    search_individual_workflow_configuration = SearchIndividualWorkflowConfiguration(triple_store)
-    search_individual_workflow = SearchIndividualWorkflow(search_individual_workflow_configuration)
+    search_individual_workflow_configuration = SearchIndividualWorkflowConfiguration(
+        triple_store
+    )
+    search_individual_workflow = SearchIndividualWorkflow(
+        search_individual_workflow_configuration
+    )
     tools += search_individual_workflow.as_tools()
-    add_individual_pipeline_configuration = AddIndividualPipelineConfiguration(triple_store, search_individual_workflow_configuration)
-    add_individual_pipeline = AddIndividualPipeline(add_individual_pipeline_configuration)
+    add_individual_pipeline_configuration = AddIndividualPipelineConfiguration(
+        triple_store, search_individual_workflow_configuration
+    )
+    add_individual_pipeline = AddIndividualPipeline(
+        add_individual_pipeline_configuration
+    )
     tools += add_individual_pipeline.as_tools()
 
     # Specialized Tools
-    add_person_pipeline_configuration = AddPersonPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_person_pipeline_configuration = AddPersonPipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
     add_person_pipeline = AddPersonPipeline(add_person_pipeline_configuration)
     tools += add_person_pipeline.as_tools()
 
-    add_skill_pipeline_configuration = AddSkillPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_skill_pipeline_configuration = AddSkillPipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
     add_skill_pipeline = AddSkillPipeline(add_skill_pipeline_configuration)
     tools += add_skill_pipeline.as_tools()
 
-    add_commercial_organization_pipeline_configuration = AddCommercialOrganizationPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
-    add_commercial_organization_pipeline = AddCommercialOrganizationPipeline(add_commercial_organization_pipeline_configuration)
+    add_commercial_organization_pipeline_configuration = (
+        AddCommercialOrganizationPipelineConfiguration(
+            triple_store, add_individual_pipeline_configuration
+        )
+    )
+    add_commercial_organization_pipeline = AddCommercialOrganizationPipeline(
+        add_commercial_organization_pipeline_configuration
+    )
     tools += add_commercial_organization_pipeline.as_tools()
 
-    add_linkedin_page_pipeline_configuration = AddLinkedInPagePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
-    add_linkedin_page_pipeline = AddLinkedInPagePipeline(add_linkedin_page_pipeline_configuration)
+    add_linkedin_page_pipeline_configuration = AddLinkedInPagePipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
+    add_linkedin_page_pipeline = AddLinkedInPagePipeline(
+        add_linkedin_page_pipeline_configuration
+    )
     tools += add_linkedin_page_pipeline.as_tools()
 
-    add_website_pipeline_configuration = AddWebsitePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_website_pipeline_configuration = AddWebsitePipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
     add_website_pipeline = AddWebsitePipeline(add_website_pipeline_configuration)
     tools += add_website_pipeline.as_tools()
 
-    add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
-    add_legal_name_pipeline = AddLegalNamePipeline(add_legal_name_pipeline_configuration)
+    add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
+    add_legal_name_pipeline = AddLegalNamePipeline(
+        add_legal_name_pipeline_configuration
+    )
     tools += add_legal_name_pipeline.as_tools()
 
-    add_ticker_pipeline_configuration = AddTickerPipelineConfiguration(triple_store, add_individual_pipeline_configuration)
+    add_ticker_pipeline_configuration = AddTickerPipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
     add_ticker_pipeline = AddTickerPipeline(add_ticker_pipeline_configuration)
     tools += add_ticker_pipeline.as_tools()
 
-    add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(triple_store, add_individual_pipeline_configuration)
-    add_legal_name_pipeline = AddLegalNamePipeline(add_legal_name_pipeline_configuration)
+    add_legal_name_pipeline_configuration = AddLegalNamePipelineConfiguration(
+        triple_store, add_individual_pipeline_configuration
+    )
+    add_legal_name_pipeline = AddLegalNamePipeline(
+        add_legal_name_pipeline_configuration
+    )
     tools += add_legal_name_pipeline.as_tools()
 
     # Override tools
     from src.core.modules.intentmapping import get_tools
+
     tools.extend(get_tools())
 
     # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-    
+
     # Use provided shared state or create new one
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return OntologyAgent(
-        name="ontology_agent", 
+        name="ontology_agent",
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
+        chat_model=model,
+        tools=tools,
         agents=agents,
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
     )
+
 
 class OntologyAgent(Agent):
     def as_api(
-        self, 
-        router: APIRouter, 
-        route_name: str = "ontology", 
-        name: str = "Ontology Agent", 
-        description: str = "API endpoints to call the Ontology agent completion.", 
+        self,
+        router: APIRouter,
+        route_name: str = "ontology",
+        name: str = "Ontology Agent",
+        description: str = "API endpoints to call the Ontology agent completion.",
         description_stream: str = "API endpoints to call the Ontology agent stream completion.",
-        tags: list[str] = []
+        tags: list[str] = [],
     ):
-        return super().as_api(router, route_name, name, description, description_stream, tags)
+        return super().as_api(
+            router, route_name, name, description, description_stream, tags
+        )

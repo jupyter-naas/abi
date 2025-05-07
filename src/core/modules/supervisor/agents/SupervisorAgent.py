@@ -1,13 +1,22 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 from src import secret
-from src.core.modules.support.agents.SupportAgent import create_agent as create_support_agent
+from src.core.modules.support.agents.SupportAgent import (
+    create_agent as create_support_agent,
+)
 
 NAME = "Supervisor Agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+AVATAR_URL = (
+    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+)
 DESCRIPTION = "Coordinates and manages specialized agents."
 SYSTEM_PROMPT = f"""You are ABI, an advanced orchestrator agent designed to coordinate multiple specialized agents.
 
@@ -28,17 +37,15 @@ Agents
 SUGGESTIONS = [
     {
         "label": "Feature Request",
-        "value": "As a user, I would like to: {{Feature Request}}"
+        "value": "As a user, I would like to: {{Feature Request}}",
     },
-    {
-        "label": "Report Bug",
-        "value": "Report a bug on: {{Bug Description}}"
-    }
+    {"label": "Report Bug", "value": "Report a bug on: {{Bug Description}}"},
 ]
 
+
 def create_agent(
-    agent_shared_state: AgentSharedState = None, 
-    agent_configuration: AgentConfiguration = None
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None,
 ) -> Agent:
     # Init
     tools = []
@@ -46,9 +53,7 @@ def create_agent(
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE, 
-        api_key=secret.get('OPENAI_API_KEY')
+        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
     )
 
     # Set configuration
@@ -58,14 +63,16 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=1)
 
     # Add support agent
-    github_api_token = secret.get('GITHUB_ACCESS_TOKEN')
+    github_api_token = secret.get("GITHUB_ACCESS_TOKEN")
     if github_api_token is not None:
-        support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+        support_agent = create_support_agent(
+            AgentSharedState(thread_id=2), agent_configuration
+        )
         agents.append(support_agent)
 
     # Get tools info from each assistant
     agents_info = []
-    for agent in agents: 
+    for agent in agents:
         agent_info = {
             "name": agent.name,
             "description": agent.description,
@@ -73,7 +80,7 @@ def create_agent(
                 {"name": t.name, "description": t.description}
                 for t in agent.tools  # Access the private tools attribute
                 if t.name != "support_agent" and t.name != "get_current_datetime"
-            ]
+            ],
         }
         agents_info.append(agent_info)
 
@@ -81,7 +88,7 @@ def create_agent(
     agents_info_str = ""
     for agent in agents_info:
         agents_info_str += f"-{agent['name']}: {agent['description']}\n"
-        for tool in agent['tools']:
+        for tool in agent["tools"]:
             agents_info_str += f"   • {tool['name']}: {tool['description']}\n"
         agents_info_str += "\n"
 
@@ -97,17 +104,20 @@ def create_agent(
         agents=agents,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver()
+        memory=MemorySaver(),
     )
+
 
 class SupervisorAgent(Agent):
     def as_api(
-        self, 
-        router: APIRouter, 
-        route_name: str = "supervisor", 
-        name: str = NAME, 
-        description: str = "API endpoints to call the Supervisor agent completion.", 
+        self,
+        router: APIRouter,
+        route_name: str = "supervisor",
+        name: str = NAME,
+        description: str = "API endpoints to call the Supervisor agent completion.",
         description_stream: str = "API endpoints to call the Supervisor agent stream completion.",
-        tags: list[str] = []
+        tags: list[str] = [],
     ):
-        return super().as_api(router, route_name, name, description, description_stream, tags)
+        return super().as_api(
+            router, route_name, name, description, description_stream, tags
+        )

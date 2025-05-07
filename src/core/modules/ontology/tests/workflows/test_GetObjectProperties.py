@@ -3,9 +3,10 @@ from rdflib import Graph
 graph = Graph()
 graph.parse("src/core/modules/common/ontologies/ConsolidatedOntology.ttl")
 
-class_uri = "http://purl.obolibrary.org/obo/BFO_0000015" # class_uri = "https://www.commoncoreontologies.org/ont00001262"
+class_uri = "http://purl.obolibrary.org/obo/BFO_0000015"  # class_uri = "https://www.commoncoreontologies.org/ont00001262"
 
-query = """
+query = (
+    """
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
@@ -31,7 +32,9 @@ WHERE {
   FILTER(ISURI(?range_uri))
 }
 ORDER BY ?range_uri
-""" % class_uri
+"""
+    % class_uri
+)
 
 results = graph.query(query)
 data = []
@@ -44,5 +47,9 @@ for row in results:
 print(data)
 
 import json
-with open(f"src/core/modules/ontology/tests/workflows/test_GetObjectProperties_{class_uri.split('/')[-1]}.json", "w") as f:
+
+with open(
+    f"src/core/modules/ontology/tests/workflows/test_GetObjectProperties_{class_uri.split('/')[-1]}.json",
+    "w",
+) as f:
     json.dump(data, f, indent=4, ensure_ascii=False)

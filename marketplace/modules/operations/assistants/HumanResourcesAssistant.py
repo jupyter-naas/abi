@@ -1,8 +1,15 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_anthropic import ChatAnthropic
 from src.core.modules.common.integrations import PennylaneIntegration
-from src.core.modules.common.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
+from src.core.modules.common.integrations.PennylaneIntegration import (
+    PennylaneIntegrationConfiguration,
+)
 
 NAME = "Human Resources"
 SLUG = "human-ressources"
@@ -43,46 +50,47 @@ Payroll Accuracy and Timeliness:
 - Chart Types: Line charts for payroll accuracy over time, bar charts for payroll processing time.
 """
 
+
 def create_human_resources_agent(
     agent_configuration: AgentConfiguration = None,
-    agent_shared_state: AgentSharedState = None
+    agent_shared_state: AgentSharedState = None,
 ) -> Agent:
     """Creates a Human Resources assistant agent.
-    
+
     Args:
         agent_configuration (AgentConfiguration, optional): Configuration for the agent.
             Defaults to None.
         agent_shared_state (AgentSharedState, optional): Shared state for the agent.
             Defaults to None.
-    
+
     Returns:
         Agent: The configured Human Resources assistant agent
     """
     model = ChatAnthropic(
         model=MODEL,
         temperature=TEMPERATURE,
-        anthropic_api_key=secret.get('ANTHROPIC_API_KEY')
+        anthropic_api_key=secret.get("ANTHROPIC_API_KEY"),
     )
     tools = []
 
     # Add Pennylane integration
-    if pennylane_key := secret.get('PENNYLANE_API_KEY'):
-        tools += PennylaneIntegration.as_tools(PennylaneIntegrationConfiguration(api_key=pennylane_key))
+    if pennylane_key := secret.get("PENNYLANE_API_KEY"):
+        tools += PennylaneIntegration.as_tools(
+            PennylaneIntegrationConfiguration(api_key=pennylane_key)
+        )
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )

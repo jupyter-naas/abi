@@ -1,6 +1,7 @@
 from src import services
 from rdflib import URIRef
 from abi.utils.SPARQL import results_to_list
+
 triple_store = services.triple_store_service
 
 # Example URI to look up
@@ -17,7 +18,7 @@ WHERE {{
 }}
 """
 results = triple_store.query(query)
-print('Result 1:')
+print("Result 1:")
 print(results_to_list(results))
 
 # Example URI to look up
@@ -33,5 +34,5 @@ WHERE {{
 }}
 """
 results = triple_store.query(query)
-print('Result 2:')
+print("Result 2:")
 print(results_to_list(results))
