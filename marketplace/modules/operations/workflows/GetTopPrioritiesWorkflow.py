@@ -1,5 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
+    TripleStoreService__SecondaryAdaptor__Filesystem,
+)
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src import config
 from dataclasses import dataclass
@@ -16,28 +18,33 @@ from langchain_core.tools import StructuredTool
 @dataclass
 class GetTopPrioritiesConfiguration(WorkflowConfiguration):
     """Configuration for GetTopPriorities workflow.
-    
+
     Attributes:
         triple_store (ITripleStoreService): Ontology store service
     """
+
     triple_store: ITripleStoreService
 
 
 class GetTopPrioritiesParameters(WorkflowParameters):
     """Parameters for GetTopPriorities workflow.
-    
+
     Attributes:
         days (int): Number of days to look ahead for issues
         assignee_label (Optional[str]): Filter tasks by assignee label
     """
+
     days: int = Field(default=7, description="Number of days to look ahead for tasks")
-    assignee_label: Optional[str] = Field(default=None, description="Filter tasks by assignee label")
+    assignee_label: Optional[str] = Field(
+        default=None, description="Filter tasks by assignee label"
+    )
 
 
 class GetTopPrioritiesWorkflow(Workflow):
     """Workflow for getting top priorities from the ontology."""
+
     __configuration: GetTopPrioritiesConfiguration
-    
+
     def __init__(self, configuration: GetTopPrioritiesConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
@@ -57,9 +64,13 @@ class GetTopPrioritiesWorkflow(Workflow):
         g = Graph()
         g.parse("src/core/ontologies/ConsolidatedOntology.ttl", format="turtle")
         task_types = g.query(task_subclasses_query)
-        
+
         # Create VALUES clause instead of UNION
-        task_types_values = "VALUES ?taskType {" + " ".join([f"<{str(row['taskType'])}>" for row in task_types]) + "}"
+        task_types_values = (
+            "VALUES ?taskType {"
+            + " ".join([f"<{str(row['taskType'])}>" for row in task_types])
+            + "}"
+        )
         logger.info(f"Task subclasses: {task_types_values}")
 
         # Calculate the due date based on configuration
@@ -112,40 +123,48 @@ class GetTopPrioritiesWorkflow(Workflow):
         """
         logger.info(f"Query: {query}")
         results = self.__triple_store.query(query)
-        
+
         # Convert tasks to a list of dictionaries for better LLM consumption
         data = []
         for row in results:
             data_dict = {}
             for key in row.labels:
                 data_dict[key] = str(row[key]) if row[key] else None
-            
+
             # Only add the task if it matches the assignee filter (if provided)
-            if (parameters.assignee_label is None or 
-                data_dict.get('assignee_label') == parameters.assignee_label):
+            if (
+                parameters.assignee_label is None
+                or data_dict.get("assignee_label") == parameters.assignee_label
+            ):
                 data.append(data_dict)
-            
-        return {"message": "Sort data providedby due date and priority in descending order", "data": data}
-    
+
+        return {
+            "message": "Sort data providedby due date and priority in descending order",
+            "data": data,
+        }
+
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow.
-        
+
         Returns:
             list[StructuredTool]: List containing the workflow tool
         """
-        return [StructuredTool(
-            name="get_top_priorities",
-            description="Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
-            func=lambda **kwargs: self.run(GetTopPrioritiesParameters(**kwargs)),
-            args_schema=GetTopPrioritiesParameters
-        )]
+        return [
+            StructuredTool(
+                name="get_top_priorities",
+                description="Get top priorities. If user wants to filter by user, ask to provide the assignee label else return all tasks.",
+                func=lambda **kwargs: self.run(GetTopPrioritiesParameters(**kwargs)),
+                args_schema=GetTopPrioritiesParameters,
+            )
+        ]
 
     def as_api(self, router: APIRouter) -> None:
         """Adds API endpoints for this workflow to the given router.
-        
+
         Args:
             router (APIRouter): FastAPI router to add endpoints to
         """
+
         @router.post("/get_top_priorities")
         def get_priorities(parameters: GetTopPrioritiesParameters):
             return self.run(parameters)

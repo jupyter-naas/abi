@@ -8,29 +8,35 @@ from langchain_core.tools import StructuredTool
 from abi.utils.SPARQL import results_to_list
 from abi import logger
 
+
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for SearchIndividual workflow."""
+
     triple_store: ITripleStoreService
+
 
 class SearchIndividualWorkflowParameters(WorkflowParameters):
     """Parameters for SearchIndividual workflow."""
+
     class_uri: str = Field(
-        ..., 
-        description="Class URI to use to search for individuals.", 
+        ...,
+        description="Class URI to use to search for individuals.",
         pattern="https?:\/\/.*",
-        example="https://www.commoncoreontologies.org/ont00000443"
+        example="https://www.commoncoreontologies.org/ont00000443",
     )
     search_label: str = Field(
-        ..., 
+        ...,
         description="Individual label to search for in the ontology schema.",
-        example="Naas.ai"
+        example="Naas.ai",
     )
+
 
 class SearchIndividualWorkflow(Workflow):
     """Workflow for searching ontology individuals."""
+
     __configuration: SearchIndividualWorkflowConfiguration
-    
+
     def __init__(self, configuration: SearchIndividualWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
@@ -66,10 +72,14 @@ class SearchIndividualWorkflow(Workflow):
             StructuredTool(
                 name="ontology_search_individual",
                 description="Search an ontology individual based on its label. It will return the most relevant individual using matching with rdfs:label",
-                func=lambda class_uri, search_label: self.search_individual(SearchIndividualWorkflowParameters(class_uri=class_uri, search_label=search_label)),
-                args_schema=SearchIndividualWorkflowParameters
+                func=lambda class_uri, search_label: self.search_individual(
+                    SearchIndividualWorkflowParameters(
+                        class_uri=class_uri, search_label=search_label
+                    )
+                ),
+                args_schema=SearchIndividualWorkflowParameters,
             )
         ]
 
     def as_api(self, router: APIRouter) -> None:
-        pass 
+        pass

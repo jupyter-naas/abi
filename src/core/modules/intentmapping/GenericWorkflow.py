@@ -2,11 +2,17 @@ from typing import TypeVar, Generic, Type
 from langchain_core.tools import StructuredTool
 
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class GenericWorkflow(Generic[T]):
-    
-    def __init__(self, name: str, description: str, sparql_template: str, arguments_model: Type[T]):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        sparql_template: str,
+        arguments_model: Type[T],
+    ):
         self.name = name
         self.description = description
         self.sparql_template = sparql_template
@@ -15,19 +21,21 @@ class GenericWorkflow(Generic[T]):
     def run(self, parameters: T):
         # Template the sparql template with the parameters using jinja2
         from jinja2 import Template
+
         template = Template(self.sparql_template)
         sparql_query = template.render(parameters.dict())
         print(sparql_query)
         from src import services
+
         results = services.triple_store_service.query(sparql_query)
         return list(results)
-        
+
     def as_tools(self) -> list[StructuredTool]:
         return [
             StructuredTool(
                 name=self.name,
                 description=self.description,
                 func=lambda **kwargs: self.run(self.arguments_model(**kwargs)),
-                args_schema=self.arguments_model
+                args_schema=self.arguments_model,
             )
         ]

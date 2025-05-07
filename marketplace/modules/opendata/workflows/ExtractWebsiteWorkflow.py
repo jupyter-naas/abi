@@ -1,6 +1,9 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.modules.common.integrations.SiteDownloader import SiteDownloader, SiteDownloaderConfiguration
+from src.core.modules.common.integrations.SiteDownloader import (
+    SiteDownloader,
+    SiteDownloaderConfiguration,
+)
 from src import secret, config
 from dataclasses import dataclass
 from pydantic import Field
@@ -11,7 +14,10 @@ from langchain_core.tools import StructuredTool
 import json
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from src.core.modules.common.integrations.LocalObjectStoreIntegration import LocalObjectStoreIntegration, LocalObjectStoreConfiguration
+from src.core.modules.common.integrations.LocalObjectStoreIntegration import (
+    LocalObjectStoreIntegration,
+    LocalObjectStoreConfiguration,
+)
 
 from tqdm import tqdm
 from queue import Queue, Empty
@@ -512,7 +518,7 @@ abi:source a owl:DatatypeProperty ;
     skos:definition "The source of the analysis." .
 """
 
-SYSTEM_PROMPT =f"""You are an expert in extracting information from websites.
+SYSTEM_PROMPT = f"""You are an expert in extracting information from websites.
 
 
 You must extract knowledge from provided text and create the proper ontology owl:NamedIndividual base on the following ontology. You must be very exhaustive.
@@ -527,49 +533,62 @@ Ontology:
 {ONTOLOGY}
 """
 
+
 @dataclass
 class ExtractWebsiteWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for ExtractWebsiteWorkflow.
-    
+
     Attributes:
         site_downloader_config (SiteDownloaderConfiguration): Configuration for the site downloader integration
     """
+
     site_downloader_config: SiteDownloaderConfiguration
+
 
 class ExtractWebsiteWorkflowParameters(WorkflowParameters):
     """Parameters for ExtractWebsiteWorkflow execution.
-    
+
     Attributes:
         url (str): The URL to extract content from
         extract_sitemap (bool): Whether to extract the sitemap (optional)
     """
+
     url: str = Field(..., description="The URL to extract content from")
+
 
 class ExtractWebsiteWorkflow(Workflow):
     """Workflow for extracting content from websites."""
-    
+
     __configuration: ExtractWebsiteWorkflowConfiguration
-    
+
     def __init__(self, configuration: ExtractWebsiteWorkflowConfiguration):
         self.__configuration = configuration
-        self.__site_downloader = SiteDownloader(self.__configuration.site_downloader_config)
-        
-        self.__object_store = LocalObjectStoreIntegration(LocalObjectStoreConfiguration(base_path="data/opendata/extract_website"))
-        
+        self.__site_downloader = SiteDownloader(
+            self.__configuration.site_downloader_config
+        )
+
+        self.__object_store = LocalObjectStoreIntegration(
+            LocalObjectStoreConfiguration(base_path="data/opendata/extract_website")
+        )
+
         # Prepare an Openai ChatCompletion
         self.__chat_completion = ChatOpenAI(
-            model="gpt-4o-2024-08-06", 
-            temperature=0.3, 
-            api_key=secret.get('OPENAI_API_KEY')
+            model="gpt-4o-2024-08-06",
+            temperature=0.3,
+            api_key=secret.get("OPENAI_API_KEY"),
         )
-        
 
     def __sanitize_url(self, url: str) -> str:
-        return url.replace("https://", "").replace("http://", "").replace("www.", "").replace('/', '__')
+        return (
+            url.replace("https://", "")
+            .replace("http://", "")
+            .replace("www.", "")
+            .replace("/", "__")
+        )
 
     def __get_sitemap(self, url: str) -> dict:
         sitemap_key = f"{self.__sanitize_url(url)}_sitemap.json"
-        
+
         # Get cached version of sitemap
         try:
             sitemap = self.__object_store.get_object(sitemap_key)
@@ -577,12 +596,12 @@ class ExtractWebsiteWorkflow(Workflow):
         except Exception as e:
             sitemap = self.__site_downloader.load_sitemap(url)
             self.__object_store.save_object(sitemap_key, json.dumps(sitemap))
-        
+
         return sitemap
 
     def __worker(self, queue: Queue, thread_id: int):
         """Worker method to process pages from the queue.
-        
+
         Args:
             queue: Queue containing jobs to process
             thread_id: ID of the worker thread
@@ -602,26 +621,36 @@ class ExtractWebsiteWorkflow(Workflow):
                 page_url, page_key, ttl_key = job
 
                 try:
-                    page_content = self.__object_store.get_object(page_key).decode('utf-8')
+                    page_content = self.__object_store.get_object(page_key).decode(
+                        "utf-8"
+                    )
                 except Exception:
                     page_content = self.__site_downloader.download_url(page_url)
-                    page_content = self.__site_downloader.extract_text_from_html(page_content)
+                    page_content = self.__site_downloader.extract_text_from_html(
+                        page_content
+                    )
                     self.__object_store.save_object(page_key, page_content)
 
                 try:
                     ttl_content = self.__object_store.get_object(ttl_key)
                 except Exception:
-                    response = self.__chat_completion.invoke([
-                        SystemMessage(content=SYSTEM_PROMPT),
-                        HumanMessage(content=page_content)
-                    ])
-                    ttl_content = response.content.replace('```turtle', '').replace('```', '')
+                    response = self.__chat_completion.invoke(
+                        [
+                            SystemMessage(content=SYSTEM_PROMPT),
+                            HumanMessage(content=page_content),
+                        ]
+                    )
+                    ttl_content = response.content.replace("```turtle", "").replace(
+                        "```", ""
+                    )
                     self.__object_store.save_object(ttl_key, ttl_content)
 
                 # logger.info(f"Thread {thread_id}: Processed {page_url}")
 
             except Exception as e:
-                logger.error(f"Thread {thread_id}: Error processing {page_url}: {str(e)}")
+                logger.error(
+                    f"Thread {thread_id}: Error processing {page_url}: {str(e)}"
+                )
             finally:
                 queue.task_done()
 
@@ -637,14 +666,13 @@ class ExtractWebsiteWorkflow(Workflow):
         # Wait for all threads to complete
         for thread in threads:
             thread.join()
-            
 
     def run(self, parameters: ExtractWebsiteWorkflowParameters) -> Dict:
         """Extracts content from a website using multiple threads.
-        
+
         Args:
             parameters: Parameters containing URL and extraction options
-            
+
         Returns:
             Dict: Extracted content and metadata
         """
@@ -653,7 +681,6 @@ class ExtractWebsiteWorkflow(Workflow):
 
         # Create job queue
         job_queue = Queue()
-
 
         ttl_files = []
         # Add jobs to queue
@@ -665,23 +692,21 @@ class ExtractWebsiteWorkflow(Workflow):
 
         self.__compute_ttl(10, job_queue)
 
-
         # Merge all TTL files into a single graph
         merged_graph = Graph()
-        
+
         # First parse the ontology to establish the base prefixes
         ontology_graph = Graph()
         ontology_graph.parse(data=ONTOLOGY, format="turtle")
-        
-        
+
         for ttl_file in ttl_files:
-            ttl_content = self.__object_store.get_object(ttl_file).decode('utf-8')
+            ttl_content = self.__object_store.get_object(ttl_file).decode("utf-8")
             if ttl_content:
                 try:
                     # Parse TTL content into temporary graph
                     temp_graph = Graph()
                     temp_graph.parse(data=f"{ONTOLOGY}\n{ttl_content}", format="turtle")
-                    
+
                     # Merge into main graph
                     merged_graph += temp_graph
                 except Exception as e:
@@ -690,55 +715,69 @@ class ExtractWebsiteWorkflow(Workflow):
         # Bind other ontology namespaces to the merged graph
         for prefix, namespace in ontology_graph.namespaces():
             merged_graph.bind(prefix, namespace)
-        
+
         # Convert merged graph to turtle format
-        result["merged_ttl"] = merged_graph.serialize(format="turtle", namespace_manager=merged_graph.namespace_manager)
-        
-        self.__object_store.save_object(f"{self.__sanitize_url(parameters.url)}.ttl", result["merged_ttl"])
+        result["merged_ttl"] = merged_graph.serialize(
+            format="turtle", namespace_manager=merged_graph.namespace_manager
+        )
+
+        self.__object_store.save_object(
+            f"{self.__sanitize_url(parameters.url)}.ttl", result["merged_ttl"]
+        )
 
         return result
 
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""
-        return [StructuredTool(
-            name="extract_website_content",
-            description="Extract text content and optionally sitemap from a website",
-            func=lambda **kwargs: self.run(ExtractWebsiteWorkflowParameters(**kwargs)),
-            args_schema=ExtractWebsiteWorkflowParameters
-        )]
+        return [
+            StructuredTool(
+                name="extract_website_content",
+                description="Extract text content and optionally sitemap from a website",
+                func=lambda **kwargs: self.run(
+                    ExtractWebsiteWorkflowParameters(**kwargs)
+                ),
+                args_schema=ExtractWebsiteWorkflowParameters,
+            )
+        ]
 
     def as_api(self, router: APIRouter) -> None:
         """Adds API endpoints for this workflow to the given router."""
+
         @router.post("/extract_website")
         def extract_website(parameters: ExtractWebsiteWorkflowParameters):
             return self.run(parameters)
+
 
 def main():
     # Initialize configurations
     config = ExtractWebsiteWorkflowConfiguration(
         site_downloader_config=SiteDownloaderConfiguration()
     )
-    
+
     # Initialize workflow
     workflow = ExtractWebsiteWorkflow(config)
-    
+
     # Run workflow with example parameters
-    result = workflow.run(ExtractWebsiteWorkflowParameters(
-        url="https://beneteau-group.com"
-    ))
-    
+    result = workflow.run(
+        ExtractWebsiteWorkflowParameters(url="https://beneteau-group.com")
+    )
+
     deduped_ttl, graph = OntologyReasoner().dedup_ttl(result["merged_ttl"])
     # Save deduped ttl to file
     with open("deduped.ttl", "w") as f:
         f.write(deduped_ttl)
-        
+
     from abi.utils.OntologyYaml import OntologyYaml
-    yaml_graph_dict = OntologyYaml.rdf_to_yaml(graph, ontology_schemas=["/app/src/core/ontologies/ConsolidatedOntology.ttl"])
-    
+
+    yaml_graph_dict = OntologyYaml.rdf_to_yaml(
+        graph, ontology_schemas=["/app/src/core/ontologies/ConsolidatedOntology.ttl"]
+    )
+
     import yaml
+
     with open("deduped.yaml", "w") as f:
         yaml.dump(yaml_graph_dict, f, sort_keys=False)
-    
-    
+
+
 if __name__ == "__main__":
     main()
