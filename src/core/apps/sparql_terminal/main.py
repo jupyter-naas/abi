@@ -6,12 +6,13 @@ from src.core.apps.sparql_terminal.terminal_style import (
     print_query,
     print_query_result,
     print_query_error,
-    print_system_message
+    print_system_message,
 )
 
 import sys
 
 from src import services
+
 
 class SPARQLTerminal:
     def __init__(self):
@@ -34,13 +35,13 @@ class SPARQLTerminal:
         while True:
             user_input = get_user_input()
 
-            if user_input.lower() == 'exit':
+            if user_input.lower() == "exit":
                 print_system_message("Goodbye!")
                 return
-            elif user_input.lower() == 'help':
+            elif user_input.lower() == "help":
                 print_welcome_message()
                 continue
-            elif user_input.lower() == 'clear':
+            elif user_input.lower() == "clear":
                 clear_screen()
                 continue
             elif not user_input.strip():
@@ -60,9 +61,11 @@ class SPARQLTerminal:
                 print_query_error(str(e))
                 print_divider()
 
+
 def main():
     terminal = SPARQLTerminal()
     terminal.run()
 
+
 if __name__ == "__main__":
-    main() 
+    main()
