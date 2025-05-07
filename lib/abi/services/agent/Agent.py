@@ -247,61 +247,12 @@ class Agent(Expose):
     def state(self) -> AgentSharedState:
         return self.__state
 
-    # def __setup_workflow(self):
-    #     """Set up the workflow graph for agent-tool interaction.
-
-    #     Creates a StateGraph with two main nodes:
-    #     - 'agent': Processes messages using the language model
-    #     - 'tools': Executes tool actions when requested
-
-    #     The workflow starts at the agent node and conditionally routes to either:
-    #     - The tools node if the agent requests a tool
-    #     - End if the agent completes the task
-
-    #     After tool execution, control returns to the agent node.
-    #     """
-    #     workflow = StateGraph(MessagesState)
-
-    #     # Define the two nodes we will cycle between
-    #     workflow.add_node("agent", self.__call_model)
-    #     workflow.add_node("tools", ToolNode(self.__tools))
-
-    #     # Set the entrypoint as `agent`
-    #     # This means that this node is the first one called
-    #     workflow.add_edge(START, "agent")
-
-    #     # We now add a conditional edge
-    #     workflow.add_conditional_edges(
-    #         # First, we define the start node. We use `agent`.
-    #         # This means these are the edges taken after the `agent` node is called.
-    #         "agent",
-    #         # Next, we pass in the function that will determine which node is called next.
-    #         self.__should_continue,
-    #     )
-
-    #     # We now add a normal edge from `tools` to `agent`.
-    #     # This means that after `tools` is called, `agent` node is called next.
-    #     workflow.add_edge("tools", 'agent')
-
-    #     self.__workflow = workflow
-
-    #     # Finally, we compile it!
-    #     # This compiles it into a LangChain Runnable,
-    #     # meaning you can use it as you would any other runnable.
-    #     # Note that we're (optionally) passing the memory when compiling the graph
-    #     self.__app = workflow.compile(checkpointer=self.__checkpointer)
-
-    # def workflow_compile(self) -> None:
-    #     self.__app = self.__workflow.compile(checkpointer=self.__checkpointer)
-
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(MessagesState)
         graph.add_node(self.call_model)
         graph.add_edge(START, "call_model")
 
         graph.add_node(self.call_tools)
-        # TODO: Make sure that the fact to call the model after the tools is not a problem.
-        # It was not in the original implementation. But it seems fine to call the model after the tools.
         graph.add_edge("call_tools", "call_model")
 
         for agent in self.__agents:
@@ -382,51 +333,6 @@ class Agent(Expose):
     def __notify_tool_response(self, message: AnyMessage):
         self.__event_queue.put(ToolResponseEvent(payload=message))
         self.__on_tool_response(message)
-
-    # def __should_continue(self, state: MessagesState) -> Literal["tools", END]:
-    #     """Determine the next node in the workflow based on the current state.
-
-    #     Examines the last message in the state to determine if a tool call is needed.
-    #     If the last message contains tool calls, routes to the 'tools' node.
-    #     Otherwise, ends the workflow.
-
-    #     Args:
-    #         state (MessagesState): The current workflow state containing message history
-
-    #     Returns:
-    #         Literal["tools", END]: Either "tools" to execute a tool call, or END to complete
-    #     """
-    #     messages = state['messages']
-    #     last_message = messages[-1]
-    #     # If the LLM makes a tool call, then we route to the "tools" node
-    #     if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-    #         self.__event_queue.put(ToolUsageEvent(payload=last_message))
-    #         self.__on_tool_usage(last_message)
-    #         return "tools"
-    #     return END
-
-    # def __call_model(self, state: MessagesState):
-    #     """Process the current state through the model.
-
-    #     Takes the current message state and:
-    #     1. Checks if the last message was a tool response and triggers callback if so
-    #     2. Invokes the chat model with the messages
-    #     3. Returns the model response wrapped in a messages dict
-
-    #     Args:
-    #         state (MessagesState): Current workflow state containing message history
-
-    #     Returns:
-    #         dict: New state containing the model's response message
-    #     """
-    #     messages = state['messages']
-    #     last_message = messages[-1]
-    #     if hasattr(last_message, 'tool_call_id'):
-    #         self.__event_queue.put(ToolResponseEvent(payload=last_message))
-    #         self.__on_tool_response(last_message)
-    #     response = self.__chat_model.invoke(messages)
-    #     # We return a list, because this will get added to the existing list
-    #     return {"messages": [response]}
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -602,7 +508,6 @@ class Agent(Expose):
                 media_type="text/event-stream; charset=utf-8",
             )
 
-    # TODO: fix this
     def stream_invoke(self, prompt: str):
         """Process a user prompt through the agent and yield responses as they come.
 
@@ -653,7 +558,6 @@ class Agent(Expose):
             except Empty:
                 pass
 
-        # response = final_state["messages"][-1].content
         response = final_state
         logger.debug(f"Response: {response}")
 
@@ -743,7 +647,5 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> Structured
         )
 
     assert isinstance(handoff_to_agent, StructuredTool)
-
-    logger.info(f"Handoff tool: {handoff_to_agent}")
 
     return handoff_to_agent
