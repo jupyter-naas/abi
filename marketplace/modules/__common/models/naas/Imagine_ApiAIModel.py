@@ -4,4 +4,4 @@ DESCRIPTION = "Generate images from any prompt"
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/midjourney_100x100.jpg"
 MODEL_TYPE = "image"
 CONTEXT_WINDOW = None
-OWNER = "midjourney" 
+OWNER = "midjourney"

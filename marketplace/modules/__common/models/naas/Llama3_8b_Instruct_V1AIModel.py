@@ -4,4 +4,4 @@ DESCRIPTION = "Ideal for limited computational power and resources, edge devices
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/meta_100x100.jpg"
 MODEL_TYPE = "chat"
 CONTEXT_WINDOW = 8000
-OWNER = "meta" 
+OWNER = "meta"

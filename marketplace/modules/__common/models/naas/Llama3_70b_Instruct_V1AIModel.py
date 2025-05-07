@@ -4,4 +4,4 @@ DESCRIPTION = "Ideal for content creation, conversational AI, language understan
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/meta_100x100.jpg"
 MODEL_TYPE = "chat"
 CONTEXT_WINDOW = 8192
-OWNER = "meta" 
+OWNER = "meta"

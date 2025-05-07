@@ -1,4 +1,6 @@
-from src.core.modules.common.prompts.support_prompt import SUPPORT_CHAIN_OF_THOUGHT_PROMPT
+from src.core.modules.common.prompts.support_prompt import (
+    SUPPORT_CHAIN_OF_THOUGHT_PROMPT,
+)
 
 RESPONSIBILITIES_PROMPT = f"""
 1. Time Awareness

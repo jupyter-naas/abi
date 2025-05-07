@@ -1,10 +1,25 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_anthropic import ChatAnthropic
-from src.core.modules.common.integrations import PennylaneIntegration, QontoIntegration, StripeIntegration
-from src.core.modules.common.integrations.PennylaneIntegration import PennylaneIntegrationConfiguration
-from src.core.modules.common.integrations.QontoIntegration import QontoIntegrationConfiguration
-from src.core.modules.common.integrations.StripeIntegration import StripeIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    PennylaneIntegration,
+    QontoIntegration,
+    StripeIntegration,
+)
+from src.core.modules.common.integrations.PennylaneIntegration import (
+    PennylaneIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.QontoIntegration import (
+    QontoIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.StripeIntegration import (
+    StripeIntegrationConfiguration,
+)
 
 NAME = "Financial Controller"
 SLUG = "financial-controller"
@@ -49,53 +64,60 @@ Cost Efficiency:
 - Chart Types: Pie charts for cost distribution, line charts for cost reduction over time.
 """
 
+
 def create_financial_controller_agent(
     agent_configuration: AgentConfiguration = None,
-    agent_shared_state: AgentSharedState = None
+    agent_shared_state: AgentSharedState = None,
 ) -> Agent:
     """Creates a Financial Controller assistant agent.
-    
+
     Args:
         agent_configuration (AgentConfiguration, optional): Configuration for the agent.
             Defaults to None.
         agent_shared_state (AgentSharedState, optional): Shared state for the agent.
             Defaults to None.
-    
+
     Returns:
         Agent: The configured Financial Controller assistant agent
     """
     model = ChatAnthropic(
         model=MODEL,
         temperature=TEMPERATURE,
-        anthropic_api_key=secret.get('ANTHROPIC_API_KEY')
+        anthropic_api_key=secret.get("ANTHROPIC_API_KEY"),
     )
     tools = []
 
-    pennylane_key = secret.get('PENNYLANE_API_KEY')
-    pennylane_organization_id = secret.get('PENNYLANE_ORGANIZATION_ID')
+    pennylane_key = secret.get("PENNYLANE_API_KEY")
+    pennylane_organization_id = secret.get("PENNYLANE_ORGANIZATION_ID")
     if pennylane_key and pennylane_organization_id:
-        tools += PennylaneIntegration.as_tools(PennylaneIntegrationConfiguration(api_key=pennylane_key, organization_id=pennylane_organization_id))
-
-    if qonto_key := secret.get('QONTO_API_KEY'):
-        tools += QontoIntegration.as_tools(QontoIntegrationConfiguration(api_key=qonto_key))
-
-    if stripe_key := secret.get('STRIPE_API_KEY'):
-        tools += StripeIntegration.as_tools(StripeIntegrationConfiguration(api_key=stripe_key))
-    
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
+        tools += PennylaneIntegration.as_tools(
+            PennylaneIntegrationConfiguration(
+                api_key=pennylane_key, organization_id=pennylane_organization_id
+            )
         )
-    
+
+    if qonto_key := secret.get("QONTO_API_KEY"):
+        tools += QontoIntegration.as_tools(
+            QontoIntegrationConfiguration(api_key=qonto_key)
+        )
+
+    if stripe_key := secret.get("STRIPE_API_KEY"):
+        tools += StripeIntegration.as_tools(
+            StripeIntegrationConfiguration(api_key=stripe_key)
+        )
+
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )
