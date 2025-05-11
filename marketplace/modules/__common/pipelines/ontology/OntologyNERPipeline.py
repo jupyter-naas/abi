@@ -5,7 +5,6 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from rdflib import Graph
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
 
 
 @dataclass
@@ -81,7 +80,7 @@ def main():
     from langchain_openai import ChatOpenAI
     from src import secret
 
-    chat_model = ChatOpenAI(
+    _ = ChatOpenAI(
         model="gpt-4o-mini", temperature=0, api_key=secret.get("OPENAI_API_KEY")
     )
     with open("src/ontologies/domain-level/task.ttl", "r") as f:

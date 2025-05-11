@@ -7,7 +7,6 @@ from lib.abi.services.triple_store.adaptors.secondary.TripleStoreService__Second
 )
 from lib.abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
-    ObjectStorageService,
 )
 
 

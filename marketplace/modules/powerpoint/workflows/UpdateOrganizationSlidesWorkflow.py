@@ -13,9 +13,8 @@ from src.core.modules.common.integrations.OpenAIIntegration import (
     OpenAIIntegrationConfiguration,
 )
 from dataclasses import dataclass
-from pydantic import Field, BaseModel
+from pydantic import Field
 from abi import logger
-from typing import Optional
 from abi.workflow.workflow import WorkflowParameters
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter

@@ -10,8 +10,8 @@ from src.core.modules.support.integrations.GithubGraphqlIntegration import (
 )
 from src import config
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import Field
+from typing import List, Dict
 from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool

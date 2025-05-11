@@ -5,7 +5,7 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     MemorySaver,
 )
-from src import secret, config, services
+from src import secret, services
 from fastapi import APIRouter
 from src.core.modules.support.agents.SupportAssistant import (
     create_agent as create_support_agent,

@@ -5,11 +5,8 @@ from lib.abi.integration.integration import (
 )
 from dataclasses import dataclass
 import requests
-import pandas as pd
-import time
-from abi import logger
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict
 
 LOGO_URL = "https://play-lh.googleusercontent.com/zb0NgZjxTlO6vMpGyjVmgMPN-xRbo31Q5xGNbjM8wYhiaU7xFKlGGCYl2Ws4-Nl0iBE"
 

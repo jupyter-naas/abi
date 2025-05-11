@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Union, BinaryIO
 import os
 import shutil
 from datetime import datetime
-import pathlib
 
 
 @dataclass

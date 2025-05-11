@@ -1,13 +1,10 @@
 from lib.abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
-    IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional
 from openai import OpenAI
-from src import config, secret
-from abi import logger
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 

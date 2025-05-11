@@ -1,7 +1,6 @@
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from datetime import datetime
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import (
@@ -143,7 +142,7 @@ class StripeIntegration(Integration):
 
     def get_products(self) -> Dict:
         """Get the products of the account."""
-        return self._make_request(f"/products")
+        return self._make_request("/products")
 
     def get_product(self, product_id: str) -> Dict:
         """Get the product of the account."""
@@ -151,7 +150,7 @@ class StripeIntegration(Integration):
 
     def create_product(self, data: Dict) -> Dict:
         """Create a new product."""
-        return self._make_request("POST", f"/products", data=data)
+        return self._make_request("POST", "/products", data=data)
 
     def update_product(self, product_id: str, data: Dict) -> Dict:
         """Update an existing product."""
@@ -163,7 +162,7 @@ class StripeIntegration(Integration):
 
     def get_subscriptions(self) -> Dict:
         """Get the subscriptions of the account."""
-        return self._make_request(f"/subscriptions")
+        return self._make_request("/subscriptions")
 
     def get_subscription(self, subscription_id: str) -> Dict:
         """Get the subscription of the account."""
@@ -171,7 +170,7 @@ class StripeIntegration(Integration):
 
     def create_subscription(self, data: Dict) -> Dict:
         """Create a new subscription."""
-        return self._make_request("POST", f"/subscriptions", data=data)
+        return self._make_request("POST", "/subscriptions", data=data)
 
     def update_subscription(self, subscription_id: str, data: Dict) -> Dict:
         """Update an existing subscription."""
@@ -185,11 +184,11 @@ class StripeIntegration(Integration):
 
     def get_balance(self) -> Dict:
         """Get the balance of the account."""
-        return self._make_request(f"/balance")
+        return self._make_request("/balance")
 
     def get_balance_transactions(self) -> Dict:
         """Get the balance transactions of the account."""
-        return self._make_request(f"/balance_transactions")
+        return self._make_request("/balance_transactions")
 
     def get_balance_transaction(self, transaction_id: str) -> Dict:
         """Get the balance transaction of the account."""
@@ -242,7 +241,7 @@ class StripeIntegration(Integration):
 
     def create_invoice(self, data: Dict) -> Dict:
         """Create a new invoice."""
-        return self._make_request("POST", f"/invoices", data=data)
+        return self._make_request("POST", "/invoices", data=data)
 
     def update_invoice(self, invoice_id: str, data: Dict) -> Dict:
         """Update an existing invoice."""
@@ -254,11 +253,11 @@ class StripeIntegration(Integration):
 
     def get_invoice_items(self) -> Dict:
         """Get the invoice items of the account."""
-        return self._make_request(f"/invoiceitems")
+        return self._make_request("/invoiceitems")
 
     def get_payment_methods(self) -> Dict:
         """Get the payment methods of the account."""
-        return self._make_request(f"/payment_methods")
+        return self._make_request("/payment_methods")
 
     def get_payment_method(self, payment_method_id: str) -> Dict:
         """Get the payment method of the account."""
@@ -266,7 +265,7 @@ class StripeIntegration(Integration):
 
     def create_payment_method(self, data: Dict) -> Dict:
         """Create a new payment method."""
-        return self._make_request("POST", f"/payment_methods", data=data)
+        return self._make_request("POST", "/payment_methods", data=data)
 
     def update_payment_method(self, payment_method_id: str, data: Dict) -> Dict:
         """Update an existing payment method."""

@@ -4,9 +4,8 @@ from src.core.modules.common.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from src import secret
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from pydantic import Field
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 import json

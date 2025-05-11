@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from lib.abi.services.agent.Agent import Agent
-from typing import Callable, List, Dict, Any
+from typing import Callable, List, Any
 import os
 import importlib
 import glob

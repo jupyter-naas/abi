@@ -4,15 +4,9 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Any
 from imapclient import IMAPClient
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 import email
-import base64
-from datetime import datetime, date
 import smtplib
 
 LOGO_URL = "https://static.dezeen.com/uploads/2020/10/gmail-google-logo-rebrand-workspace-design_dezeen_2364_sq.jpg"
