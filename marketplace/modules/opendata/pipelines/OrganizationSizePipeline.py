@@ -119,7 +119,7 @@ class OrganizationSizePipeline(Pipeline):
         graph.add((organization_size_uri, ABI.isOrganizationSizeOf, organization_uri))
 
         # Save to ontology store
-        logger.info(f"Saving organization size classification to ontology store")
+        logger.info("Saving organization size classification to ontology store")
         self.__configuration.triple_store.store(parameters.ontology_name, graph)
 
     def as_tools(self) -> list[StructuredTool]:

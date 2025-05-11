@@ -4,7 +4,7 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from google.oauth2 import service_account
 from google.cloud import functions_v1
 from google.cloud.functions_v1 import CloudFunction
@@ -51,7 +51,7 @@ class GCPFunctionsIntegration(Integration):
             self.__client = functions_v1.CloudFunctionsServiceClient(
                 credentials=credentials
             )
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Cloud Functions API client: {str(e)}")
 
@@ -201,7 +201,7 @@ class GCPFunctionsIntegration(Integration):
             )
 
             filter_str = [
-                f'resource.type="cloud_function"',
+                'resource.type="cloud_function"',
                 f'resource.labels.function_name="{function_name}"',
             ]
 

@@ -1,4 +1,4 @@
-from src import secret, config, services
+from src import secret, services
 from src.core.modules.common.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )

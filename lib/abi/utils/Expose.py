@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Any
 
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool

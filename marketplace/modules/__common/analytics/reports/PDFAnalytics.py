@@ -1,16 +1,13 @@
 from lib.abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from datetime import datetime
-import random
-from datetime import timedelta
 from abi import logger
-from reportlab.pdfgen import canvas
 import os
 
 

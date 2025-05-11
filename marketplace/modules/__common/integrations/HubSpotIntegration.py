@@ -130,9 +130,6 @@ class HubSpotIntegration(Integration):
         if response.status_code == 200:
             properties_data = response.json()
             properties = properties_data["results"]
-            for prop in properties:
-                prop_name = prop["name"]
-                prop_label = prop["label"]
             return properties
         else:
             return []

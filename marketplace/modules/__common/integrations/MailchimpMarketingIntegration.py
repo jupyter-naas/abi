@@ -790,7 +790,7 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
     """Convert MailchimpMarketing integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    from typing import Optional, List, Dict
+    from typing import Optional, List
 
     integration = MailchimpMarketingIntegration(configuration)
 

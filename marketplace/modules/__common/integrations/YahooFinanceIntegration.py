@@ -4,9 +4,8 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List
 import yfinance as yf
-from datetime import datetime, timedelta
 
 LOGO_URL = "https://logo.clearbit.com/yahoo.com"
 

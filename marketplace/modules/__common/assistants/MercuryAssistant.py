@@ -6,7 +6,6 @@ from abi.services.agent.Agent import (
     MemorySaver,
 )
 from src import secret
-from fastapi import APIRouter
 from src.core.apps.terminal_agent.terminal_style import (
     print_tool_usage,
     print_tool_response,

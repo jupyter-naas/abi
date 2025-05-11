@@ -4,7 +4,7 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -59,7 +59,7 @@ class GoogleSheetsIntegration(Integration):
 
             # Build the service
             self.__service = build("sheets", "v4", credentials=delegated_credentials)
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Sheets API client: {str(e)}")
 

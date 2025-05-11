@@ -6,7 +6,7 @@ from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow impo
     ConvertOntologyGraphToYamlConfiguration,
     ConvertOntologyGraphToYamlParameters,
 )
-from src import config, services
+from src import services
 from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
@@ -14,7 +14,6 @@ from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 from typing import Any
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
-import pydash as _
 from rdflib import Graph, URIRef, RDFS, Literal, RDF, OWL
 from abi.utils.SPARQL import results_to_list, get_class_uri_from_individual_uri
 

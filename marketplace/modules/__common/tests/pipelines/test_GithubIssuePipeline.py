@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch
-from datetime import datetime
+from unittest.mock import Mock
 from rdflib import Graph
 
 from src.core.modules.common.pipelines.github.GithubIssuePipeline import (

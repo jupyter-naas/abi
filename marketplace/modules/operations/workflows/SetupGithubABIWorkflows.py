@@ -4,14 +4,12 @@ from src.core.modules.common.integrations.GithubIntegration import (
     GithubIntegration,
     GithubIntegrationConfiguration,
 )
-from src import secret, config
 from dataclasses import dataclass
 from pydantic import Field
 from typing import Dict, List
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 import os
-from abi import logger
 
 
 @dataclass
@@ -84,7 +82,7 @@ class SetupGithubABIWorkflows(Workflow):
             if repo:
                 message = f"Repository {parameters.repository_name} already exists in organization {parameters.org_name}"
                 return message
-        except:
+        except Exception as _:
             # Create private repository via GitHub API if it doesn't exist
             repo = self.__github.create_organization_repository(
                 org=parameters.org_name,

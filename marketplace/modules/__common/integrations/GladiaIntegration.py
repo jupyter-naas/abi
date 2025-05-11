@@ -4,7 +4,7 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, BinaryIO
+from typing import Dict, List, BinaryIO
 import requests
 
 LOGO_URL = "https://logo.clearbit.com/gladia.io"

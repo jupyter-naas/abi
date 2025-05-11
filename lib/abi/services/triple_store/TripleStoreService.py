@@ -3,8 +3,7 @@ from lib.abi.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
 )
-from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
-from rdflib import Graph, RDF, RDFS
+from rdflib import Graph, RDF
 from typing import Callable, List, Tuple
 import uuid
 import pydash
@@ -15,7 +14,7 @@ import base64
 from lib.abi import logger
 
 
-from lib.abi.utils.Workers import WorkerPool, Queue, Job
+from lib.abi.utils.Workers import WorkerPool, Job
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -239,10 +238,10 @@ class TripleStoreService(ITripleStoreService):
 
             # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
             if schema_dict["hash"] == new_content_hash:
-                logger.debug(f"Schema is up to date, no need to update.")
+                logger.debug("Schema is up to date, no need to update.")
                 return
 
-            logger.debug(f"Schema is not up to date, updating.")
+            logger.debug("Schema is not up to date, updating.")
 
             # Decode old content
             old_content = base64.b64decode(schema_dict["content"]).decode("utf-8")
@@ -291,7 +290,7 @@ class TripleStoreService(ITripleStoreService):
             # Return as we don't need to continue as we have already updated the schema.
             return
         elif not schema_exists_in_store:
-            logger.debug(f"Loading schema in graph as it doesn't exist in store.")
+            logger.debug("Loading schema in graph as it doesn't exist in store.")
 
             # Open file and get content.
             with open(filepath, "r") as file:

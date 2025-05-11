@@ -5,7 +5,7 @@ from lib.abi.integration.integration import (
 )
 from dataclasses import dataclass
 import requests
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 LOGO_URL = "https://logo.clearbit.com/notion.so"
 

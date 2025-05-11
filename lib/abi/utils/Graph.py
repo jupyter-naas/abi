@@ -1,8 +1,6 @@
 from rdflib import Namespace, URIRef, Literal, Graph as rdfgraph
-from rdflib.namespace import RDF, RDFS, OWL, DC, XSD, SKOS, DCTERMS
+from rdflib.namespace import RDF, RDFS, OWL, SKOS
 from urllib.parse import quote
-from typing import Union
-from typing import overload
 from datetime import datetime, date
 import pytz
 from abi import logger

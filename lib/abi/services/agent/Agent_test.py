@@ -13,9 +13,7 @@ def model():
 
 def test_no_tools_no_agents(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
-    from langchain_openai import ChatOpenAI
     from langchain_core.messages import AIMessage
-    import os
 
     agent = Agent(
         name="Test Agent",
@@ -38,10 +36,7 @@ def test_no_tools_no_agents(model):
 
 def test_tools_no_agents(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import AIMessage
     from langchain_core.tools import tool
-    import os
 
     @tool
     def test_tool(input: str) -> str:
@@ -75,9 +70,6 @@ def test_tools_no_agents(model):
 
 def test_agents_no_tools(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import AIMessage
-    import os
     from queue import Queue
 
     queue = Queue()
@@ -114,7 +106,7 @@ def test_agents_no_tools(model):
     assert queue.qsize() == 2
 
     while not queue.empty():
-        event = queue.get()
+        _ = queue.get()
 
 
 def test_agent_duplication(model):

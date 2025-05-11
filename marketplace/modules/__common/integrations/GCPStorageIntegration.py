@@ -4,7 +4,7 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Union, BinaryIO
+from typing import Dict, List, Optional, Union, BinaryIO
 from google.oauth2 import service_account
 from google.cloud import storage
 
@@ -48,7 +48,7 @@ class GCPStorageIntegration(Integration):
             self.__client = storage.Client(
                 credentials=self.__credentials, project=self.__configuration.project_id
             )
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Storage API client: {str(e)}")
 

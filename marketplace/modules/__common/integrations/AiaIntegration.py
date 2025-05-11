@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import (

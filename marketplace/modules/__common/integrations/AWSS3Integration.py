@@ -4,7 +4,7 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union, BinaryIO
+from typing import Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
 import os

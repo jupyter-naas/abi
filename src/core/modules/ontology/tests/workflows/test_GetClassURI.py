@@ -1,4 +1,5 @@
 from rdflib import Graph
+import json
 
 graph = Graph()
 graph.parse("src/core/modules/common/ontologies/ConsolidatedOntology.ttl")
@@ -72,7 +73,6 @@ for row in results:
     data.append(data_dict)
 
 print(data)
-import json
 
 with open(
     f"src/core/modules/ontology/tests/workflows/test_GetClassURI_{searchLabel}.json",

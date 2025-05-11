@@ -4,10 +4,9 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Union
 from google.oauth2 import service_account
 from google.cloud import bigquery
-from google.api_core import retry
 
 LOGO_URL = "https://static.amarello.cloud/img/bigquery.png"
 
@@ -51,7 +50,7 @@ class GCPBigQueryIntegration(Integration):
                 project=self.__configuration.project_id,
                 location=self.__configuration.location,
             )
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize BigQuery API client: {str(e)}")
 

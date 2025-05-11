@@ -21,7 +21,6 @@
 
 from src import services, secret
 from lib.abi.services.triple_store.TripleStorePorts import OntologyEvent
-from rdflib import URIRef, Literal
 from abi import logger
 
 

@@ -1,6 +1,5 @@
 from common import get_config, get_storage_credentials
 import os
-from datetime import datetime
 
 if __name__ == "__main__":
     naas_api_key, workspace_id, storage_name = get_config()

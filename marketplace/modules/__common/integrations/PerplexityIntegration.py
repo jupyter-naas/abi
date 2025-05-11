@@ -2,7 +2,6 @@ from typing import Optional, Dict, List
 import requests
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-from abi import logger
 from lib.abi.integration.integration import (
     Integration,
     IntegrationConnectionError,

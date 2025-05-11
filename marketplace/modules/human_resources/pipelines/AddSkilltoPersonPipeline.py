@@ -5,10 +5,8 @@ from dataclasses import dataclass
 from abi import logger
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, Any
-from abi.utils.Graph import CCO, ABI, ABIGraph
-from rdflib import Graph, URIRef, Literal, RDF, OWL, RDFS
-from urllib.parse import quote
+from abi.utils.Graph import ABI, ABIGraph
+from rdflib import Graph, URIRef
 
 
 @dataclass

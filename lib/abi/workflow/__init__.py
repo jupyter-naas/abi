@@ -1,1 +1,4 @@
-from abi.workflow.workflow import Workflow, WorkflowConfiguration
+from abi.workflow.workflow import (
+    Workflow as Workflow,
+    WorkflowConfiguration as WorkflowConfiguration,
+)

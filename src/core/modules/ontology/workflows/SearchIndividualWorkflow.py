@@ -6,7 +6,6 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 from abi.utils.SPARQL import results_to_list
-from abi import logger
 
 
 @dataclass

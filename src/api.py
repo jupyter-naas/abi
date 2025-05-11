@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.utils import get_openapi
@@ -6,18 +6,20 @@ from fastapi.security.oauth2 import OAuth2
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from src import secret
 import subprocess
 import os
 from abi import logger
 
 # Authentication
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
+
+# Automatic loading of agents from modules
+from src.__modules__ import get_modules
 
 # Init API
 TITLE = config.api_title
@@ -169,9 +171,6 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
-
-# Automatic loading of agents from modules
-from src.__modules__ import get_modules
 
 for module in get_modules():
     for agent in module.agents:

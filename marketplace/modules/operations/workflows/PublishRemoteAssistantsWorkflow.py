@@ -1,12 +1,10 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from abi.workflow.workflow import WorkflowParameters
 from src.core.modules.common.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
 from src import config, secret
 from dataclasses import dataclass
-from pydantic import Field
 from typing import List
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
@@ -14,7 +12,6 @@ from abi import logger
 import re
 import importlib
 from pathlib import Path
-import os
 
 
 @dataclass

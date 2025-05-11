@@ -48,7 +48,7 @@ def pipeline(name):
 
     # Import and run pipeline
     module_path = f"src.data.pipelines.{name}"
-    module = importlib.import_module(module_path)
+    _ = importlib.import_module(module_path)
 
 
 def main():
