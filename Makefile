@@ -36,7 +36,7 @@ test:
 
 check:
 	uvx ruff check
-
+	uvx mypy lib src
 
 sh: .venv
 	@ docker compose run --rm --remove-orphans -it abi bash
