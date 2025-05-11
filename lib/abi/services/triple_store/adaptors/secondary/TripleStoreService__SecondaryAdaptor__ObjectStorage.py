@@ -12,8 +12,6 @@ from lib.abi.services.triple_store.adaptors.secondary.base.TripleStoreService__S
 )
 from rdflib import Graph
 from typing import List, Dict, Tuple, Any
-import os
-import io
 from lib.abi.utils.Logger import logger
 from lib.abi.utils.Workers import WorkerPool, Job
 import queue

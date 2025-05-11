@@ -6,7 +6,6 @@ from lib.abi.integration.integration import (
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
-import time
 
 LOGO_URL = "https://wpforms.com/wp-content/uploads/cache/integrations/e102d25de690b520bb1136f4175d4570.png"
 

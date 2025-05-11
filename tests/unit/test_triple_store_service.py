@@ -1,5 +1,4 @@
 import pytest
-import os
 import tempfile
 from rdflib import Graph, URIRef, Literal
 from lib.abi.services.triple_store.TripleStoreFactory import TripleStoreFactory

@@ -7,10 +7,11 @@ from src import cli
 from src.__modules__ import get_modules
 import yaml
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from typing import List
 from lib.abi import logger
-from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
+from lib.abi.services.object_storage.ObjectStorageFactory import (
+    ObjectStorageFactory as ObjectStorageFactory,
+)
 import atexit
 
 

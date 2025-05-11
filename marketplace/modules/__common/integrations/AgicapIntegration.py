@@ -4,7 +4,7 @@ from lib.abi.integration.integration import (
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import requests
 import pandas as pd
 from datetime import datetime

@@ -21,13 +21,12 @@
 
 from src import services
 from lib.abi.services.triple_store.TripleStorePorts import OntologyEvent
-from rdflib import URIRef, Literal
-from abi import logger
+from rdflib import URIRef
 
 
 # Register organization logo update trigger
 def register_organization_logo_update_trigger():
-    from src import secret, config
+    from src import secret
     from src.core.modules.common.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )

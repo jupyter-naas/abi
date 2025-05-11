@@ -6,7 +6,6 @@ from lib.abi.integration.integration import (
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
-from datetime import datetime
 from abi import logger
 
 LOGO_URL = "https://logo.clearbit.com/pennylane.tech"

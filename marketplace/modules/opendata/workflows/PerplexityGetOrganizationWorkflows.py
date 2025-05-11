@@ -19,7 +19,6 @@ from lib.abi.services.object_storage.ObjectStoragePort import (
 )
 from abi.utils.JSON import extract_json_from_completion
 from abi.utils.String import create_id_from_string
-from urllib.parse import quote
 
 
 @dataclass

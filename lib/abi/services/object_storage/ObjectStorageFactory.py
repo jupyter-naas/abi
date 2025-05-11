@@ -1,6 +1,3 @@
-from lib.abi.services.object_storage.ObjectStoragePort import (
-    Exceptions as ObjectStorageExceptions,
-)
 from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
 from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,

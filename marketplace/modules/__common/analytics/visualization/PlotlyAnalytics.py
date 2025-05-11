@@ -1,8 +1,7 @@
 from lib.abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import List, Optional
 import plotly.graph_objects as go
-import plotly.express as px
 from plotly.subplots import make_subplots
 from datetime import datetime
 from pydantic import Field
@@ -250,7 +249,6 @@ class PlotlyAnalytics(Integration):
             >>> fig = analytics.create_linechart(x_data=[1,2,3], y_data=[4,5,6])
             >>> path = analytics.save_graph(fig, "my_chart")
         """
-        import os
         from pathlib import Path
 
         # Format the filename to be a valid filename
@@ -837,8 +835,7 @@ def as_tools(configuration: PlotlyAnalyticsConfiguration):
         list[StructuredTool]: List of LangChain tools for chart creation
     """
     from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel, Field
-    from typing import Optional, List
+    from pydantic import BaseModel
 
     analytics = PlotlyAnalytics(configuration)
 

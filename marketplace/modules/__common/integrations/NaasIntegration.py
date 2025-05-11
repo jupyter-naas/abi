@@ -14,7 +14,6 @@ import jwt
 
 from lib.abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
-    ObjectStorageExceptions,
     ObjectStorageService,
 )
 
@@ -530,7 +529,7 @@ class NaasIntegration(Integration):
             Dict: Response containing list of secrets
         """
         payload = {"page_size": 100, "page_number": 0}
-        return self._make_request("GET", f"/secret/", payload).get("secrets", [])
+        return self._make_request("GET", "/secret/", payload).get("secrets", [])
 
     def list_secrets_names(self) -> Dict:
         secrets = self.list_secrets()
@@ -547,7 +546,7 @@ class NaasIntegration(Integration):
             Dict: Response containing the created secret details
         """
         payload = {"secret": {"name": name, "value": value}}
-        return self._make_request("POST", f"/secret/", payload)
+        return self._make_request("POST", "/secret/", payload)
 
     def update_secret(self, secret_id: str, value: str) -> Dict:
         """Update an existing secret in a workspace.
@@ -662,7 +661,7 @@ class NaasIntegration(Integration):
 
         # Create storage if it doesn't exist
         if not storage_exist:
-            new_storage = self.create_workspace_storage(workspace_id, storage_name)
+            _ = self.create_workspace_storage(workspace_id, storage_name)
             logger.info(f"Created storage {storage_name} in workspace {workspace_id}")
 
         # Get storage credentials
