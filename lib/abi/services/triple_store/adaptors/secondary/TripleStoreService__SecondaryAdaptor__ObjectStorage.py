@@ -211,8 +211,8 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
 
     def handle_view_event(
         self,
-        view: Tuple[str, str, str],
+        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[str, str, str],
+        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
