@@ -8,8 +8,8 @@ from src.__modules__ import get_modules
 import yaml
 from dataclasses import dataclass
 from typing import List
-from lib.abi import logger
-from lib.abi.services.object_storage.ObjectStorageFactory import (
+from abi import logger
+from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
 import atexit

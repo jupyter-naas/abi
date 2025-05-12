@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
 from typing import List, Optional
 import plotly.graph_objects as go

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,

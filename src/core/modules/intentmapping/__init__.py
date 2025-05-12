@@ -1,5 +1,5 @@
 from .TemplatableSparqlQuery import load_workflows
-from lib.abi import logger
+from abi import logger
 
 workflows = []
 tools = []

@@ -3,7 +3,7 @@ from datetime import datetime
 import replicate
 import requests
 from src import config
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,

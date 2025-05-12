@@ -1,4 +1,4 @@
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStoragePort import (
     IObjectStorageAdapter,
     Exceptions,
 )
