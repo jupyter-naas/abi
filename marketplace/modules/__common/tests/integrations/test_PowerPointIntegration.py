@@ -1,5 +1,7 @@
-from src.core.modules.common.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration
-from abi import logger
+from src.core.modules.common.integrations.PowerPointIntegration import (
+    PowerPointIntegration,
+    PowerPointIntegrationConfiguration,
+)
 
 # Initialize configuration
 template_path = "assets/PresentationTemplate.pptx"

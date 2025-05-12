@@ -66,7 +66,7 @@ This initialization is handled automatically when the application starts, allowi
 The Triple Store Service provides factory methods to create service instances based on your needs:
 
 ```python
-from lib.abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
+from abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
 
 # Create a filesystem-based triple store service
 triple_store = TripleStoreFactory.TripleStoreServiceFilesystem("/path/to/triple_store")
@@ -202,7 +202,7 @@ Adapter for using Naas-managed cloud storage for RDF triples.
 The Triple Store Service provides an event system for reacting to changes in the RDF data:
 
 ```python
-from lib.abi.services.triple_store.TripleStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 
 # Subscribe to all triple insertions with any predicate for a specific subject
 subscription_id = triple_store.subscribe(
@@ -304,7 +304,7 @@ Creating a new secondary adapter allows you to extend the Triple Store Service t
 Here's a simplified example implementation of an in-memory adapter:
 
 ```python
-from lib.abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent, Exceptions
+from abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent, Exceptions
 from rdflib import Graph
 from typing import Tuple
 
@@ -367,7 +367,7 @@ def TripleStoreServiceInMemory() -> TripleStoreService:
     Returns:
         TripleStoreService: Configured service instance using in-memory storage
     """
-    from lib.abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__InMemory import TripleStoreService__SecondaryAdaptor__InMemory
+    from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__InMemory import TripleStoreService__SecondaryAdaptor__InMemory
     return TripleStoreService(TripleStoreService__SecondaryAdaptor__InMemory())
 ```
 
@@ -376,7 +376,7 @@ def TripleStoreServiceInMemory() -> TripleStoreService:
 You can now use your in-memory adapter in your application:
 
 ```python
-from lib.abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
+from abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
 
 # Create an in-memory triple store service
 triple_store = TripleStoreFactory.TripleStoreServiceInMemory()

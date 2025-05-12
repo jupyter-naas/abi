@@ -1,1 +1,1 @@
-from abi.integration.integration import Integration
+from abi.integration.integration import Integration as Integration

@@ -4,4 +4,4 @@ DESCRIPTION = "Top-tier reasoning for high-complexity tasks."
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/mistralai_100x100.jpg"
 MODEL_TYPE = "chat"
 CONTEXT_WINDOW = 32000
-OWNER = "mistral" 
+OWNER = "mistral"

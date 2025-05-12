@@ -1,12 +1,33 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.core.modules.common.integrations import HubSpotIntegration, LinkedInIntegration, PipedriveIntegration, YouTubeIntegration, GoogleAnalyticsIntegration
-from src.core.modules.common.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.modules.common.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
-from src.core.modules.common.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
-from src.core.modules.common.integrations.GoogleAnalyticsIntegration import GoogleAnalyticsIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    HubSpotIntegration,
+    LinkedInIntegration,
+    PipedriveIntegration,
+    YouTubeIntegration,
+    GoogleAnalyticsIntegration,
+)
+from src.core.modules.common.integrations.HubSpotIntegration import (
+    HubSpotIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.LinkedInIntegration import (
+    LinkedInIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.PipedriveIntegration import (
+    PipedriveIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.YouTubeIntegration import (
+    YouTubeIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.GoogleAnalyticsIntegration import (
+    GoogleAnalyticsIntegrationConfiguration,
+)
 
 NAME = "Lead Generation"
 SLUG = "lead-generation"
@@ -51,52 +72,61 @@ Remember to:
 - Optimize based on feedback
 """
 
+
 def create_lead_generation_agent(
     agent_configuration: AgentConfiguration = None,
-    agent_shared_state: AgentSharedState = None
+    agent_shared_state: AgentSharedState = None,
 ) -> Agent:
     model = ChatOpenAI(
         model=MODEL,
         temperature=TEMPERATURE,
-        openai_api_key=secret.get('OPENAI_API_KEY')
+        openai_api_key=secret.get("OPENAI_API_KEY"),
     )
     tools = []
 
-    hubspot_access_token = secret.get('HUBSPOT_ACCESS_TOKEN')
+    hubspot_access_token = secret.get("HUBSPOT_ACCESS_TOKEN")
     if hubspot_access_token:
-        tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(access_token=hubspot_access_token))
+        tools += HubSpotIntegration.as_tools(
+            HubSpotIntegrationConfiguration(access_token=hubspot_access_token)
+        )
 
-    li_at = secret.get('li_at')
-    JSESSIONID = secret.get('JSESSIONID')
+    li_at = secret.get("li_at")
+    JSESSIONID = secret.get("JSESSIONID")
     if li_at and JSESSIONID:
-        tools += LinkedInIntegration.as_tools(LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
+        tools += LinkedInIntegration.as_tools(
+            LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+        )
 
-    pipedrive_api_key = secret.get('PIPEDRIVE_API_KEY')
+    pipedrive_api_key = secret.get("PIPEDRIVE_API_KEY")
     if pipedrive_api_key:
-        tools += PipedriveIntegration.as_tools(PipedriveIntegrationConfiguration(api_key=pipedrive_api_key))
+        tools += PipedriveIntegration.as_tools(
+            PipedriveIntegrationConfiguration(api_key=pipedrive_api_key)
+        )
 
-    youtube_key = secret.get('YOUTUBE_API_KEY')
+    youtube_key = secret.get("YOUTUBE_API_KEY")
     if youtube_key:
-        tools += YouTubeIntegration.as_tools(YouTubeIntegrationConfiguration(api_key=youtube_key))
+        tools += YouTubeIntegration.as_tools(
+            YouTubeIntegrationConfiguration(api_key=youtube_key)
+        )
 
-    google_analytics_key = secret.get('GOOGLE_ANALYTICS_KEY')
+    google_analytics_key = secret.get("GOOGLE_ANALYTICS_KEY")
     if google_analytics_key:
-        tools += GoogleAnalyticsIntegration.as_tools(GoogleAnalyticsIntegrationConfiguration(api_key=google_analytics_key))
+        tools += GoogleAnalyticsIntegration.as_tools(
+            GoogleAnalyticsIntegrationConfiguration(api_key=google_analytics_key)
+        )
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )

@@ -1,67 +1,73 @@
-[tool.poetry]
+[project]
 name = "src"
 version = "0.1.0"
 description = "AI system"
-authors = ["AI Team <aiteam@company.com>"]
+authors = [{ name = "AI Team", email = "aiteam@company.com" }]
+requires-python = "~=3.9"
 readme = "README.md"
+dependencies = [
+    "pyyaml>=6.0.1,<7",
+    "abi[all]",
+    "requests>=2.32.3,<3",
+    "fastapi>=0.115.5,<0.116",
+    "uvicorn[standard]>=0.32.1,<0.33",
+    "replicate>=1.0.4,<2",
+    "pydash>=8.0.4,<9",
+    "pandas>=2.2.3,<3",
+    "click>=8.1.7,<9",
+    "jwt>=1.3.1,<2",
+    "pyjwt>=2.10.1,<3",
+    "boto3>=1.35.82,<2",
+    "google>=3.0.0,<4",
+    "google-auth-oauthlib>=1.2.1,<2",
+    "google-api-python-client>=2.155.0,<3",
+    "google-analytics-data>=0.18.16,<0.19",
+    "psycopg2-binary>=2.9.10,<3",
+    "supabase>=2.10.0,<3",
+    "yfinance>=0.2.50,<0.3",
+    "algoliasearch>=4.11.1,<5",
+    "google-cloud-bigquery>=3.27.0,<4",
+    "google-cloud-functions>=1.19.0,<2",
+    "google-cloud-storage>=2.19.0,<3",
+    "plotly>=5.24.1,<6",
+    "rich>=13.9.4,<14",
+    "pillow>=11.0.0,<12",
+    "kaleido==0.2.1",
+    "matplotlib>=3.7.1,<4",
+    "seaborn>=0.13.2,<0.14",
+    "gitpython>=3.1.43,<4",
+    "openpyxl>=3.1.5,<4",
+    "python-multipart>=0.0.20,<0.0.21",
+    "wordcloud>=1.9.4,<2",
+    "imapclient>=3.0.1,<4",
+    "pynacl>=1.5.0,<2",
+    "python-pptx>=1.0.2,<2",
+    "arxiv>=2.1.3,<3",
+    "jinja2>=3.1.6,<4",
+    "mypy>=1.15.0",
+    "types-requests>=2.31.0.6",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-pyyaml = "^6.0.1"
-abi = {path = "./lib", develop = true, extras = ["all"]} 
-requests = "^2.32.3"
-fastapi = "^0.115.5"
-uvicorn = {extras = ["standard"], version = "^0.32.1"}
-replicate = "^1.0.4"
-pydash = "^8.0.4"
-pandas = "^2.2.3"
-click = "^8.1.7"
-jwt = "^1.3.1"
-pyjwt = "^2.10.1"
-boto3 = "^1.35.82"
-google = "^3.0.0"
-google-auth-oauthlib = "^1.2.1"
-google-api-python-client = "^2.155.0"
-google-analytics-data = "^0.18.16"
-psycopg2-binary = "^2.9.10"
-supabase = "^2.10.0"
-yfinance = "^0.2.50"
-algoliasearch = "^4.11.1"
-google-cloud-bigquery = "^3.27.0"
-google-cloud-functions = "^1.19.0"
-google-cloud-storage = "^2.19.0"
-plotly = "^5.24.1"
-rich = "^13.9.4"
-pillow = "^11.0.0"
-kaleido = "0.2.1"
-matplotlib = "^3.7.1"
-seaborn = "^0.13.2"
-gitpython = "^3.1.43"
-openpyxl = "^3.1.5"
-python-multipart = "^0.0.20"
-wordcloud = "^1.9.4"
-imapclient = "^3.0.1"
-pynacl = "^1.5.0"
-python-pptx = "^1.0.2"
-arxiv = "^2.1.3"
-#siteanalyzer = { path = "./src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-0.1.0-py3-none-any.whl", develop = true }
-jinja2 = "^3.1.6"
-
-[tool.poetry.group.terminal-agent.dependencies]
-langchain-anthropic = "^0.3.0"
-langchain-openai = "^0.3.3"
-rich = "^13.9.4"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.4"
-ipykernel = "^6.29.5"
-
-[tool.poetry.scripts]
+[project.scripts]
 abi = "src.cli:main"
 api = "src.api:api"
-
 chat-arxiv-agent = "src.apps.terminal_agent.main:run_arxiv_agent"
 
+[dependency-groups]
+terminal-agent = [
+    "langchain-anthropic>=0.3.0,<0.4",
+    "langchain-openai>=0.3.3,<0.4",
+    "rich>=13.9.4,<14",
+]
+dev = [
+    "pytest>=8.3.4,<9",
+    "ipykernel>=6.29.5,<7",
+]
+
+
+[tool.uv.sources]
+abi = { path = "./lib", editable = true }
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"

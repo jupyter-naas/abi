@@ -1,5 +1,8 @@
 from abi.workflow import Workflow, WorkflowConfiguration
-from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
+from src.core.modules.common.integrations.LinkedInIntegration import (
+    LinkedInIntegration,
+    LinkedInIntegrationConfiguration,
+)
 from dataclasses import dataclass
 from pydantic import Field
 from datetime import datetime, date, timedelta
@@ -13,44 +16,57 @@ from fastapi import APIRouter
 
 LOGO_URL = "https://logo.clearbit.com/linkedin.com"
 
+
 @dataclass
 class LinkedinPostsWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for LinkedIn Posts Workflow.
-    
+
     Attributes:
         linkedin_integration_config (LinkedInIntegrationConfiguration): LinkedIn integration configuration
     """
+
     linkedin_integration_config: LinkedInIntegrationConfiguration
 
 
 class LinkedinPostsWorkflowParameters(WorkflowParameters):
     """Parameters for LinkedIn Posts Workflow execution.
-    
+
     Attributes:
         linkedin_url (str): LinkedIn profile or organization post URL
         days_start (int): Number of days back to fetch posts from
         timezone (str): Timezone to use for date calculations
     """
+
     linkedin_url: str = Field(..., description="LinkedIn profile or organization URL")
-    days_start: Optional[int] = Field(default=3, description="Number of days back to fetch posts from")
-    timezone: Optional[str] = Field(default="Europe/Paris", description="Timezone to use for date calculations")
+    days_start: Optional[int] = Field(
+        default=3, description="Number of days back to fetch posts from"
+    )
+    timezone: Optional[str] = Field(
+        default="Europe/Paris", description="Timezone to use for date calculations"
+    )
+
 
 class LinkedinPostsWorkflow(Workflow):
     """Workflow for fetching LinkedIn posts from a profile or organization."""
+
     __configuration: LinkedinPostsWorkflowConfiguration
-    
+
     def __init__(self, configuration: LinkedinPostsWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__linkedin_integration = LinkedInIntegration(self.__configuration.linkedin_integration_config)
+        self.__linkedin_integration = LinkedInIntegration(
+            self.__configuration.linkedin_integration_config
+        )
 
     def run(self, parameters: LinkedinPostsWorkflowParameters) -> pd.DataFrame:
         # Initialize empty DataFrame
         df = pd.DataFrame()
         TIMEZONE = pytz.timezone(parameters.timezone)
-        
+
         # Calculate start date
-        date_start = date.today() - timedelta(days=datetime.now(TIMEZONE).weekday() + parameters.days_start)
+        date_start = date.today() - timedelta(
+            days=datetime.now(TIMEZONE).weekday() + parameters.days_start
+        )
 
         # Initialize pagination variables
         logger.info(f"Linkedin URL: {parameters.linkedin_url}")
@@ -68,17 +84,21 @@ class LinkedinPostsWorkflow(Workflow):
                         linkedin_url=parameters.linkedin_url,
                         pagination_token=pagination_token,
                         limit=1,
-                        sleep=False
+                        sleep=False,
                     )
-                    pagination_token = tmp_df.loc[0, "PAGINATION_TOKEN"] if not tmp_df.empty else None
-                    
-                elif "/company/" or "/school/" or "/showcase/" in parameters.linkedin_url:
+                    pagination_token = (
+                        tmp_df.loc[0, "PAGINATION_TOKEN"] if not tmp_df.empty else None
+                    )
+
+                elif (
+                    "/company/" or "/school/" or "/showcase/" in parameters.linkedin_url
+                ):
                     # Get organization posts
                     tmp_df = self.__linkedin_integration.get_organization_posts(
                         linkedin_url=parameters.linkedin_url,
                         start=start,
                         limit=1,
-                        sleep=False
+                        sleep=False,
                     )
                     start += 1
                 else:
@@ -91,9 +111,13 @@ class LinkedinPostsWorkflow(Workflow):
                 title = tmp_df.loc[0, "TITLE"]
                 published_date = tmp_df.loc[0, "PUBLISHED_DATE"]
                 post_url = tmp_df.loc[0, "POST_URL"]
-                
+
                 # Parse date
-                date_format = "%Y-%m-%d %H:%M:%S%z" if "/in/" in parameters.linkedin_url else "%Y-%m-%d %H:%M:%S"
+                date_format = (
+                    "%Y-%m-%d %H:%M:%S%z"
+                    if "/in/" in parameters.linkedin_url
+                    else "%Y-%m-%d %H:%M:%S"
+                )
                 datetime_obj = datetime.strptime(published_date, date_format).date()
 
                 # Check if published date > date_limit
@@ -101,26 +125,30 @@ class LinkedinPostsWorkflow(Workflow):
                     break
 
                 # Concat dataframes
-                logger.info(f"{i} - ✅ '{title}' published on {published_date} ({post_url})")
+                logger.info(
+                    f"{i} - ✅ '{title}' published on {published_date} ({post_url})"
+                )
                 df = pd.concat([df, tmp_df])
                 i += 1
 
             except Exception as e:
                 logger.debug(f"Error: {str(e)}")
-                if hasattr(e, 'response') and e.response.status_code == 302:
+                if hasattr(e, "response") and e.response.status_code == 302:
                     raise e
                 break
 
-        return df.to_dict('records')
-    
+        return df.to_dict("records")
+
     def as_tools(self) -> list[StructuredTool]:
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
                 name="linkedin_get_posts_from_url",
                 description="Get LinkedIn posts for a profile or organization within date range.",
-                func=lambda **kwargs: self.run(LinkedinPostsWorkflowParameters(**kwargs)).to_dict('records'),
-                args_schema=LinkedinPostsWorkflowParameters
+                func=lambda **kwargs: self.run(
+                    LinkedinPostsWorkflowParameters(**kwargs)
+                ).to_dict("records"),
+                args_schema=LinkedinPostsWorkflowParameters,
             )
         ]
 

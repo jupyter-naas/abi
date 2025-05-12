@@ -1,9 +1,19 @@
-from src.core.modules.common.workflows.powerpoint.UpdateSlidesWorkflow import UpdateSlidesWorkflow, UpdateSlidesWorkflowConfiguration, UpdateSlidesWorkflowParameters
+from src.core.modules.common.workflows.powerpoint.UpdateSlidesWorkflow import (
+    UpdateSlidesWorkflow,
+    UpdateSlidesWorkflowConfiguration,
+    UpdateSlidesWorkflowParameters,
+)
 from abi import logger
 from src import secret
-from src.core.modules.common.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.modules.common.integrations.OpenAIIntegration import OpenAIIntegrationConfiguration
-from src.core.modules.common.integrations.PowerPointIntegration import PowerPointIntegrationConfiguration
+from src.core.modules.common.integrations.NaasIntegration import (
+    NaasIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.OpenAIIntegration import (
+    OpenAIIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.PowerPointIntegration import (
+    PowerPointIntegrationConfiguration,
+)
 
 # Initialize naas integration
 naas_integration_config = NaasIntegrationConfiguration(
@@ -43,5 +53,7 @@ Our value proposition centers on AI innovation and practical business applicatio
 - Industry-specific AI applications
 """
 use_cache = True
-output = workflow.update_slides(UpdateSlidesWorkflowParameters(text=text, use_cache=use_cache))
+output = workflow.update_slides(
+    UpdateSlidesWorkflowParameters(text=text, use_cache=use_cache)
+)
 logger.info(output)
