@@ -14,7 +14,7 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
     def __create_path(self, prefix: str) -> None:
         os.makedirs(os.path.join(self.base_path, prefix), exist_ok=True)
 
-    def __path_exists(self, prefix: str, key: str = None) -> bool:
+    def __path_exists(self, prefix: str, key: str | None = None) -> bool:
         if key is None:
             exists = os.path.exists(os.path.join(self.base_path, prefix))
         else:
