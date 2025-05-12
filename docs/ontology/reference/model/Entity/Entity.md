@@ -32,10 +32,7 @@ graph BT
 
 ## Properties
 ### Data Properties
-| Predicate | Domain | Range | Label | Definition | Example |
-|-----------|---------|--------|---------|------------|----------|
-
 ### Object Properties
-| Predicate | Domain | Range | Label | Definition | Example | Inverse Of |
-|-----------|---------|--------|---------|------------|----------|------------|
-| http://purl.obolibrary.org/obo/BFO_0000108 | ['http://purl.obolibrary.org/obo/BFO_0000001'] | ['http://purl.obolibrary.org/obo/BFO_0000008'] | exists at | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | None |
+| Label | Definition | Example | Domain | Range | Inverse Of |
+|-------|------------|---------|--------|-------|------------|
+| [exists at](http://purl.obolibrary.org/obo/BFO_0000108) | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | [entity](http://purl.obolibrary.org/obo/BFO_0000001) | [temporal region](http://purl.obolibrary.org/obo/BFO_0000008) | []([]) |

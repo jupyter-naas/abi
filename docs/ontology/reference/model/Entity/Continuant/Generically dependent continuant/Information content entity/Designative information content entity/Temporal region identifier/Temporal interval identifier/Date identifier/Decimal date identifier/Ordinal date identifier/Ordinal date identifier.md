@@ -15,7 +15,7 @@ Not defined.
 https://www.commoncoreontologies.org/ont00000087
 
 ### Subclass Of
-- https://www.commoncoreontologies.org/ont00000894
+- Decimal Date Identifier: https://www.commoncoreontologies.org/ont00000894
 
 ### Ontology Reference
 - https://www.commoncoreontologies.org/InformationEntityOntology
@@ -23,15 +23,15 @@ https://www.commoncoreontologies.org/ont00000087
 ### Hierarchy
 ```mermaid
 graph BT
-    ont00000087(Ordinal<br>date<br>identifier<br>ont00000087):::ABI-->ont00000894
-    ont00000894(Decimal<br>date<br>identifier<br>ont00000894):::ABI-->ont00000529
-    ont00000529(Date<br>identifier<br>ont00000529):::ABI-->ont00000073
-    ont00000073(Temporal<br>interval<br>identifier<br>ont00000073):::ABI-->ont00000399
-    ont00000399(Temporal<br>region<br>identifier<br>ont00000399):::ABI-->ont00000686
-    ont00000686(Designative<br>information<br>content<br>entity<br>ont00000686):::ABI-->ont00000958
-    ont00000958(Information<br>content<br>entity<br>ont00000958):::BFO-->BFO_0000031
-    BFO_0000031(Generically<br>dependent<br>continuant<br>BFO_0000031):::BFO-->BFO_0000002
-    BFO_0000002(Continuant<br>BFO_0000002):::BFO-->BFO_0000001
+    ont00000087(Ordinal<br>date<br>identifier):::ABI-->ont00000894
+    ont00000894(Decimal<br>date<br>identifier):::ABI-->ont00000529
+    ont00000529(Date<br>identifier):::ABI-->ont00000073
+    ont00000073(Temporal<br>interval<br>identifier):::ABI-->ont00000399
+    ont00000399(Temporal<br>region<br>identifier):::ABI-->ont00000686
+    ont00000686(Designative<br>information<br>content<br>entity):::ABI-->ont00000958
+    ont00000958(Information<br>content<br>entity):::BFO-->BFO_0000031
+    BFO_0000031(Generically<br>dependent<br>continuant):::BFO-->BFO_0000002
+    BFO_0000002(Continuant):::BFO-->BFO_0000001
     BFO_0000001(Entity):::BFO
     
     classDef BFO fill:#97c1fb,color:#060606
@@ -41,19 +41,16 @@ graph BT
 
 ## Properties
 ### Data Properties
-| Predicate | Domain | Range | Label | Definition | Example |
-|-----------|---------|--------|---------|------------|----------|
-
 ### Object Properties
-| Predicate | Domain | Range | Label | Definition | Example | Inverse Of |
-|-----------|---------|--------|---------|------------|----------|------------|
-| http://purl.obolibrary.org/obo/BFO_0000058 | ['http://purl.obolibrary.org/obo/BFO_0000031'] | [{'or': {'or': ['http://purl.obolibrary.org/obo/BFO_0000015']}}] | is concretized by | c is concretized by b =Def b concretizes c |  | ['http://purl.obolibrary.org/obo/BFO_0000059'] |
-| http://purl.obolibrary.org/obo/BFO_0000084 | ['http://purl.obolibrary.org/obo/BFO_0000031'] | [{'and': {'and': ['http://purl.obolibrary.org/obo/BFO_0000004']}}] | generically depends on | b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t |  | ['http://purl.obolibrary.org/obo/BFO_0000101'] |
-| http://purl.obolibrary.org/obo/BFO_0000108 | ['http://purl.obolibrary.org/obo/BFO_0000001'] | ['http://purl.obolibrary.org/obo/BFO_0000008'] | exists at | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | None |
-| http://purl.obolibrary.org/obo/BFO_0000176 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000002'] | continuant part of | b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t | Milk teeth continuant part of human; surgically removed tumour continuant part of organism | ['http://purl.obolibrary.org/obo/BFO_0000178'] |
-| http://purl.obolibrary.org/obo/BFO_0000178 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000002'] | has continuant part | b has continuant part c =Def c continuant part of b |  | None |
-| https://www.commoncoreontologies.org/ont00001808 | ['https://www.commoncoreontologies.org/ont00000958'] | ['http://purl.obolibrary.org/obo/BFO_0000001'] | is about | A primitive relationship between an Information Content Entity and some Entity. |  | None |
-| https://www.commoncoreontologies.org/ont00001816 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is output of | x is_output_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the end of y is a necessary condition for the completion of y. |  | ['https://www.commoncoreontologies.org/ont00001986'] |
-| https://www.commoncoreontologies.org/ont00001841 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is input of | x is_input_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the beginning of y is a necessary condition for the start of y. |  | ['https://www.commoncoreontologies.org/ont00001921'] |
-| https://www.commoncoreontologies.org/ont00001886 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is affected by | x is_affected_by y iff x is an instance of Continuant and y is an instance of Process, and y influences x in some manner, most often by producing a change in x. |  | None |
-| https://www.commoncoreontologies.org/ont00001916 | ['https://www.commoncoreontologies.org/ont00000686'] | None | designates | x designates y iff x is an instance of an Information Content Entity, and y is an instance of an Entity, such that given some context, x uniquely distinguishes y from other entities. | a vehicle identification number designates some vehicle | None |
+| Label | Definition | Example | Domain | Range | Inverse Of |
+|-------|------------|---------|--------|-------|------------|
+| [exists at](https://www.commoncoreontologies.org/ont00001916) | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | [entity](http://purl.obolibrary.org/obo/BFO_0000001) | [temporal region](http://purl.obolibrary.org/obo/BFO_0000008) | []([]) |
+| [continuant part of](https://www.commoncoreontologies.org/ont00001916) | b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t | Milk teeth continuant part of human; surgically removed tumour continuant part of organism | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [has continuant part](http://purl.obolibrary.org/obo/BFO_0000178) |
+| [has continuant part](https://www.commoncoreontologies.org/ont00001916) | b has continuant part c =Def c continuant part of b |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | []([]) |
+| [is output of](https://www.commoncoreontologies.org/ont00001916) | x is_output_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the end of y is a necessary condition for the completion of y. |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | [has output](https://www.commoncoreontologies.org/ont00001986) |
+| [is input of](https://www.commoncoreontologies.org/ont00001916) | x is_input_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the beginning of y is a necessary condition for the start of y. |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | [has input](https://www.commoncoreontologies.org/ont00001921) |
+| [is affected by](https://www.commoncoreontologies.org/ont00001916) | x is_affected_by y iff x is an instance of Continuant and y is an instance of Process, and y influences x in some manner, most often by producing a change in x. |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | []([]) |
+| [is concretized by](https://www.commoncoreontologies.org/ont00001916) | c is concretized by b =Def b concretizes c |  | [generically dependent continuant](http://purl.obolibrary.org/obo/BFO_0000031) | {'or': {'or': ['http://purl.obolibrary.org/obo/BFO_0000015']}} | [concretizes](http://purl.obolibrary.org/obo/BFO_0000059) |
+| [generically depends on](https://www.commoncoreontologies.org/ont00001916) | b generically depends on c =Def b is a generically dependent continuant & c is an independent continuant that is not a spatial region & at some time t there inheres in c a specifically dependent continuant which concretizes b at t |  | [generically dependent continuant](http://purl.obolibrary.org/obo/BFO_0000031) | {'and': {'and': ['http://purl.obolibrary.org/obo/BFO_0000004']}} | [is carrier of](http://purl.obolibrary.org/obo/BFO_0000101) |
+| [is about](https://www.commoncoreontologies.org/ont00001916) | A primitive relationship between an Information Content Entity and some Entity. |  | [Information Content Entity](https://www.commoncoreontologies.org/ont00000958) | [entity](http://purl.obolibrary.org/obo/BFO_0000001) | []([]) |
+| [designates](https://www.commoncoreontologies.org/ont00001916) | x designates y iff x is an instance of an Information Content Entity, and y is an instance of an Entity, such that given some context, x uniquely distinguishes y from other entities. | a vehicle identification number designates some vehicle | [Designative Information Content Entity](https://www.commoncoreontologies.org/ont00000686) |  | []([]) |

@@ -9,14 +9,14 @@ An Air-Breathing Jet Engine that uses the forward motion of the Engine to compre
 Not defined.
 
 ### Aliases
-- Scramjet
 - Supersonic Combusting Ramjet
+- Scramjet
 
 ### URI
 https://www.commoncoreontologies.org/ont00001121
 
 ### Subclass Of
-- https://www.commoncoreontologies.org/ont00000294
+- Air-Breathing Jet Engine: https://www.commoncoreontologies.org/ont00000294
 
 ### Ontology Reference
 - https://www.commoncoreontologies.org/ArtifactOntology
@@ -24,15 +24,15 @@ https://www.commoncoreontologies.org/ont00001121
 ### Hierarchy
 ```mermaid
 graph BT
-    ont00001121(Scramjet<br>engine<br>ont00001121):::ABI-->ont00000294
-    ont00000294(Air-breathing<br>jet<br>engine<br>ont00000294):::ABI-->ont00000533
-    ont00000533(Jet<br>engine<br>ont00000533):::ABI-->ont00000056
-    ont00000056(Reaction<br>engine<br>ont00000056):::ABI-->ont00000210
-    ont00000210(Engine<br>ont00000210):::ABI-->ont00000995
-    ont00000995(Material<br>artifact<br>ont00000995):::BFO-->BFO_0000040
-    BFO_0000040(Material<br>entity<br>BFO_0000040):::BFO-->BFO_0000004
-    BFO_0000004(Independent<br>continuant<br>BFO_0000004):::BFO-->BFO_0000002
-    BFO_0000002(Continuant<br>BFO_0000002):::BFO-->BFO_0000001
+    ont00001121(Scramjet<br>engine):::ABI-->ont00000294
+    ont00000294(Air-breathing<br>jet<br>engine):::ABI-->ont00000533
+    ont00000533(Jet<br>engine):::ABI-->ont00000056
+    ont00000056(Reaction<br>engine):::ABI-->ont00000210
+    ont00000210(Engine):::ABI-->ont00000995
+    ont00000995(Material<br>artifact):::BFO-->BFO_0000040
+    BFO_0000040(Material<br>entity):::BFO-->BFO_0000004
+    BFO_0000004(Independent<br>continuant):::BFO-->BFO_0000002
+    BFO_0000002(Continuant):::BFO-->BFO_0000001
     BFO_0000001(Entity):::BFO
     
     classDef BFO fill:#97c1fb,color:#060606
@@ -42,23 +42,20 @@ graph BT
 
 ## Properties
 ### Data Properties
-| Predicate | Domain | Range | Label | Definition | Example |
-|-----------|---------|--------|---------|------------|----------|
-
 ### Object Properties
-| Predicate | Domain | Range | Label | Definition | Example | Inverse Of |
-|-----------|---------|--------|---------|------------|----------|------------|
-| http://purl.obolibrary.org/obo/BFO_0000108 | ['http://purl.obolibrary.org/obo/BFO_0000001'] | ['http://purl.obolibrary.org/obo/BFO_0000008'] | exists at | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | None |
-| http://purl.obolibrary.org/obo/BFO_0000115 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000040'] | has member part | b has member part c =Def c member part of b |  | ['http://purl.obolibrary.org/obo/BFO_0000129'] |
-| http://purl.obolibrary.org/obo/BFO_0000127 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000016'] | material basis of | b material basis of c =Def c has material basis b |  | ['http://purl.obolibrary.org/obo/BFO_0000218'] |
-| http://purl.obolibrary.org/obo/BFO_0000129 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000040'] | member part of | b member part of c =Def b is an object & c is a material entity & there is some time t such that b continuant part of c at t & there is a mutually exhaustive and pairwise disjoint partition of c into objects x1, ..., xn (for some n ≠ 1) with b = xi (for some 1 <= i <= n) |  | None |
-| http://purl.obolibrary.org/obo/BFO_0000176 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000002'] | continuant part of | b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t | Milk teeth continuant part of human; surgically removed tumour continuant part of organism | ['http://purl.obolibrary.org/obo/BFO_0000178'] |
-| http://purl.obolibrary.org/obo/BFO_0000178 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000002'] | has continuant part | b has continuant part c =Def c continuant part of b |  | None |
-| http://purl.obolibrary.org/obo/BFO_0000185 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000182'] | has history | b has history c =Def c history of b | This organism has history this life | None |
-| https://www.commoncoreontologies.org/ont00001775 | ['http://purl.obolibrary.org/obo/BFO_0000004'] | ['http://purl.obolibrary.org/obo/BFO_0000004'] | is successor of | A continuant c2 is a successor of some continuant c1 iff there is some process p1 and c1 is an input to p1 and c2 is an output of p1. Inverse of is predecessor.  |  | ['https://www.commoncoreontologies.org/ont00001928'] |
-| https://www.commoncoreontologies.org/ont00001816 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is output of | x is_output_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the end of y is a necessary condition for the completion of y. |  | ['https://www.commoncoreontologies.org/ont00001986'] |
-| https://www.commoncoreontologies.org/ont00001841 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is input of | x is_input_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the beginning of y is a necessary condition for the start of y. |  | ['https://www.commoncoreontologies.org/ont00001921'] |
-| https://www.commoncoreontologies.org/ont00001852 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | accessory in | y is_accessory_in x iff x is an instance of Process and y is an instance of Agent, such that y assists another agent in the commission of x, and y was not located at the location of x when x occurred, and y was not an agent_in x. |  | ['https://www.commoncoreontologies.org/ont00001949'] |
-| https://www.commoncoreontologies.org/ont00001886 | ['http://purl.obolibrary.org/obo/BFO_0000002'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | is affected by | x is_affected_by y iff x is an instance of Continuant and y is an instance of Process, and y influences x in some manner, most often by producing a change in x. |  | None |
-| https://www.commoncoreontologies.org/ont00001895 | ['http://purl.obolibrary.org/obo/BFO_0000040'] | ['http://purl.obolibrary.org/obo/BFO_0000015'] | accomplice in | An agent a1 is accomplice_in some Processual Entity p1 iff a1 assists in the commission of p1, is located at the location of p1, but is not agent_in p1. |  | None |
-| https://www.commoncoreontologies.org/ont00001928 | ['http://purl.obolibrary.org/obo/BFO_0000004'] | ['http://purl.obolibrary.org/obo/BFO_0000004'] | is predecessor of | A continuant c1 is a predecessor of some continuant c2 iff there is some process p1 and c1 is an input to p1 and c2 is an output of p1. |  | None |
+| Label | Definition | Example | Domain | Range | Inverse Of |
+|-------|------------|---------|--------|-------|------------|
+| [exists at](https://www.commoncoreontologies.org/ont00001928) | (Elucidation) exists at is a relation between a particular and some temporal region at which the particular exists | First World War exists at 1914-1916; Mexico exists at January 1, 2000 | [entity](http://purl.obolibrary.org/obo/BFO_0000001) | [temporal region](http://purl.obolibrary.org/obo/BFO_0000008) | []([]) |
+| [continuant part of](https://www.commoncoreontologies.org/ont00001928) | b continuant part of c =Def b and c are continuants & there is some time t such that b and c exist at t & b continuant part of c at t | Milk teeth continuant part of human; surgically removed tumour continuant part of organism | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [has continuant part](http://purl.obolibrary.org/obo/BFO_0000178) |
+| [has continuant part](https://www.commoncoreontologies.org/ont00001928) | b has continuant part c =Def c continuant part of b |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | []([]) |
+| [is output of](https://www.commoncoreontologies.org/ont00001928) | x is_output_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the end of y is a necessary condition for the completion of y. |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | [has output](https://www.commoncoreontologies.org/ont00001986) |
+| [is input of](https://www.commoncoreontologies.org/ont00001928) | x is_input_of y iff x is an instance of Continuant and y is an instance of Process, such that the presence of x at the beginning of y is a necessary condition for the start of y. |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | [has input](https://www.commoncoreontologies.org/ont00001921) |
+| [is affected by](https://www.commoncoreontologies.org/ont00001928) | x is_affected_by y iff x is an instance of Continuant and y is an instance of Process, and y influences x in some manner, most often by producing a change in x. |  | [continuant](http://purl.obolibrary.org/obo/BFO_0000002) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | []([]) |
+| [is successor of](https://www.commoncoreontologies.org/ont00001928) | A continuant c2 is a successor of some continuant c1 iff there is some process p1 and c1 is an input to p1 and c2 is an output of p1. Inverse of is predecessor.  |  | [independent continuant](http://purl.obolibrary.org/obo/BFO_0000004) | [independent continuant](http://purl.obolibrary.org/obo/BFO_0000004) | [is predecessor of](https://www.commoncoreontologies.org/ont00001928) |
+| [is predecessor of](https://www.commoncoreontologies.org/ont00001928) | A continuant c1 is a predecessor of some continuant c2 iff there is some process p1 and c1 is an input to p1 and c2 is an output of p1. |  | [independent continuant](http://purl.obolibrary.org/obo/BFO_0000004) | [independent continuant](http://purl.obolibrary.org/obo/BFO_0000004) | []([]) |
+| [has member part](https://www.commoncoreontologies.org/ont00001928) | b has member part c =Def c member part of b |  | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [member part of](http://purl.obolibrary.org/obo/BFO_0000129) |
+| [material basis of](https://www.commoncoreontologies.org/ont00001928) | b material basis of c =Def c has material basis b |  | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [disposition](http://purl.obolibrary.org/obo/BFO_0000016) | [has material basis](http://purl.obolibrary.org/obo/BFO_0000218) |
+| [member part of](https://www.commoncoreontologies.org/ont00001928) | b member part of c =Def b is an object & c is a material entity & there is some time t such that b continuant part of c at t & there is a mutually exhaustive and pairwise disjoint partition of c into objects x1, ..., xn (for some n ≠ 1) with b = xi (for some 1 <= i <= n) |  | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | []([]) |
+| [has history](https://www.commoncoreontologies.org/ont00001928) | b has history c =Def c history of b | This organism has history this life | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [history](http://purl.obolibrary.org/obo/BFO_0000182) | []([]) |
+| [accessory in](https://www.commoncoreontologies.org/ont00001928) | y is_accessory_in x iff x is an instance of Process and y is an instance of Agent, such that y assists another agent in the commission of x, and y was not located at the location of x when x occurred, and y was not an agent_in x. |  | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | [has accessory](https://www.commoncoreontologies.org/ont00001949) |
+| [accomplice in](https://www.commoncoreontologies.org/ont00001928) | An agent a1 is accomplice_in some Processual Entity p1 iff a1 assists in the commission of p1, is located at the location of p1, but is not agent_in p1. |  | [material entity](http://purl.obolibrary.org/obo/BFO_0000040) | [process](http://purl.obolibrary.org/obo/BFO_0000015) | []([]) |
