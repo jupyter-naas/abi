@@ -9,15 +9,39 @@ from src.core.apps.terminal_agent.terminal_style import (
     print_image,
 )
 from abi.services.agent.Agent import Agent
+from langgraph.types import Command
+from langchain_core.messages import ToolMessage
+from typing import Union
+# import json
 
-
-def on_tool_response(message: str):
+def on_tool_response(message: Union[str, Command, dict, ToolMessage]):
     try:
-        print_tool_response(f"\n{message}")
+        message_content = ''
+        if isinstance(message, str):
+            message_content = message
+        elif isinstance(message, dict) and 'content' in message:
+            message_content = message['content']
+        elif isinstance(message, Command):
+            message_content = message.content
+        elif isinstance(message, ToolMessage):
+            message_content = message.content
+        else:
+            print('Unknown message type:')
+            print(type(message))
+            message_content = message
+
+        # This would nicely display JSON but it takes a lot of screen space
+        # try:
+        #     message_content = json.dumps(json.loads(message_content), indent=4)
+        # except:
+        #     pass
+
+        print_tool_response(message_content)
+        
         # Check if the message contains a path to an image file
-        if isinstance(message.content, str):
+        if isinstance(message_content, str):
             # Look for image file paths in the message
-            words = message.content.split(" ")
+            words = message_content.split(" ")
             for word in words:
                 if any(
                     word.lower().endswith(ext)
@@ -86,7 +110,7 @@ def generic_run_agent(agent_class: str = None):
             print(agent.__class__.__name__)
             if agent.__class__.__name__ == agent_class:
                 agent.on_tool_usage(
-                    lambda message: print_tool_usage(message.tool_calls[0]["name"])
+                    lambda message: print_tool_usage(message)
                 )
                 agent.on_tool_response(on_tool_response)
                 run_agent(agent)
