@@ -56,9 +56,16 @@ def print_code(code, language="python"):
         )
     )
 
+def dict_to_equal_string(d: dict) -> str:
+    return ', '.join([f'{key}={value}' for key, value in d.items()])
 
-def print_tool_usage(tool_name):
-    console.print(f"\n🔧 [bold blue]Tool Used:[/bold blue] {tool_name}")
+def print_tool_usage(message):
+    tool_name = message.tool_calls[0]["name"]
+    if 'args' in message.tool_calls[0] and len(message.tool_calls[0]["args"].values()) > 0:
+        arguments = ": " + dict_to_equal_string(message.tool_calls[0]["args"])
+    else:
+        arguments = ""
+    console.print(f"\n🔧 [bold blue]Tool Used:[/bold blue] {tool_name}{arguments}")
 
 
 def print_tool_response(response):
