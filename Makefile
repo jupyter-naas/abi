@@ -32,11 +32,15 @@ lock:
 
 path=tests/
 test: 
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pytest tests'
+	@ uv run python -m pytest tests
 
-check:
+check-core:
 	uvx ruff check
-	uvx mypy lib src
+	.venv/bin/mypy -p lib.abi --follow-untyped-imports
+	.venv/bin/mypy -p src.core --follow-untyped-imports
+
+check: check-core
+	.venv/bin/mypy -p src.custom --follow-untyped-imports
 
 sh: .venv
 	@ docker compose run --rm --remove-orphans -it abi bash
@@ -151,7 +155,7 @@ chat-naas-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent'
 
 chat-supervisor-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent'
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
 
 chat-ontology-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent'

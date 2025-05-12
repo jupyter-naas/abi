@@ -1,6 +1,6 @@
 from pydantic import Field, create_model
 
-from lib.abi import logger
+from abi import logger
 
 from .GenericWorkflow import GenericWorkflow
 

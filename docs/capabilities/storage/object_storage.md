@@ -66,7 +66,7 @@ This initialization is handled automatically when the application starts, allowi
 The Object Storage Service provides several factory methods to create storage service instances based on your needs:
 
 ```python
-from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
+from abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
 
 # Create a filesystem-based storage service by auto-detecting the storage folder
 storage = ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
@@ -229,7 +229,7 @@ Creating a new secondary adapter allows you to extend the Object Storage Service
 Here's an example implementation of an FTP adapter:
 
 ```python
-from lib.abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter, Exceptions
+from abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter, Exceptions
 from queue import Queue
 from typing import Optional
 import ftplib
@@ -461,7 +461,7 @@ def ObjectStorageServiceFTP(host: str, username: str, password: str, base_path: 
     Returns:
         ObjectStorageService: Configured service instance
     """
-    from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFTP import ObjectStorageSecondaryAdapterFTP
+    from abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFTP import ObjectStorageSecondaryAdapterFTP
     return ObjectStorageService(ObjectStorageSecondaryAdapterFTP(host, username, password, base_path))
 ```
 
@@ -470,7 +470,7 @@ def ObjectStorageServiceFTP(host: str, username: str, password: str, base_path: 
 You can now use your FTP adapter in your application:
 
 ```python
-from lib.abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
+from abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
 
 # Create an FTP-based storage service
 storage = ObjectStorageFactory.ObjectStorageServiceFTP(

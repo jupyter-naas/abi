@@ -1,19 +1,20 @@
-from lib.abi.services.triple_store.TripleStorePorts import (
+from abi.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
     Exceptions,
 )
-from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStorageService import ObjectStorageService
+from abi.services.object_storage.ObjectStoragePort import (
     Exceptions as ObjectStorageExceptions,
 )
-from lib.abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import (
+from abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import (
     TripleStoreService__SecondaryAdaptor__FileBase,
 )
-from rdflib import Graph
+from rdflib import Graph, query, Node, URIRef
+import rdflib
 from typing import List, Dict, Tuple, Any
-from lib.abi.utils.Logger import logger
-from lib.abi.utils.Workers import WorkerPool, Job
+from abi.utils.Logger import logger
+from abi.utils.Workers import WorkerPool, Job
 import queue
 from threading import Thread
 import time
@@ -42,11 +43,11 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         self.__live_graph = self.load()
 
     def load_triples(self, subject_hash: str) -> Graph:
-        obj = self.__object_storage_service.get_object(
+        obj : bytes = self.__object_storage_service.get_object(
             prefix=self.__triples_prefix, key=f"{subject_hash}.ttl"
         )
 
-        content = obj.decode("utf-8")
+        content : str = obj.decode("utf-8")
 
         return Graph().parse(data=str(content), format="turtle")
 
@@ -57,12 +58,12 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         )
 
     def insert(self, triples: Graph):
-        triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = self.triples_by_subject(
+        triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = self.triples_by_subject(
             triples
         )
 
         def __insert(
-            subject: str, triples_by_subject: Dict[Any, List[Tuple[Any, Any]]]
+            subject: URIRef, triples_by_subject: Dict[Node, List[Tuple[Node, Node]]]
         ):
             subject_hash = self.iri_hash(subject)
 
@@ -78,7 +79,7 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
 
             self.store(subject_hash, graph)
 
-        jobs = [
+        jobs : List[Job] = [
             Job(
                 queue=None,
                 func=__insert,
@@ -87,7 +88,8 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
             )
             for subject in triples_by_subject
         ]
-        result_queue = self.__insert_pool.submit_all(jobs)
+
+        result_queue : queue.Queue[Job] = self.__insert_pool.submit_all(jobs)
 
         while result_queue.qsize() < result_queue.maxsize:
             logger.debug(f"Inserting {result_queue.qsize()}/{result_queue.maxsize}")
@@ -120,8 +122,8 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
 
         self.__live_graph -= triples
 
-    def get_subject_graph(self, subject: str) -> Graph:
-        subject_hash = self.iri_hash(subject)
+    def get_subject_graph(self, subject: str | URIRef) -> Graph:
+        subject_hash = self.iri_hash(URIRef(subject)) if isinstance(subject, str) else self.iri_hash(subject)
 
         try:
             graph = self.load_triples(subject_hash)
@@ -134,9 +136,9 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         triples = Graph()
 
         # Queue to stream files as they are discovered
-        files_queue = queue.Queue()
+        files_queue : queue.Queue[str] = queue.Queue()
         worker_pool = WorkerPool(num_workers=50)
-        result_queue = queue.Queue()
+        result_queue : queue.Queue[Job] = queue.Queue()
         job_nbr = 0
 
         def list_objects_worker(files_queue: queue.Queue):
@@ -155,7 +157,7 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         # Process files as they are discovered
         while not files_queue.empty() or list_object_thread.is_alive():
             try:
-                file = files_queue.get(timeout=1.0)
+                file : str = files_queue.get(timeout=1.0)
 
                 file_hash = file.split("/")[-1].split(".")[0]
                 worker_pool.submit(
@@ -188,18 +190,6 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
 
         logger.debug(f"Loaded {len(triples)} triples")
 
-        # try:
-        #     logger.debug("Listing objects in object storage")
-        #     for obj in ):
-        #         logger.debug(f"Loading triples from {obj}")
-
-        #         # g = self.load_triples(obj)
-        #         # for prefix, namespace in g.namespaces():
-        #         #     triples.bind(prefix, namespace)
-        #         # triples += g
-        # except ObjectStorageExceptions.ObjectNotFound:
-        #     pass
-
         logger.debug("Joining list objects thread")
         list_object_thread.join()
 
@@ -213,10 +203,10 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
     def get(self) -> Graph:
         return self.__live_graph
 
-    def query(self, query: str) -> Graph:
+    def query(self, query: str) -> query.Result:
         return self.get().query(query)
 
-    def query_view(self, view: str, query: str) -> Graph:
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.get().query(query)
 
     def handle_view_event(

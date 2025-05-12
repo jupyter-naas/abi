@@ -1,4 +1,4 @@
-from abi.services.ontology_processor.ports import IOntologyNERPort, IOntologyService
+from abi.services.ontology.OntologyPorts import IOntologyNERPort, IOntologyService
 from rdflib import Graph
 
 

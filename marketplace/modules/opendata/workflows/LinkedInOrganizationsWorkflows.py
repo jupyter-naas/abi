@@ -24,7 +24,7 @@ import json
 import requests
 from src import config
 from src.services import services
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStoragePort import (
     Exceptions as ObjectStorageExceptions,
 )
 from abi.utils.String import create_id_from_string

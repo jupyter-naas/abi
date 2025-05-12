@@ -1,8 +1,8 @@
 import pytest
 import tempfile
 from rdflib import Graph, URIRef, Literal
-from lib.abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
-from lib.abi.services.triple_store.TripleStorePorts import OntologyEvent
+from abi.services.triple_store.TripleStoreFactory import TripleStoreFactory
+from abi.services.triple_store.TripleStorePorts import OntologyEvent
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-from abi.services.ontology_processor.ports import IOntologyNERPort
+from abi.services.ontology.OntologyPorts import IOntologyNERPort
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage, HumanMessage
 from rdflib import Graph
@@ -28,6 +28,7 @@ Only output the Turtle formated file ready to be stored in a file. You must add 
             HumanMessage(content=input),
         ]
         response = self.__chat_model.invoke(messages)
+        assert isinstance(response.content, str)
         sanitized_response = response.content.replace("```turtle", "").replace(
             "```", ""
         )

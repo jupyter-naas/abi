@@ -1,4 +1,4 @@
-from lib.abi.workflow import Workflow, WorkflowConfiguration
+from abi.workflow import Workflow, WorkflowConfiguration
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
@@ -7,7 +7,7 @@ from langchain_core.tools import StructuredTool
 import os
 import glob
 from rdflib import Graph
-from lib.abi.utils.Graph import ABIGraph
+from abi.utils.Graph import ABIGraph
 
 
 @dataclass

@@ -1,4 +1,4 @@
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStoragePort import (
     IObjectStorageAdapter,
     Exceptions,
 )
@@ -17,7 +17,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
         access_key_id: str,
         secret_access_key: str,
         base_prefix: str = "",
-        session_token: str = None,
+        session_token: str | None = None,
     ):
         """Initialize S3 adapter with bucket name and credentials.
 
@@ -37,7 +37,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             aws_session_token=session_token,
         )
 
-    def __get_full_key(self, prefix: str, key: str = None) -> str:
+    def __get_full_key(self, prefix: str, key: str | None = None) -> str:
         """Construct full key path including base prefix.
 
         Args:
@@ -53,7 +53,7 @@ class ObjectStorageSecondaryAdapterS3(IObjectStorageAdapter):
             "/"
         )
 
-    def __object_exists(self, prefix: str, key: str = None) -> bool:
+    def __object_exists(self, prefix: str, key: str | None = None) -> bool:
         """Check if an object exists in S3.
 
         Args:

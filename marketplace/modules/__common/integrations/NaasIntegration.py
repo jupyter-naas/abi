@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,
@@ -12,7 +12,7 @@ import os
 from abi import logger
 import jwt
 
-from lib.abi.services.object_storage.ObjectStorageFactory import (
+from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
     ObjectStorageService,
 )

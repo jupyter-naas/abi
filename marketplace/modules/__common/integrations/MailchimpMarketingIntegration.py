@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
 import requests
 from typing import Optional, List, Dict

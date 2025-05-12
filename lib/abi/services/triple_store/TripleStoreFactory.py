@@ -1,11 +1,11 @@
-from lib.abi.services.triple_store.TripleStoreService import TripleStoreService
-from lib.abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
+from abi.services.triple_store.TripleStoreService import TripleStoreService
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
     TripleStoreService__SecondaryAdaptor__NaasStorage,
 )
-from lib.abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
     TripleStoreService__SecondaryAdaptor__Filesystem,
 )
-from lib.abi.services.object_storage.ObjectStorageFactory import (
+from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
 )
 

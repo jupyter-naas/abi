@@ -1,11 +1,11 @@
-from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
-from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
+from abi.services.object_storage.ObjectStorageService import ObjectStorageService
+from abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
-from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import (
+from abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas import (
     ObjectStorageSecondaryAdapterNaas,
 )
-from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
+from abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
     ObjectStorageSecondaryAdapterS3,
 )
 
@@ -41,7 +41,7 @@ class ObjectStorageFactory:
         secret_access_key: str,
         bucket_name: str,
         base_prefix: str,
-        session_token: str = None,
+        session_token: str | None = None,
     ) -> ObjectStorageService:
         return ObjectStorageService(
             ObjectStorageSecondaryAdapterS3(

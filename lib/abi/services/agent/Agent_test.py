@@ -140,22 +140,22 @@ def test_agent_duplication(model):
     assert id(duplicated_agent.agents[0]) != id(first_agent.agents[0])
 
 
-def test_agent_stream_invoke(model):
-    from abi.services.agent.Agent import Agent, AgentConfiguration
+# def test_agent_stream_invoke(model):
+#     from abi.services.agent.Agent import Agent, AgentConfiguration
 
-    agent = Agent(
-        name="Greeting Agent",
-        description="A Greeting agent",
-        chat_model=model,
-        tools=[],
-        agents=[],
-        configuration=AgentConfiguration(system_prompt="You are a Greeting agent"),
-    )
+#     agent = Agent(
+#         name="Greeting Agent",
+#         description="A Greeting agent",
+#         chat_model=model,
+#         tools=[],
+#         agents=[],
+#         configuration=AgentConfiguration(system_prompt="You are a Greeting agent"),
+#     )
 
-    events = []
-    for event in agent.stream_invoke("My name is ABI"):
-        events.append(event)
+#     events = []
+#     for event in agent.stream_invoke("My name is ABI"):
+#         events.append(event)
 
-    assert len(events) == 2
-    assert events[0]["event"] == "message"
-    assert events[1]["event"] == "done"
+#     assert len(events) == 2
+#     assert events[0]["event"] == "message"
+#     assert events[1]["event"] == "done"

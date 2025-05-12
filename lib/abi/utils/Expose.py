@@ -1,13 +1,14 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool
 
 
 class Expose(ABC):
     @abstractmethod
-    def as_tools(self) -> list[StructuredTool]:
-        """Returns a list of StructuredTools that can be used by an Agent.
+    def as_tools(self) -> list[BaseTool]:
+        """Returns a list of Tools that can be used by an Agent.
 
         This method should be implemented by concrete classes to expose their functionality
         as LangChain StructuredTools that can be used by an Agent.
@@ -28,7 +29,7 @@ class Expose(ABC):
         name: str,
         description: str = "",
         description_stream: str = "",
-        tags: list[str] = [],
+        tags: list[str | Enum] | None = [],
     ) -> None:
         """Registers API routes for the class's functionality on the provided FastAPI router.
 
