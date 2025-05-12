@@ -18,6 +18,9 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
     GitHubSupportWorkflowsConfiguration,
 )
 
+NAME = "support"
+MODEL = "gpt-4o"
+TEMPERATURE = 0
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = (
     "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
@@ -48,7 +51,10 @@ SUGGESTIONS = [
         "label": "Feature Request",
         "value": "As a user, I would like to: [Feature Request]",
     },
-    {"label": "Report Bug", "value": "Report a bug on: [Bug Description]"},
+    {
+        "label": "Report Bug", 
+        "value": "Report a bug on: [Bug Description]",
+    },
 ]
 
 
@@ -56,8 +62,11 @@ def create_agent(
     agent_shared_state: AgentSharedState = None,
     agent_configuration: AgentConfiguration = None,
 ) -> Agent:
+    # Init
     model = ChatOpenAI(
-        model="gpt-4o", temperature=0, api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=secret.get("OPENAI_API_KEY")
     )
     tools = []
 
@@ -87,7 +96,7 @@ def create_agent(
         agent_shared_state = AgentSharedState()
 
     return SupportAssistant(
-        name="support_agent",
+        name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
@@ -101,10 +110,10 @@ class SupportAssistant(Agent):
     def as_api(
         self,
         router: APIRouter,
-        route_name: str = "support",
-        name: str = "Support Assistant",
-        description: str = "API endpoints to call the Support assistant completion.",
-        description_stream: str = "API endpoints to call the Support assistant stream completion.",
+        route_name: str = NAME,
+        name: str = NAME.capitalize(),
+        description: str = "API endpoints to call the Support agent completion.",
+        description_stream: str = "API endpoints to call the Support agent stream completion.",
         tags: list[str] = [],
     ):
         return super().as_api(

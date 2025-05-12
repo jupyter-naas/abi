@@ -24,7 +24,7 @@ class GenericWorkflow(Generic[T]):
 
         template = Template(self.sparql_template)
         sparql_query = template.render(parameters.dict())
-        print(sparql_query)
+        # print(sparql_query)
         from src import services
 
         results = services.triple_store_service.query(sparql_query)
