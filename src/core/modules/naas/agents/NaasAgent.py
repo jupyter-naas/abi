@@ -12,9 +12,9 @@ from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
 
-NAME = "Naas Agent"
-MODEL = "o3-mini"
-TEMPERATURE = 1
+NAME = "naas"
+MODEL = "gpt-4o"
+TEMPERATURE = 0
 DESCRIPTION = "A Naas Agent with access to Naas Integration tools."
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
 SYSTEM_PROMPT = f"""
@@ -36,7 +36,9 @@ def create_agent(
 
     # Set model
     model = ChatOpenAI(
-        model="gpt-4o", temperature=0, api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=secret.get("OPENAI_API_KEY")
     )
 
     # Set configuration
@@ -68,8 +70,8 @@ class NaasAgent(Agent):
     def as_api(
         self,
         router: APIRouter,
-        route_name: str = "naas",
-        name: str = "Naas Agent",
+        route_name: str = NAME,
+        name: str = NAME.capitalize(),
         description: str = "API endpoints to call the Naas agent completion.",
         description_stream: str = "API endpoints to call the Naas agent stream completion.",
         tags: list[str] = [],

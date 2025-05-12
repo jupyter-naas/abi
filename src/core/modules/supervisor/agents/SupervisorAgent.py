@@ -7,11 +7,17 @@ from abi.services.agent.Agent import (
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 from src import secret
+from src.core.modules.ontology.agents.OntologyAgent import (
+    create_agent as create_ontology_agent,
+)
+from src.core.modules.naas.agents.NaasAgent import (
+    create_agent as create_naas_agent,
+)
 from src.core.modules.support.agents.SupportAgent import (
     create_agent as create_support_agent,
 )
 
-NAME = "Supervisor Agent"
+NAME = "supervisor"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
@@ -28,10 +34,6 @@ General Rules
 - Return URL links as follow: [Link](https://www.google.com)
 - Return Images as follow: ![Image](https://www.google.com/image.png)
 - You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french.
-
-Agents
---------------------------------
-[AGENTS]
 """
 
 SUGGESTIONS = [
@@ -39,7 +41,10 @@ SUGGESTIONS = [
         "label": "Feature Request",
         "value": "As a user, I would like to: {{Feature Request}}",
     },
-    {"label": "Report Bug", "value": "Report a bug on: {{Bug Description}}"},
+    {
+        "label": "Report Bug", 
+        "value": "Report a bug on: {{Bug Description}}",
+    },    
 ]
 
 
@@ -53,51 +58,30 @@ def create_agent(
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=secret.get("OPENAI_API_KEY")
     )
 
     # Set configuration
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration()
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=1)
-
-    # Add support agent
-    github_api_token = secret.get("GITHUB_ACCESS_TOKEN")
-    if github_api_token is not None:
-        support_agent = create_support_agent(
-            AgentSharedState(thread_id=2), agent_configuration
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+            on_tool_usage=lambda x: print(x),
+            on_tool_response=lambda x: print(x),
         )
-        agents.append(support_agent)
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Get tools info from each assistant
-    agents_info = []
-    for agent in agents:
-        agent_info = {
-            "name": agent.name,
-            "description": agent.description,
-            "tools": [
-                {"name": t.name, "description": t.description}
-                for t in agent.tools  # Access the private tools attribute
-                if t.name != "support_agent" and t.name != "get_current_datetime"
-            ],
-        }
-        agents_info.append(agent_info)
-
-    # Transform agents_info into formatted string
-    agents_info_str = ""
-    for agent in agents_info:
-        agents_info_str += f"-{agent['name']}: {agent['description']}\n"
-        for tool in agent["tools"]:
-            agents_info_str += f"   • {tool['name']}: {tool['description']}\n"
-        agents_info_str += "\n"
-
-    # Replace the [AGENTS] placeholder in the system prompt with the agents_info
-    system_prompt = SYSTEM_PROMPT.replace("[AGENTS]", agents_info_str)
-    agent_configuration.system_prompt = system_prompt
+    # Add support agents
+    agents = [
+        create_support_agent(),
+        create_ontology_agent(),
+        create_naas_agent(),
+    ]
 
     return SupervisorAgent(
-        name="supervisor_agent",
+        name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
@@ -112,8 +96,8 @@ class SupervisorAgent(Agent):
     def as_api(
         self,
         router: APIRouter,
-        route_name: str = "supervisor",
-        name: str = NAME,
+        route_name: str = NAME,
+        name: str = NAME.capitalize(),
         description: str = "API endpoints to call the Supervisor agent completion.",
         description_stream: str = "API endpoints to call the Supervisor agent stream completion.",
         tags: list[str] = [],
