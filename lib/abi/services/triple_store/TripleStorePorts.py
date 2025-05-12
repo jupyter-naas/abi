@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from rdflib import Graph
+from rdflib import Graph, URIRef
+import rdflib
 from typing import List, Callable, Dict, Tuple
 from enum import Enum
 
@@ -36,31 +37,31 @@ class ITripleStorePort(ABC):
     @abstractmethod
     def handle_view_event(
         self,
-        view: Tuple[str, str, str],
+        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[str, str, str],
+        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         pass
 
     @abstractmethod
-    def query(self, query: str) -> Graph:
+    def query(self, query: str) -> rdflib.query.Result:
         pass
 
     @abstractmethod
-    def query_view(self, view: str, query: str) -> Graph:
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
         pass
 
     @abstractmethod
-    def get_subject_graph(self, subject: str) -> Graph:
+    def get_subject_graph(self, subject: URIRef) -> Graph:
         pass
 
 
 class ITripleStoreService(ABC):
     __ontology_adaptor: ITripleStorePort
 
-    __event_listeners: Dict[tuple, Dict[OntologyEvent, List[tuple[str, Callable]]]]
+    __event_listeners: Dict[tuple, Dict[OntologyEvent, List[tuple[str, Callable, bool]]]]
 
-    __views: List[Tuple[str, str, str]]
+    __views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]]
 
     @abstractmethod
     def subscribe(
@@ -100,9 +101,6 @@ class ITripleStoreService(ABC):
         Returns:
             None
         """
-        pass
-
-    def __filter_ontology(self, ontology: Graph) -> Graph:
         pass
 
     @abstractmethod
@@ -148,7 +146,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def query(self, query: str) -> Graph:
+    def query(self, query: str) -> rdflib.query.Result:
         """Execute a SPARQL query against the triple store.
 
         This method executes the provided SPARQL query string against all triples in the store
@@ -166,7 +164,7 @@ class ITripleStoreService(ABC):
         pass
 
     @abstractmethod
-    def query_view(self, view: str, query: str) -> Graph:
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
         pass
 
     @abstractmethod

@@ -21,9 +21,9 @@ from src.core.modules.common.integrations.LocalObjectStoreIntegration import (
 
 from queue import Queue, Empty
 from threading import Thread
-from lib.abi.utils.Graph import ABIGraph as Graph
+from abi.utils.Graph import ABIGraph as Graph
 
-from lib.abi.utils.OntologyReasoner import OntologyReasoner
+from abi.utils.OntologyReasoner import OntologyReasoner
 
 ONTOLOGY = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
