@@ -3,7 +3,7 @@ from typing import Callable, Literal, Any, AsyncGenerator, Union
 
 # LangChain Core imports for base components
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, AnyMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AnyMessage, SystemMessage, AIMessage
 from langchain_core.tools import Tool, StructuredTool
 
 # LangGraph imports for workflow and state management
@@ -36,7 +36,7 @@ from abi.utils.Logger import logger
 from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
-
+import pydash as pd
 
 class AgentSharedState:
     __thread_id: int
@@ -306,9 +306,9 @@ class Agent(Expose):
                 # inject state
                 tool_call = {**tool_call, "args": {**tool_call["args"], "state": state}}
 
-            self.__notify_tool_usage(state["messages"][-1])
+            #self.__notify_tool_usage(state["messages"][-1])
             tool_response = tool_.invoke(tool_call)
-            self.__notify_tool_response(tool_response)
+            #self.__notify_tool_response(tool_response)
             if isinstance(tool_response, ToolMessage):
                 results.append(Command(update={"messages": [tool_response]}))
 
@@ -384,6 +384,34 @@ class Agent(Expose):
             config={"configurable": {"thread_id": self.__state.thread_id}},
             subgraphs=True,
         ):
+            _, payload = chunk
+            
+            if isinstance(payload, dict):
+                last_message = list(payload.values())[0]["messages"][-1]
+                
+                if isinstance(last_message, AIMessage):
+                    if pd.get(last_message, "additional_kwargs.tool_calls"):
+                        # This is a tool call.
+                        self.__notify_tool_usage(last_message)
+                    else:
+                        # This is a message.
+                        # print("\n\nIntermediate AI Message:")
+                        # print(last_message.content)
+                        # print(last_message)
+                        # print('\n\n')
+                        pass
+                elif isinstance(last_message, ToolMessage):
+                    self.__notify_tool_response(last_message)
+                else:
+                    if 'tool_call_id' in last_message:
+                        self.__notify_tool_response(last_message)
+                    else:
+                        print("\n\n Unknown message type:")
+                        print(type(last_message))
+                        print(last_message)
+                        print('\n\n')
+            
+            
             yield chunk
 
     def invoke(self, prompt: str) -> str:
