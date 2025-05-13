@@ -253,7 +253,8 @@ class Agent(Expose):
         graph.add_edge(START, "call_model")
 
         graph.add_node(self.call_tools)
-        graph.add_edge("call_tools", "call_model")
+        # TODO: Investigate if we need to uncomment this line. But It seems that is causing models + tools parrallel execution issues.
+        #graph.add_edge("call_tools", "call_model")
 
         for agent in self.__agents:
             logger.debug(f"Adding node {agent.name} in graph")
@@ -270,6 +271,7 @@ class Agent(Expose):
     def call_model(
         self, state: MessagesState
     ) -> Command[Literal["call_tools", "__end__"]]:
+        # logger.debug(f"call_model on: {self.name}")
         messages = state["messages"]
         if self.__configuration.system_prompt:
             messages = [
@@ -293,6 +295,7 @@ class Agent(Expose):
     # If you want to have a tool node that has full feature parity, please refer to the source code
     def call_tools(self, state: MessagesState) -> Command[Literal["call_model"]]:
         tool_calls = state["messages"][-1].tool_calls
+        assert len(tool_calls) > 0, state["messages"][-1]
         results = []
         for tool_call in tool_calls:
             tool_ = self.__tools_by_name[tool_call["name"]]
@@ -307,6 +310,9 @@ class Agent(Expose):
                 tool_call = {**tool_call, "args": {**tool_call["args"], "state": state}}
 
             #self.__notify_tool_usage(state["messages"][-1])
+            if tool_call['name'].startswith('transfer_to_'):
+                tool_call = {"state": state, "tool_call_id": tool_call['id']}
+                
             tool_response = tool_.invoke(tool_call)
             #self.__notify_tool_response(tool_response)
             if isinstance(tool_response, ToolMessage):
@@ -319,7 +325,7 @@ class Agent(Expose):
                 raise ValueError(
                     f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
                 )
-
+        assert len(results) > 0, state
         return results
 
     @property
