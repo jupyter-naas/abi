@@ -4,7 +4,7 @@ ASSISTANTS_ORDER = {
     "SalesAssistant": 2,
     "OperationsAssistant": 3,
     "FinanceAssistant": 4,
-    "OpenDataAssistant": 5, 
+    "OpenDataAssistant": 5,
 }
 
 ASSISTANTS_INTEGRATIONS = {
@@ -13,12 +13,12 @@ ASSISTANTS_INTEGRATIONS = {
         "InstagramIntegration",
         "LinkedInIntegration",
         "ReplicateIntegration",
-        "YouTubeIntegration"
+        "YouTubeIntegration",
     ],
     "GrowthAssistant": [
         "LinkedInSalesNavigatorIntegration",
         "SlackIntegration",
-        "WhatsAppIntegration"
+        "WhatsAppIntegration",
     ],
     "SalesAssistant": [
         "BrevoIntegration",
@@ -27,7 +27,7 @@ ASSISTANTS_INTEGRATIONS = {
         "MailchimpMarketingIntegration",
         "PipedriveIntegration",
         "SendGridIntegration",
-        "ZeroBounceIntegration"
+        "ZeroBounceIntegration",
     ],
     "OperationsAssistant": [
         "AirtableIntegration",
@@ -49,31 +49,27 @@ ASSISTANTS_INTEGRATIONS = {
         "NotionIntegration",
         "OneDriveIntegration",
         "PostgresIntegration",
-        "SupabaseIntegration"
+        "SupabaseIntegration",
     ],
     "FinanceAssistant": [
         "AgicapIntegration",
-        "AiaIntegration", 
+        "AiaIntegration",
         "MercuryIntegration",
         "PennylaneIntegration",
         "QontoIntegration",
-        "StripeIntegration"
+        "StripeIntegration",
     ],
     "OpenDataAssistant": [
         "GlassdoorIntegration",
-        "NewsAPIIntegration", 
+        "NewsAPIIntegration",
         "PerplexityIntegration",
         "SerperIntegration",
-        "YahooFinanceIntegration"
-    ]
+        "YahooFinanceIntegration",
+    ],
 }
 
 ASSISTANTS_ONTOLOGIES = {
-    "ContentAssistant": [
-        "PublicationOntology",
-        "IdeaOntology",
-        "ConversationOntology"
-    ],
+    "ContentAssistant": ["PublicationOntology", "IdeaOntology", "ConversationOntology"],
     "GrowthAssistant": [
         "InteractionOntology",
         "GrowthOntology",
@@ -102,5 +98,3 @@ ASSISTANTS_ONTOLOGIES = {
         "EventsOntology",
     ],
 }
-
-

@@ -4,4 +4,4 @@ DESCRIPTION = "OpenAI's affordable and intelligent small model for fast, lightwe
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/openai_100x100.png"
 MODEL_TYPE = "chat"
 CONTEXT_WINDOW = 128000
-OWNER = "openai" 
+OWNER = "openai"

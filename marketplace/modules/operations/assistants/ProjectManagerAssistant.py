@@ -1,10 +1,25 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.core.modules.common.integrations import GithubIntegration, GithubGraphqlIntegration, NotionIntegration
-from src.core.modules.common.integrations.GithubIntegration import GithubIntegrationConfiguration
-from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegrationConfiguration
-from src.core.modules.common.integrations.NotionIntegration import NotionIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    GithubIntegration,
+    GithubGraphqlIntegration,
+    NotionIntegration,
+)
+from src.core.modules.common.integrations.GithubIntegration import (
+    GithubIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.GithubGraphqlIntegration import (
+    GithubGraphqlIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.NotionIntegration import (
+    NotionIntegrationConfiguration,
+)
 
 NAME = "Project Manager"
 SLUG = "project-manager"
@@ -41,51 +56,56 @@ You will use project management tools to track progress, manage resources, and m
 If you encounter situations requiring escalation or specialized expertise, acknowledge this and coordinate with the appropriate teams or stakeholders. Your goal is to be an effective project leader who delivers successful outcomes through organized planning and execution.
 """
 
+
 def create_project_manager_agent(
     agent_configuration: AgentConfiguration = None,
-    agent_shared_state: AgentSharedState = None
+    agent_shared_state: AgentSharedState = None,
 ) -> Agent:
     """Creates a Project Manager assistant agent.
-    
+
     Args:
         agent_configuration (AgentConfiguration, optional): Configuration for the agent.
             Defaults to None.
         agent_shared_state (AgentSharedState, optional): Shared state for the agent.
             Defaults to None.
-    
+
     Returns:
         Agent: The configured Project Manager assistant agent
     """
     model = ChatOpenAI(
         model=MODEL,
         temperature=TEMPERATURE,
-        openai_api_key=secret.get('OPENAI_API_KEY')
+        openai_api_key=secret.get("OPENAI_API_KEY"),
     )
     tools = []
 
-    github_key = secret.get('GITHUB_ACCESS_TOKEN')
+    github_key = secret.get("GITHUB_ACCESS_TOKEN")
     if github_key:
-        tools += GithubGraphqlIntegration.as_tools(GithubGraphqlIntegrationConfiguration(access_token=github_key))
-        tools += GithubIntegration.as_tools(GithubIntegrationConfiguration(access_token=github_key))
+        tools += GithubGraphqlIntegration.as_tools(
+            GithubGraphqlIntegrationConfiguration(access_token=github_key)
+        )
+        tools += GithubIntegration.as_tools(
+            GithubIntegrationConfiguration(access_token=github_key)
+        )
 
-    notion_key = secret.get('NOTION_ACCESS_TOKEN')
+    notion_key = secret.get("NOTION_ACCESS_TOKEN")
     if notion_key:
-        tools += NotionIntegration.as_tools(NotionIntegrationConfiguration(access_token=notion_key))
+        tools += NotionIntegration.as_tools(
+            NotionIntegrationConfiguration(access_token=notion_key)
+        )
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )

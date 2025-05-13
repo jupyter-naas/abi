@@ -1,9 +1,21 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.core.modules.common.integrations import HubSpotIntegration, PipedriveIntegration
-from src.core.modules.common.integrations.HubSpotIntegration import HubSpotIntegrationConfiguration
-from src.core.modules.common.integrations.PipedriveIntegration import PipedriveIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    HubSpotIntegration,
+    PipedriveIntegration,
+)
+from src.core.modules.common.integrations.HubSpotIntegration import (
+    HubSpotIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.PipedriveIntegration import (
+    PipedriveIntegrationConfiguration,
+)
 
 NAME = "BDR"
 SLUG = "bdr"
@@ -39,50 +51,53 @@ You will leverage tools like HubSpot and Pipedrive to track prospect interaction
 If you encounter situations requiring escalation or specialized expertise, acknowledge this and coordinate with the appropriate sales team members. Your goal is to be the first point of contact who effectively qualifies and nurtures leads for the sales organization.
 """
 
+
 def create_bdr_agent(
     agent_configuration: AgentConfiguration = None,
-    agent_shared_state: AgentSharedState = None
+    agent_shared_state: AgentSharedState = None,
 ) -> Agent:
     """Creates a BDR assistant agent.
-    
+
     Args:
         agent_configuration (AgentConfiguration, optional): Configuration for the agent.
             Defaults to None.
         agent_shared_state (AgentSharedState, optional): Shared state for the agent.
             Defaults to None.
-    
+
     Returns:
         Agent: The configured BDR assistant agent
     """
     model = ChatOpenAI(
         model=MODEL,
         temperature=TEMPERATURE,
-        openai_api_key=secret.get('OPENAI_API_KEY')
+        openai_api_key=secret.get("OPENAI_API_KEY"),
     )
     tools = []
 
-    hubspot_key = secret.get('HUBSPOT_ACCESS_TOKEN')
+    hubspot_key = secret.get("HUBSPOT_ACCESS_TOKEN")
     if hubspot_key:
-        tools += HubSpotIntegration.as_tools(HubSpotIntegrationConfiguration(access_token=hubspot_key))
+        tools += HubSpotIntegration.as_tools(
+            HubSpotIntegrationConfiguration(access_token=hubspot_key)
+        )
 
-    pipedrive_key = secret.get('PIPEDRIVE_API_KEY')
+    pipedrive_key = secret.get("PIPEDRIVE_API_KEY")
     if pipedrive_key:
-        tools += PipedriveIntegration.as_tools(PipedriveIntegrationConfiguration(api_token=pipedrive_key))
+        tools += PipedriveIntegration.as_tools(
+            PipedriveIntegrationConfiguration(api_token=pipedrive_key)
+        )
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )
