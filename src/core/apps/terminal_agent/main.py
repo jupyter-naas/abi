@@ -53,17 +53,18 @@ def on_tool_response(message: Union[str, Command, dict, ToolMessage]):
 
 
 def run_agent(agent: Agent):
+    agent_label = " ".join(word.capitalize() for word in agent.name.replace('_', ' ').split())
     clear_screen()
-    print_welcome_message()
+    print_welcome_message(agent)
     print_divider()
 
     while True:
-        user_input = get_user_input()
+        user_input = get_user_input(agent_label)
 
         if user_input == "exit":
             return
         elif user_input == "help":
-            print_welcome_message()
+            print_welcome_message(agent)
             continue
         elif user_input == "reset":
             agent.reset()
@@ -72,7 +73,7 @@ def run_agent(agent: Agent):
 
         print_divider()
         response = agent.invoke(user_input)
-        print_agent_response(response)
+        print_agent_response(response, agent_label)
         print_divider()
 
 
