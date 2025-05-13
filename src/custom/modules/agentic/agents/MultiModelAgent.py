@@ -53,7 +53,7 @@ def create_agent(
     #shared_state = AgentSharedState()
     
     return MultiModelAgent(
-        name="MultiModelAgent",
+        name="multi_model_agent",
         description="A multi-model agent that can use different models to answer questions.",
         chat_model=ChatOpenAI(
             model="o3-mini", 
@@ -62,7 +62,7 @@ def create_agent(
         ),
         tools=[
             Agent(
-                name="o3-mini",
+                name="o3-mini_agent",
                 description="A agent using o3-mini that can answer questions.",
                 chat_model=ChatOpenAI(
                     model="o3-mini", 
@@ -75,7 +75,7 @@ def create_agent(
                 )
             ),
             Agent(
-                name="gpt-4o-mini",
+                name="gpt-4o-mini_agent",
                 description="A agent using gpt-4o-mini that can answer questions.",
                 chat_model=ChatOpenAI(
                     model="gpt-4o-mini", 
@@ -88,7 +88,7 @@ def create_agent(
                 )
             ),
             Agent(
-                name="gpt-4-1",
+                name="gpt-4-1_agent",
                 description="A agent using gpt-4.1 that can answer questions.",
                 chat_model=ChatOpenAI(
                     model="gpt-4.1", 
@@ -101,7 +101,7 @@ def create_agent(
                 )
             ),
             Agent(
-                name="ComparisonAgent",
+                name="comparison_agent",
                 description="A agent that can compare the answers of the different models and present the best and cons of each answer.",
                 chat_model=ChatOpenAI(
                     model="gpt-4o-mini",
@@ -114,7 +114,7 @@ def create_agent(
                 )
             ),
             Agent(
-                name="PythonCodeExecutionAgent",
+                name="python_code_execution_agent",
                 description="A agent that can execute python code.",
                 chat_model=ChatOpenAI(
                     model="gpt-4o-mini",
