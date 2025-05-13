@@ -144,9 +144,6 @@ chat-ontology-agent: .venv
 chat-support-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent'
 
-chat-multi-model-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent MultiModelAgent'
-
 chat: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)'
 
