@@ -1,9 +1,21 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.core.modules.common.integrations import NewsAPIIntegration, PerplexityIntegration
-from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    NewsAPIIntegration,
+    PerplexityIntegration,
+)
+from src.core.modules.common.integrations.NewsAPIIntegration import (
+    NewsAPIIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.PerplexityIntegration import (
+    PerplexityIntegrationConfiguration,
+)
 
 NAME = "Private Researcher"
 SLUG = "private-researcher"
@@ -49,39 +61,40 @@ I'm here to help you harness the power of open data for your specific needs. Ple
 Note: While I can provide guidance and analysis frameworks, I need to be connected to specific data sources and tools to perform actual data retrieval and analysis. Please contact support@naas.ai to enable these capabilities.
 """
 
+
 def create_private_researcher_agent(
-        agent_shared_state: AgentSharedState = None, 
-        agent_configuration: AgentConfiguration = None
-    ) -> Agent:
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None,
+) -> Agent:
     model = ChatOpenAI(
-        model="gpt-4o-mini", 
-        temperature=0.3, 
-        api_key=secret.get('OPENAI_API_KEY')
+        model="gpt-4o-mini", temperature=0.3, api_key=secret.get("OPENAI_API_KEY")
     )
     tools = []
 
-    news_api_key = secret.get('NEWS_API_KEY')
+    news_api_key = secret.get("NEWS_API_KEY")
     if news_api_key:
-        tools += NewsAPIIntegration.as_tools(NewsAPIIntegrationConfiguration(api_key=news_api_key))
+        tools += NewsAPIIntegration.as_tools(
+            NewsAPIIntegrationConfiguration(api_key=news_api_key)
+        )
 
-    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
     if perplexity_api_key:
-        tools += PerplexityIntegration.as_tools(PerplexityIntegrationConfiguration(api_key=perplexity_api_key))
+        tools += PerplexityIntegration.as_tools(
+            PerplexityIntegrationConfiguration(api_key=perplexity_api_key)
+        )
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
-    
+
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )

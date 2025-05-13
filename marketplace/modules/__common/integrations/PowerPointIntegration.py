@@ -17,25 +17,28 @@ from pptx.enum.dml import MSO_FILL
 
 LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
 
+
 @dataclass
 class PowerPointIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for PowerPoint integration.
-    
+
     Attributes:
         template_path (str, optional): Path to PowerPoint template file
     """
+
     template_path: Optional[str] = None
+
 
 class PowerPointIntegration(Integration):
     """PowerPoint integration for creating and modifying presentations.
-    
+
     This class provides methods to interact with PowerPoint files using python-pptx,
     allowing creation and modification of slides, shapes, and content.
-    
+
     Attributes:
         __configuration (PowerPointIntegrationConfiguration): Configuration instance
             containing template settings.
-    
+
     Example:
         >>> config = PowerPointIntegrationConfiguration(
         ...     template_path="path/to/template.pptx"
@@ -51,10 +54,10 @@ class PowerPointIntegration(Integration):
 
     def create_presentation(self, template_path: Optional[str] = None) -> Presentation:
         """Create a new presentation.
-        
+
         Args:
             template_path (str, optional): Path to PowerPoint template file
-            
+
         Returns:
             Presentation: New PowerPoint presentation object
         """
@@ -64,22 +67,22 @@ class PowerPointIntegration(Integration):
         else:
             self.__presentation = Presentation()
         return self.__presentation
-    
+
     def save_presentation(self, presentation: Presentation, output_path: str) -> None:
         """Save the presentation to a file.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             output_path (str): Path to save presentation to
-            
+
         Example:
             >>> integration.save_presentation(ppt, "output.pptx")
         """
         presentation.save(output_path)
-    
+
     def list_slides(self, presentation: Presentation, text: bool = False) -> List[str]:
         """List all slides in the presentation with their shapes.
-        
+
         Args:
             text (bool, optional): Whether to return slide titles or indices. Defaults to False.
         """
@@ -89,41 +92,36 @@ class PowerPointIntegration(Integration):
             for shape in slide.shapes:
                 data = {
                     "slide_number": i,
-                    "shape_name": shape.name if hasattr(shape, 'name') else None,
+                    "shape_name": shape.name if hasattr(shape, "name") else None,
                     "shape_id": shape.shape_id,
                     "shape_type": shape.shape_type,
-                    "text": shape.text.encode('ascii', 'ignore').decode('ascii') if hasattr(shape, 'text') else "",
-                    "left": shape.left.cm if hasattr(shape, 'left') else None,
-                    "top": shape.top.cm if hasattr(shape, 'top') else None,
-                    "width": shape.width.cm if hasattr(shape, 'width') else None,
-                    "height": shape.height.cm if hasattr(shape, 'height') else None,
-                    "rotation": shape.rotation if hasattr(shape, 'rotation') else None,
+                    "text": shape.text.encode("ascii", "ignore").decode("ascii")
+                    if hasattr(shape, "text")
+                    else "",
+                    "left": shape.left.cm if hasattr(shape, "left") else None,
+                    "top": shape.top.cm if hasattr(shape, "top") else None,
+                    "width": shape.width.cm if hasattr(shape, "width") else None,
+                    "height": shape.height.cm if hasattr(shape, "height") else None,
+                    "rotation": shape.rotation if hasattr(shape, "rotation") else None,
                 }
                 if text and data["text"] == "":
                     continue
                 shapes.append(data)
-            slides.append(
-                {
-                    "slide_number": i,
-                    "shapes": shapes
-                }
-            )
+            slides.append({"slide_number": i, "shapes": shapes})
         return slides
-    
+
     def add_slide(
-        self, 
-        presentation: Presentation, 
-        layout_index: int = 6
+        self, presentation: Presentation, layout_index: int = 6
     ) -> Tuple[Presentation, int]:
         """Add a new slide to the presentation.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             layout_index (int, optional): Index of slide layout to use. Defaults to 6 (blank layout).
-            
+
         Returns:
             Tuple[Presentation, int]: Updated presentation and index of new slide
-            
+
         Example:
             >>> ppt, slide_idx = integration.add_slide(ppt, layout_index=6)
         """
@@ -145,10 +143,10 @@ class PowerPointIntegration(Integration):
         font_size: Optional[int] = None,
         font_color: Optional[Tuple[int, int, int]] = None,
         fill_color: Optional[Tuple[int, int, int]] = None,
-        line_color: Optional[Tuple[int, int, int]] = None
+        line_color: Optional[Tuple[int, int, int]] = None,
     ) -> Presentation:
         """Add a shape to a slide.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             slide_index (int): Index of slide to add shape to
@@ -160,10 +158,10 @@ class PowerPointIntegration(Integration):
             text (str, optional): Text to add to shape
             fill_color (Tuple[int, int, int], optional): RGB fill color
             line_color (Tuple[int, int, int], optional): RGB line color
-            
+
         Returns:
             Presentation: Updated presentation
-            
+
         Example:
             >>> ppt = integration.add_shape(
             ...     ppt,
@@ -180,34 +178,30 @@ class PowerPointIntegration(Integration):
         """
         slide = presentation.slides[slide_index]
         shape = slide.shapes.add_shape(
-            shape_type,
-            Cm(left),
-            Cm(top),
-            Cm(width),
-            Cm(height)
+            shape_type, Cm(left), Cm(top), Cm(width), Cm(height)
         )
-        
+
         if text:
             shape.text = text
             shape.text_frame.paragraphs[0].font.name = font_name
             shape.text_frame.paragraphs[0].font.size = Pt(font_size)
             shape.text_frame.paragraphs[0].font.color.rgb = RGBColor(*font_color)
-            
+
         if fill_color:
             shape.fill.solid()
             shape.fill.fore_color.rgb = RGBColor(*fill_color)
-            
+
         if line_color:
             shape.line.color.rgb = RGBColor(*line_color)
-            
+
         return presentation
-    
+
     def add_text_box(
         self,
         presentation: Presentation,
         slide_index: int,
         left: float,
-        top: float, 
+        top: float,
         width: float,
         height: float,
         text: str,
@@ -219,10 +213,10 @@ class PowerPointIntegration(Integration):
         bold: bool = False,
         italic: bool = False,
         underline: bool = False,
-        font_color: str = "000000"
+        font_color: str = "000000",
     ) -> Presentation:
         """Add a text box to a slide.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             slide_index (int): Index of slide to add text box to
@@ -244,10 +238,10 @@ class PowerPointIntegration(Integration):
             italic (bool, optional): Italic text. Defaults to False.
             underline (bool, optional): Underline text. Defaults to False.
             font_color (str, optional): Font color as hex string. Defaults to "000000".
-            
+
         Returns:
             Presentation: Updated presentation
-            
+
         Example:
             >>> ppt = integration.add_text_box(
             ...     ppt,
@@ -263,15 +257,10 @@ class PowerPointIntegration(Integration):
             ... )
         """
         slide = presentation.slides[slide_index]
-        
+
         # Add textbox
-        txBox = slide.shapes.add_textbox(
-            Cm(left),
-            Cm(top),
-            Cm(width),
-            Cm(height)
-        )
-        
+        txBox = slide.shapes.add_textbox(Cm(left), Cm(top), Cm(width), Cm(height))
+
         # Setup textFrame
         textFrame = txBox.text_frame
         textFrame.word_wrap = word_wrap
@@ -291,9 +280,9 @@ class PowerPointIntegration(Integration):
         font.italic = italic
         font.underline = underline
         font.color.rgb = RGBColor.from_string(font_color)
-        
+
         return presentation
-    
+
     def update_shape(
         self,
         presentation: Presentation,
@@ -305,10 +294,10 @@ class PowerPointIntegration(Integration):
         left: Optional[float] = None,
         top: Optional[float] = None,
         width: Optional[float] = None,
-        height: Optional[float] = None
+        height: Optional[float] = None,
     ) -> Presentation:
         """Update an existing shape on a slide.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             slide_index (int): Index of slide containing shape
@@ -320,10 +309,10 @@ class PowerPointIntegration(Integration):
             top (float, optional): New top position in inches
             width (float, optional): New width in inches
             height (float, optional): New height in inches
-            
+
         Returns:
             Presentation: Updated presentation
-            
+
         Example:
             >>> ppt = integration.update_shape(
             ...     ppt,
@@ -337,38 +326,40 @@ class PowerPointIntegration(Integration):
         """
         slide = presentation.slides[slide_index]
         shape = None
-        
+
         # Find shape by ID
         for s in slide.shapes:
             if s.shape_id == shape_id:
                 shape = s
                 break
-                
+
         if not shape:
-            raise ValueError(f"Shape with ID {shape_id} not found on slide {slide_index}")
-            
+            raise ValueError(
+                f"Shape with ID {shape_id} not found on slide {slide_index}"
+            )
+
         if text is not None:
             shape.text_frame.paragraphs[0].text = text
-            
+
         if fill_color is not None:
             shape.fill.solid()
             shape.fill.fore_color.rgb = RGBColor(*fill_color)
-            
+
         if line_color is not None:
             shape.line.color.rgb = RGBColor(*line_color)
-            
+
         if left is not None:
             shape.left = Cm(left)
-            
+
         if top is not None:
             shape.top = Cm(top)
-            
+
         if width is not None:
             shape.width = Cm(width)
-            
+
         if height is not None:
             shape.height = Cm(height)
-            
+
         return presentation
 
     def add_image(
@@ -379,10 +370,10 @@ class PowerPointIntegration(Integration):
         left: float,
         top: float,
         width: Optional[float] = None,
-        height: Optional[float] = None
+        height: Optional[float] = None,
     ) -> Presentation:
         """Add an image to a slide.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             slide_index (int): Index of slide to add image to
@@ -391,10 +382,10 @@ class PowerPointIntegration(Integration):
             top (float): Top position in inches
             width (float, optional): Width in inches. If None, maintains aspect ratio.
             height (float, optional): Height in inches. If None, maintains aspect ratio.
-            
+
         Returns:
             Presentation: Updated presentation
-            
+
         Example:
             >>> ppt = integration.add_image(
             ...     ppt,
@@ -412,7 +403,7 @@ class PowerPointIntegration(Integration):
             Cm(left),
             Cm(top),
             Cm(width) if width else None,
-            Cm(height) if height else None
+            Cm(height) if height else None,
         )
         return presentation
 
@@ -426,10 +417,10 @@ class PowerPointIntegration(Integration):
         top: float,
         width: float,
         height: float,
-        data: Optional[List[List[str]]] = None
+        data: Optional[List[List[str]]] = None,
     ) -> Presentation:
         """Add a table to a slide.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             slide_index (int): Index of slide to add table to
@@ -440,10 +431,10 @@ class PowerPointIntegration(Integration):
             width (float): Width in inches
             height (float): Height in inches
             data (List[List[str]], optional): Table data
-            
+
         Returns:
             Presentation: Updated presentation
-            
+
         Example:
             >>> data = [["Header 1", "Header 2"], ["Cell 1", "Cell 2"]]
             >>> ppt = integration.add_table(
@@ -460,31 +451,26 @@ class PowerPointIntegration(Integration):
         """
         slide = presentation.slides[slide_index]
         table = slide.shapes.add_table(
-            rows,
-            cols,
-            Cm(left),
-            Cm(top),
-            Cm(width),
-            Cm(height)
+            rows, cols, Cm(left), Cm(top), Cm(width), Cm(height)
         ).table
-        
+
         if data:
             for row_idx, row in enumerate(data):
                 for col_idx, cell_text in enumerate(row):
                     if row_idx < rows and col_idx < cols:
                         table.cell(row_idx, col_idx).text = str(cell_text)
-                        
+
         return presentation
 
     def get_presentation_bytes(self, presentation: Presentation) -> bytes:
         """Get the presentation as bytes.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
-            
+
         Returns:
             bytes: Presentation file as bytes
-            
+
         Example:
             >>> ppt_bytes = integration.get_presentation_bytes(ppt)
         """
@@ -498,20 +484,20 @@ class PowerPointIntegration(Integration):
         slide_index: int,
         background_color: Optional[Tuple[int, int, int]] = None,
         title: Optional[str] = None,
-        subtitle: Optional[str] = None
+        subtitle: Optional[str] = None,
     ) -> Presentation:
         """Set formatting for a slide.
-        
+
         Args:
             presentation (Presentation): PowerPoint presentation object
             slide_index (int): Index of slide to format
             background_color (Tuple[int, int, int], optional): RGB background color
             title (str, optional): Slide title
             subtitle (str, optional): Slide subtitle
-            
+
         Returns:
             Presentation: Updated presentation
-            
+
         Example:
             >>> ppt = integration.set_slide_format(
             ...     ppt,
@@ -522,27 +508,28 @@ class PowerPointIntegration(Integration):
             ... )
         """
         slide = presentation.slides[slide_index]
-        
+
         if background_color:
             background = slide.background
             fill = background.fill
             fill.solid()
             fill.fore_color.rgb = RGBColor(*background_color)
-            
-        if title and hasattr(slide, 'shapes') and hasattr(slide.shapes, 'title'):
+
+        if title and hasattr(slide, "shapes") and hasattr(slide.shapes, "title"):
             slide.shapes.title.text = title
-            
+
         if subtitle and len(slide.placeholders) > 1:
             subtitle_placeholder = slide.placeholders[1]
             subtitle_placeholder.text = subtitle
-            
+
         return presentation
-    
+
+
 def as_tools(configuration: PowerPointIntegrationConfiguration):
     """Convert PowerPoint integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    
+
     integration = PowerPointIntegration(configuration)
 
     class CreatePresentationSchema(BaseModel):
@@ -556,12 +543,12 @@ def as_tools(configuration: PowerPointIntegrationConfiguration):
             name="powerpoint_create_presentation",
             description="Create a new presentation",
             func=lambda **kwargs: integration.create_presentation(**kwargs),
-            args_schema=CreatePresentationSchema
+            args_schema=CreatePresentationSchema,
         ),
         StructuredTool(
             name="powerpoint_list_slides",
             description="List all slides in the presentation",
             func=lambda **kwargs: integration.list_slides(**kwargs),
-            args_schema=ListSlidesSchema
-        )
+            args_schema=ListSlidesSchema,
+        ),
     ]

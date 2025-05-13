@@ -3,25 +3,28 @@ from dataclasses import dataclass
 import siteanalyzer
 import json
 
+
 @dataclass
 class SiteDownloaderConfiguration(IntegrationConfiguration):
     """Configuration for SiteDownloader.
-    
+
     Currently no configuration parameters are needed as the library
     doesn't require any authentication or special settings.
     """
+
     pass
+
 
 class SiteDownloader(Integration):
     """SiteDownloader class for downloading website content and sitemaps.
-    
+
     This class provides methods to interact with websites using the siteanalyzer library.
     It can fetch sitemaps and download individual pages.
-    
+
     Attributes:
         __configuration (SiteDownloaderConfiguration): Configuration instance
             (currently unused but required by Integration interface)
-    
+
     Example:
         >>> config = SiteDownloaderConfiguration()
         >>> downloader = SiteDownloader(config)
@@ -75,4 +78,8 @@ if __name__ == "__main__":
     # sitemap = integration.download_url("https://monip.org")
     # print(sitemap)
     # print(integration.load_sitemap("https://beneteau-group.com"))
-    print(integration.extract_text_from_html(integration.download_url("https://monip.org")))
+    print(
+        integration.extract_text_from_html(
+            integration.download_url("https://monip.org")
+        )
+    )

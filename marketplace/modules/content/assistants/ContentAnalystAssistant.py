@@ -1,11 +1,29 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_openai import ChatOpenAI
-from src.core.modules.common.integrations import LinkedInIntegration, YouTubeIntegration, NewsAPIIntegration, PerplexityIntegration
-from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.modules.common.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
-from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    LinkedInIntegration,
+    YouTubeIntegration,
+    NewsAPIIntegration,
+    PerplexityIntegration,
+)
+from src.core.modules.common.integrations.LinkedInIntegration import (
+    LinkedInIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.YouTubeIntegration import (
+    YouTubeIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.NewsAPIIntegration import (
+    NewsAPIIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.PerplexityIntegration import (
+    PerplexityIntegrationConfiguration,
+)
 
 NAME = "Content Analyst"
 SLUG = "content-analyst"
@@ -59,48 +77,53 @@ Remember to:
 - Focus on business impact
 """
 
+
 def create_content_analyst_agent(
-        agent_shared_state: AgentSharedState = None, 
-        agent_configuration: AgentConfiguration = None
-    ) -> Agent:
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None,
+) -> Agent:
     model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=secret.get('OPENAI_API_KEY')
+        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
     )
     tools = []
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
-    li_at = secret.get('li_at')
-    JSESSIONID = secret.get('JSESSIONID')
+    li_at = secret.get("li_at")
+    JSESSIONID = secret.get("JSESSIONID")
     if li_at and JSESSIONID:
-        tools += LinkedInIntegration.as_tools(LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
+        tools += LinkedInIntegration.as_tools(
+            LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+        )
 
-    youtube_key = secret.get('YOUTUBE_API_KEY')
+    youtube_key = secret.get("YOUTUBE_API_KEY")
     if youtube_key:
-        tools += YouTubeIntegration.as_tools(YouTubeIntegrationConfiguration(api_key=youtube_key))
+        tools += YouTubeIntegration.as_tools(
+            YouTubeIntegrationConfiguration(api_key=youtube_key)
+        )
 
-    news_api_key = secret.get('NEWS_API_KEY')
+    news_api_key = secret.get("NEWS_API_KEY")
     if news_api_key:
-        tools += NewsAPIIntegration.as_tools(NewsAPIIntegrationConfiguration(api_key=news_api_key))
+        tools += NewsAPIIntegration.as_tools(
+            NewsAPIIntegrationConfiguration(api_key=news_api_key)
+        )
 
-    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
     if perplexity_api_key:
-        tools += PerplexityIntegration.as_tools(PerplexityIntegrationConfiguration(api_key=perplexity_api_key))
+        tools += PerplexityIntegration.as_tools(
+            PerplexityIntegrationConfiguration(api_key=perplexity_api_key)
+        )
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )
