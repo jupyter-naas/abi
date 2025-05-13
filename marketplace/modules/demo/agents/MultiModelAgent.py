@@ -131,13 +131,13 @@ def create_agent(
         ],
         configuration=AgentConfiguration(
             system_prompt="""You have multiple agents, using different models. To answer a users questions, you need to call every model agents and present the different answers:
-            - Agent o3-mini
-            - Agent gpt-4o-mini
-            - Agent gpt-4.1
-            
-            Once every Model agents have been called you must call the "Comparison Agent" to compare the answers and present best and cons of each answer.
-            
-            If the user asks for python code execution, you must call the "Python Code Execution Agent" to execute the code.
-            """
+- Agent o3-mini
+- Agent gpt-4o-mini
+- Agent gpt-4.1
+
+Once every Model agents have been called you must call the "Comparison Agent" to compare the answers and present best and cons of each answer.
+On your final outputs display all answers you received from the different Agents.
+If the user asks for python code execution, you must call the "Python Code Execution Agent" to execute the code.
+"""
         )
     )
