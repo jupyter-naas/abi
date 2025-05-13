@@ -655,6 +655,15 @@ class Agent(Expose):
             BaseChatModel: The agent's chat model
         """
         return self.__chat_model
+    
+    @property
+    def configuration(self) -> AgentConfiguration:
+        """Get the configuration used by the agent.
+
+        Returns:
+            AgentConfiguration: The agent's configuration
+        """
+        return self.__configuration
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> StructuredTool:
@@ -669,9 +678,10 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> Structured
         tool_call_id: Annotated[str, InjectedToolCallId],
     ):
         """Ask another agent for help."""
+        agent_label = " ".join(word.capitalize() for word in agent.name.replace('_', ' ').split())
         tool_message = {
             "role": "tool",
-            "content": f"Successfully transferred to {agent.name}",
+            "content": f"Conversation transferred to {agent_label}",
             "name": tool_name,
             "tool_call_id": tool_call_id,
         }
