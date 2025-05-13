@@ -1,9 +1,18 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_openai import ChatOpenAI
 from src.core.modules.common.integrations import LinkedInIntegration, YouTubeIntegration
-from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.modules.common.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
+from src.core.modules.common.integrations.LinkedInIntegration import (
+    LinkedInIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.YouTubeIntegration import (
+    YouTubeIntegrationConfiguration,
+)
 
 NAME = "Audience Engagement"
 SLUG = "audience-engagement"
@@ -39,40 +48,43 @@ You will use various tools to track engagement metrics and manage communications
 If you encounter situations requiring escalation or specialized knowledge, acknowledge this and coordinate with the appropriate team members. Your goal is to be an effective brand ambassador who builds meaningful connections with our audience.
 """
 
+
 def create_audience_engagement_agent(
     agent_configuration: AgentConfiguration = None,
-    agent_shared_state: AgentSharedState = None
+    agent_shared_state: AgentSharedState = None,
 ) -> Agent:
     model = ChatOpenAI(
         model=MODEL,
         temperature=TEMPERATURE,
-        openai_api_key=secret.get('OPENAI_API_KEY')
+        openai_api_key=secret.get("OPENAI_API_KEY"),
     )
     tools = []
 
-    li_at = secret.get('li_at')
-    JSESSIONID = secret.get('JSESSIONID')
+    li_at = secret.get("li_at")
+    JSESSIONID = secret.get("JSESSIONID")
     if li_at and JSESSIONID:
-        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
+        tools += LinkedinIntegration.as_tools(
+            LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+        )
 
-    youtube_key = secret.get('YOUTUBE_API_KEY')
+    youtube_key = secret.get("YOUTUBE_API_KEY")
     if youtube_key:
-        tools += YouTubeIntegration.as_tools(YouTubeIntegrationConfiguration(api_key=youtube_key))
+        tools += YouTubeIntegration.as_tools(
+            YouTubeIntegrationConfiguration(api_key=youtube_key)
+        )
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )

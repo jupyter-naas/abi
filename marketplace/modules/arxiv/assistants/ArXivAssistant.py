@@ -1,11 +1,27 @@
 from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret, config
-from src.custom.modules.arxiv_agent.integrations.ArXivIntegration import ArXivIntegration, ArXivIntegrationConfiguration
-from src.custom.modules.arxiv_agent.pipelines.ArXivPaperPipeline import ArXivPaperPipeline, ArXivPaperPipelineConfiguration
-from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import TripleStoreService__SecondaryAdaptor__Filesystem
+from src.custom.modules.arxiv_agent.integrations.ArXivIntegration import (
+    ArXivIntegration,
+    ArXivIntegrationConfiguration,
+)
+from src.custom.modules.arxiv_agent.pipelines.ArXivPaperPipeline import (
+    ArXivPaperPipeline,
+    ArXivPaperPipelineConfiguration,
+)
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
+    TripleStoreService__SecondaryAdaptor__Filesystem,
+)
 from abi.services.triple_store.TripleStoreService import TripleStoreService
-from src.custom.modules.arxiv_agent.workflows.ArXivQueryWorkflow import ArXivQueryWorkflow, ArXivQueryWorkflowConfiguration
+from src.custom.modules.arxiv_agent.workflows.ArXivQueryWorkflow import (
+    ArXivQueryWorkflow,
+    ArXivQueryWorkflowConfiguration,
+)
 
 NAME = "ArXiv Assistant"
 SLUG = "arxiv-assistant"
@@ -25,33 +41,34 @@ Then you can get detailed information about specific papers using get_arxiv_pape
 Use arxiv_paper_pipeline to add important papers to the knowledge graph for future reference.
 Use the query tools to search for information in papers you've already added to the knowledge graph."""
 
+
 class ArXivAssistant(Agent):
     """Assistant for interacting with ArXiv papers."""
+
     pass
+
 
 def create_agent(
     agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None
+    agent_configuration: AgentConfiguration = None,
 ) -> Agent:
     """Creates an ArXiv assistant agent.
-    
+
     Args:
         agent_shared_state (AgentSharedState, optional): Shared state for the agent
         agent_configuration (AgentConfiguration, optional): Configuration for the agent
-            
+
     Returns:
         Agent: The configured ArXiv assistant agent
     """
     # Initialize model
     model = ChatOpenAI(
-        model="gpt-4",
-        temperature=0,
-        api_key=secret.get('OPENAI_API_KEY')
+        model="gpt-4", temperature=0, api_key=secret.get("OPENAI_API_KEY")
     )
 
     # Initialize tools
     tools = []
-    
+
     # Initialize ontology store
     triple_store = TripleStoreService(
         TripleStoreService__SecondaryAdaptor__Filesystem(
@@ -68,7 +85,7 @@ def create_agent(
             arxiv_integration_config=arxiv_integration_config,
             triple_store=triple_store,
             storage_base_path="storage/triplestore/application-level/arxiv",
-            pdf_storage_path="datastore/application-level/arxiv"
+            pdf_storage_path="datastore/application-level/arxiv",
         )
     )
     tools += arxiv_pipeline.as_tools()
@@ -83,9 +100,7 @@ def create_agent(
 
     # Use provided configuration or create default
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
 
     # Use provided shared state or create new
     if agent_shared_state is None:
@@ -98,5 +113,5 @@ def create_agent(
         tools=tools,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver()
-    ) 
+        memory=MemorySaver(),
+    )
