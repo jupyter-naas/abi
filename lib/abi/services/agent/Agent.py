@@ -385,6 +385,8 @@ class Agent(Expose):
         Yields:
             str: The model's response text
         """
+        notified = {}
+        
         for chunk in self.graph.stream(
             {"messages": [HumanMessage(content=prompt)]},
             config={"configurable": {"thread_id": self.__state.thread_id}},
@@ -407,10 +409,14 @@ class Agent(Expose):
                         # print('\n\n')
                         pass
                 elif isinstance(last_message, ToolMessage):
-                    self.__notify_tool_response(last_message)
+                    if last_message.id not in notified:
+                        self.__notify_tool_response(last_message)
+                        notified[last_message.id] = True
                 else:
                     if 'tool_call_id' in last_message:
-                        self.__notify_tool_response(last_message)
+                        if last_message['tool_call_id'] not in notified:
+                            self.__notify_tool_response(last_message)
+                            notified[last_message['tool_call_id']] = True
                     else:
                         print("\n\n Unknown message type:")
                         print(type(last_message))
