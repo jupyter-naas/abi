@@ -1,0 +1,183 @@
+id: https://w3id.org/abi/gpt-4o/schema
+name: gpt-4o-message-schema
+title: GPT-4o Message Schema
+description: LinkML schema for GPT-4o message formats and conversation structure
+version: 0.1.0
+license: MIT
+imports:
+  - linkml:types
+
+prefixes:
+  abi: https://w3id.org/abi/
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  xsd: http://www.w3.org/2001/XMLSchema#
+  
+default_prefix: abi
+
+types:
+  timestamp:
+    base: str
+    uri: xsd:dateTime
+    description: ISO-8601 formatted datetime
+  
+  role_enum:
+    base: str
+    enum_values:
+      system: System message
+      user: User message
+      assistant: Assistant message
+      tool: Tool message
+
+  interface_enum:
+    base: str
+    enum_values:
+      streamlit: Streamlit interface
+      terminal: Terminal interface
+      naasworkspace: NaasWorkspace interface
+      api: API interface
+
+  content_type_enum:
+    base: str
+    enum_values:
+      text: Text content
+      image: Image content
+      audio: Audio content
+      video: Video content
+      file: File content
+
+classes:
+  Conversation:
+    description: A conversation session between a user and the GPT-4o model
+    slots:
+      conversation_id:
+        description: Unique identifier for the conversation
+        identifier: true
+        range: string
+      messages:
+        description: List of messages in the conversation
+        multivalued: true
+        range: Message
+        inlined: true
+        
+  Message:
+    description: Abstract message class defining common properties across all message types
+    abstract: true
+    slots:
+      message_id:
+        description: Unique identifier for the message
+        identifier: true
+        range: string
+      role:
+        description: Role of the entity sending the message
+        range: role_enum
+        required: true
+      date:
+        description: Timestamp when the message was created
+        range: timestamp
+        required: true
+      interface:
+        description: Interface through which the message was sent
+        range: interface_enum
+      conversation_id:
+        description: ID of the conversation this message belongs to
+        range: string
+        required: true
+
+  SystemMessage:
+    description: Message sent by the system to set context or instructions
+    is_a: Message
+    slot_usage:
+      role:
+        equals_string: system
+    slots:
+      content:
+        description: Content of the system message
+        multivalued: true
+        range: ContentItem
+        required: true
+        inlined: true
+
+  UserMessage:
+    description: Message sent by the user
+    is_a: Message
+    slot_usage:
+      role:
+        equals_string: user
+    slots:
+      content:
+        description: Content of the user message
+        multivalued: true
+        range: ContentItem
+        required: true
+        inlined: true
+
+  AssistantMessage:
+    description: Message sent by the assistant
+    is_a: Message
+    slot_usage:
+      role:
+        equals_string: assistant
+    slots:
+      content:
+        description: Content of the assistant message
+        range: string
+      tool_calls:
+        description: Tool calls made by the assistant
+        multivalued: true
+        range: ToolCall
+        inlined: true
+
+  ToolMessage:
+    description: Message sent by a tool in response to a tool call
+    is_a: Message
+    slot_usage:
+      role:
+        equals_string: tool
+    slots:
+      content:
+        description: Content of the tool message
+        range: string
+        required: true
+      tool_call_id:
+        description: ID of the tool call this message is responding to
+        range: string
+        required: true
+      name:
+        description: Name of the tool
+        range: string
+        required: true
+
+  ContentItem:
+    description: Content item within a message
+    slots:
+      type:
+        description: Type of the content
+        range: content_type_enum
+        required: true
+      text:
+        description: Text content (when type is text)
+        range: string
+      url:
+        description: URL to content (when type is image, audio, video, or file)
+        range: string
+
+  ToolCall:
+    description: A call to a tool made by the assistant
+    slots:
+      name:
+        description: Name of the tool being called
+        range: string
+        required: true
+      args:
+        description: Arguments for the tool call
+        range: object
+        required: true
+      id:
+        description: Unique identifier for the tool call
+        range: string
+        required: true
+      type:
+        description: Type of the tool call
+        range: string
+        required: true 
