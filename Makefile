@@ -12,7 +12,7 @@ git-deps: .git/hooks/pre-commit
 deps: git-deps .venv
 
 .venv:
-	@ docker compose run --rm --remove-orphans abi poetry install
+	uv sync
 
 dev-build:
 	@ docker compose build
