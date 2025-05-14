@@ -9,8 +9,8 @@ An component of the overall information necessary for the configuration of an op
 Not defined.
 
 ### Aliases
-- System Configuration
 - Operating System Configuration Information
+- System Configuration
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#OperatingSystemConfigurationComponent

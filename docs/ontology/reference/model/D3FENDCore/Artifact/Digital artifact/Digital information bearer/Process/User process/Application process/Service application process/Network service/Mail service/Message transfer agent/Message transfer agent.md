@@ -9,8 +9,8 @@ A message transfer agent or mail transfer agent (MTA) or mail relay is software 
 Not defined.
 
 ### Aliases
-- Mail Transfer Agent
 - MTA
+- Mail Transfer Agent
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#MessageTransferAgent

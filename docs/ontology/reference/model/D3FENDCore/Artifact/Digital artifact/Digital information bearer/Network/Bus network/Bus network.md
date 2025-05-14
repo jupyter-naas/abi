@@ -9,8 +9,8 @@ An electronic communication system that links multiple components through one sh
 Not defined.
 
 ### Aliases
-- Data Highway
 - Bus
+- Data Highway
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#BusNetwork

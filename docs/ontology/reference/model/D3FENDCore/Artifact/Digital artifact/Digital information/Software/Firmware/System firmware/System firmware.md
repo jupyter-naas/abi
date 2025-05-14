@@ -9,8 +9,8 @@ Firmware that is installed on a computer's main board which manages the initial 
 Not defined.
 
 ### Aliases
-- BIOS Firmware
 - UEFI Firmware
+- BIOS Firmware
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#SystemFirmware

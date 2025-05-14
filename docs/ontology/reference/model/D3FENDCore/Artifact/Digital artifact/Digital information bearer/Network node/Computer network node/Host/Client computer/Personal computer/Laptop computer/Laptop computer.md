@@ -9,8 +9,8 @@ A laptop computer (also laptop), is a small, portable personal computer (PC) wit
 Not defined.
 
 ### Aliases
-- Notebook
 - Laptop
+- Notebook
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#LaptopComputer

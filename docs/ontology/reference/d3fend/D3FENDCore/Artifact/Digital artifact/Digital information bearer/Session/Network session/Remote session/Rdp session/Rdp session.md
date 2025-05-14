@@ -9,8 +9,8 @@ A Remote Desktop Protocol (RDP) session is a session established using the RDP p
 Not defined.
 
 ### Aliases
-- Remote Desktop Session
 - Terminal Services
+- Remote Desktop Session
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#RDPSession

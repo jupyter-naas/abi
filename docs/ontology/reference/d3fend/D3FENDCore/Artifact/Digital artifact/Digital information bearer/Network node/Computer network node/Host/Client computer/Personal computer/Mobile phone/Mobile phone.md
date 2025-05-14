@@ -9,8 +9,8 @@ A mobile phone, cellular phone, cell phone, cellphone or hand phone, sometimes s
 Not defined.
 
 ### Aliases
-- Cellphone
 - Cellular Phone
+- Cellphone
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#MobilePhone

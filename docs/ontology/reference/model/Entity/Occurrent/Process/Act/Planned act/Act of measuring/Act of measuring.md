@@ -6,9 +6,9 @@
 A Planned Act that involves determining the extent, dimensions, quanity, or quality of an Entity relative to some standard.
 
 ### Examples
-- rating Hollywood movies on a 1 to 5 star scale
 - putting an object on a scale to measure its weight in kilograms
 - using a tape measure to determine the height and width of a doorway in inches
+- rating Hollywood movies on a 1 to 5 star scale
 
 ### Aliases
 Not defined.
@@ -48,7 +48,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
