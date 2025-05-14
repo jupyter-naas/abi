@@ -9,8 +9,8 @@ A system initialization process is a process that executes to initialize (boot) 
 Not defined.
 
 ### Aliases
-- System Startup Process
 - System Initialization Process
+- System Startup Process
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#SystemInitProcess

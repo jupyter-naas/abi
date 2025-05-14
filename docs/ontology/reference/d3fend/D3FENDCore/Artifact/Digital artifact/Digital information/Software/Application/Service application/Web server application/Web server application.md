@@ -9,8 +9,8 @@ A web server application (or web app) is an application software that runs on a 
 Not defined.
 
 ### Aliases
-- Web App
 - Web Application
+- Web App
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#WebServerApplication

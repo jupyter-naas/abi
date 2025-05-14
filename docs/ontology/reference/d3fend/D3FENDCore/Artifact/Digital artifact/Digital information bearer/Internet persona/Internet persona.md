@@ -9,8 +9,8 @@ A social identity that an Internet user establishes in online communities and we
 Not defined.
 
 ### Aliases
-- Online Personality
 - Online Identity
+- Online Personality
 - Online Persona
 
 ### URI

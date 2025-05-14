@@ -9,10 +9,10 @@ A decoy is an imitation digital artifact in any sense of a digital artifact, obj
 Not defined.
 
 ### Aliases
-- Decoy Object
 - Trap
-- Decoy
 - Lure
+- Decoy Object
+- Decoy
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#DecoyArtifact
