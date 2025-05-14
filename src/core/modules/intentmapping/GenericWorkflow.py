@@ -1,6 +1,6 @@
 from typing import TypeVar, Generic, Type
 from langchain_core.tools import StructuredTool
-
+from abi.utils.SPARQL import results_to_list
 
 T = TypeVar("T")
 
@@ -28,7 +28,7 @@ class GenericWorkflow(Generic[T]):
         from src import services
 
         results = services.triple_store_service.query(sparql_query)
-        return list(results)
+        return results_to_list(results)
 
     def as_tools(self) -> list[StructuredTool]:
         return [

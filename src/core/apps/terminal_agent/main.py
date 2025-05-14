@@ -73,6 +73,9 @@ def run_agent(agent: Agent):
 
         print_divider()
         response = agent.invoke(user_input)
+        # Convert list response to string if necessary
+        if isinstance(response, list):
+            response = "\n".join(str(item) for item in response)
         print_agent_response(response, agent_label)
         print_divider()
 
