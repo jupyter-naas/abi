@@ -9,8 +9,8 @@ An event concerning the administrative actions of setting, modifying, or abolish
 Not defined.
 
 ### Aliases
-- Permission Administration Event
 - Permission Provisioning Event
+- Permission Administration Event
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#AccessControlAdministrationEvent

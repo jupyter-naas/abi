@@ -9,9 +9,9 @@ A command-line interface or command language interpreter (CLI), also known as co
 Not defined.
 
 ### Aliases
-- CUI
-- CLI
 - Command-line Interface
+- CLI
+- CUI
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#CommandLineInterface

@@ -37,6 +37,11 @@ graph BT
 - [bfo](http://purl.obolibrary.org/obo/)
 
 ## Properties
+### Data Properties
+| Ontology | Label | Definition | Example | Domain | Range |
+|----------|-------|------------|---------|--------|-------|
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
 |----------|-------|------------|---------|--------|-------|------------|
@@ -51,5 +56,5 @@ graph BT
 | cco | [caused by](https://www.commoncoreontologies.org/ont00001819) | x caused_by y iff x and y are instances of Occurrent, and x is a consequence of y. |  | [occurrent](/docs/ontology/reference/model/Entity/Occurrent/Occurrent.md) | [occurrent](/docs/ontology/reference/model/Entity/Occurrent/Occurrent.md) | []() |
 | bfo | [has first instant](http://purl.obolibrary.org/obo/BFO_0000222) | t has first instant t' =Def t' first instant of t | The first hour of a year has first instant midnight on December 31 | [temporal region](/docs/ontology/reference/model/Entity/Occurrent/Temporal%20region/Temporal%20region.md) | [temporal instant](/docs/ontology/reference/model/Entity/Occurrent/Temporal%20region/Zero-dimensional%20temporal%20region/Temporal%20instant/Temporal%20instant.md) | []() |
 | bfo | [has last instant](http://purl.obolibrary.org/obo/BFO_0000224) | t has last instant t' =Def t' last instant of t | The last hour of a year has last instant midnight December 31 | [temporal region](/docs/ontology/reference/model/Entity/Occurrent/Temporal%20region/Temporal%20region.md) | [temporal instant](/docs/ontology/reference/model/Entity/Occurrent/Temporal%20region/Zero-dimensional%20temporal%20region/Temporal%20instant/Temporal%20instant.md) | []() |
-| cco | [is temporal region of](https://www.commoncoreontologies.org/ont00001874) | t is temporal region of p iff p occupies temporal region t. |  | [temporal region](/docs/ontology/reference/model/Entity/Occurrent/Temporal%20region/Temporal%20region.md) | [](/docs/ontology/reference/model/.md) | []() |
+| cco | [is temporal region of](https://www.commoncoreontologies.org/ont00001874) | t is temporal region of p iff p occupies temporal region t. |  | [temporal region](/docs/ontology/reference/model/Entity/Occurrent/Temporal%20region/Temporal%20region.md) | [{'or': ['http://purl.obolibrary.org/obo/BFO_0000015', 'http://purl.obolibrary.org/obo/BFO_0000035']}](/docs/ontology/reference/model/%7B%27or%27%3A%20%5B%27http%3A//purl.obolibrary.org/obo/BFO_0000015%27%2C%20%27http%3A//purl.obolibrary.org/obo/BFO_0000035%27%5D%7D/%7B%27or%27%3A%20%5B%27http%3A//purl.obolibrary.org/obo/bfo_0000015%27%2C%20%27http%3A//purl.obolibrary.org/obo/bfo_0000035%27%5D%7D.md) | []() |
 
