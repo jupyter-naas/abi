@@ -9,8 +9,8 @@ An Estimate Information Content Entity that consists of an interval of possible 
 Not defined.
 
 ### Aliases
-- Interval Estimate
 - Interval Estimate Measurement Information Content Entity
+- Interval Estimate
 
 ### URI
 https://www.commoncoreontologies.org/ont00001101

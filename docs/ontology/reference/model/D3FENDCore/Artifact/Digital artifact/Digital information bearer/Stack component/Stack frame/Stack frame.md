@@ -9,8 +9,8 @@ A machine-dependent and application-binary-dependent (ABI-dependent) data struct
 Not defined.
 
 ### Aliases
-- Activation Frame
 - Activation Record
+- Activation Frame
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#StackFrame

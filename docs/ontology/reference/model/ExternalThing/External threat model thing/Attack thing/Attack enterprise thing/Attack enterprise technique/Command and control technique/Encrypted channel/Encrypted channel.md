@@ -9,9 +9,9 @@ Adversaries may employ an encryption algorithm to conceal command and control tr
 Not defined.
 
 ### Aliases
-- Custom Command and Control Protocol
-- Multilayer Encryption
 - Custom Cryptographic Protocol
+- Multilayer Encryption
+- Custom Command and Control Protocol
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#T1573

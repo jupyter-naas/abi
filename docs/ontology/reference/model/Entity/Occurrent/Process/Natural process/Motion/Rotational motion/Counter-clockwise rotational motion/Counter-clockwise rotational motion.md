@@ -9,8 +9,8 @@ A Rotational Motion in which the direction of rotation is toward the left as see
 the axial rotation of the Earth as seen from above the North Pole
 
 ### Aliases
-- Anti-Clockwise Rotation
 - CCW Rotational Motion
+- Anti-Clockwise Rotation
 - Counter-Clockwise Rotation
 
 ### URI

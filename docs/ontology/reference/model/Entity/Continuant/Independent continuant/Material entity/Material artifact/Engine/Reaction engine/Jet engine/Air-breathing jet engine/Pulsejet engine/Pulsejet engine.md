@@ -9,8 +9,8 @@ An Air-Breathing Jet Engine that is capable of operating statically and uses int
 Not defined.
 
 ### Aliases
-- Pulse Jet
 - Pulsejet
+- Pulse Jet
 
 ### URI
 https://www.commoncoreontologies.org/ont00000522

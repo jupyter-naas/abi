@@ -7,8 +7,8 @@ A Measurement Information Content Entity that consists of a symbol that places a
 
 ### Examples
 - a measurement that places military units onto a readiness rank order of red, yellow, green
-- a measurement that places Geospatial Regions into a rank order of small, medium, large
 - The sentence "The coldest day in history in Chicago, IL. is January 20, 1985." is the carrier of an ordinal measurment.
+- a measurement that places Geospatial Regions into a rank order of small, medium, large
 
 ### Aliases
 Not defined.

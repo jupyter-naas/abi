@@ -9,10 +9,10 @@ A session cookie, also known as an in-memory cookie, transient cookie or non-per
 Not defined.
 
 ### Aliases
-- In-memory Cookie
 - Web Session Cookie
-- Non-persistent Cookie
 - Transient Cookie
+- Non-persistent Cookie
+- In-memory Cookie
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#SessionCookie

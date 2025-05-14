@@ -9,8 +9,8 @@ In the context of computer operating systems, a volume or logical drive is a sin
 Not defined.
 
 ### Aliases
-- Logical Drive
 - Drive Volume
+- Logical Drive
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#Volume

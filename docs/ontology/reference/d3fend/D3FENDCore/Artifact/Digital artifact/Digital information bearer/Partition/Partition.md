@@ -9,8 +9,8 @@ A partition is a region on secondary storage device created so that the region c
 Not defined.
 
 ### Aliases
-- Disk Partition
 - Disk Slice
+- Disk Partition
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#Partition

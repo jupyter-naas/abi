@@ -9,8 +9,8 @@ A Nozzle that consists of a tube with an asymmetric hourglass shape that is desi
 Not defined.
 
 ### Aliases
-- CD Nozzle
 - de Laval Nozzle
+- CD Nozzle
 
 ### URI
 https://www.commoncoreontologies.org/ont00000698

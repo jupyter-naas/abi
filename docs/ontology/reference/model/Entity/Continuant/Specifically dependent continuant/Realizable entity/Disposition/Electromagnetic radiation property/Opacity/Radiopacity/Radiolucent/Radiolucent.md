@@ -9,8 +9,8 @@ A Radiopacity that inheres in a bearer in virtue of its capacity to permit most 
 Not defined.
 
 ### Aliases
-- Transradiance
 - Hypodense
+- Transradiance
 
 ### URI
 https://www.commoncoreontologies.org/ont00000695

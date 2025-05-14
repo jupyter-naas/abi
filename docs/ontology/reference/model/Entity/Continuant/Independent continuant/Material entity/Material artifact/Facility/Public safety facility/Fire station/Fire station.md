@@ -9,8 +9,8 @@ A Public Safety Facility that is designed for the storage of firefighting appara
 Not defined.
 
 ### Aliases
-- Fire House
 - Fire Hall
+- Fire House
 
 ### URI
 https://www.commoncoreontologies.org/ont00001383

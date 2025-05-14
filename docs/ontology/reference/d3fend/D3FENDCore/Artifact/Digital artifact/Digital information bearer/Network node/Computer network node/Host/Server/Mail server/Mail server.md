@@ -9,12 +9,12 @@ Within the Internet email system, a message transfer agent or mail transfer agen
 Not defined.
 
 ### Aliases
-- Email Server Resource
-- MTA
-- MX Host
-- Message transfer agent
 - Mail transfer agent
+- MX Host
+- MTA
+- Message transfer agent
 - Mail Exchanger
+- Email Server Resource
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#MailServer
