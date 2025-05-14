@@ -9,8 +9,8 @@ An Act of Communication by Media involving the exchange of brief written message
 Not defined.
 
 ### Aliases
-- Act of Texting
 - Act of Text Messaging
+- Act of Texting
 
 ### URI
 https://www.commoncoreontologies.org/ont00000750

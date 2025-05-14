@@ -9,9 +9,9 @@ A social identity that an Internet user establishes in online communities and we
 Not defined.
 
 ### Aliases
-- Online Persona
 - Online Personality
 - Online Identity
+- Online Persona
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#InternetPersona
