@@ -42,7 +42,7 @@ class OntologyDocs:
             top_level_class (str): Top level class to compute class levels.
         """
         # Load the ontology schemas.
-        self.load_ontology_schemas()
+        self.ontology_schemas = services.triple_store_service.get_schema_graph()
 
         # Load the mapping.
         self.load_mapping()
@@ -91,31 +91,6 @@ class OntologyDocs:
         
         # Create the YAML file.
         self.create_md()
-
-    def load_ontology_schemas(self):
-        # Init ontology schemas
-        consolidated = services.triple_store_service.get_schema_graph()
-        schema_graph = Graph()
-
-        # Filter for desired types
-        desired_types = {
-            OWL.Class,
-            OWL.DatatypeProperty,
-            OWL.ObjectProperty,
-            OWL.AnnotationProperty
-        }
-        
-        # Add all triples where subject is of desired type
-        for s, p, o in consolidated.triples((None, RDF.type, None)):
-            if o in desired_types:
-                # Add the type triple
-                schema_graph.add((s, p, o))
-                # Add all triples where this subject is involved
-                for s2, p2, o2 in consolidated.triples((s, None, None)):
-                    schema_graph.add((s2, p2, o2))
-                for s2, p2, o2 in consolidated.triples((None, None, s)):
-                    schema_graph.add((s2, p2, o2))
-        self.ontology_schemas = schema_graph
 
     def load_mapping(self):
         # Init mapping
@@ -350,7 +325,8 @@ class OntologyDocs:
         reference_dir = os.path.join("docs", "ontology", "reference")
         folder = "model"
         dir_path = os.path.join(reference_dir, folder)
-        onto_classes = _.filter_(self.onto_classes.values(), lambda x: "is curated in foundry" in x)
+        # onto_classes = _.filter_(self.onto_classes.values(), lambda x: "is curated in foundry" in x)
+        onto_classes = self.onto_classes.values()
         print("Foundry classes : ", len(onto_classes))
         # print(onto_classes)
         
@@ -572,8 +548,8 @@ class OntologyDocs:
                             o_range_label = o_range_class_dict.get('label', [''])[0]
                             o_range_level_path = o_range_class_dict.get('level_path', '')
                         else:
-                            o_range_label = ""
-                            o_range_level_path = ""
+                            o_range_label = str(o_range[0])
+                            o_range_level_path = str(o_range[0])
                     else:
                         o_range_uri = str(o_range)
                         o_range_label = str(o_range)
@@ -665,8 +641,7 @@ class OntologyDocs:
                             file_foundry_path = os.path.join(foundry_path, level_path, f"{label_safe}.md")
                             os.makedirs(os.path.dirname(file_foundry_path), exist_ok=True)
                             shutil.copy(file_path, file_foundry_path)
-                        
-            break
+                            logger.info(f"✅ {label.capitalize()} saved in {file_foundry_path}")
 
 OntologyDocs().rdf_to_md()
 
