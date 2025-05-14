@@ -9,8 +9,8 @@ A shared library file is a file that is intended to be shared by executable file
 Not defined.
 
 ### Aliases
-- Shared Object
 - Shared Library
+- Shared Object
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#SharedLibraryFile

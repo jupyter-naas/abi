@@ -6,11 +6,11 @@
 A Natural Process in which one or more Forces are generated and applied to a participating Object such that the Object is set in Motion or has the direction or magnitude of its Motion altered.
 
 ### Examples
-- an apple falling to the ground under the power of Earth's gravitational force
-- launching a water balloon using a sling shot
-- a twin-engine turboprop plane rotating both of its propellers against a portion of atmosphere to propel the plane forward
-- the wind blowing leaves across a lawn
 - turning a paddle wheel against a portion of water to propel the paddle boat forward
+- the wind blowing leaves across a lawn
+- a twin-engine turboprop plane rotating both of its propellers against a portion of atmosphere to propel the plane forward
+- launching a water balloon using a sling shot
+- an apple falling to the ground under the power of Earth's gravitational force
 - burning a portion of fuel to produce exhaust that is ejected through a jet nozzle to propel a rocket and its payload
 - heat from a fire causing ashes to rise into the sky
 
@@ -50,7 +50,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |

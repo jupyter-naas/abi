@@ -9,8 +9,8 @@ A session cookie, also known as an in-memory cookie, transient cookie or non-per
 Not defined.
 
 ### Aliases
-- Web Session Cookie
 - In-memory Cookie
+- Web Session Cookie
 - Non-persistent Cookie
 - Transient Cookie
 
