@@ -6,13 +6,13 @@
 A Natural Process in which one or more Forces are generated and applied to a participating Object such that the Object is set in Motion or has the direction or magnitude of its Motion altered.
 
 ### Examples
-- the wind blowing leaves across a lawn
 - heat from a fire causing ashes to rise into the sky
-- launching a water balloon using a sling shot
-- turning a paddle wheel against a portion of water to propel the paddle boat forward
+- the wind blowing leaves across a lawn
 - burning a portion of fuel to produce exhaust that is ejected through a jet nozzle to propel a rocket and its payload
-- an apple falling to the ground under the power of Earth's gravitational force
+- turning a paddle wheel against a portion of water to propel the paddle boat forward
 - a twin-engine turboprop plane rotating both of its propellers against a portion of atmosphere to propel the plane forward
+- an apple falling to the ground under the power of Earth's gravitational force
+- launching a water balloon using a sling shot
 
 ### Aliases
 Not defined.

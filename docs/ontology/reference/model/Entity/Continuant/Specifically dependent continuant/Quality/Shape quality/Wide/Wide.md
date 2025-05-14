@@ -9,8 +9,8 @@ A Shape Quality inhering in a bearer in virtue of the bearer having a width or d
 Not defined.
 
 ### Aliases
-- Broad
 - Fat
+- Broad
 
 ### URI
 https://www.commoncoreontologies.org/ont00000385

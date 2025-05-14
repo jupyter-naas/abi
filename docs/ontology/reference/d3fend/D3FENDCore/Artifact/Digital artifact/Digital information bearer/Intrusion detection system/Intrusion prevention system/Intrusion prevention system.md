@@ -11,9 +11,9 @@ Intrusion prevention systems are considered extensions of intrusion detection sy
 Not defined.
 
 ### Aliases
-- Intrusion Detection and Prevention System
 - IPS
 - IDPS
+- Intrusion Detection and Prevention System
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#IntrusionPreventionSystem

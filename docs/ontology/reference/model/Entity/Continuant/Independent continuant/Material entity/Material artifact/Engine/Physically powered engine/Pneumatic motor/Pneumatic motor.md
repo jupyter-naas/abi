@@ -9,8 +9,8 @@ A Physically Powered Engine that converts potential energy stored in a portion o
 Not defined.
 
 ### Aliases
-- Air Motor
 - Compressed Air Engine
+- Air Motor
 
 ### URI
 https://www.commoncoreontologies.org/ont00000364

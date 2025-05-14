@@ -9,8 +9,8 @@ A Process Profile that is the total change in Velocity of an object's Motion.
 Not defined.
 
 ### Aliases
-- Change in Velocity
 - DeltaV
+- Change in Velocity
 
 ### URI
 https://www.commoncoreontologies.org/ont00001219

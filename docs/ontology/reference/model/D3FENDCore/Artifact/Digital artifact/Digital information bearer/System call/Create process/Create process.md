@@ -11,9 +11,9 @@ Creates a process.
 Not defined.
 
 ### Aliases
-- Execute Process
 - Spawn Process
 - Process Spawn
+- Execute Process
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#CreateProcess

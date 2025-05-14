@@ -9,9 +9,9 @@ A Non-Name Identifier that consists of a string of characters that was created a
 Not defined.
 
 ### Aliases
+- Identifier Code
 - ID Code
 - Code ID
-- Identifier Code
 
 ### URI
 https://www.commoncoreontologies.org/ont00000077

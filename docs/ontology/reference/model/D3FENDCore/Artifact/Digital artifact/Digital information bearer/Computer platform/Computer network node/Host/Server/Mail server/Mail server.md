@@ -9,11 +9,11 @@ Within the Internet email system, a message transfer agent or mail transfer agen
 Not defined.
 
 ### Aliases
-- Message transfer agent
-- MTA
 - MX Host
-- Email Server Resource
 - Mail Exchanger
+- MTA
+- Message transfer agent
+- Email Server Resource
 - Mail transfer agent
 
 ### URI

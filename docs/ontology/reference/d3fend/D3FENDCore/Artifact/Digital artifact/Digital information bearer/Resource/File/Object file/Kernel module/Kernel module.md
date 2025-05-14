@@ -11,8 +11,8 @@ Most current Unix-like systems and Microsoft Windows support loadable kernel mod
 Not defined.
 
 ### Aliases
-- LKM
 - Loadable Kernel Module
+- LKM
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#KernelModule

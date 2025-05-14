@@ -9,9 +9,9 @@ A Motion wherein some participant repetitively deviates from a central location 
 Not defined.
 
 ### Aliases
+- Mechanical Oscillation
 - Oscillation Motion
 - Vibration
-- Mechanical Oscillation
 
 ### URI
 https://www.commoncoreontologies.org/ont00001279

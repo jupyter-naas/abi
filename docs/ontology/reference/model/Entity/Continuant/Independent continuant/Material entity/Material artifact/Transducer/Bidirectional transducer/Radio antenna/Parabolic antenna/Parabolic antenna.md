@@ -9,8 +9,8 @@ A Radio Antenna that uses a parabolic reflector to direct or receive radio waves
 Not defined.
 
 ### Aliases
-- Parabolic Dish
 - Dish Antenna
+- Parabolic Dish
 
 ### URI
 https://www.commoncoreontologies.org/ont00000724

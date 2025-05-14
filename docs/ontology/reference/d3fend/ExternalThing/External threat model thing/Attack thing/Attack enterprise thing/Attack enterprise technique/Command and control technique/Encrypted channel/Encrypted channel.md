@@ -10,8 +10,8 @@ Not defined.
 
 ### Aliases
 - Custom Cryptographic Protocol
-- Custom Command and Control Protocol
 - Multilayer Encryption
+- Custom Command and Control Protocol
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#T1573

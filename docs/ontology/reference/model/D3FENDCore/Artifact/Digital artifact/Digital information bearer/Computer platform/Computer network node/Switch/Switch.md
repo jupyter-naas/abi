@@ -10,9 +10,9 @@ Not defined.
 
 ### Aliases
 - Bridging Hub
-- Switching Hub
 - Network Switch
 - MAC Bridge
+- Switching Hub
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#Switch

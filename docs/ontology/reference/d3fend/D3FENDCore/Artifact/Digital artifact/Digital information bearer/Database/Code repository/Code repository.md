@@ -9,8 +9,8 @@ A code repository is a form of database where code, typically source code, is st
 Not defined.
 
 ### Aliases
-- Repository
 - Version Control Repository
+- Repository
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#CodeRepository
