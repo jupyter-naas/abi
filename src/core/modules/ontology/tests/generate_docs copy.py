@@ -2,26 +2,36 @@ from src import services
 from rdflib import Graph, RDF, OWL, RDFS, URIRef
 import pydash as _
 import os
+from pprint import pprint
 import urllib.parse
 from abi import logger
 import shutil
-from mappings import rdf_terms, rdfs_terms, owl_terms, skos_terms, dc_terms
-
-ONTOLOGY_DICT = {
-    "abi": "http://ontology.naas.ai/abi/",
-    "bfo": "http://purl.obolibrary.org/obo/",
-    "cco": "https://www.commoncoreontologies.org/",
-    "attack": "http://w3id.org/sepses/vocab/ref/attack#",
-    "d3fend": "http://d3fend.mitre.org/ontologies/d3fend.owl#",
-}
-
-ONTOLOGY_OPERATORS = {
-    'unionOf': 'or',
-    'intersectionOf': 'and',
-    'complementOf': 'not'
-}
 
 class OntologyDocs:
+    def __init__(self):
+        pass
+        
+    @staticmethod
+    def rdf_to_md(
+        graph,
+        top_level_class: str = 'http://purl.obolibrary.org/obo/BFO_0000001',
+    ):
+        """Translate RDF graph to YAML.
+
+        Args:
+            graph (Graph): RDF graph to translate.
+            class_colors_mapping (dict): Mapping of classes to colors.
+            top_level_class (str): Top level class to compute class levels.
+            display_relations_names (bool): Whether to display relations names.
+        """
+        translator = Translator()
+        return translator.translate(
+            graph,
+            top_level_class=top_level_class,
+        )
+
+
+class Translator:
     def __init__(self):
         # Dictionary to store ontology components
         self.onto = {}
@@ -31,68 +41,14 @@ class OntologyDocs:
         self.onto_classes = {}
         self.amount_per_level = {}
         self.mapping_oprop = {}
-        self.ontologies_dict = ONTOLOGY_DICT
-        self.operators = ONTOLOGY_OPERATORS
+        self.ontologies_dict = {
+            "abi": "http://ontology.naas.ai/abi/",
+            "bfo": "http://purl.obolibrary.org/obo/",
+            "cco": "https://www.commoncoreontologies.org/",
+            "attack": "http://w3id.org/sepses/vocab/ref/attack#",
+            "d3fend": "http://d3fend.mitre.org/ontologies/d3fend.owl#",
+        }
 
-    def rdf_to_md(self):
-        """Translate RDF graph to YAML.
-
-        Args:
-            graph (Graph): RDF graph to translate.
-            top_level_class (str): Top level class to compute class levels.
-        """
-        # Load the ontology schemas.
-        self.load_ontology_schemas()
-
-        # Load the mapping.
-        self.load_mapping()
-
-        # Extract triples from the Graph.
-        self.load_triples()
-        
-        # Load the classes from the ontology.
-        self.load_classes()
-        
-        # Compute class levels for the hierarchy building.
-        self.amount_per_level = {}
-        self.compute_class_levels(
-            'http://purl.obolibrary.org/obo/BFO_0000001',
-            level=0,
-            level_path="Entity",
-            hierarchy=[{"uri": "http://purl.obolibrary.org/obo/BFO_0000001", "label": "Entity", "level": 0, "level_path": "Entity"}]
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore",
-            level=0,
-            level_path="D3FENDCore",
-            hierarchy=[{"uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore", "label": "D3FENDCore", "level": 0, "level_path": "D3FENDCore"}]
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing",
-            level=0,
-            level_path="D3FENDKBThing",
-            hierarchy=[{"uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing", "label": "D3FENDKBThing", "level": 0, "level_path": "D3FENDKBThing"}]
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing",
-            level=0,
-            level_path="ExternalThing",
-            hierarchy=[{"uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing", "label": "ExternalThing", "level": 0, "level_path": "ExternalThing"}]
-        )
-        
-        # Got object properties.
-        self.load_object_properties()
-
-        # Got data properties.
-        self.load_data_properties()
-
-        # Save ontology data as JSON
-        self.save_json()
-        
-        # Create the YAML file.
-        self.create_md()
-
-    def load_ontology_schemas(self):
         # Init ontology schemas
         consolidated = services.triple_store_service.get_schema_graph()
         schema_graph = Graph()
@@ -117,12 +73,52 @@ class OntologyDocs:
                     schema_graph.add((s2, p2, o2))
         self.ontology_schemas = schema_graph
 
-    def load_mapping(self):
         # Init mapping
         mapping = {}
         for s, p, o in self.ontology_schemas.triples((None, RDFS.label, None)):
             if isinstance(s, URIRef):
                 mapping[str(s)] = str(o)
+            
+        # Add standard RDF terms
+        rdf_terms = {
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": "type",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#first": "first", 
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest": "rest",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil": "nil"
+        }
+        
+        # Add RDFS terms
+        rdfs_terms = {
+            "http://www.w3.org/2000/01/rdf-schema#domain": "domain",
+            "http://www.w3.org/2000/01/rdf-schema#label": "label",
+            "http://www.w3.org/2000/01/rdf-schema#range": "range",
+            "http://www.w3.org/2000/01/rdf-schema#subClassOf": "subclassOf"
+        }
+        
+        # Add OWL terms
+        owl_terms = {
+            "http://www.w3.org/2002/07/owl#complementOf": "complementOf",
+            "http://www.w3.org/2002/07/owl#intersectionOf": "intersectionOf", 
+            "http://www.w3.org/2002/07/owl#inverseOf": "inverseOf",
+            "http://www.w3.org/2002/07/owl#unionOf": "unionOf"
+        }
+        
+        # Add SKOS terms
+        skos_terms = {
+            "http://www.w3.org/2004/02/skos/core#altLabel": "altLabel",
+            "http://www.w3.org/2004/02/skos/core#definition": "definition",
+            "http://www.w3.org/2004/02/skos/core#example": "example"
+        }
+        
+        # Add DC terms
+        dc_terms = {
+            "http://purl.org/dc/elements/1.1/identifier": "identifier",
+            "http://purl.org/dc/terms/title": "title",
+            "http://purl.org/dc/terms/description": "description",
+            "http://purl.org/dc/terms/license": "license",
+            "http://purl.org/dc/terms/rights": "rights",
+            "http://purl.org/dc/terms/contributor": "contributor"
+        }
         
         # Update mapping with all terms
         mapping.update(rdf_terms)
@@ -131,6 +127,77 @@ class OntologyDocs:
         mapping.update(skos_terms)
         mapping.update(dc_terms)
         self.mapping = mapping
+
+        # Define logical operators mapping
+        self.operators = {
+            'unionOf': 'or',
+            'intersectionOf': 'and',
+            'complementOf': 'not'
+        }
+
+    def save_json(self):
+        """Save ontology data as JSON.
+
+        Returns:
+            dict: Dictionary containing ontology data structures
+        """
+        import json
+        import os
+
+        # Create the docs/ontology/reference/model directory if it doesn't exist
+        os.makedirs("docs/ontology/reference/model", exist_ok=True)
+
+        # Save the ontology data as JSON
+        with open("docs/ontology/reference/model/ontology.json", "w") as f:
+            json.dump(self.onto, f, indent=4, ensure_ascii=False)
+
+        with open("docs/ontology/reference/model/onto_tuples.json", "w") as f:
+            json.dump(self.onto_tuples, f, indent=4, ensure_ascii=False)
+        
+        with open("docs/ontology/reference/model/onto_oprop.json", "w") as f:
+            json.dump(self.onto_oprop, f, indent=4, ensure_ascii=False)
+        
+        with open("docs/ontology/reference/model/onto_dprop.json", "w") as f:
+            json.dump(self.onto_dprop, f, indent=4, ensure_ascii=False)
+        
+        with open("docs/ontology/reference/model/onto_classes.json", "w") as f:
+            json.dump(self.onto_classes, f, indent=4, ensure_ascii=False)
+        
+        with open("docs/ontology/reference/model/amount_per_level.json", "w") as f:
+            json.dump(self.amount_per_level, f, indent=4, ensure_ascii=False)
+        
+    
+    def translate(
+        self, 
+        graph,
+        top_level_class
+    ):
+        """Translate RDF graph to YAML.
+
+        Args:
+            graph (Graph): RDF graph to translate.
+            top_level_class (str): Top level class to compute class levels.
+        """
+        # Extract triples from the Graph.
+        self.load_triples(graph)
+        
+        # Load the classes from the ontology.
+        self.load_classes()
+        
+        # Compute class levels for the hierarchy building.
+        self.compute_class_levels(top_level_class)
+        
+        # Got object properties.
+        self.load_object_properties()
+
+        # Got data properties.
+        self.load_data_properties()
+
+        # Save ontology data as JSON
+        self.save_json()
+        
+        # Create the YAML file.
+        self.create_md()
 
     def __handle_onto_tuples(self, s, p, o):
         """Load SPO in onto_tuples dictionary.
@@ -146,14 +213,17 @@ class OntologyDocs:
         
         self.onto_tuples[str(s)].append((p, o))
     
-    def load_triples(self):
+    def load_triples(self, g):
         """Load the triples from the graph into the ontology dictionary.
 
         Args:
             graph (_type_): _description_
         """
+        # Consolidates graph with ConsolidatedOntology.ttl schema
+        g += self.ontology_schemas
+
         # Load the triples from the graph into the ontology dictionary.
-        for s, p, o in self.ontology_schemas:
+        for s, p, o in g:
             self.__handle_onto_tuples(s, p, o)
             
             # Keep only the predicates that are in the mapping.
@@ -179,7 +249,6 @@ class OntologyDocs:
     def load_classes(self):
         # We filter the classes from the ontology.
         _onto_classes = _.filter_(self.onto, lambda x: 'http://www.w3.org/2002/07/owl#Class' in x['type'] if 'type' in x else None)
-        logger.info(f"🔍 Found {len(_onto_classes)} classes in the ontology.")
 
         # We remove the subclassOf that are restrictions to keep it simple for now.
         # TODO: Resolve the restrictions to be able to display/use them later on.
@@ -189,12 +258,12 @@ class OntologyDocs:
         # We re build a dictionary with the __id as the key as it is easier to access the data this way.
         self.onto_classes = {e['__id']: e for e in _onto_classes}
     
-    def compute_class_levels(
+    def __compute_class_levels(
             self, 
             cls_id, 
-            level, 
-            level_path, 
-            hierarchy
+            level=0, 
+            level_path="Entity", 
+            hierarchy=[{"uri": "http://purl.obolibrary.org/obo/BFO_0000001", "label": "Entity", "level": 0, "level_path": "Entity"}]
         ):
         if cls_id in self.onto_classes:
             self.onto_classes[cls_id]['level'] = level
@@ -212,7 +281,7 @@ class OntologyDocs:
                 class_label = subclass['label'][0].capitalize().replace('/', '-').strip()
                 class_level = level + 1
                 class_level_path = os.path.join(level_path, class_label)
-                self.compute_class_levels(
+                self.__compute_class_levels(
                     class_uri, 
                     class_level, 
                     class_level_path, 
@@ -225,6 +294,34 @@ class OntologyDocs:
                         }
                     ]
                 )
+    
+    def compute_class_levels(self, cls_id):
+        # Reset amount_per_level
+        self.amount_per_level = {}
+        self.__compute_class_levels(
+            cls_id,
+            level=0,
+            level_path="Entity",
+            hierarchy=[{"uri": "http://purl.obolibrary.org/obo/BFO_0000001", "label": "Entity", "level": 0, "level_path": "Entity"}]
+        )
+        self.__compute_class_levels(
+            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore",
+            level=0,
+            level_path="D3FENDCore",
+            hierarchy=[{"uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore", "label": "D3FENDCore", "level": 0, "level_path": "D3FENDCore"}]
+        )
+        self.__compute_class_levels(
+            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing",
+            level=0,
+            level_path="D3FENDKBThing",
+            hierarchy=[{"uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing", "label": "D3FENDKBThing", "level": 0, "level_path": "D3FENDKBThing"}]
+        )
+        self.__compute_class_levels(
+            "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing",
+            level=0,
+            level_path="ExternalThing",
+            hierarchy=[{"uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing", "label": "ExternalThing", "level": 0, "level_path": "ExternalThing"}]
+        )
 
     # get_first_rest is used to get the values from unionOf, intersectionOf and complementOf.
     def __get_first_rest(self, tpl):
@@ -284,17 +381,16 @@ class OntologyDocs:
     
     # We map the ranges and domains to the classes by calling get_linked_classes.
     def map_ranges_domains(self, x):
-        if 'domain' in x:
-            x['domain'] = _.map_(x['domain'], lambda x: x if 'http' in x else self.get_linked_classes(x)[0])
         if 'range' in x:
             x['range'] = _.map_(x['range'], lambda x: x if 'http' in x else self.get_linked_classes(x)[0])
+        if 'domain' in x:
+            x['domain'] = _.map_( x['domain'], lambda x: x if 'http' in x else self.get_linked_classes(x)[0])
         return x
 
     def load_object_properties(self):
         # We filter the object properties from the ontology.
         _onto_oprop = _.filter_(self.onto, lambda x: 'http://www.w3.org/2002/07/owl#ObjectProperty' in x['type'] if 'type' in x else None)
-        logger.info(f"🔍 Found {len(_onto_oprop)} object properties in the ontology.")
-
+    
         # For each Object property, we map the ranges and domains.
         for i in _onto_oprop:
             self.map_ranges_domains(i)
@@ -305,45 +401,9 @@ class OntologyDocs:
     def load_data_properties(self):
         # We filter the data properties from the ontology.
         _onto_dprop = _.filter_(self.onto, lambda x: 'http://www.w3.org/2002/07/owl#DatatypeProperty' in x['type'] if 'type' in x else None)
-        logger.info(f"🔍 Found {len(_onto_dprop)} data properties in the ontology.")
 
         # We re build a dictionary with the __id as the key as it is easier to access the data this way.
         self.onto_dprop = {e['__id']: e for e in _onto_dprop}
-
-    def save_json(self):
-        """Save ontology data as JSON.
-
-        Returns:
-            dict: Dictionary containing ontology data structures
-        """
-        import json
-        import os
-
-        # Create the docs/ontology/reference/model directory if it doesn't exist
-        os.makedirs("docs/ontology/reference/model", exist_ok=True)
-
-        # Save the ontology data as JSON
-        with open("docs/ontology/reference/model/ontology.json", "w") as f:
-            json.dump(self.onto, f, indent=4, ensure_ascii=False)
-
-        logger.info(f"💾 Saving onto_tuples.json: {len(self.onto_tuples)}")
-        with open("docs/ontology/reference/model/onto_tuples.json", "w") as f:
-            json.dump(self.onto_tuples, f, indent=4, ensure_ascii=False)
-
-        logger.info(f"💾 Saving onto_classes.json: {len(self.onto_classes)}")
-        with open("docs/ontology/reference/model/onto_classes.json", "w") as f:
-            json.dump(self.onto_classes, f, indent=4, ensure_ascii=False)
-        
-        logger.info(f"💾 Saving onto_oprop.json: {len(self.onto_oprop)}")
-        with open("docs/ontology/reference/model/onto_oprop.json", "w") as f:
-            json.dump(self.onto_oprop, f, indent=4, ensure_ascii=False)
-        
-        logger.info(f"💾 Saving onto_dprop.json: {len(self.onto_dprop)}")
-        with open("docs/ontology/reference/model/onto_dprop.json", "w") as f:
-            json.dump(self.onto_dprop, f, indent=4, ensure_ascii=False)
-        
-        with open("docs/ontology/reference/model/amount_per_level.json", "w") as f:
-            json.dump(self.amount_per_level, f, indent=4, ensure_ascii=False)
 
     def create_md(self):
         # Init
@@ -666,9 +726,10 @@ class OntologyDocs:
                             os.makedirs(os.path.dirname(file_foundry_path), exist_ok=True)
                             shutil.copy(file_path, file_foundry_path)
                         
-            break
+            # break
 
-OntologyDocs().rdf_to_md()
+graph = Graph()
+OntologyDocs.rdf_to_md(graph)
 
 
         
