@@ -474,7 +474,7 @@ class Translator:
                         else:
                             parent_group = "ABI"
                             
-                        nodes.append(f"    {safe_name}({formatted_label}<br>{safe_name}):::{parent_group}-->{parent_name}\n")
+                        nodes.append(f"    {safe_name}({formatted_label}):::{parent_group}-->{parent_name}\n")
                     
                     # Add nodes to markdown
                     markdown_content += "".join(reversed(nodes))
@@ -493,14 +493,10 @@ class Translator:
                 print("Parents : ", parents)
 
                 # H3 : Data Properties
-                markdown_content += "### Data Properties\n"
-                data_properties = _.filter_(self.onto_dprop.values(), lambda x: 'domain' in x and any(uri in x['domain'] for uri in parents))
-                print("Data properties : ", data_properties)
-
-                markdown_content += "| Predicate | Domain | Range | Label | Definition | Example |\n"
-                markdown_content += "|-----------|---------|--------|---------|------------|----------|\n"
-                
-                for dprop in sorted(data_properties, key=lambda x: x.get('__id', 0)):
+                dproperties = _.filter_(self.onto_dprop.values(), lambda x: 'domain' in x and any(uri in x['domain'] for uri in parents))
+                print("Data properties : ", dproperties)
+                data_properties = []
+                for dprop in sorted(dproperties, key=lambda x: x.get('__id', 0)):
                     d_predicate = dprop.get('__id', '')
                     d_domain = dprop.get("domain")
                     if d_domain:
@@ -511,18 +507,30 @@ class Translator:
                     d_label = dprop.get('label', [''])[0]
                     d_definition = dprop.get('definition', [''])[0]
                     d_example = dprop.get('example', [''])[0]
-                    
-                    markdown_content += f"| {d_predicate} | {d_domain} | {d_range} | {d_label} | {d_definition} | {d_example} |\n"
-                
-                markdown_content += "\n"
+                    data_properties.append({
+                        "predicate": d_predicate,
+                        "label": d_label,
+                        "domain": d_domain,
+                        "range": d_range,
+                        "definition": d_definition,
+                        "example": d_example
+                    })
+                if len(data_properties) > 0:
+                    markdown_content += "### Data Properties\n"
+                    markdown_content += "| Label | Definition | Example | Domain | Range |\n"
+                    markdown_content += "|-------|------------|---------|--------|-------|\n"
+                    from pprint import pprint
+                    print("Data properties : ")
+                    pprint(data_properties)
+                    for dprop in data_properties:
+                        markdown_content += f"| [{dprop['label']}]({dprop['predicate']}) | {dprop['domain']} | {dprop['range']} | {dprop['definition']} | {dprop['example']} |\n"
+                    markdown_content += "\n"
+
                 # H3 : Object Properties
-                markdown_content += "### Object Properties\n"
-                object_properties = _.filter_(self.onto_oprop.values(), lambda x: 'domain' in x and any(uri in x['domain'] for uri in parents))
-                print("Object properties : ", object_properties)
-                markdown_content += "| Predicate | Domain | Range | Label | Definition | Example | Inverse Of |\n"
-                markdown_content += "|-----------|---------|--------|---------|------------|----------|------------|\n"
-                
-                for oprop in sorted(object_properties, key=lambda x: x.get('__id', 0)):
+                oproperties = _.filter_(self.onto_oprop.values(), lambda x: 'domain' in x and any(uri in x['domain'] for uri in parents))
+                print("Object properties : ", oproperties)
+                object_properties = []
+                for oprop in sorted(oproperties, key=lambda x: x.get('__id', 0)):
                     o_predicate = oprop.get('__id', '')
                     o_domain = oprop.get("domain")
                     if o_domain:
@@ -536,8 +544,26 @@ class Translator:
                     o_inverse_of = oprop.get('inverseOf')
                     if o_inverse_of:
                         o_inverse_of = str(o_inverse_of)
-                    
-                    markdown_content += f"| {o_predicate} | {o_domain} | {o_range} | {o_label} | {o_definition} | {o_example} | {o_inverse_of} |\n"
+                    data_properties.append({
+                        "predicate": o_predicate,
+                        "label": o_label,
+                        "definition": o_definition,
+                        "example": o_example,
+                        "domain": o_domain,
+                        "range": o_range,
+                        "inverseOf": o_inverse_of
+                    })
+                if len(object_properties) > 0:
+                    markdown_content += "### Object Properties\n"
+                    markdown_content += "| Label | Definition | Example | Domain | Range | Inverse Of |\n"
+                    markdown_content += "|-------|------------|---------|--------|-------|------------|\n"
+                    from pprint import pprint
+                    print("Object properties : ")
+                    pprint(object_properties)
+                    for oprop in object_properties:
+                        markdown_content += f"| [{oprop['label']}]({oprop['predicate']}) | {oprop['definition']} | {oprop['example']} | {oprop['domain']} | {oprop['range']} | {oprop['inverseOf']} |\n"
+                    markdown_content += "\n"
+
                 # Save markdown file if level path exists
                 if level_path:  
                     file_path = os.path.join(dir_path, level_path, f"{label.capitalize()}.md")
@@ -545,6 +571,7 @@ class Translator:
                     with open(file_path, "w") as f:
                         f.write(markdown_content)
                     print(f"✅ {label.capitalize()} saved in {file_path}")
+                break
 
 graph = Graph()
 OntologyYaml.rdf_to_yaml(graph)
