@@ -24,13 +24,15 @@ abi:Website a owl:Class ;
     rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
     rdfs:label "Website" ;
     skos:definition "A website containing a biography, portfolio of work, and contact information, representing an organization's presence and identity on the web." ;
-    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries." .
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries." ;
+    abi:is_curated_in_foundry "entreprise_management_foundry", "personal_ai_foundry" .
 
 abi:Ticker a owl:Class ;
     rdfs:subClassOf cco:ont00000958 ;
     rdfs:label "Ticker" ;
     skos:definition "Represents a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges." ;
-    skos:example "AAPL, GOOGL, AMZN, etc." .
+    skos:example "AAPL, GOOGL, AMZN, etc." ;
+    abi:is_curated_in_foundry "entreprise_management_foundry" .
 
 #################################################################
 #    Object Properties

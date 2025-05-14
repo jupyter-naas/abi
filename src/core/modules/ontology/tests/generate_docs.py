@@ -5,6 +5,7 @@ import os
 from pprint import pprint
 import urllib.parse
 from abi import logger
+import shutil
 
 class OntologyDocs:
     def __init__(self):
@@ -409,14 +410,19 @@ class Translator:
         reference_dir = os.path.join("docs", "ontology", "reference")
         folder = "model"
         dir_path = os.path.join(reference_dir, folder)
+        onto_classes = _.filter_(self.onto_classes.values(), lambda x: "is curated in foundry" in x)
+        print("Foundry classes : ", len(onto_classes))
+        # print(onto_classes)
         
         # Loop on classes
-        for onto_class in self.onto_classes:
+        for onto_class in onto_classes:
+            onto_class = onto_class.get("__id")
             if onto_class.startswith("http"):
                 onto_class_dict = self.onto_classes.get(onto_class)
                 logger.info(f"==> Onto class : {onto_class}")
                 level = onto_class_dict.get("level", 0)
                 level_path = onto_class_dict.get("level_path", "Not Defined")
+                curated_in_foundry = onto_class_dict.get("is curated in foundry", [])
 
                 # H1 : Title
                 label = onto_class_dict.get("label", [""])[0]
@@ -708,15 +714,18 @@ class Translator:
                             ontology_path = os.path.join(reference_dir, k)
                             file_ontology_path = os.path.join(ontology_path, level_path, f"{label_safe}.md")
                             os.makedirs(os.path.dirname(file_ontology_path), exist_ok=True)
-                            import shutil
                             shutil.copy(file_path, file_ontology_path)
-                            # # Replace dir_path with ontology_path in markdown content
-                            # ontology_markdown = markdown_content.replace(dir_path, ontology_path)
-                            # os.makedirs(os.path.dirname(file_ontology_path), exist_ok=True)
-                            # with open(file_ontology_path, "w") as f:
-                            #     f.write(ontology_markdown)
                             logger.info(f"✅ {label.capitalize()} saved in {file_ontology_path}")
                             break
+                    
+                    # Add curated in foundry to the markdown content
+                    if curated_in_foundry:
+                        for foundry in curated_in_foundry:
+                            foundry_path = os.path.join("docs", "ontology", "foundry", foundry)
+                            file_foundry_path = os.path.join(foundry_path, level_path, f"{label_safe}.md")
+                            os.makedirs(os.path.dirname(file_foundry_path), exist_ok=True)
+                            shutil.copy(file_path, file_foundry_path)
+                        
             # break
 
 graph = Graph()
