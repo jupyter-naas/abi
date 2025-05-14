@@ -1,0 +1,43 @@
+# Offensive action
+
+## Overview
+
+### Definition
+Not defined.
+
+### Examples
+Not defined.
+
+### Aliases
+Not defined.
+
+### URI
+http://d3fend.mitre.org/ontologies/d3fend.owl#OffensiveAction
+
+### Subclass Of
+```mermaid
+graph BT
+    d3fend.owl#OffensiveAction(Offensive<br>action):::d3fend-->d3fend.owl#CyberAction
+    d3fend.owl#CyberAction(Cyber<br>action):::d3fend-->d3fend.owl#Action
+    d3fend.owl#Action(Action):::d3fend-->d3fend.owl#Event
+    d3fend.owl#Event(Event):::d3fend-->d3fend.owl#D3FENDCore
+    d3fend.owl#D3FENDCore(D3FENDCore):::d3fend
+    
+    classDef bfo fill:#97c1fb,color:#060606
+    classDef cco fill:#e4c51e,color:#060606
+    classDef abi fill:#48DD82,color:#060606
+    classDef attack fill:#FF0000,color:#060606
+    classDef d3fend fill:#FF0000,color:#060606
+```
+
+- [D3FENDCore](/docs/ontology/reference/model/D3FENDCore/D3FENDCore.md)
+- [Event](/docs/ontology/reference/model/D3FENDCore/Event/Event.md)
+- [Action](/docs/ontology/reference/model/D3FENDCore/Event/Action/Action.md)
+- [Cyber action](/docs/ontology/reference/model/D3FENDCore/Event/Action/Cyber%20action/Cyber%20action.md)
+- [Offensive action](/docs/ontology/reference/model/D3FENDCore/Event/Action/Cyber%20action/Offensive%20action/Offensive%20action.md)
+
+
+### Ontology Reference
+- [d3fend](http://d3fend.mitre.org/ontologies/d3fend.owl#)
+
+## Properties
