@@ -9,8 +9,8 @@ An Air-Breathing Jet Engine that is capable of operating statically and uses int
 Not defined.
 
 ### Aliases
-- Pulse Jet
 - Pulsejet
+- Pulse Jet
 
 ### URI
 https://www.commoncoreontologies.org/ont00000522
@@ -52,6 +52,11 @@ graph BT
 - [cco](https://www.commoncoreontologies.org/): [ArtifactOntology](https://www.commoncoreontologies.org/ArtifactOntology)
 
 ## Properties
+### Data Properties
+| Ontology | Label | Definition | Example | Domain | Range |
+|----------|-------|------------|---------|--------|-------|
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
 |----------|-------|------------|---------|--------|-------|------------|

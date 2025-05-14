@@ -6,8 +6,8 @@
 An Information Medium Artifact that is designed to bear some Information Content Entity by means of recording that information in digital (binary) format.
 
 ### Examples
-- A computer's Hard Disk Drive
 - A portable USB Drive
+- A computer's Hard Disk Drive
 
 ### Aliases
 Not defined.
@@ -46,6 +46,11 @@ graph BT
 - [cco](https://www.commoncoreontologies.org/): [ArtifactOntology](https://www.commoncoreontologies.org/ArtifactOntology)
 
 ## Properties
+### Data Properties
+| Ontology | Label | Definition | Example | Domain | Range |
+|----------|-------|------------|---------|--------|-------|
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
 |----------|-------|------------|---------|--------|-------|------------|

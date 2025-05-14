@@ -9,8 +9,8 @@ Outbound internet encrypted remote terminal traffic is encrypted network traffic
 Not defined.
 
 ### Aliases
-- Outbound Internet Encrypted SSH Traffic
 - Outbound Internet Encrypted RDP Traffic
+- Outbound Internet Encrypted SSH Traffic
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#OutboundInternetEncryptedRemoteTerminalTraffic
