@@ -9,8 +9,8 @@ Version control tools are tools that used to conduct version control. A  compone
 Not defined.
 
 ### Aliases
-- Revision Control
 - Source Control
+- Revision Control
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#VersionControlTool

@@ -9,8 +9,8 @@ A Government Building that is designed for the administration of a local communi
 Not defined.
 
 ### Aliases
-- Town Hall
 - City Hall
+- Town Hall
 
 ### URI
 https://www.commoncoreontologies.org/ont00000545

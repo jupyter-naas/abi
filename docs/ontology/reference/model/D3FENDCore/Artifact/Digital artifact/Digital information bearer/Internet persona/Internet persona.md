@@ -10,8 +10,8 @@ Not defined.
 
 ### Aliases
 - Online Personality
-- Online Persona
 - Online Identity
+- Online Persona
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#InternetPersona

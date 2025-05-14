@@ -9,8 +9,8 @@ Personal message, private message (PM), direct message (DM), or personal chat (P
 Not defined.
 
 ### Aliases
-- Personal Message
 - Private Message
+- Personal Message
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#UserToUserMessage

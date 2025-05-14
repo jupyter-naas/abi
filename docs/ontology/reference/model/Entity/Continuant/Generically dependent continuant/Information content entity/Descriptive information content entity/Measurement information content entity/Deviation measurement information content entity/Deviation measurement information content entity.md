@@ -7,13 +7,13 @@ A Measurement Information Content Entity that is a measurement of the extent to 
 
 ### Examples
 - a satellite deviaties from its predicted orbital path by 5 kilometers
-- an overweight piece of luggage deviates from an airline's maximum allowed weight by +10 pounds
 - a missile impact deviates from its target location by 100 feet
+- an overweight piece of luggage deviates from an airline's maximum allowed weight by +10 pounds
 
 ### Aliases
-- Conformance Measurement
 - Degree of Conformance
 - Degree of Deviation
+- Conformance Measurement
 - Deviation Measurement
 
 ### URI

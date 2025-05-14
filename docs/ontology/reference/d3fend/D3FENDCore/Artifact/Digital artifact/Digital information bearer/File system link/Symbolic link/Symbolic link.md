@@ -9,9 +9,9 @@ A symbolic link (also symlink or soft link) is a term for any file that contains
 Not defined.
 
 ### Aliases
+- Soft Link
 - Symlink
 - Softlink
-- Soft Link
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#SymbolicLink

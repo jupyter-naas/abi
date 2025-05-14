@@ -10,8 +10,8 @@ Not defined.
 
 ### Aliases
 - Graphics Adapter
-- Video Card
 - Display Card
+- Video Card
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#DisplayAdapter

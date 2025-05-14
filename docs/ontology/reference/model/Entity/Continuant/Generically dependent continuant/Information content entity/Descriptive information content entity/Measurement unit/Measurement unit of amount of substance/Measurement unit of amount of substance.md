@@ -9,8 +9,8 @@ A Measurement Unit that is used as a standard for measurement of the number of a
 mole, pound-mole
 
 ### Aliases
-- Measurement Unit of Chemical Amount
 - Measurement Unit of Enplethy
+- Measurement Unit of Chemical Amount
 
 ### URI
 https://www.commoncoreontologies.org/ont00000140
