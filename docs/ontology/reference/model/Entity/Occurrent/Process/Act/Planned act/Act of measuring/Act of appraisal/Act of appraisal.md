@@ -6,9 +6,9 @@
 An Act of Measuring that involves evaluating, assessing, estimating, or judging the nature, value, importance, condition, or quality of something or someone.
 
 ### Examples
+- a food critic rating the quality of a restaurant's ambiance, service, and food
 - a mechanic assessing whether a damaged vehicle is repairable
 - an insurance agent appraising the financial value of a building
-- a food critic rating the quality of a restaurant's ambiance, service, and food
 
 ### Aliases
 Not defined.
@@ -50,7 +50,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |

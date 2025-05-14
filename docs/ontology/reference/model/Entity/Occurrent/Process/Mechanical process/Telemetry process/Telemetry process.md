@@ -6,8 +6,8 @@
 A Mechanical Process that is highly automated and in which measurements are made or other data is collected and transmitted to receiving equipment to facilitate the monitoring of environmental conditions or equipment parameters at a remote or inaccessible location.
 
 ### Examples
-- using a portable cardiac monitor to remotely collect data on a patient's heart activity (biotelemetry)
 - using a GPS tag to track a shark's migratory pattern
+- using a portable cardiac monitor to remotely collect data on a patient's heart activity (biotelemetry)
 
 ### Aliases
 Not defined.
@@ -45,7 +45,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |

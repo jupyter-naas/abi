@@ -6,8 +6,8 @@
 A Role that inheres in an Agent by virtue of that Agent's responsibilities to operate or control some Artifact.
 
 ### Examples
-- the role of flying an airplane
 - the role of driving a car
+- the role of flying an airplane
 - the role of operating a crane
 
 ### Aliases
@@ -48,7 +48,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |

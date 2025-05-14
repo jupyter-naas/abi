@@ -6,12 +6,12 @@
 A Continuant that is owned by, in the possession of, or is otherwise controlled by an Agent such that it could be used by that Agent.
 
 ### Examples
+- a knowledge base
+- a plot of land
+- a sum of money
+- a group of interns
 - a vehicle
 - a software program
-- a knowledge base
-- a group of interns
-- a sum of money
-- a plot of land
 
 ### Aliases
 Not defined.
@@ -45,7 +45,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |

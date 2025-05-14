@@ -9,9 +9,9 @@ A network of multiple, connected networks. Internetworking is the practice of co
 Not defined.
 
 ### Aliases
+- Interconnected Network
 - Internet
 - Internetwork
-- Interconnected Network
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#InternetNetwork

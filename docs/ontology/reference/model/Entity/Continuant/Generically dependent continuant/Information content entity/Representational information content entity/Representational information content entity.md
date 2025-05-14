@@ -7,8 +7,8 @@ An Information Content Entity that represents some Entity.
 
 ### Examples
 - the content of a court transcript represents a courtroom proceeding
-- the content of a photograph of the Statue of Liberty represents the Statue of Liberty
 - the content of a video of a sporting event represents that sporting event
+- the content of a photograph of the Statue of Liberty represents the Statue of Liberty
 
 ### Aliases
 Not defined.
@@ -46,7 +46,7 @@ graph BT
 ### Data Properties
 | Ontology | Label | Definition | Example | Domain | Range |
 |----------|-------|------------|---------|--------|-------|
-| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'entreprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
+| abi | [is curated in foundry](http://ontology.naas.ai/abi/is_curated_in_foundry) | Relates a class to the foundry it is curated in. | The class cco:ont00001262 is curated in the foundry 'enterprise_management_foundry' and 'personal_ai_foundry'. | [entity](/docs/ontology/reference/model/Entity/Entity.md) | [string](http://www.w3.org/2001/XMLSchema#string) |
 
 ### Object Properties
 | Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
