@@ -6,8 +6,8 @@
 A Government Building that is designed for the administration of a sovereign nation.
 
 ### Examples
-- United States Capitol
 - Parliament of Canada
+- United States Capitol
 
 ### Aliases
 Not defined.

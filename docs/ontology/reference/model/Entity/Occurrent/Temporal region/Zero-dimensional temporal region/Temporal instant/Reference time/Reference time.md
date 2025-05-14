@@ -9,9 +9,9 @@ A Temporal Instant specified as the origin for which other Temporal Regions are 
 Not defined.
 
 ### Aliases
+- Epoch Time
 - Reference Date
 - Epoch
-- Epoch Time
 
 ### URI
 https://www.commoncoreontologies.org/ont00001116

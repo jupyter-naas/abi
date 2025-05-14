@@ -10,9 +10,9 @@ Not defined.
 
 ### Aliases
 - Decoy Object
+- Trap
 - Decoy
 - Lure
-- Trap
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#DecoyArtifact

@@ -9,8 +9,8 @@ A Microwave Frequency that is between 30 and 300 GHz.
 Not defined.
 
 ### Aliases
-- ITU Band Number 11
 - Millimeter Band Frequency
+- ITU Band Number 11
 
 ### URI
 https://www.commoncoreontologies.org/ont00000519

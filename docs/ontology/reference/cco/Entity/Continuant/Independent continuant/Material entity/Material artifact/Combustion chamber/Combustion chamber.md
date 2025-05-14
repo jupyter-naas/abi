@@ -9,9 +9,9 @@ A Material Artifact that is designed to wholly or partially bound an internal Si
 Not defined.
 
 ### Aliases
+- Burner
 - Flame Holder
 - Combustor
-- Burner
 
 ### URI
 https://www.commoncoreontologies.org/ont00000397

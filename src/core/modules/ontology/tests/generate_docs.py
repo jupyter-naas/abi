@@ -416,7 +416,7 @@ class Translator:
                 onto_class_dict = self.onto_classes.get(onto_class)
                 logger.info(f"==> Onto class : {onto_class}")
                 level = onto_class_dict.get("level", 0)
-                level_path = onto_class_dict.get("level_path", "Entity")
+                level_path = onto_class_dict.get("level_path", "Not Defined")
 
                 # H1 : Title
                 label = onto_class_dict.get("label", [""])[0]
@@ -500,14 +500,13 @@ class Translator:
                     markdown_content += "    classDef abi fill:#48DD82,color:#060606\n"
                     markdown_content += "    classDef attack fill:#FF0000,color:#060606\n"
                     markdown_content += "    classDef d3fend fill:#FF0000,color:#060606\n"
-                
-                markdown_content += "```\n\n"
-                for h in hierarchy:
-                    h_label = h.get('label')
-                    h_level_path = h.get('level_path')
-                    h_file_path = urllib.parse.quote(os.path.join("/", dir_path, h_level_path, h_label + ".md"))
-                    markdown_content += f"- [{h_label}]({h_file_path})\n"
-                markdown_content += "\n\n"
+                    markdown_content += "```\n\n"
+                    for h in hierarchy:
+                        h_label = h.get('label')
+                        h_level_path = h.get('level_path')
+                        h_file_path = urllib.parse.quote(os.path.join("/", dir_path, h_level_path, h_label + ".md"))
+                        markdown_content += f"- [{h_label}]({h_file_path})\n"
+                    markdown_content += "\n\n"
 
                 # H3 : Ontology Reference
                 markdown_content += "### Ontology Reference\n"

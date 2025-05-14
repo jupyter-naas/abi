@@ -9,8 +9,8 @@ An Air-Breathing Jet Engine that uses the forward motion of the Engine to compre
 Not defined.
 
 ### Aliases
-- Supersonic Combusting Ramjet
 - Scramjet
+- Supersonic Combusting Ramjet
 
 ### URI
 https://www.commoncoreontologies.org/ont00001121

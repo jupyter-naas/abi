@@ -9,8 +9,8 @@ An Act of Communication by Media in which the Information Content Entity that in
 Not defined.
 
 ### Aliases
-- Act of Facsimile Transmission
 - Act of Faxing
+- Act of Facsimile Transmission
 
 ### URI
 https://www.commoncoreontologies.org/ont00001143

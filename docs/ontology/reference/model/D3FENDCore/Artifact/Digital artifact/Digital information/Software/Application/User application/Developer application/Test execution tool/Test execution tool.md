@@ -9,9 +9,9 @@ A test execution tool is a type of software used to test software, hardware or c
 Not defined.
 
 ### Aliases
+- Test Executive
 - Test Manager
 - Test Execution Engine
-- Test Executive
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#TestExecutionTool

@@ -9,8 +9,8 @@ A computer keyboard is a typewriter-style device which uses an arrangement of bu
 Not defined.
 
 ### Aliases
-- Computer Keyboard
 - Keyboard
+- Computer Keyboard
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#KeyboardInputDevice

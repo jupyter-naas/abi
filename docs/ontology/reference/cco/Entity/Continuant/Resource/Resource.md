@@ -6,12 +6,12 @@
 A Continuant that is owned by, in the possession of, or is otherwise controlled by an Agent such that it could be used by that Agent.
 
 ### Examples
-- a plot of land
-- a sum of money
 - a vehicle
-- a group of interns
+- a sum of money
 - a software program
 - a knowledge base
+- a plot of land
+- a group of interns
 
 ### Aliases
 Not defined.

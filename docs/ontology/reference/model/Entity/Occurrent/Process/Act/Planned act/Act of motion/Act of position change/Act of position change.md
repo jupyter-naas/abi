@@ -6,10 +6,10 @@
 An Act of Motion in which the position (i.e. the orientation, alignment, or arrangement) of some Object or of one or more of an Object's parts is changed by some Agent.
 
 ### Examples
-- raising your left arm
 - a top spinning in place
 - swivelling your office chair to face the window
 - adjusting your posture
+- raising your left arm
 
 ### Aliases
 Not defined.

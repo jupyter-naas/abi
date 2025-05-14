@@ -9,8 +9,8 @@ Controlling access to local computer system resources with kernel-level capabili
 Not defined.
 
 ### Aliases
-- System Call Mediation
 - Mandatory Access Control
+- System Call Mediation
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#SystemCallFiltering

@@ -9,8 +9,8 @@ A Designative Information Content Entity that consists of a string of characters
 Not defined.
 
 ### Aliases
-- Identifier
 - ID
+- Identifier
 
 ### URI
 https://www.commoncoreontologies.org/ont00000649
