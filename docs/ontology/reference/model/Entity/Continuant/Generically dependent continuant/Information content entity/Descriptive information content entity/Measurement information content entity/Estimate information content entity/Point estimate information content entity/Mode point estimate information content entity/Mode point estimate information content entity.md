@@ -9,8 +9,8 @@ A Point Estimate Information Content Entity that is a measurement of a set of va
 Not defined.
 
 ### Aliases
-- Statistical Mode
 - Mode
+- Statistical Mode
 
 ### URI
 https://www.commoncoreontologies.org/ont00000154

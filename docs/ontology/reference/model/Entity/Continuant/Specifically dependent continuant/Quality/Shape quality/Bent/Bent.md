@@ -9,8 +9,8 @@ A Shape Quality inhering in a bearer in virtue of the bearer having one or more 
 Not defined.
 
 ### Aliases
-- Kinked
 - Angular
+- Kinked
 
 ### URI
 https://www.commoncoreontologies.org/ont00000991

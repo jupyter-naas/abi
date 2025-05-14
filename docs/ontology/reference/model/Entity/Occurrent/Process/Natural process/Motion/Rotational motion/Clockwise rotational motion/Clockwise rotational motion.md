@@ -9,8 +9,8 @@ A Rotational Motion in which the direction of rotation is toward the right as se
 the axial rotation of the Earth as seen from above the South Pole
 
 ### Aliases
-- Clockwise Rotation
 - CW Rotational Motion
+- Clockwise Rotation
 
 ### URI
 https://www.commoncoreontologies.org/ont00000148

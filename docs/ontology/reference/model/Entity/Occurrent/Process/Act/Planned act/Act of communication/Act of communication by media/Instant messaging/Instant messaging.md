@@ -9,8 +9,8 @@ An Act of Communication by Media in which real-time direct text-based communicat
 Not defined.
 
 ### Aliases
-- Act of Instant Messaging
 - Act of IMing
+- Act of Instant Messaging
 
 ### URI
 https://www.commoncoreontologies.org/ont00000149

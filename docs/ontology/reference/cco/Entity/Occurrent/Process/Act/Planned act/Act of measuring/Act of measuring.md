@@ -7,8 +7,8 @@ A Planned Act that involves determining the extent, dimensions, quanity, or qual
 
 ### Examples
 - putting an object on a scale to measure its weight in kilograms
-- using a tape measure to determine the height and width of a doorway in inches
 - rating Hollywood movies on a 1 to 5 star scale
+- using a tape measure to determine the height and width of a doorway in inches
 
 ### Aliases
 Not defined.

@@ -6,8 +6,8 @@
 Conveys the identity, distinguishing characteristics, and reputation of a product or service offered by an organization, often associated with a name, term, design, symbol, or other feature.
 
 ### Examples
-- The brand "Apple" for consumer electronics
 - The brand "Nike" for athletic apparel
+- The brand "Apple" for consumer electronics
 
 ### Aliases
 Not defined.

@@ -9,8 +9,8 @@ A Motion wherein some participant repetitively deviates from a central location 
 Not defined.
 
 ### Aliases
-- Oscillation Motion
 - Vibration
+- Oscillation Motion
 - Mechanical Oscillation
 
 ### URI

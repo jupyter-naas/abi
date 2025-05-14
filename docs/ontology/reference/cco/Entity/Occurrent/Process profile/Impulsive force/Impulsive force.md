@@ -9,9 +9,9 @@ A Process Profile that is the integral of a Force that is applied to a portion o
 Not defined.
 
 ### Aliases
-- J
 - Imp
 - Impulse
+- J
 
 ### URI
 https://www.commoncoreontologies.org/ont00000772

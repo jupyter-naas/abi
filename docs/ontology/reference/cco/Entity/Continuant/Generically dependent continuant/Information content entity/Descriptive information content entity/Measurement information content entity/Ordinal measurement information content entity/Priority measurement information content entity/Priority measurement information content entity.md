@@ -9,9 +9,9 @@ An Ordinal Measurement Information Content Entity that is a measurement of the r
 low, normal, high, urgent, or immediate priority
 
 ### Aliases
+- Priority Measurement
 - Criticality Measurement
 - Importance Measurement
-- Priority Measurement
 
 ### URI
 https://www.commoncoreontologies.org/ont00000369

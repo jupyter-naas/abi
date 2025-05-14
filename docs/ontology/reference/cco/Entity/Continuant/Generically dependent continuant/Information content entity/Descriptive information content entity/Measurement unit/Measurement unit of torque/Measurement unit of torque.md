@@ -9,8 +9,8 @@ A Measurement Unit that is used as a standard for measurement of the rate of cha
 Not defined.
 
 ### Aliases
-- Measurement Unit of Moment of Force
 - Measurement Unit of Rotational Force
+- Measurement Unit of Moment of Force
 
 ### URI
 https://www.commoncoreontologies.org/ont00000659

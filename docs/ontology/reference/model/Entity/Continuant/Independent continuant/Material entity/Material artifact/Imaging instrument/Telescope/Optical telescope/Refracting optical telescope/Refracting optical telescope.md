@@ -9,8 +9,8 @@ An Optical Telescope that is designed to aid in the observation of spatially dis
 Not defined.
 
 ### Aliases
-- Refractor
 - Refracting Telescope
+- Refractor
 
 ### URI
 https://www.commoncoreontologies.org/ont00000355

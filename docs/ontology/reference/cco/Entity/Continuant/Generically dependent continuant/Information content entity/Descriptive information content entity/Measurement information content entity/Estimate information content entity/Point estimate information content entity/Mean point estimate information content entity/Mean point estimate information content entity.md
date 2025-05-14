@@ -9,9 +9,9 @@ A Point Estimate Information Content Entity that is a measurement of a set of va
 Not defined.
 
 ### Aliases
-- Mean
-- Average
 - Arithmetic Mean
+- Average
+- Mean
 
 ### URI
 https://www.commoncoreontologies.org/ont00000896

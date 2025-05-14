@@ -3,17 +3,17 @@
 ## Overview
 
 ### Definition
-A process spawn refers to a function that loads and executes a new child process.The current process may wait for the child to terminate or may continue to execute asynchronously. Creating a new subprocess requires enough memory in which both the child process and the current program can execute. There is a family of spawn functions in DOS, inherited by Microsoft Windows. There is also a different family of spawn functions in an optional extension of the POSIX standards.  Fork-exec is another technique combining two Unix system calls, which can effect a process spawn.
 Creates a process.
 Executes a process.
+A process spawn refers to a function that loads and executes a new child process.The current process may wait for the child to terminate or may continue to execute asynchronously. Creating a new subprocess requires enough memory in which both the child process and the current program can execute. There is a family of spawn functions in DOS, inherited by Microsoft Windows. There is also a different family of spawn functions in an optional extension of the POSIX standards.  Fork-exec is another technique combining two Unix system calls, which can effect a process spawn.
 
 ### Examples
 Not defined.
 
 ### Aliases
+- Spawn Process
 - Process Spawn
 - Execute Process
-- Spawn Process
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#CreateProcess

@@ -9,8 +9,8 @@ In computer systems, an access token contains the security credentials for a log
 Not defined.
 
 ### Aliases
-- Ticket
 - Token
+- Ticket
 
 ### URI
 http://d3fend.mitre.org/ontologies/d3fend.owl#AccessToken

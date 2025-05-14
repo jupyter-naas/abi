@@ -9,8 +9,8 @@ A Measurement Information Content Entity that is a measurement of the extent to 
 Not defined.
 
 ### Aliases
-- Accuracy of Information
 - Trueness Measurement
+- Accuracy of Information
 - Veracity Measurement
 
 ### URI

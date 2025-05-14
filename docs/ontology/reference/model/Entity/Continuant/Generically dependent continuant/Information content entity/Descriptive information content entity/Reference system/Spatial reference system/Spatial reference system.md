@@ -9,8 +9,8 @@ A Reference System that describes a set of standards for uniquely identifying th
 Not defined.
 
 ### Aliases
-- Coordinate System
 - Spatial Coordinate System
+- Coordinate System
 - Spatial Reference Frame
 
 ### URI

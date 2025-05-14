@@ -9,8 +9,8 @@ A Measurement Information Content Entity that is a measurement of the extent to 
 Not defined.
 
 ### Aliases
-- Accuracy of Process
 - Reliability Measurement
+- Accuracy of Process
 
 ### URI
 https://www.commoncoreontologies.org/ont00001256
