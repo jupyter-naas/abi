@@ -21,4 +21,4 @@ class Secret(ISecretService):
         self.__adapter = adapter
 
     def get(self, key: str, default: any = None) -> str:
-        return self.__adapter.get(key)
+        return self.__adapter.get(key, default)

@@ -19,7 +19,7 @@ lock:
 
 path=tests/
 test: 
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pytest tests'
+	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pytest $(path)'
 
 
 
