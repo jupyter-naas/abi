@@ -46,6 +46,9 @@ python-pptx = "^1.0.2"
 arxiv = "^2.1.3"
 #siteanalyzer = { path = "./src/core/modules/common/integrations/siteanalyzer/target/wheels/siteanalyzer-0.1.0-py3-none-any.whl", develop = true }
 jinja2 = "^3.1.6"
+pytest = "^8.3.5"
+langchain-google-genai = "^2.1.4"
+langchain-aws = "^0.2.23"
 
 [tool.poetry.group.terminal-agent.dependencies]
 langchain-anthropic = "^0.3.0"
