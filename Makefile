@@ -28,7 +28,7 @@ lock:
 
 path=tests/
 test: 
-	@ uv run python -m pytest tests
+	@ uv run python -m pytest .
 
 check-core:
 	uvx ruff check
