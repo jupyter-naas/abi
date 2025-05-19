@@ -6,13 +6,15 @@ RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificat
 
 COPY . .
 
-RUN pip install poetry
-RUN poetry config virtualenvs.in-project true
+RUN pip install uv
 
-# Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
-RUN . "$HOME/.cargo/env"
-RUN pip install maturin[patchelf]
+# RUN pip install poetry
+# RUN poetry config virtualenvs.in-project true
+
+# # Install Rust toolchain
+# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+# RUN . "$HOME/.cargo/env"
+# RUN pip install maturin[patchelf]
 
 
 # Add build argument for architecture

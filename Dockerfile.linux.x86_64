@@ -7,16 +7,20 @@ ADD ./lib/ /app/lib
 ADD ./src/ /app/src
 ADD ./config.yaml /app/config.yaml
 ADD ./Makefile /app/Makefile
-ADD ./poetry.lock /app/poetry.lock
+# ADD ./poetry.lock /app/poetry.lock
+ADD ./uv.lock /app/uv.lock
 ADD ./pyproject.toml /app/pyproject.toml
 ADD ./README.md /app/README.md
 ADD ./.git /app/.git
 ADD ./marketplace/ /app/marketplace
 
-RUN pip install poetry
-RUN poetry install
+# RUN pip install poetry
+# RUN poetry install
+
+RUN pip install uv
+RUN uv sync
 
 # Install siteanalyzer integration
 #RUN poetry run python -m pip install --force-reinstall /app/src/core/modules/common/integrations/siteanalyzer/target/wheels/*.whl
 
-CMD ["poetry", "run", "api" ]
+CMD ["uv", "run", "api" ]
