@@ -17,7 +17,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from typing import Annotated, Optional
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import ToolMessage, ToolCall
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
 from enum import Enum
@@ -295,30 +295,32 @@ class Agent(Expose):
     # NOTE: this is a simplified version of the prebuilt ToolNode
     # If you want to have a tool node that has full feature parity, please refer to the source code
     def call_tools(self, state: MessagesState) -> list[Command]:
-        last_message = state["messages"][-1]
+        last_message : AnyMessage = state["messages"][-1]
         if not isinstance(last_message, AIMessage) or not hasattr(last_message, 'tool_calls'):
             return [Command(goto="__end__", update={"messages": [last_message]})]
             
-        tool_calls = last_message.tool_calls
+        tool_calls : list[ToolCall] = last_message.tool_calls
         results: list[Command] = []
         for tool_call in tool_calls:
-            tool_ = self.__tools_by_name[tool_call["name"]]
+            tool_ : BaseTool = self.__tools_by_name[tool_call["name"]]
 
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
                 "properties"
             ]
 
+            args : dict[str, Any] | ToolCall = tool_call
+
             # this is simplified for demonstration purposes and
             # is different from the ToolNode implementation
             if "state" in tool_input_fields:
                 # inject state
-                tool_call = {**tool_call, "args": {**tool_call["args"], "state": state}}
+                args = {**tool_call, "args": {**tool_call["args"], "state": state}}
             
             #self.__notify_tool_usage(state["messages"][-1])
             if tool_call['name'].startswith('transfer_to_'):
-                tool_call = {"state": state, "tool_call_id": tool_call['id']}
+                args = {"state": state, "tool_call_id": tool_call['id']}
                 
-            tool_response = tool_.invoke(tool_call)
+            tool_response = tool_.invoke(args)
             #self.__notify_tool_response(tool_response)
             if isinstance(tool_response, ToolMessage):
                 results.append(Command(update={"messages": [tool_response]}))

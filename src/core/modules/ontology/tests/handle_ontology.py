@@ -1,5 +1,5 @@
 from src import services
-from rdflib import Graph, RDF, OWL, RDFS, URIRef
+from rdflib import URIRef
 from abi import logger
 
 consolidated = services.triple_store_service.get_schema_graph()
