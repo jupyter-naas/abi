@@ -5,7 +5,6 @@ def create_agent():
     class AzureOpenAIO4MiniAgent(Agent): pass
     
     return AzureOpenAIO4MiniAgent(
-        id=model.id,
         name=model.name,
         description=model.description,
         chat_model=model.model,
