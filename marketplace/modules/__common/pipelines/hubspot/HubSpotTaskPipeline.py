@@ -12,7 +12,6 @@ from abi import logger
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, List
 from src import secret, config
 
 LOGO_URL = "https://logo.clearbit.com/hubspot.com"

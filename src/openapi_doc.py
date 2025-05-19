@@ -14,7 +14,7 @@ This document describes the current version of the ABI API, which provides acces
     },
     {
         "name": "Authentication",
-        "description": f"""
+        "description": """
 Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer `<token>`') or as a query parameter (e.g. '?token=`<token>`'). 
 The token must match the `ABI_API_KEY` environment variable.
 Contact your administrator to get the token.
@@ -26,9 +26,9 @@ import requests
 
 url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion"
 
-headers = {{
-    "Authorization": f"Bearer {{token}}"
-}}
+headers = {
+    "Authorization": f"Bearer {token}"
+}
 
 response = requests.post(url, headers=headers)
 print(response.json())

@@ -1,7 +1,6 @@
 import dash
 from dash import html, dcc
-import plotly.graph_objects as go
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any
 from dataclasses import dataclass
 from src.core.modules.common.analytics.visualization.PlotlyAnalytics import (
     PlotlyAnalytics,

@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,
@@ -442,7 +442,6 @@ class GithubGraphqlIntegration(Integration):
 def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    from typing import Optional
 
     integration = GithubGraphqlIntegration(configuration)
 

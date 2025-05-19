@@ -1,7 +1,6 @@
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStoragePort import (
     IObjectStorageDomain,
     IObjectStorageAdapter,
-    Exceptions,
 )
 from queue import Queue
 from typing import Optional

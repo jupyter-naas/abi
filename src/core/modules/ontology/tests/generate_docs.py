@@ -1,5 +1,5 @@
 from src import services
-from rdflib import Graph, RDF, OWL, RDFS, URIRef
+from rdflib import RDFS, URIRef
 import pydash as _
 import os
 import urllib.parse
@@ -345,10 +345,10 @@ class OntologyDocs:
                 markdown_content = f"# {label.capitalize()}\n\n"
 
                 # H2 : Overview
-                markdown_content += f"## Overview\n\n"
+                markdown_content += "## Overview\n\n"
 
                 # H3 : Definition
-                markdown_content += f"### Definition\n"
+                markdown_content += "### Definition\n"
                 definition = onto_class_dict.get("definition", [])
                 if definition:
                     markdown_content += "\n".join(definition) + "\n\n"
@@ -590,7 +590,7 @@ class OntologyDocs:
                         oprop_definition = oprop.get('definition')
                         oprop_example = oprop.get('example')
                         oprop_domain = oprop.get('domain', {}).get('label')
-                        oprop_domain_uri = oprop.get('domain', {}).get('uri')
+                        _ = oprop.get('domain', {}).get('uri')
                         oprop_domain_level_path = urllib.parse.quote(
                             os.path.join(
                                 "/",
@@ -600,7 +600,7 @@ class OntologyDocs:
                             )
                         )
                         oprop_range = oprop.get('range', {}).get('label')
-                        oprop_range_uri = oprop.get('range', {}).get('uri')
+                        _ = oprop.get('range', {}).get('uri')
                         oprop_range_level_path = urllib.parse.quote(
                             os.path.join(
                                 "/",

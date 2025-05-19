@@ -48,6 +48,7 @@ Get started with ABI - Install, configure and chat with your first agent.
 ### Pre-requisites
 
 - **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)**
+- **Install [uv](https://docs.astral.sh/uv/getting-started/installation/)**
 - **Create your account on [NAAS](https://naas.ai)** (Optional, only if you want to use the storage system in production)
 
 ### Installation Options

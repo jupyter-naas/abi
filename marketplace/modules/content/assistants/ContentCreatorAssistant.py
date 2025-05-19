@@ -7,15 +7,10 @@ from abi.services.agent.Agent import (
 from src import secret
 from langchain_anthropic import ChatAnthropic
 from src.core.modules.common.integrations import (
-    LinkedInIntegration,
     YouTubeIntegration,
-    ReplicateIntegration,
     NewsAPIIntegration,
     ReplicateIntegration,
     PerplexityIntegration,
-)
-from src.core.modules.common.integrations.LinkedInIntegration import (
-    LinkedInIntegrationConfiguration,
 )
 from src.core.modules.common.integrations.YouTubeIntegration import (
     YouTubeIntegrationConfiguration,
@@ -28,6 +23,10 @@ from src.core.modules.common.integrations.NewsAPIIntegration import (
 )
 from src.core.modules.common.integrations.PerplexityIntegration import (
     PerplexityIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.LinkedInIntegration import (
+    LinkedInIntegration,
+    LinkedInIntegrationConfiguration,
 )
 
 NAME = "Content Creator"
@@ -99,8 +98,8 @@ def create_content_creator_agent(
     li_at = secret.get("li_at")
     JSESSIONID = secret.get("JSESSIONID")
     if li_at and JSESSIONID:
-        tools += LinkedinIntegration.as_tools(
-            LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+        tools += LinkedInIntegration.as_tools(
+            LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
         )
 
     youtube_key = secret.get("YOUTUBE_API_KEY")

@@ -17,7 +17,7 @@ MODEL = "gpt-4o"
 TEMPERATURE = 0
 DESCRIPTION = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
-SYSTEM_PROMPT = f"""
+SYSTEM_PROMPT = """
 You are a Naas Agent with access to NaasIntegration tools to perform actions on Naas workspaces.
 If you don't have access to any tool, ask the user to set their access token in .env file.
 Always be clear and professional in your communication while helping users interact with Naas services.

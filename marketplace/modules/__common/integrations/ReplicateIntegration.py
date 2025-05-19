@@ -1,10 +1,9 @@
-from typing import Dict, Optional, List
+from typing import List
 from datetime import datetime
-from pathlib import Path
 import replicate
 import requests
 from src import config
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,
@@ -16,9 +15,6 @@ from src.core.modules.common.integrations.NaasIntegration import (
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from src.services import services
-from lib.abi.services.object_storage.ObjectStoragePort import (
-    Exceptions as ObjectStorageExceptions,
-)
 
 LOGO_URL = "https://logo.clearbit.com/replicate.com"
 

@@ -1,9 +1,9 @@
-from lib.abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter
+from abi.services.object_storage.ObjectStoragePort import IObjectStorageAdapter
 from queue import Queue
 from typing import Optional
 
 # Load S3 secondary adapter as we will use it.
-from lib.abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
+from abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3 import (
     ObjectStorageSecondaryAdapterS3,
 )
 
@@ -32,8 +32,8 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
     __naas_api_key: str
     __workspace_id: str
     __storage_name: str
-    __credentials: Credentials
-    __s3_adapter: ObjectStorageSecondaryAdapterS3
+    __credentials: Credentials | None
+    __s3_adapter: ObjectStorageSecondaryAdapterS3 | None
 
     def __init__(
         self,
@@ -46,12 +46,15 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
         self.__workspace_id = workspace_id
         self.__storage_name = storage_name
         self.__base_prefix = base_prefix
-        self.__credentials = None
-        self.__s3_adapter = None
+        self.__credentials: Credentials | None = None
+        self.__s3_adapter: ObjectStorageSecondaryAdapterS3 | None = None
 
-    def ensure_credentials(self) -> dict:
+    def ensure_credentials(self) -> Credentials:
         if self.__credentials is None:
+            #TODO: Handle raise_for_status.
             self.__refresh_credentials()
+
+        assert self.__credentials is not None
 
         # If credentials are older than 10 minutes, refresh them
         if self.__credentials.created_at < datetime.now() - CREDENTIALS_EXPIRATION_TIME:
@@ -59,7 +62,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
         return self.__credentials
 
-    def __refresh_credentials(self) -> dict:
+    def __refresh_credentials(self) -> None:
         response = requests.post(
             f"{NAAS_API_URL}/workspace/{self.__workspace_id}/storage/credentials/",
             headers={"Authorization": f"Bearer {self.__naas_api_key}"},
@@ -100,19 +103,27 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
     def get_object(self, prefix: str, key: str) -> bytes:
         self.ensure_credentials()
 
+        assert self.__s3_adapter is not None
+
         return self.__s3_adapter.get_object(prefix, key)
 
     def put_object(self, prefix: str, key: str, content: bytes):
         self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
 
         return self.__s3_adapter.put_object(prefix, key, content)
 
     def delete_object(self, prefix: str, key: str):
         self.ensure_credentials()
 
+        assert self.__s3_adapter is not None
+
         return self.__s3_adapter.delete_object(prefix, key)
 
     def list_objects(self, prefix: str, queue: Optional[Queue] = None) -> list[str]:
         self.ensure_credentials()
+
+        assert self.__s3_adapter is not None
 
         return self.__s3_adapter.list_objects(prefix, queue)

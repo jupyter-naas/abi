@@ -1,14 +1,14 @@
 from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from abi import logger
 from pydantic import Field
-from typing import Dict, Optional, Any
-from abi.utils.Graph import ABIGraph, ABI, BFO, CCO, XSD, TIME
+from typing import Optional
+from abi.utils.Graph import ABIGraph, ABI, BFO, CCO
 from abi.utils.String import create_id_from_string
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
-from src import config, secret
+from src import config
 from src.core.modules.common.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
@@ -161,7 +161,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
             raise ValueError(f"Organization type {organization_type} not supported")
         try:
             number_of_employee_value = int(organization_number_of_employee.get("value"))
-        except:
+        except Exception as _:
             number_of_employee_value = None
 
         # Add organization to graph
@@ -373,7 +373,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
         graph = add_member(graph, organization_uri, cto, "Top Management")
 
         # Add organization offerings
-        logger.info(f"---> Mapping organization offerings")
+        logger.info("---> Mapping organization offerings")
         organization_offerings = response["organization_offerings"]
         organization_products = organization_offerings["products"]
         organization_services = organization_offerings["services"]
@@ -540,7 +540,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
                 )
 
         # Add capabilities to graph
-        logger.info(f"---> Mapping organization capabilities")
+        logger.info("---> Mapping organization capabilities")
         capabilities = response["organization_capabilities"]
         organization_technological_capabilities = capabilities[
             "technological_capabilities"
@@ -587,15 +587,13 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
         )
 
         # Add corporate structure to graph
-        logger.info(f"---> Mapping organization corporate structure")
+        logger.info("---> Mapping organization corporate structure")
         organization_corporate_structure = response["organization_corporate_structure"]
         organization_mergers = organization_corporate_structure.get("mergers", [])
         organization_acquisitions = organization_corporate_structure.get(
             "acquisitions", []
         )
-        organization_subsidiaries = organization_corporate_structure.get(
-            "subsidiaries", []
-        )
+        _ = organization_corporate_structure.get("subsidiaries", [])
 
         def add_corporate_structure(
             graph,
@@ -653,7 +651,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
                 event_uid = organization_id + "_" + agreement_id
                 if year_uri is not None:
                     event_uid = event_uid + "_" + str(corporate_structure["year"])
-                event_uri = graph.add_process(
+                _ = graph.add_process(
                     prefix=ABI,
                     uid=event_uid,
                     label=corporate_structure["name"],
@@ -687,7 +685,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
         )
 
         # Add strategic alliances to graph
-        logger.info(f"---> Mapping organization strategic alliances")
+        logger.info("---> Mapping organization strategic alliances")
         organization_strategic_alliances = response.get(
             "organization_strategic_alliances", {}
         )
@@ -768,7 +766,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
                 event_uid = organization_id + "_" + agreement_id
                 if year_uri is not None:
                     event_uid = event_uid + "_" + str(strategic_alliance["year"])
-                event_uri = graph.add_process(
+                _ = graph.add_process(
                     prefix=ABI,
                     uid=event_uid,
                     label=strategic_alliance.get("name", None),
@@ -834,7 +832,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
         )
 
         # Add financial data
-        logger.info(f"---> Adding financial data")
+        logger.info("---> Adding financial data")
         organization_financial_data = response["organization_profit_and_loss"]
         organization_revenue = organization_financial_data.get("revenue", [])
         organization_expenses = organization_financial_data.get("expenses", [])
@@ -923,7 +921,7 @@ class PerplexityOrganizationAnalysisPipeline(Pipeline):
         )
 
         # Add key indicators
-        logger.info(f"---> Adding key indicators")
+        logger.info("---> Adding key indicators")
         organization_key_indicators = response["organization_key_indicators"]
         organization_key_indicators = organization_key_indicators.get(
             "key_indicators", []

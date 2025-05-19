@@ -2,7 +2,7 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from langchain_openai import ChatOpenAI
-from langchain_core.tools import Tool, tool
+from langchain_core.tools import tool
 # from langchain_anthropic import ChatAnthropic
 # from langchain_ollama import ChatOllama
 from typing import Any
