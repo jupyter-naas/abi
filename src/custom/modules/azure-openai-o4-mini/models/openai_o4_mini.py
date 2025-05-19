@@ -9,15 +9,15 @@ if "AZURE_OPENAI_API_KEY" not in os.environ:
 os.environ["AZURE_OPENAI_ENDPOINT"] = "https://YOUR-ENDPOINT.openai.azure.com/"
 
 model = ChatModel(
-    id="113f2201-9f0e-4bf1-a25f-3ea8ba88e41d",
+    model_id="113f2201-9f0e-4bf1-a25f-3ea8ba88e41d",
     name="o4-mini",
     description="",
     image="",
-    context_window=200000,
     owner="openai",
     model=AzureChatOpenAI(
         deployment_name="o4-mini",
         api_version="2024-08-01-preview",
         azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-    )
+    ),
+    context_window=200000,
 )
