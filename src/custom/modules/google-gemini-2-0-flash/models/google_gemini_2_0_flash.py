@@ -1,4 +1,4 @@
-from lib.abi.models.Model import ChatModel
+from lib.abi.models.Model import ChatModel, ModelType
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src import secret
 import os
@@ -15,11 +15,10 @@ if "GOOGLE_API_KEY" not in os.environ:
     os.environ["GOOGLE_API_KEY"] = secret.get("GOOGLE_API_KEY", '')
 
 model = ChatModel(
-    id=ID,
+    model_id=ID,
     name=NAME,
     description=DESCRIPTION,
     image=IMAGE,
-    context_window=CONTEXT_WINDOW,
     owner=OWNER,
     model=ChatGoogleGenerativeAI(
         model=NAME,
@@ -27,5 +26,6 @@ model = ChatModel(
         max_tokens=None,
         timeout=None,
         max_retries=2,
-    )
+    ),
+    context_window=CONTEXT_WINDOW
 )
