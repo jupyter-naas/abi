@@ -4,21 +4,22 @@ import importlib
 import os
 from pathlib import Path
 
-MODULE_PATH = ['src/core/modules', 'src/custom/modules']
+MODULE_PATH = ["src/core/modules", "src/custom/modules"]
 
-__modules : List[IModule] = []
-__loaded : bool = False
+__modules: List[IModule] = []
+__loaded: bool = False
+
 
 def get_modules():
     """Loads and returns all enabled modules from the src/modules directory.
-    
+
     This method scans the src/modules directory and dynamically loads each module found.
     Modules are autonomous and self-contained - they can be added by simply dropping them
     into the modules directory without modifying other code. A module can be disabled
     by adding "disabled" to its directory name (e.g. "opendata_disabled").
-    
+
     The modules are only loaded once - subsequent calls return the cached modules list.
-    
+
     Returns:
         List[IModule]: List of loaded module instances
     """
@@ -45,5 +46,5 @@ def get_modules():
                         print(f"❌ Error loading module {module.name}: {e}")
         
         __loaded = True
-    
+
     return __modules

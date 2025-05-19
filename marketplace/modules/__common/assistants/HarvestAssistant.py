@@ -1,11 +1,25 @@
 from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
-from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.apps.terminal_agent.terminal_style import (
+    print_tool_usage,
+    print_tool_response,
+)
 from src.core.modules.common.integrations import HarvestIntegration
-from src.core.modules.common.integrations.HarvestIntegration import HarvestIntegrationConfiguration
-from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
-from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.common.integrations.HarvestIntegration import (
+    HarvestIntegrationConfiguration,
+)
+from src.core.modules.support.agents.SupportAssistant import (
+    create_agent as create_support_agent,
+)
+from src.core.modules.common.prompts.responsabilities_prompt import (
+    RESPONSIBILITIES_PROMPT,
+)
 
 DESCRIPTION = "A Harvest Assistant for time tracking and project management."
 AVATAR_URL = "https://logo.clearbit.com/getharvest.com"
@@ -18,31 +32,32 @@ Always provide all the context (tool response, draft, etc.) to the user in your 
 {RESPONSIBILITIES_PROMPT}
 """
 
+
 def create_harvest_agent():
     agent_configuration = AgentConfiguration(
-        on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
-        on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
-        system_prompt=SYSTEM_PROMPT
+        on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]["name"]),
+        on_tool_response=lambda message: print_tool_response(f"\n{message.content}"),
+        system_prompt=SYSTEM_PROMPT,
     )
     model = ChatOpenAI(
-        model="gpt-4",
-        temperature=0,
-        api_key=secret.get('OPENAI_API_KEY')
+        model="gpt-4", temperature=0, api_key=secret.get("OPENAI_API_KEY")
     )
     tools = []
-    
+
     # Add integration based on available credentials
-    if secret.get('HARVEST_API_KEY') and secret.get('HARVEST_ACCOUNT_ID'):    
+    if secret.get("HARVEST_API_KEY") and secret.get("HARVEST_ACCOUNT_ID"):
         integration_config = HarvestIntegrationConfiguration(
-            api_key=secret.get('HARVEST_API_KEY'),
-            account_id=secret.get('HARVEST_ACCOUNT_ID')
+            api_key=secret.get("HARVEST_API_KEY"),
+            account_id=secret.get("HARVEST_ACCOUNT_ID"),
         )
         tools += HarvestIntegration.as_tools(integration_config)
 
     # Add support assistant
-    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    support_agent = create_support_agent(
+        AgentSharedState(thread_id=2), agent_configuration
+    )
     tools += support_agent.as_tools()
-    
+
     return Agent(
         name="harvest_agent",
         description="Use to manage time tracking and project management tasks",
@@ -50,5 +65,5 @@ def create_harvest_agent():
         tools=tools,
         state=AgentSharedState(thread_id=1),
         configuration=agent_configuration,
-        memory=MemorySaver()
-    ) 
+        memory=MemorySaver(),
+    )

@@ -5,7 +5,8 @@ graph.parse("src/core/modules/common/ontologies/ConsolidatedOntology.ttl")
 
 class_uri = "http://purl.obolibrary.org/obo/BFO_0000015"
 
-query = """
+query = (
+    """
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
@@ -26,7 +27,9 @@ WHERE {
   OPTIONAL { ?data_property_uri skos:definition ?definition }
 }
 ORDER BY ?label
-""" % class_uri
+"""
+    % class_uri
+)
 
 results = graph.query(query)
 data = []
@@ -39,5 +42,9 @@ for row in results:
 print(data)
 
 import json
-with open(f"src/core/modules/ontology/tests/workflows/test_GetDataProperties_{class_uri.split('/')[-1]}.json", "w") as f:
+
+with open(
+    f"src/core/modules/ontology/tests/workflows/test_GetDataProperties_{class_uri.split('/')[-1]}.json",
+    "w",
+) as f:
     json.dump(data, f, indent=4, ensure_ascii=False)
