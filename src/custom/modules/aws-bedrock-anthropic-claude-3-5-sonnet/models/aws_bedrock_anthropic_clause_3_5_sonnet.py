@@ -4,7 +4,7 @@ from langchain_aws import ChatBedrockConverse
 
 
 model = ChatModel(
-    id="1ef84540-0000-4000-8000-000000000000",
+    model_id="1ef84540-0000-4000-8000-000000000000",
     name="AWS Bedrock Anthropic Claude 3.5 Sonnet",
     description="AWS Bedrock Anthropic Claude 3.5 Sonnet",
     image="",
