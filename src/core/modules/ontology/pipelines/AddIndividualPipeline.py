@@ -1,14 +1,12 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
-    OntologyEvent,
 )
 from langchain_core.tools import StructuredTool
 from dataclasses import dataclass
 from abi import logger
-from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, Any, Tuple
+from typing import Tuple
 from rdflib import (
     Graph,
     URIRef,
@@ -17,9 +15,6 @@ from rdflib import (
     RDF,
     OWL,
     RDFS,
-    SKOS,
-    XSD,
-    TIME,
     DCTERMS,
 )
 import uuid

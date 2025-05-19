@@ -1,63 +1,86 @@
+# Git hooks setups
+
+.git/hooks/pre-commit:
+	@mkdir -p .git/hooks
+	@echo 'cd "$(git rev-parse --show-toplevel)" || exit 1;make check' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+
+git-deps: .git/hooks/pre-commit
+
+###############@
+
+deps: uv git-deps .venv
+
+# Make sure uv exists otherwise tell the user to install it.
+uv:
+	@if ! command -v uv &> /dev/null; then \
+		echo "🚀 Oops! Looks like uv is missing from your system!"; \
+		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
+		exit 1; \
+	fi
+
 .venv:
-	@ docker compose run --rm --remove-orphans abi poetry install
+	uv sync
 
 dev-build:
 	@ docker compose build
 
-install:
-	@ docker compose run --rm --remove-orphans abi poetry install
-	@ docker compose run --rm --remove-orphans abi poetry update abi
-
 abi-add: .venv
-	@ docker compose run --rm abi bash -c 'cd lib && poetry add $(dep) && poetry lock'
+	cd lib && uv add $(dep)
 
 add:
-	@ docker compose run --rm abi bash -c 'poetry add $(dep) && poetry lock'
+	uv add $(dep) && uv lock
 
 lock:
 	@ docker compose run --rm --remove-orphans abi poetry lock
 
 path=tests/
 test: 
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pytest tests'
+	@ uv run python -m pytest .
 
+check-core:
+	uvx ruff check
+	.venv/bin/mypy -p lib.abi --follow-untyped-imports
+	#.venv/bin/mypy -p src.core --follow-untyped-imports
 
+.venv/lib/python3.10/site-packages/abi: .venv
+	ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi
 
-sh: .venv
-	@ docker compose run --rm --remove-orphans -it abi bash
+check: .venv/lib/python3.10/site-packages/abi check-core
+	.venv/bin/mypy -p src.custom --follow-untyped-imports
   
 api: .venv
-	@ docker compose run --rm --remove-orphans -p 9879:9879 abi poetry run api
+	uv run api
 
 api-prod:
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
 sparql-terminal: .venv
-	@ docker compose run --rm --remove-orphans -it abi bash -c 'poetry run python -m src.core.apps.sparql_terminal.main'
+	@ uv run python -m src.core.apps.sparql_terminal.main	
 
 dvc-login: .venv
-	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/setup_dvc.py | sh'
+	@ uv run run python scripts/setup_dvc.py | sh
 
 storage-pull: .venv
 	@ echo "Pulling storage..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/storage_pull.py | sh'
+	@ uv run python scripts/storage_pull.py | sh
 
 storage-push: .venv storage-pull
 	@ echo "Pushing storage..."
-	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
+	@ uv run run python scripts/storage_push.py | sh
 
 triplestore-prod-remove: .venv
 	@ echo "Removing production triplestore..."
-	@ docker compose run --rm -it --remove-orphans  abi bash -c 'poetry run python scripts/triplestore_prod_remove.py'
+	@ uv run python scripts/triplestore_prod_remove.py
 
 triplestore-prod-override: .venv
 	@ echo "Overriding production triplestore..."
-	@ docker compose run -it --rm --remove-orphans  abi bash -c 'poetry run python scripts/triplestore_prod_override.py'
+	@ uv run python scripts/triplestore_prod_override.py
 
 triplestore-prod-pull: .venv
 	@ echo "Pulling production triplestore..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/triplestore_prod_pull.py'
+	@ uv run python scripts/triplestore_prod_pull.py
 
 clean:
 	@echo "Cleaning up build artifacts..."
@@ -75,13 +98,11 @@ help:
 	@echo "ENVIRONMENT SETUP:"
 	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
 	@echo "  dev-build                Build all Docker containers defined in docker-compose.yml"
-	@echo "  install                  Install all dependencies and update the abi package"
 	@echo "  add dep=<package>        Add a new dependency to the project"
 	@echo "  abi-add dep=<package>    Add a new dependency to the lib directory"
 	@echo "  lock                     Update the Poetry lock file without installing packages"
 	@echo ""
 	@echo "DEVELOPMENT:"
-	@echo "  sh                       Open an interactive bash shell in the ABI Docker container"
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
@@ -133,20 +154,22 @@ build.linux.x86_64: .venv
 # -------------------------------------------------------------------------------------------------
 
 chat-naas-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent'
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
 chat-supervisor-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent'
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
 
 chat-ontology-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent'
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
 
 chat-support-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent'
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
+
+default: deps help
+.DEFAULT_GOAL := default
 
 chat: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)'
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
-.DEFAULT_GOAL := help
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv

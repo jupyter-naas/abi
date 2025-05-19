@@ -13,9 +13,8 @@ from src.core.modules.common.integrations.OpenAIIntegration import (
     OpenAIIntegrationConfiguration,
 )
 from dataclasses import dataclass
-from pydantic import Field, BaseModel
+from pydantic import Field
 from abi import logger
-from typing import Optional
 from abi.workflow.workflow import WorkflowParameters
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
@@ -25,7 +24,7 @@ from src import config
 import hashlib
 import uuid
 from src.services import services
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStoragePort import (
     Exceptions as ObjectStorageExceptions,
 )
 from io import BytesIO

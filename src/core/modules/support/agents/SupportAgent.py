@@ -25,7 +25,7 @@ AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2
 DESCRIPTION = (
     "A Support Assistant that helps to get any feedbacks/bugs or needs from user."
 )
-SYSTEM_PROMPT = f"""
+SYSTEM_PROMPT = """
 You are a support assistant focusing on answering user requests and creating features requests or reporting bugs.
 
 Be sure to follow the chain of thought:

@@ -3,9 +3,7 @@ import pytest
 from pathlib import Path
 import importlib.util
 import sys
-from typing import Type
 from abi.workflow import Workflow
-from abi.utils.Expose import Expose
 
 
 def get_workflow_classes():

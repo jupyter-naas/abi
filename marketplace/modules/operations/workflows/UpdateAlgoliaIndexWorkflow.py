@@ -136,7 +136,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 )
                                 dummy_config = config_class(
                                     **{
-                                        field.name: "dummy" if field.type == str else 0
+                                        field.name: "dummy" if field.type is str else 0
                                         for field in config_class.__dataclass_fields__.values()
                                     }
                                 )
@@ -291,7 +291,7 @@ class UpdateAlgoliaIndex(Workflow):
                     class_name = file.stem
                     if hasattr(module, class_name):
                         integration_class = getattr(module, class_name)
-                        doc = inspect.getdoc(integration_class) or ""
+                        _ = inspect.getdoc(integration_class) or ""
                         logo_url = getattr(module, "LOGO_URL", "")
                         source_title = file.stem.replace("Integration", "")
 
@@ -304,7 +304,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 )
                                 dummy_config = config_class(
                                     **{
-                                        field.name: "dummy" if field.type == str else 0
+                                        field.name: "dummy" if field.type is str else 0
                                         for field in config_class.__dataclass_fields__.values()
                                     }
                                 )
@@ -387,7 +387,7 @@ class UpdateAlgoliaIndex(Workflow):
                     class_name = file.stem
                     if hasattr(module, class_name):
                         analytic_class = getattr(module, class_name)
-                        doc = inspect.getdoc(analytic_class) or ""
+                        _ = inspect.getdoc(analytic_class) or ""
                         logo_url = getattr(module, "LOGO_URL", "")
                         source_title = file.stem.replace("Analytics", "")
 
@@ -400,7 +400,7 @@ class UpdateAlgoliaIndex(Workflow):
                                 )
                                 dummy_config = config_class(
                                     **{
-                                        field.name: "dummy" if field.type == str else 0
+                                        field.name: "dummy" if field.type is str else 0
                                         for field in config_class.__dataclass_fields__.values()
                                     }
                                 )

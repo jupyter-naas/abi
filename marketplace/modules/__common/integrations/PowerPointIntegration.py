@@ -1,19 +1,12 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.enum.shapes import MSO_SHAPE
+from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
 import io
-from abi import logger
-import json
-from pptx.util import Inches, Pt, Cm
-from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
-from pptx.enum.shapes import MSO_CONNECTOR
-from pptx.dml.color import RGBColor
-from pptx.enum.dml import MSO_FILL
+from pptx.util import Cm
 
 LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
 
@@ -528,7 +521,7 @@ class PowerPointIntegration(Integration):
 def as_tools(configuration: PowerPointIntegrationConfiguration):
     """Convert PowerPoint integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel
 
     integration = PowerPointIntegration(configuration)
 

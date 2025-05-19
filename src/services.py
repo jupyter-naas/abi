@@ -1,10 +1,10 @@
 import os
 
-from lib.abi.services.object_storage.ObjectStorageFactory import (
+from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
     ObjectStorageService,
 )
-from lib.abi.services.triple_store.TripleStoreFactory import (
+from abi.services.triple_store.TripleStoreFactory import (
     TripleStoreFactory,
     TripleStoreService,
 )

@@ -4,10 +4,10 @@ from src.core.modules.common.integrations.SiteDownloader import (
     SiteDownloader,
     SiteDownloaderConfiguration,
 )
-from src import secret, config
+from src import secret
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional, List, Dict
+from typing import List, Dict
 from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
@@ -19,14 +19,11 @@ from src.core.modules.common.integrations.LocalObjectStoreIntegration import (
     LocalObjectStoreConfiguration,
 )
 
-from tqdm import tqdm
 from queue import Queue, Empty
 from threading import Thread
-from rdflib import RDF, RDFS
-from lib.abi.utils.Graph import ABIGraph as Graph
-import string
+from abi.utils.Graph import ABIGraph as Graph
 
-from lib.abi.utils.OntologyReasoner import OntologyReasoner
+from abi.utils.OntologyReasoner import OntologyReasoner
 
 ONTOLOGY = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -593,7 +590,7 @@ class ExtractWebsiteWorkflow(Workflow):
         try:
             sitemap = self.__object_store.get_object(sitemap_key)
             sitemap = json.loads(sitemap)
-        except Exception as e:
+        except Exception:
             sitemap = self.__site_downloader.load_sitemap(url)
             self.__object_store.save_object(sitemap_key, json.dumps(sitemap))
 

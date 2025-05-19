@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional, List
-from abi.utils.Graph import CCO, ABI
-from rdflib import URIRef, Literal, RDF, OWL, Graph
+from abi.utils.Graph import ABI
+from rdflib import URIRef, Literal, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,

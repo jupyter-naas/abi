@@ -1,12 +1,11 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import requests
-from datetime import datetime
 
 LOGO_URL = "https://newsapi.org/images/n-logo-border.png"
 

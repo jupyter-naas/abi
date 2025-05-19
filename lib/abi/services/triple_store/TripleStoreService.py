@@ -1,10 +1,10 @@
-from lib.abi.services.triple_store.TripleStorePorts import (
+from abi.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     ITripleStorePort,
     OntologyEvent,
 )
-from lib.abi.services.object_storage.ObjectStorageService import ObjectStorageService
-from rdflib import Graph, RDF, RDFS
+from rdflib import Graph, RDF, URIRef
+import rdflib
 from typing import Callable, List, Tuple
 import uuid
 import pydash
@@ -12,10 +12,10 @@ import hashlib
 import os
 import io
 import base64
-from lib.abi import logger
+from abi import logger
 
 
-from lib.abi.utils.Workers import WorkerPool, Queue, Job
+from abi.utils.Workers import WorkerPool, Job
 
 SCHEMA_TTL = """
 @prefix internal: <http://triple-store.internal#> .
@@ -76,12 +76,12 @@ class TripleStoreService(ITripleStoreService):
     def __init__(
         self,
         ontology_adaptor: ITripleStorePort,
-        views: List[Tuple[str, str, str]] = [(None, RDF.type, None)],
+        views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = [(None, RDF.type, None)],
         trigger_worker_pool_size: int = 10,
     ):
         self.__ontology_adaptor = ontology_adaptor
         self.__event_listeners = {}
-        self.__views = views
+        self.__views : List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = views
 
         self.__trigger_worker_pool = WorkerPool(trigger_worker_pool_size)
 
@@ -160,10 +160,10 @@ class TripleStoreService(ITripleStoreService):
     def get(self) -> Graph:
         return self.__ontology_adaptor.get()
 
-    def query(self, query: str) -> Graph:
+    def query(self, query: str) -> rdflib.query.Result:
         return self.__ontology_adaptor.query(query)
 
-    def query_view(self, view: str, query: str) -> Graph:
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
         return self.__ontology_adaptor.query_view(view, query)
 
     def subscribe(
@@ -195,9 +195,9 @@ class TripleStoreService(ITripleStoreService):
                 )
 
     def get_subject_graph(self, subject: str) -> Graph:
-        return self.__ontology_adaptor.get_subject_graph(subject)
+        return self.__ontology_adaptor.get_subject_graph(URIRef(subject))
 
-    ############################################################
+    ###################lib/abi/services/ontology/OntologyService.py#########################################
     # Schema Management
     ############################################################
 
@@ -207,21 +207,26 @@ class TripleStoreService(ITripleStoreService):
         query = f'SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'
         logger.debug(f"Query: {query}")
         # Check if schema with filePath == filepath already exists and grab all triples
-        schema_triples = self.query(query)
+        schema_triples : rdflib.query.Result = self.query(query)
 
         logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
         # If schema with filePath == filepath already exists, we check if the file has been modified.
         schema_exists_in_store = len(list(schema_triples)) == 1
         logger.debug(f"Schema exists in store: {schema_exists_in_store}")
         if schema_exists_in_store:
-            subject = list(schema_triples)[0][0]
+            result_rows = list(schema_triples)
+            assert len(result_rows) == 1
+            assert isinstance(result_rows[0], rdflib.query.ResultRow)
+            _SUBJECT_TUPLE_INDEX = 0
+            subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
 
             # Select * from subject
-            triples = self.query(f"SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}")
+            triples : rdflib.query.Result = self.query(f"SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}")
 
             # Load schema into a dict
             schema_dict = {}
             for row in triples:
+                assert isinstance(row, rdflib.query.ResultRow)
                 p, o = row
 
                 schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
@@ -239,10 +244,10 @@ class TripleStoreService(ITripleStoreService):
 
             # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
             if schema_dict["hash"] == new_content_hash:
-                logger.debug(f"Schema is up to date, no need to update.")
+                logger.debug("Schema is up to date, no need to update.")
                 return
 
-            logger.debug(f"Schema is not up to date, updating.")
+            logger.debug("Schema is not up to date, updating.")
 
             # Decode old content
             old_content = base64.b64decode(schema_dict["content"]).decode("utf-8")
@@ -291,7 +296,7 @@ class TripleStoreService(ITripleStoreService):
             # Return as we don't need to continue as we have already updated the schema.
             return
         elif not schema_exists_in_store:
-            logger.debug(f"Loading schema in graph as it doesn't exist in store.")
+            logger.debug("Loading schema in graph as it doesn't exist in store.")
 
             # Open file and get content.
             with open(filepath, "r") as file:
@@ -329,11 +334,16 @@ class TripleStoreService(ITripleStoreService):
             )
 
     def get_schema_graph(self) -> Graph:
-        contents = self.query("SELECT ?s ?o WHERE { ?s internal:content ?o . }")
+        contents : rdflib.query.Result = self.query("SELECT ?s ?o WHERE { ?s internal:content ?o . }")
 
         graph = Graph()
 
-        for s, o in contents:
+
+        for row in contents:
+            
+            assert isinstance(row, rdflib.query.ResultRow)
+            _, o = row
+
             g = Graph().parse(
                 io.StringIO(base64.b64decode(o).decode("utf-8")), format="turtle"
             )

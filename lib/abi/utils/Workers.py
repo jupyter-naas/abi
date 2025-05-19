@@ -1,11 +1,10 @@
 from threading import Thread, Event, Lock
 from queue import Queue, Empty
-from typing import Any, Callable, List, Optional
+from typing import Callable, List, Optional
 from enum import Enum
 import uuid
-import time
 
-from lib.abi import logger
+from abi import logger
 
 
 class JobStatus(Enum):
@@ -98,7 +97,7 @@ class WorkerPool:
 
     def submit_all(self, jobs: List[Job]) -> Queue[Job]:
         """Submit multiple jobs to the worker pool"""
-        queue = Queue(maxsize=len(jobs))
+        queue : Queue[Job] = Queue(maxsize=len(jobs))
 
         for job in jobs:
             if job.queue is None:

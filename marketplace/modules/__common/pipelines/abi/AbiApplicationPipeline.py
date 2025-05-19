@@ -4,9 +4,9 @@ from abi import logger
 from dataclasses import dataclass
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
-from abi.utils.Graph import ABIGraph, ABI, BFO
+from abi.utils.Graph import ABIGraph, ABI
 from abi.utils.OntologyYaml import OntologyYaml
-from rdflib import Graph, RDFS, OWL, DC, URIRef, RDF
+from rdflib import Graph, OWL, DC, URIRef, RDF
 from pathlib import Path
 import importlib
 import inspect
@@ -18,7 +18,7 @@ from src.core.modules.common.integrations.NaasIntegration import (
 import re
 import glob
 import yaml
-from yaml import Dumper, Loader
+from yaml import Dumper
 
 
 @dataclass
@@ -164,8 +164,8 @@ class AbiApplicationPipeline(Pipeline):
                 if i is None:
                     i = order
                     order += 1
-                x = coordinates[i][0]
-                y = coordinates[i][1]
+                # x = coordinates[i][0]
+                # y = coordinates[i][1]
 
                 g = Graph()
                 g.parse(file, format="turtle")
@@ -178,19 +178,19 @@ class AbiApplicationPipeline(Pipeline):
 
                 # Set image URL based on ontology type
                 if is_top_level:
-                    image_url = "https://workspace-dev-ugc-public-access.s3.us-west-2.amazonaws.com/2b9ac8af-4026-4173-8796-1c2de5d34966/images/2dd774ba51a94b4eb4d29d444e7771cc"
+                    # image_url = "https://workspace-dev-ugc-public-access.s3.us-west-2.amazonaws.com/2b9ac8af-4026-4173-8796-1c2de5d34966/images/2dd774ba51a94b4eb4d29d444e7771cc"
                     source_title = "BFO"
                 elif is_mid_level:
-                    image_url = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_CCO.png"
+                    # image_url = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_CCO.png"
                     source_title = "CCO"
                 elif is_domain:
-                    image_url = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+                    # image_url = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
                     source_title = "Domain Ontology"
                 elif is_application:
-                    image_url = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
+                    # image_url = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
                     source_title = "Application Ontology"
                 else:
-                    image_url = ""
+                    # image_url = ""
                     source_title = "Unknown"
 
                 # Add ontology entry
@@ -235,7 +235,6 @@ class AbiApplicationPipeline(Pipeline):
         coordinates = self.__generate_coordinates(
             200, nb_agents - 2
         )  # Exclude supervisor assistant
-        i = 0
 
         for file in agents_dir.rglob("*.py"):
             if (
@@ -470,15 +469,15 @@ class AbiApplicationPipeline(Pipeline):
         graph = ABIGraph()
 
         # Scan and add components
-        logger.debug(f"-----> Scanning integrations")
+        logger.debug("-----> Scanning integrations")
         self.scan_integrations(graph)
-        logger.debug(f"-----> Scanning ontologies")
+        logger.debug("-----> Scanning ontologies")
         self.scan_ontologies(graph)
-        logger.debug(f"-----> Scanning agents")
+        logger.debug("-----> Scanning agents")
         self.scan_agents(graph)
-        logger.debug(f"-----> Scanning pipelines")
+        logger.debug("-----> Scanning pipelines")
         self.scan_pipelines(graph)
-        logger.debug(f"-----> Scanning workflows")
+        logger.debug("-----> Scanning workflows")
         self.scan_workflows(graph)
 
         # Store the graph

@@ -13,14 +13,13 @@ from rdflib import Graph
 from datetime import datetime, timedelta
 from abi.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
-    OntologyEvent,
 )
 import pydash as _
 from abi import logger
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, Any
+from typing import Optional
 from src import secret, config
 
 LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
@@ -156,7 +155,7 @@ class GithubIssuePipeline(Pipeline):
         if parameters.github_project_id != 0:
             # Get project data from GithubGraphqlIntegration
             organization = parameters.github_repository.split("/")[0]
-            project_data: dict = self.__github_graphql_integration.get_project_node_id(
+            project_data = self.__github_graphql_integration.get_project_node_id(
                 organization, parameters.github_project_id
             )  # type: ignore
             project_node_id = _.get(project_data, "data.organization.projectV2.id")

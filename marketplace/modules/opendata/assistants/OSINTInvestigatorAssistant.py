@@ -4,7 +4,7 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     MemorySaver,
 )
-from src import secret, config, services
+from src import secret, services
 from langchain_openai import ChatOpenAI
 from src.core.modules.common.integrations import (
     LinkedInIntegration,

@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
@@ -64,7 +64,7 @@ class GoogleDriveIntegration(Integration):
 
             # Build the service
             self.__service = build("drive", "v3", credentials=delegated_credentials)
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Drive API client: {str(e)}")
 

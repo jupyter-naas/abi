@@ -103,8 +103,8 @@ def create_campaign_manager_agent(
     li_at = secret.get("li_at")
     JSESSIONID = secret.get("JSESSIONID")
     if li_at and JSESSIONID:
-        tools += LinkedinIntegration.as_tools(
-            LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+        tools += LinkedInIntegration.as_tools(
+            LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
         )
 
     youtube_key = secret.get("YOUTUBE_API_KEY")

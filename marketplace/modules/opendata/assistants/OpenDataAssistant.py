@@ -17,9 +17,6 @@ from src.core.modules.common.integrations import (
     PerplexityIntegration,
     GoogleSearchIntegration,
 )
-from src.core.modules.common.integrations.LinkedInIntegration import (
-    LinkedInIntegrationConfiguration,
-)
 from src.core.modules.common.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
@@ -114,12 +111,12 @@ def create_agent(
             .get("value")
         )
 
-    # LinkedinIntegration Configuration
-    if li_at and JSESSIONID:
-        linkedin_integration_config = LinkedInIntegrationConfiguration(
-            li_at=li_at, JSESSIONID=JSESSIONID
-        )
-
+    #    # LinkedinIntegration Configuration
+    #    if li_at and JSESSIONID:
+    #        linkedin_integration_config = LinkedInIntegrationConfiguration(
+    #            li_at=li_at, JSESSIONID=JSESSIONID
+    #        )
+    #
     # PerplexityIntegration Configuration + Integration
     perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
     if perplexity_api_key:
