@@ -43,7 +43,9 @@ def get_modules():
                         
                         __modules.append(mod)
                     except Exception as e:
+                        import traceback
                         print(f"❌ Error loading module {module.name}: {e}")
+                        traceback.print_exc()
         
         __loaded = True
 

@@ -145,7 +145,7 @@ class Agent(Expose):
         name: str,
         description: str,
         chat_model: BaseChatModel,
-        tools: list[Union[Tool, "Agent"]],
+        tools: list[Union[Tool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),
         state: AgentSharedState = AgentSharedState(),
