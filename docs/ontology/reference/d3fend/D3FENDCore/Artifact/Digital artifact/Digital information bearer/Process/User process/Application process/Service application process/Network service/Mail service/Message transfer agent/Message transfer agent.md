@@ -1,0 +1,67 @@
+# Message transfer agent
+
+## Overview
+
+### Definition
+A message transfer agent or mail transfer agent (MTA) or mail relay is software that transfers electronic mail messages from one computer to another using a client-server application architecture. An MTA implements both the client (sending) and server (receiving) portions of the Simple Mail Transfer Protocol.
+
+### Examples
+Not defined.
+
+### Aliases
+- Mail Transfer Agent
+- MTA
+
+### URI
+http://d3fend.mitre.org/ontologies/d3fend.owl#MessageTransferAgent
+
+### Subclass Of
+```mermaid
+graph BT
+    d3fend.owl#MessageTransferAgent(Message<br>transfer<br>agent):::d3fend-->d3fend.owl#MailService
+    d3fend.owl#MailService(Mail<br>service):::d3fend-->d3fend.owl#NetworkService
+    d3fend.owl#NetworkService(Network<br>service):::d3fend-->d3fend.owl#ServiceApplicationProcess
+    d3fend.owl#ServiceApplicationProcess(Service<br>application<br>process):::d3fend-->d3fend.owl#ApplicationProcess
+    d3fend.owl#ApplicationProcess(Application<br>process):::d3fend-->d3fend.owl#UserProcess
+    d3fend.owl#UserProcess(User<br>process):::d3fend-->d3fend.owl#Process
+    d3fend.owl#Process(Process):::d3fend-->d3fend.owl#DigitalInformationBearer
+    d3fend.owl#DigitalInformationBearer(Digital<br>information<br>bearer):::d3fend-->d3fend.owl#DigitalArtifact
+    d3fend.owl#DigitalArtifact(Digital<br>artifact):::d3fend-->d3fend.owl#Artifact
+    d3fend.owl#Artifact(Artifact):::d3fend-->d3fend.owl#D3FENDCore
+    d3fend.owl#D3FENDCore(D3FENDCore):::d3fend
+    
+    classDef bfo fill:#97c1fb,color:#060606
+    classDef cco fill:#e4c51e,color:#060606
+    classDef abi fill:#48DD82,color:#060606
+    classDef attack fill:#FF0000,color:#060606
+    classDef d3fend fill:#FF0000,color:#060606
+```
+
+- [D3FENDCore](/docs/ontology/reference/model/D3FENDCore/D3FENDCore.md)
+- [Artifact](/docs/ontology/reference/model/D3FENDCore/Artifact/Artifact.md)
+- [Digital artifact](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20artifact.md)
+- [Digital information bearer](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Digital%20information%20bearer.md)
+- [Process](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/Process.md)
+- [User process](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/User%20process/User%20process.md)
+- [Application process](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/User%20process/Application%20process/Application%20process.md)
+- [Service application process](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/User%20process/Application%20process/Service%20application%20process/Service%20application%20process.md)
+- [Network service](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/User%20process/Application%20process/Service%20application%20process/Network%20service/Network%20service.md)
+- [Mail service](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/User%20process/Application%20process/Service%20application%20process/Network%20service/Mail%20service/Mail%20service.md)
+- [Message transfer agent](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/User%20process/Application%20process/Service%20application%20process/Network%20service/Mail%20service/Message%20transfer%20agent/Message%20transfer%20agent.md)
+
+
+### Ontology Reference
+- [d3fend](http://d3fend.mitre.org/ontologies/d3fend.owl#)
+
+## Properties
+### Data Properties
+| Ontology | Label | Definition | Example | Domain | Range |
+|----------|-------|------------|---------|--------|-------|
+| d3fend | [d3fend-artifact-data-property](http://d3fend.mitre.org/ontologies/d3fend.owl#d3fend-artifact-data-property) | x d3fend-artifact-data-property y: The artifact x has the data property y. |  | [Digital Artifact](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20artifact.md) | []() |
+| d3fend | [process-security-context](http://d3fend.mitre.org/ontologies/d3fend.owl#process-security-context) | x process-security-context y: The process x has the process security context data y. |  | [Process](/docs/ontology/reference/model/D3FENDCore/Artifact/Digital%20artifact/Digital%20information%20bearer/Process/Process.md) | []() |
+
+### Object Properties
+| Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
+|----------|-------|------------|---------|--------|-------|------------|
+| d3fend | [may-have-weakness](http://d3fend.mitre.org/ontologies/d3fend.owl#may-have-weakness) |  |  | [Artifact](/docs/ontology/reference/model/D3FENDCore/Artifact/Artifact.md) | [Weakness](/docs/ontology/reference/model/D3FENDCore/Weakness/Weakness.md) | []() |
+

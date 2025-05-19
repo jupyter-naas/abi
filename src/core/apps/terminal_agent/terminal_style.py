@@ -19,9 +19,9 @@ def set_terminal_title():
         print("\33]0;ABI\a", end="", flush=True)
 
 
-def print_agent_response(text):
+def print_agent_response(text, agent_label):
     console.print()  # Add a blank line before the assistant's response
-    console.print("[bold green]Abi:[/bold green] ", end="")
+    console.print(f"[bold green]{agent_label}:[/bold green] ", end="")
     md = Markdown(text)
     console.print(md)
     console.print()  # Add a blank line after the assistant's response
@@ -56,25 +56,43 @@ def print_code(code, language="python"):
         )
     )
 
+def dict_to_equal_string(d: dict) -> str:
+    return '\n- '.join([f'{key}={value}' for key, value in d.items()])
 
-def print_tool_usage(tool_name):
-    console.print(f"\n🔧 [bold blue]Tool Used:[/bold blue] {tool_name}")
+def print_tool_usage(message):
+    print_message = ""
+    tool_name = message.tool_calls[0]["name"]
+    arguments = ""
+    if 'args' in message.tool_calls[0] and len(message.tool_calls[0]["args"].values()) > 0:
+        arguments += dict_to_equal_string(message.tool_calls[0]["args"])
+    
+    if tool_name.startswith("transfer_to_"):
+        tool_label = " ".join(word.capitalize() for word in tool_name.split("transfer_to_")[1].replace("_", " ").split())
+        print_message = f"\n🧞 [bold blue]Delegated to [/bold blue]{tool_label}"
+    else:
+        tool_label = tool_name.capitalize().replace("_", " ")
+        print_message = f"\n[bold blue]Tool Used:[/bold blue] {tool_label}\n{arguments}"
+    console.print(print_message)
 
 
 def print_tool_response(response):
-    console.print(f"\n🔧 [bold blue]Tool Response:[/bold blue] {response}")
+    console.print(f"\n[bold blue]Response:[/bold blue] {response}")
 
 
 def clear_screen():
     console.clear()
 
 
-def print_welcome_message():
+def print_welcome_message(agent):
     # Set terminal title
     set_terminal_title()
-
+    agent_label = " ".join(word.capitalize() for word in agent.name.replace('_', ' ').split())
     welcome_text = Text.assemble(
-        ("Welcome to ABI Super Assistant\n\n", "bold green"),
+        (f"Welcome to {agent_label}\n\n", "bold green"),
+        ("Description:\n", "yellow"),
+        (f"{agent.description}\n\n", "dim"),
+        ("System prompt:\n", "yellow"),
+        (f"{agent.configuration.system_prompt}\n\n", "dim"),
         ("Available commands:\n", "yellow"),
         ("- ", "dim"),
         ("'exit' ", "cyan"),
@@ -94,7 +112,7 @@ def print_divider():
     console.print("─" * console.width, style="dim")
 
 
-def get_user_input():
+def get_user_input(agent_label):
     try:
         user_input = console.input(
             "\n[bold cyan]You:[/bold cyan] "
@@ -102,10 +120,10 @@ def get_user_input():
         console.print()  # Add a blank line after the user's input
         return user_input
     except EOFError:
-        console.print("\n[bold red]Abi:[/bold red] Conversation ended by user.")
+        console.print(f"\n[bold red]{agent_label}:[/bold red] Conversation ended by user.")
         return "exit"
     except KeyboardInterrupt:
-        console.print("\n[bold red]Abi:[/bold red] Conversation ended by user.")
+        console.print(f"\n[bold red]{agent_label}:[/bold red] Conversation ended by user.")
         return "exit"
 
 

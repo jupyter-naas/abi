@@ -18,7 +18,7 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
     GitHubSupportWorkflowsConfiguration,
 )
 
-NAME = "support"
+NAME = "support_agent"
 MODEL = "gpt-4o"
 TEMPERATURE = 0
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"

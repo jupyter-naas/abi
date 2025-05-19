@@ -1,0 +1,48 @@
+# Improper enforcement of a single, unique action
+
+## Overview
+
+### Definition
+Not defined.
+
+### Examples
+Not defined.
+
+### Aliases
+Not defined.
+
+### URI
+http://d3fend.mitre.org/ontologies/d3fend.owl#CWE-837
+
+### Subclass Of
+```mermaid
+graph BT
+    d3fend.owl#CWE-837(Improper<br>enforcement<br>of<br>a<br>single,<br>unique<br>action):::d3fend-->d3fend.owl#CWE-799
+    d3fend.owl#CWE-799(Improper<br>control<br>of<br>interaction<br>frequency):::d3fend-->d3fend.owl#CWE-691
+    d3fend.owl#CWE-691(Insufficient<br>control<br>flow<br>management):::d3fend-->d3fend.owl#Weakness
+    d3fend.owl#Weakness(Weakness):::d3fend-->d3fend.owl#D3FENDCore
+    d3fend.owl#D3FENDCore(D3FENDCore):::d3fend
+    
+    classDef bfo fill:#97c1fb,color:#060606
+    classDef cco fill:#e4c51e,color:#060606
+    classDef abi fill:#48DD82,color:#060606
+    classDef attack fill:#FF0000,color:#060606
+    classDef d3fend fill:#FF0000,color:#060606
+```
+
+- [D3FENDCore](/docs/ontology/reference/model/D3FENDCore/D3FENDCore.md)
+- [Weakness](/docs/ontology/reference/model/D3FENDCore/Weakness/Weakness.md)
+- [Insufficient control flow management](/docs/ontology/reference/model/D3FENDCore/Weakness/Insufficient%20control%20flow%20management/Insufficient%20control%20flow%20management.md)
+- [Improper control of interaction frequency](/docs/ontology/reference/model/D3FENDCore/Weakness/Insufficient%20control%20flow%20management/Improper%20control%20of%20interaction%20frequency/Improper%20control%20of%20interaction%20frequency.md)
+- [Improper enforcement of a single, unique action](/docs/ontology/reference/model/D3FENDCore/Weakness/Insufficient%20control%20flow%20management/Improper%20control%20of%20interaction%20frequency/Improper%20enforcement%20of%20a%20single%2C%20unique%20action/Improper%20enforcement%20of%20a%20single%2C%20unique%20action.md)
+
+
+### Ontology Reference
+- [d3fend](http://d3fend.mitre.org/ontologies/d3fend.owl#)
+
+## Properties
+### Object Properties
+| Ontology | Label | Definition | Example | Domain | Range | Inverse Of |
+|----------|-------|------------|---------|--------|-------|------------|
+| d3fend | [may-be-weakness-of](http://d3fend.mitre.org/ontologies/d3fend.owl#may-be-weakness-of) |  |  | [Weakness](/docs/ontology/reference/model/D3FENDCore/Weakness/Weakness.md) | [Artifact](/docs/ontology/reference/model/D3FENDCore/Artifact/Artifact.md) | [may-have-weakness](http://d3fend.mitre.org/ontologies/d3fend.owl#may-have-weakness) |
+

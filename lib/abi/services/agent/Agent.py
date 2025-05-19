@@ -35,7 +35,7 @@ from abi.utils.Logger import logger
 from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
-
+import pydash as pd
 
 class AgentSharedState:
     __thread_id: int
@@ -254,7 +254,8 @@ class Agent(Expose):
         graph.add_edge(START, "call_model")
 
         graph.add_node(self.call_tools)
-        graph.add_edge("call_tools", "call_model")
+        # TODO: Investigate if we need to uncomment this line. But It seems that is causing models + tools parrallel execution issues.
+        #graph.add_edge("call_tools", "call_model")
 
         for agent in self.__agents:
             logger.debug(f"Adding node {agent.name} in graph")
@@ -271,6 +272,7 @@ class Agent(Expose):
     def call_model(
         self, state: MessagesState
     ) -> Command[Literal["call_tools", "__end__"]]:
+        # logger.debug(f"call_model on: {self.name}")
         messages = state["messages"]
         if self.__configuration.system_prompt:
             messages = [
@@ -311,11 +313,13 @@ class Agent(Expose):
             if "state" in tool_input_fields:
                 # inject state
                 tool_call = {**tool_call, "args": {**tool_call["args"], "state": state}}
-
-            self.__notify_tool_usage(last_message)
-            tool_response = tool_.invoke(tool_call)
-            self.__notify_tool_response(tool_response)
             
+            #self.__notify_tool_usage(state["messages"][-1])
+            if tool_call['name'].startswith('transfer_to_'):
+                tool_call = {"state": state, "tool_call_id": tool_call['id']}
+                
+            tool_response = tool_.invoke(tool_call)
+            #self.__notify_tool_response(tool_response)
             if isinstance(tool_response, ToolMessage):
                 results.append(Command(update={"messages": [tool_response]}))
 
@@ -326,7 +330,7 @@ class Agent(Expose):
                 raise ValueError(
                     f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
                 )
-
+        assert len(results) > 0, state
         return results
 
     @property
@@ -386,11 +390,45 @@ class Agent(Expose):
         Yields:
             str: The model's response text
         """
+        notified = {}
+        
         for chunk in self.graph.stream(
             {"messages": [HumanMessage(content=prompt)]},
             config={"configurable": {"thread_id": self.__state.thread_id}},
             subgraphs=True,
         ):
+            _, payload = chunk
+            
+            if isinstance(payload, dict):
+                last_message = list(payload.values())[0]["messages"][-1]
+                
+                if isinstance(last_message, AIMessage):
+                    if pd.get(last_message, "additional_kwargs.tool_calls"):
+                        # This is a tool call.
+                        self.__notify_tool_usage(last_message)
+                    else:
+                        # This is a message.
+                        # print("\n\nIntermediate AI Message:")
+                        # print(last_message.content)
+                        # print(last_message)
+                        # print('\n\n')
+                        pass
+                elif isinstance(last_message, ToolMessage):
+                    if last_message.id not in notified:
+                        self.__notify_tool_response(last_message)
+                        notified[last_message.id] = True
+                else:
+                    if 'tool_call_id' in last_message:
+                        if last_message['tool_call_id'] not in notified:
+                            self.__notify_tool_response(last_message)
+                            notified[last_message['tool_call_id']] = True
+                    else:
+                        print("\n\n Unknown message type:")
+                        print(type(last_message))
+                        print(last_message)
+                        print('\n\n')
+            
+            
             yield chunk
 
     def invoke(self, prompt: str) -> str:
@@ -627,6 +665,15 @@ class Agent(Expose):
             BaseChatModel: The agent's chat model
         """
         return self.__chat_model
+    
+    @property
+    def configuration(self) -> AgentConfiguration:
+        """Get the configuration used by the agent.
+
+        Returns:
+            AgentConfiguration: The agent's configuration
+        """
+        return self.__configuration
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
@@ -641,9 +688,10 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
         tool_call_id: Annotated[str, InjectedToolCallId],
     ):
         """Ask another agent for help."""
+        agent_label = " ".join(word.capitalize() for word in agent.name.replace('_', ' ').split())
         tool_message = {
             "role": "tool",
-            "content": f"Successfully transferred to {agent.name}",
+            "content": f"Conversation transferred to {agent_label}",
             "name": tool_name,
             "tool_call_id": tool_call_id,
         }
