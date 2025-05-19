@@ -167,6 +167,10 @@ chat-support-agent: .venv
 	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent'
 
 default: deps help
-.DEFAULT_GOAL := default 
+.DEFAULT_GOAL := default
+
+chat: .venv
+	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)'
+
 
 .PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help

@@ -12,10 +12,10 @@ from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
 
-NAME = "naas"
+NAME = "naas_agent"
 MODEL = "gpt-4o"
 TEMPERATURE = 0
-DESCRIPTION = "A Naas Agent with access to Naas Integration tools."
+DESCRIPTION = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
 SYSTEM_PROMPT = """
 You are a Naas Agent with access to NaasIntegration tools to perform actions on Naas workspaces.
@@ -71,7 +71,7 @@ class NaasAgent(Agent):
         self,
         router: APIRouter,
         route_name: str = NAME,
-        name: str = NAME.capitalize(),
+        name: str = NAME.capitalize().replace("_", " "),
         description: str = "API endpoints to call the Naas agent completion.",
         description_stream: str = "API endpoints to call the Naas agent stream completion.",
         tags: list[str] = [],
