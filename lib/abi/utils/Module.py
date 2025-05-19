@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
-from lib.abi.services.agent.Agent import Agent
-from typing import Callable, List, Dict, Any
+from abi.services.agent.Agent import Agent
+from typing import Callable, List, Any
 import os
 import importlib
 import glob
@@ -24,7 +24,7 @@ class IModule(ABC):
     """
 
     agents: List[Agent]
-    triggers: List[tuple[tuple[any, any, any], OntologyEvent, Callable]]
+    triggers: List[tuple[tuple[Any, Any, Any], OntologyEvent, Callable]]
     ontologies: List[str]
 
     def __init__(self, module_path: str, module_import_path: str, imported_module: Any):

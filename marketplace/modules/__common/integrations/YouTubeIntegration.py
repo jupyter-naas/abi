@@ -1,13 +1,12 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from abi import logger
 
 LOGO_URL = "https://logo.clearbit.com/youtube.com"
 
@@ -50,7 +49,7 @@ class YouTubeIntegration(Integration):
                 cache_discovery=False,
                 static_discovery=False,
             )
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize YouTube API client: {str(e)}")
 

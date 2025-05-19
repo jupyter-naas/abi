@@ -1,25 +1,26 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, AsyncGenerator, Union
+from typing import Callable, Literal, Any, Union, Sequence, Generator
 
 # LangChain Core imports for base components
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, AnyMessage, SystemMessage, AIMessage
-from langchain_core.tools import Tool, StructuredTool
+from langchain_core.messages import HumanMessage, AnyMessage, BaseMessage, SystemMessage, AIMessage
+from langchain_core.tools import Tool, StructuredTool, BaseTool
+from langchain_core.runnables import Runnable
 
 # LangGraph imports for workflow and state management
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from typing import Annotated, Callable, Optional
-from langchain_core.messages import ToolMessage
+from typing import Annotated, Optional
+from langchain_core.messages import ToolMessage, ToolCall
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
+from enum import Enum
 
 # Pydantic imports for schema validation
 from pydantic import BaseModel, Field
@@ -30,8 +31,6 @@ from abi.utils.Expose import Expose
 from dataclasses import dataclass, field
 
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
-from typing import Generator
 from abi.utils.Logger import logger
 from sse_starlette.sse import EventSourceResponse
 
@@ -119,9 +118,9 @@ class Agent(Expose):
     __description: str
 
     __chat_model: BaseChatModel
-    __chat_model_with_tools: BaseChatModel
-    __tools: list[Tool]
-    __tools_by_name: dict[str, Tool]
+    __chat_model_with_tools: Runnable[Any | str | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]], BaseMessage]
+    __tools: list[Union[Tool, "Agent"]]
+    __tools_by_name: dict[str, Union[Tool, BaseTool]]
 
     # An agent can have other agents.
     # He will be responsible to load them as tools.
@@ -150,7 +149,7 @@ class Agent(Expose):
         memory: BaseCheckpointSaver = MemorySaver(),
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
-        event_queue: Queue = None,
+        event_queue: Queue | None = None,
     ):
         """Initialize a new Agent instance.
 
@@ -189,7 +188,7 @@ class Agent(Expose):
             assert hasattr(t, "func")
             assert hasattr(t, "args_schema")
 
-        self.__tools_by_name: dict[str, Tool] = {
+        self.__tools_by_name: dict[str, Union[Tool, BaseTool]] = {
             tool.name: tool for tool in self.__structured_tools
         }
 
@@ -214,13 +213,13 @@ class Agent(Expose):
 
         self.build_graph()
 
-    def prepare_tools(self, tools: list[Union[StructuredTool, "Agent"]], agents: list):
+    def prepare_tools(self, tools: list[Union[Tool, "Agent"]], agents: list) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
         """
-        _tools = []
-        _agents = []
+        _tools: list[Tool | BaseTool] = []
+        _agents: list["Agent"] = []
 
         # We process tools knowing that they can either be StructutedTools or Agent.
         for t in tools:
@@ -228,7 +227,8 @@ class Agent(Expose):
                 # TODO: We might want to duplicate the agent first.
                 logger.debug(f"Agent passed as tool: {t}")
                 _agents.append(t)
-                _tools.append(t.as_tools())
+                for tool in t.as_tools():
+                    _tools.append(tool)
             else:
                 _tools.append(t)
 
@@ -236,12 +236,13 @@ class Agent(Expose):
         for agent in agents:
             if agent not in _agents:
                 _agents.append(agent)
-                _tools.append(agent.as_tools())
+                for tool in agent.as_tools():
+                    _tools.append(tool)
 
         return _tools, _agents
 
-    def as_tools(self, parent_graph: bool = False) -> StructuredTool:
-        return make_handoff_tool(agent=self, parent_graph=parent_graph)
+    def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
+        return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
 
     @property
     def state(self) -> AgentSharedState:
@@ -275,11 +276,11 @@ class Agent(Expose):
         messages = state["messages"]
         if self.__configuration.system_prompt:
             messages = [
-                {"role": "system", "content": self.__configuration.system_prompt}
+                SystemMessage(content=self.__configuration.system_prompt),
             ] + messages
 
-        response = self.__chat_model_with_tools.invoke(messages)
-        if len(response.tool_calls) > 0:
+        response: BaseMessage = self.__chat_model_with_tools.invoke(messages)
+        if isinstance(response, AIMessage) and hasattr(response, 'tool_calls') and len(response.tool_calls) > 0:
             # TODO: Rethink this.
             # This is done to prevent an LLM to call multiple tools at once.
             # It's important because, as some tools are subgraphs, and that we are passing the full state, the subgraph will be able to mess with the state.
@@ -289,31 +290,37 @@ class Agent(Expose):
 
             return Command(goto="call_tools", update={"messages": [response]})
 
-        return {"messages": [response]}
+        return Command(goto="__end__", update={"messages": [response]})
 
     # NOTE: this is a simplified version of the prebuilt ToolNode
     # If you want to have a tool node that has full feature parity, please refer to the source code
-    def call_tools(self, state: MessagesState) -> Command[Literal["call_model"]]:
-        tool_calls = state["messages"][-1].tool_calls
-        assert len(tool_calls) > 0, state["messages"][-1]
-        results = []
+    def call_tools(self, state: MessagesState) -> list[Command]:
+        last_message : AnyMessage = state["messages"][-1]
+        if not isinstance(last_message, AIMessage) or not hasattr(last_message, 'tool_calls'):
+            return [Command(goto="__end__", update={"messages": [last_message]})]
+            
+        tool_calls : list[ToolCall] = last_message.tool_calls
+        results: list[Command] = []
         for tool_call in tool_calls:
-            tool_ = self.__tools_by_name[tool_call["name"]]
+            tool_ : BaseTool = self.__tools_by_name[tool_call["name"]]
+
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
                 "properties"
             ]
+
+            args : dict[str, Any] | ToolCall = tool_call
 
             # this is simplified for demonstration purposes and
             # is different from the ToolNode implementation
             if "state" in tool_input_fields:
                 # inject state
-                tool_call = {**tool_call, "args": {**tool_call["args"], "state": state}}
-
+                args = {**tool_call, "args": {**tool_call["args"], "state": state}}
+            
             #self.__notify_tool_usage(state["messages"][-1])
             if tool_call['name'].startswith('transfer_to_'):
-                tool_call = {"state": state, "tool_call_id": tool_call['id']}
+                args = {"state": state, "tool_call_id": tool_call['id']}
                 
-            tool_response = tool_.invoke(tool_call)
+            tool_response = tool_.invoke(args)
             #self.__notify_tool_response(tool_response)
             if isinstance(tool_response, ToolMessage):
                 results.append(Command(update={"messages": [tool_response]}))
@@ -376,7 +383,7 @@ class Agent(Expose):
         """
         return self.__app
 
-    def stream(self, prompt: str) -> AsyncGenerator[str, None]:
+    def stream(self, prompt: str) -> Generator[dict[str, Any] | Any, None, None]:
         """Process a user prompt through the agent and yield responses as they come.
 
         Args:
@@ -440,8 +447,13 @@ class Agent(Expose):
             str: The model's response text
         """
 
-        chunks = []
-        for _, chunk in self.stream(prompt):
+        chunks: list[dict[str, Any]] = []
+        for chunk in self.stream(prompt):
+            if isinstance(chunk, tuple):
+                chunk = chunk[1]
+                
+            assert isinstance(chunk, dict)
+            
             chunks.append(chunk)
 
         content = list(chunks[-1].values())[0]["messages"][-1].content
@@ -462,7 +474,7 @@ class Agent(Expose):
 
         return response
 
-    def duplicate(self, queue: Queue = None) -> "Agent":
+    def duplicate(self, queue: Queue | None = None) -> "Agent":
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -474,14 +486,14 @@ class Agent(Expose):
         """
         # Initialize the tools list with the original list of tools.
         # tools = [tool for tool in self.__structured_tools]
-        tools = [tool for tool in self.__tools if isinstance(tool, StructuredTool)]
+        tools : list[Tool] = [tool for tool in self.__tools if isinstance(tool, Tool)]
 
         if queue is None:
             queue = Queue()
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents = [agent.duplicate(queue) for agent in self.__agents]
+        agents : list[Agent] = [agent.duplicate(queue) for agent in self.__agents]
 
         new_agent = Agent(
             name=self.__name,
@@ -504,7 +516,7 @@ class Agent(Expose):
         name: str,
         description: str = "",
         description_stream: str = "",
-        tags: list[str] = [],
+        tags: list[str | Enum] | None = None,
     ) -> None:
         """Adds API endpoints for this agent to the given router.
 
@@ -617,7 +629,7 @@ class Agent(Expose):
         yield {"event": "done", "data": "[DONE]"}
 
     @property
-    def tools(self) -> list[Tool]:
+    def tools(self) -> list[Union[Tool, BaseTool]]:
         """Get the list of tools available to the agent.
 
         Returns:
@@ -666,7 +678,7 @@ class Agent(Expose):
         return self.__configuration
 
 
-def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> StructuredTool:
+def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
     """Create a tool that can return handoff via a Command"""
     tool_name = f"transfer_to_{agent.name}"
 
@@ -696,6 +708,6 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> Structured
             update={"messages": state["messages"] + [tool_message]},
         )
 
-    assert isinstance(handoff_to_agent, StructuredTool)
+    assert isinstance(handoff_to_agent, BaseTool)
 
     return handoff_to_agent

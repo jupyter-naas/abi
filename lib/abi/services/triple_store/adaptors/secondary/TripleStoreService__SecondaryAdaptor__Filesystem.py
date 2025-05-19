@@ -1,4 +1,4 @@
-from lib.abi.services.triple_store.TripleStorePorts import (
+from abi.services.triple_store.TripleStorePorts import (
     ITripleStorePort,
     OntologyEvent,
     Exceptions,
@@ -6,7 +6,8 @@ from lib.abi.services.triple_store.TripleStorePorts import (
 from abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import (
     TripleStoreService__SecondaryAdaptor__FileBase,
 )
-from rdflib import Graph, RDFS
+from rdflib import Graph, RDFS, query, URIRef
+import rdflib
 from typing import List, Dict, Tuple, Any
 import os
 
@@ -102,7 +103,7 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
     def get(self) -> Graph:
         return self.__live_graph
 
-    def get_subject_graph(self, subject: str) -> Graph:
+    def get_subject_graph(self, subject: URIRef) -> Graph:
         subject_hash = self.iri_hash(subject)
 
         if os.path.exists(self.hash_triples_path(subject_hash)):
@@ -131,12 +132,12 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
         return triples
 
-    def query(self, query: str) -> Graph:
+    def query(self, query: str) -> query.Result:
         aggregate_graph = self.get()
 
         return aggregate_graph.query(query)
 
-    def query_view(self, view: str, query: str) -> Graph:
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
         if os.path.exists(os.path.join(self.__store_path, "views", view)):
             aggregate_graph = Graph()
 
@@ -157,11 +158,14 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
 
     def handle_view_event(
         self,
-        view: Tuple[str, str, str],
+        view: Tuple[URIRef | None, URIRef | None, URIRef | None],
         event: OntologyEvent,
-        triple: Tuple[str, str, str],
+        triple: Tuple[URIRef | None, URIRef | None, URIRef | None],
     ):
         s, _, o = triple
+
+        assert isinstance(s, URIRef)
+        assert isinstance(o, URIRef)
 
         partition_hash = self.iri_hash(o)
 

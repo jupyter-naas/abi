@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
@@ -6,9 +6,8 @@ from lib.abi.integration.integration import (
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Union, Tuple
 import psycopg2
-from psycopg2.extras import RealDictCursor, execute_values
+from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
-import pandas as pd
 
 LOGO_URL = "https://logo.clearbit.com/postgresql.org"
 

@@ -1,10 +1,10 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict
 import requests
 
 LOGO_URL = (
@@ -88,7 +88,7 @@ class SerperIntegration(Integration):
         """
         payload = {"q": q, "num": num, "gl": gl, "hl": hl}
 
-        return self._make_request(f"/search", payload)
+        return self._make_request("/search", payload)
 
     def news_search(
         self, q: str, num: int = 10, gl: str = "us", hl: str = "en"
@@ -106,7 +106,7 @@ class SerperIntegration(Integration):
         """
         payload = {"q": q, "num": num, "gl": gl, "hl": hl, "type": "news"}
 
-        return self._make_request(f"/search", payload)
+        return self._make_request("/search", payload)
 
     def image_search(
         self, q: str, num: int = 10, gl: str = "us", hl: str = "en"
@@ -124,7 +124,7 @@ class SerperIntegration(Integration):
         """
         payload = {"q": q, "num": num, "gl": gl, "hl": hl, "type": "images"}
 
-        return self._make_request(f"/search", payload)
+        return self._make_request("/search", payload)
 
 
 def as_tools(configuration: SerperIntegrationConfiguration):

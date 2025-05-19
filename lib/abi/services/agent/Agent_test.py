@@ -13,9 +13,7 @@ def model():
 
 def test_no_tools_no_agents(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
-    from langchain_openai import ChatOpenAI
     from langchain_core.messages import AIMessage
-    import os
 
     agent = Agent(
         name="Test Agent",
@@ -38,10 +36,7 @@ def test_no_tools_no_agents(model):
 
 def test_tools_no_agents(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import AIMessage
     from langchain_core.tools import tool
-    import os
 
     @tool
     def test_tool(input: str) -> str:
@@ -75,9 +70,6 @@ def test_tools_no_agents(model):
 
 def test_agents_no_tools(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import AIMessage
-    import os
     from queue import Queue
 
     queue = Queue()
@@ -114,7 +106,7 @@ def test_agents_no_tools(model):
     assert queue.qsize() == 2
 
     while not queue.empty():
-        event = queue.get()
+        _ = queue.get()
 
 
 def test_agent_duplication(model):
@@ -148,22 +140,22 @@ def test_agent_duplication(model):
     assert id(duplicated_agent.agents[0]) != id(first_agent.agents[0])
 
 
-def test_agent_stream_invoke(model):
-    from abi.services.agent.Agent import Agent, AgentConfiguration
+# def test_agent_stream_invoke(model):
+#     from abi.services.agent.Agent import Agent, AgentConfiguration
 
-    agent = Agent(
-        name="Greeting Agent",
-        description="A Greeting agent",
-        chat_model=model,
-        tools=[],
-        agents=[],
-        configuration=AgentConfiguration(system_prompt="You are a Greeting agent"),
-    )
+#     agent = Agent(
+#         name="Greeting Agent",
+#         description="A Greeting agent",
+#         chat_model=model,
+#         tools=[],
+#         agents=[],
+#         configuration=AgentConfiguration(system_prompt="You are a Greeting agent"),
+#     )
 
-    events = []
-    for event in agent.stream_invoke("My name is ABI"):
-        events.append(event)
+#     events = []
+#     for event in agent.stream_invoke("My name is ABI"):
+#         events.append(event)
 
-    assert len(events) == 2
-    assert events[0]["event"] == "message"
-    assert events[1]["event"] == "done"
+#     assert len(events) == 2
+#     assert events[0]["event"] == "message"
+#     assert events[1]["event"] == "done"

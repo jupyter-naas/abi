@@ -1,7 +1,6 @@
 from pathlib import Path
 from rdflib import Graph, URIRef, RDFS, RDF, OWL
 from abi import logger
-import json
 
 
 def consolidate_ontologies(

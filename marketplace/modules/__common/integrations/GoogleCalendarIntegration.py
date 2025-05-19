@@ -1,14 +1,13 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from datetime import datetime, timezone
 
 LOGO_URL = "https://cdn-icons-png.flaticon.com/512/5968/5968499.png"
 
@@ -60,7 +59,7 @@ class GoogleCalendarIntegration(Integration):
 
             # Build the service
             self.__service = build("calendar", "v3", credentials=delegated_credentials)
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Calendar API client: {str(e)}")
 
