@@ -1,11 +1,25 @@
 from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
-from src.core.apps.terminal_agent.terminal_style import print_tool_usage, print_tool_response
+from src.core.apps.terminal_agent.terminal_style import (
+    print_tool_usage,
+    print_tool_response,
+)
 from src.core.modules.common.integrations import NewsAPIIntegration
-from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.modules.support.agents.SupportAssistant import create_agent as create_support_agent
-from src.core.modules.common.prompts.responsabilities_prompt import RESPONSIBILITIES_PROMPT
+from src.core.modules.common.integrations.NewsAPIIntegration import (
+    NewsAPIIntegrationConfiguration,
+)
+from src.core.modules.support.agents.SupportAssistant import (
+    create_agent as create_support_agent,
+)
+from src.core.modules.common.prompts.responsabilities_prompt import (
+    RESPONSIBILITIES_PROMPT,
+)
 
 DESCRIPTION = "A NewsAPI Assistant for retrieving news articles and headlines."
 AVATAR_URL = "https://newsapi.org/images/n-logo-border.png"
@@ -24,30 +38,31 @@ When searching for news:
 {RESPONSIBILITIES_PROMPT}
 """
 
+
 def create_news_api_agent():
     agent_configuration = AgentConfiguration(
-        on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]['name']),
-        on_tool_response=lambda message: print_tool_response(f'\n{message.content}'),
-        system_prompt=SYSTEM_PROMPT
+        on_tool_usage=lambda message: print_tool_usage(message.tool_calls[0]["name"]),
+        on_tool_response=lambda message: print_tool_response(f"\n{message.content}"),
+        system_prompt=SYSTEM_PROMPT,
     )
     model = ChatOpenAI(
-        model="gpt-4",
-        temperature=0,
-        api_key=secret.get('OPENAI_API_KEY')
+        model="gpt-4", temperature=0, api_key=secret.get("OPENAI_API_KEY")
     )
     tools = []
-    
+
     # Add integration based on available credentials
-    if secret.get('NEWSAPI_API_KEY'):    
+    if secret.get("NEWSAPI_API_KEY"):
         integration_config = NewsAPIIntegrationConfiguration(
-            api_key=secret.get('NEWSAPI_API_KEY')
+            api_key=secret.get("NEWSAPI_API_KEY")
         )
         tools += NewsAPIIntegration.as_tools(integration_config)
 
     # Add support assistant
-    support_agent = create_support_agent(AgentSharedState(thread_id=2), agent_configuration)
+    support_agent = create_support_agent(
+        AgentSharedState(thread_id=2), agent_configuration
+    )
     tools += support_agent.as_tools()
-    
+
     return Agent(
         name="news_api_agent",
         description="Use to search and retrieve news articles and headlines",
@@ -55,5 +70,5 @@ def create_news_api_agent():
         tools=tools,
         state=AgentSharedState(thread_id=1),
         configuration=agent_configuration,
-        memory=MemorySaver()
-    ) 
+        memory=MemorySaver(),
+    )

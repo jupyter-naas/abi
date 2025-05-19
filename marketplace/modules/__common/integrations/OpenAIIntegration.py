@@ -1,4 +1,8 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration, IntegrationConnectionError
+from lib.abi.integration.integration import (
+    Integration,
+    IntegrationConfiguration,
+    IntegrationConnectionError,
+)
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union, Any
 from openai import OpenAI
@@ -9,21 +13,24 @@ from pydantic import BaseModel, Field
 
 LOGO_URL = "https://logo.clearbit.com/openai.com"
 
+
 @dataclass
 class OpenAIIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for OpenAI integration.
-    
+
     Attributes:
         api_key (str): OpenAI API key for authentication
     """
+
     api_key: str
+
 
 class OpenAIIntegration(Integration):
     """OpenAI integration class for interacting with OpenAI's API.
-    
+
     This class provides methods to interact with OpenAI's API endpoints.
     It handles authentication and request management.
-    
+
     Attributes:
         __configuration (OpenAIIntegrationConfiguration): Configuration instance
             containing necessary credentials and settings.
@@ -36,11 +43,11 @@ class OpenAIIntegration(Integration):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__client = OpenAI(api_key=self.__configuration.api_key)
-        
+
     def list_models(self) -> Dict:
         """List available models."""
         return self.__client.models.list()
-    
+
     def retrieve_model(self, model_id: str) -> Dict:
         """Retrieve a specific model."""
         return self.__client.models.retrieve(model_id)
@@ -55,7 +62,7 @@ class OpenAIIntegration(Integration):
         response_format: Optional[str] = None,
     ) -> Dict:
         """Create a chat completion using OpenAI's API.
-        
+
         Args:
             messages (List[Dict[str, str]]): List of message dictionaries with role and content
             prompt (Optional[str]): Prompt to use, defaults to None
@@ -63,16 +70,16 @@ class OpenAIIntegration(Integration):
             model (Optional[str]): Model ID to use, defaults to gpt-4o
             temperature (float): Sampling temperature between 0 and 2, defaults to 0.7
             response_format (Optional[str]): Response format to use, defaults to None
-            
+
         Returns:
             Dict: API response containing the completion
         """
         if messages == [] and prompt is not None and system_prompt is not None:
             messages = [
                 {"role": "developer", "content": system_prompt},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ]
-        
+
         if model.startswith("o"):
             completion = self.__client.chat.completions.create(
                 messages=messages,
@@ -87,7 +94,7 @@ class OpenAIIntegration(Integration):
                 response_format=response_format,
             )
         return completion.choices[0].message.content
-    
+
     def create_chat_completion_beta(
         self,
         prompt: str,
@@ -96,28 +103,28 @@ class OpenAIIntegration(Integration):
         response_format: BaseModel = None,
     ) -> Dict:
         """Create a chat completion beta with structured output using OpenAI's API.
-        
+
         Args:
             prompt (str): Prompt to use
             system_prompt (str): System prompt to use
             model (str): Model ID to use, defaults to gpt-4o
             response_format (BaseModel): Response format to use
-            
+
         Returns:
             Dict: API response containing the completion
         """
         messages = [
             {"role": "developer", "content": system_prompt},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
-        
+
         completion = self.__client.beta.chat.completions.parse(
             messages=messages,
             model=model,
             response_format=response_format,
         )
         return completion.choices[0].message.content
-    
+
 
 def as_tools(configuration: OpenAIIntegrationConfiguration):
     """Convert OpenAI integration into LangChain tools."""
@@ -147,24 +154,24 @@ def as_tools(configuration: OpenAIIntegrationConfiguration):
             name="openai_list_models",
             description="List available OpenAI models",
             func=lambda **kwargs: integration.list_models(**kwargs),
-            args_schema=ListModelsSchema
+            args_schema=ListModelsSchema,
         ),
         StructuredTool(
             name="openai_retrieve_model",
             description="Retrieve a specific OpenAI model",
             func=lambda **kwargs: integration.retrieve_model(**kwargs),
-            args_schema=RetrieveModelSchema
+            args_schema=RetrieveModelSchema,
         ),
         StructuredTool(
             name="openai_create_chat_completion",
             description="Create a chat completion using OpenAI's API",
             func=lambda **kwargs: integration.create_chat_completion(**kwargs),
-            args_schema=CreateChatCompletionSchema
+            args_schema=CreateChatCompletionSchema,
         ),
         StructuredTool(
             name="openai_create_chat_completion_beta",
             description="Create a chat completion beta using OpenAI's API.",
             func=lambda **kwargs: integration.create_chat_completion_beta(**kwargs),
-            args_schema=CreateChatCompletionBetaSchema
+            args_schema=CreateChatCompletionBetaSchema,
         ),
     ]

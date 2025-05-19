@@ -1,7 +1,10 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
-from src.core.modules.common.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
+from src.core.modules.common.integrations.NaasIntegration import (
+    NaasIntegration,
+    NaasIntegrationConfiguration,
+)
 from src import secret, config, services
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
@@ -16,19 +19,22 @@ from yaml import Dumper
 from typing import Dict
 import pydash as _
 
+
 @dataclass
 class CreateOntologyYAMLConfiguration(WorkflowConfiguration):
     """Configuration for CreateOntologyYAML workflow.
-    
+
     Attributes:
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
+
     naas_integration_config: NaasIntegrationConfiguration
     triple_store: ITripleStoreService
 
+
 class CreateOntologyYAMLParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
-    
+
     Attributes:
         ontology_name (str): The name of the ontology store to use
         label (str): The label of the ontology
@@ -37,23 +43,32 @@ class CreateOntologyYAMLParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
+
     ontology_name: str = Field(..., description="The name of the ontology store to use")
     label: str = Field(..., description="The label of the ontology")
-    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
+    description: str = Field(
+        ...,
+        description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'",
+    )
     workspace_id: str = Field(..., description="The ID of the Naas workspace to use")
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
-    level: str ='USE_CASE'
+    logo_url: str = (
+        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
+    )
+    level: str = "USE_CASE"
     display_relations_names: bool = True
     class_colors_mapping: Dict[str, str] = {}
 
+
 class CreateOntologyYAML(Workflow):
     """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
-    
+
     __configuration: CreateOntologyYAMLConfiguration
-    
+
     def __init__(self, configuration: CreateOntologyYAMLConfiguration):
         self.__configuration = configuration
-        self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
+        self.__naas_integration = NaasIntegration(
+            self.__configuration.naas_integration_config
+        )
 
     def graph_to_yaml(self, parameters: CreateOntologyYAMLParameters) -> str:
         # Initialize parameters
@@ -62,12 +77,12 @@ class CreateOntologyYAML(Workflow):
 
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(
-            data=graph.serialize(format="turtle").encode('utf-8'),  # Convert to bytes
+            data=graph.serialize(format="turtle").encode("utf-8"),  # Convert to bytes
             workspace_id=config.workspace_id,
             storage_name=config.storage_name,
             prefix="assets",
             object_name=str(parameters.ontology_name + ".ttl"),
-            visibility="public"
+            visibility="public",
         )
         # Save asset URL to JSON
         asset_url = asset.get("asset").get("url")
@@ -77,9 +92,9 @@ class CreateOntologyYAML(Workflow):
         # Convert to YAML
         try:
             yaml_data = OntologyYaml.rdf_to_yaml(
-                graph, 
+                graph,
                 display_relations_names=parameters.display_relations_names,
-                class_colors_mapping=parameters.class_colors_mapping
+                class_colors_mapping=parameters.class_colors_mapping,
             )
         except Exception as e:
             message = f"Error converting ontology to YAML: {e}"
@@ -93,7 +108,9 @@ class CreateOntologyYAML(Workflow):
             onto_level = parameters.level
 
             # Get ontology ID if it exists
-            ontologies = self.__naas_integration.get_ontologies(workspace_id).get("ontologies", [])
+            ontologies = self.__naas_integration.get_ontologies(workspace_id).get(
+                "ontologies", []
+            )
             ontology_id = None
             for ontology in ontologies:
                 if ontology.get("label") == onto_label:
@@ -134,8 +151,10 @@ class CreateOntologyYAML(Workflow):
             StructuredTool(
                 name="create_ontology_yaml",
                 description="Convert an ontology file to YAML and push it to a Naas workspace",
-                func=lambda **kwargs: self.graph_to_yaml(CreateOntologyYAMLParameters(**kwargs)),
-                args_schema=CreateOntologyYAMLParameters
+                func=lambda **kwargs: self.graph_to_yaml(
+                    CreateOntologyYAMLParameters(**kwargs)
+                ),
+                args_schema=CreateOntologyYAMLParameters,
             )
         ]
 

@@ -4,4 +4,4 @@ DESCRIPTION = "OpenAI's most advanced, multimodal flagship model that's cheaper 
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/openai_100x100.png"
 MODEL_TYPE = "chat"
 CONTEXT_WINDOW = 128000
-OWNER = "openai" 
+OWNER = "openai"

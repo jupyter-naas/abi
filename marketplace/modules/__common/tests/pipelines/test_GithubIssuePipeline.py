@@ -6,11 +6,14 @@ from rdflib import Graph
 from src.core.modules.common.pipelines.github.GithubIssuePipeline import (
     GithubIssuePipeline,
     GithubIssuePipelineConfiguration,
-    GithubIssuePipelineParameters
+    GithubIssuePipelineParameters,
 )
 from src.core.modules.common.integrations.GithubIntegration import GithubIntegration
-from src.core.modules.common.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration
+from src.core.modules.common.integrations.GithubGraphqlIntegration import (
+    GithubGraphqlIntegration,
+)
 from abi.services.triple_store.TripleStoreService import TripleStoreService
+
 
 @pytest.fixture
 def mock_issue_data():
@@ -29,26 +32,22 @@ def mock_issue_data():
         "user": {
             "id": "user123",
             "login": "testuser",
-            "html_url": "https://github.com/testuser"
+            "html_url": "https://github.com/testuser",
         },
-        "assignees": [{
-            "id": "assignee123",
-            "login": "assigneeuser",
-            "html_url": "https://github.com/assigneeuser"
-        }]
+        "assignees": [
+            {
+                "id": "assignee123",
+                "login": "assigneeuser",
+                "html_url": "https://github.com/assigneeuser",
+            }
+        ],
     }
+
 
 @pytest.fixture
 def mock_project_data():
-    return {
-        "data": {
-            "organization": {
-                "projectV2": {
-                    "id": "project123"
-                }
-            }
-        }
-    }
+    return {"data": {"organization": {"projectV2": {"id": "project123"}}}}
+
 
 @pytest.fixture
 def mock_item_data():
@@ -56,14 +55,12 @@ def mock_item_data():
         "data": {
             "node": {
                 "projectItems": {
-                    "nodes": [{
-                        "project": {"id": "project123"},
-                        "id": "item123"
-                    }]
+                    "nodes": [{"project": {"id": "project123"}, "id": "item123"}]
                 }
             }
         }
     }
+
 
 @pytest.fixture
 def mock_item_details():
@@ -72,25 +69,19 @@ def mock_item_details():
             "node": {
                 "fieldValues": {
                     "nodes": [
-                        {
-                            "field": {"name": "Status"},
-                            "name": "In Progress"
-                        },
-                        {
-                            "field": {"name": "Priority"},
-                            "name": "High"
-                        },
-                        {
-                            "field": {"name": "Estimate"},
-                            "number": 5
-                        }
+                        {"field": {"name": "Status"}, "name": "In Progress"},
+                        {"field": {"name": "Priority"}, "name": "High"},
+                        {"field": {"name": "Estimate"}, "number": 5},
                     ]
                 }
             }
         }
     }
 
-def test_github_issue_pipeline(mock_issue_data, mock_project_data, mock_item_data, mock_item_details):
+
+def test_github_issue_pipeline(
+    mock_issue_data, mock_project_data, mock_item_data, mock_item_details
+):
     # Mock the integrations and services
     mock_github = Mock(spec=GithubIntegration)
     mock_github.get_issue.return_value = mock_issue_data
@@ -106,14 +97,12 @@ def test_github_issue_pipeline(mock_issue_data, mock_project_data, mock_item_dat
     config = GithubIssuePipelineConfiguration(
         github_integration=mock_github,
         github_graphql_integration=mock_github_graphql,
-        triple_store=mock_triple_store
+        triple_store=mock_triple_store,
     )
 
     # Create pipeline parameters
     params = GithubIssuePipelineParameters(
-        github_repository="org/repo",
-        github_issue_id="123",
-        github_project_id=1
+        github_repository="org/repo", github_issue_id="123", github_project_id=1
     )
 
     # Create and run pipeline
@@ -131,6 +120,7 @@ def test_github_issue_pipeline(mock_issue_data, mock_project_data, mock_item_dat
     assert "https://github.com/org/repo/issues/123" in turtle_data
     assert "testuser" in turtle_data
     assert "assigneeuser" in turtle_data
+
 
 def test_github_issue_pipeline_without_project():
     # Mock the integrations and services
@@ -150,9 +140,9 @@ def test_github_issue_pipeline_without_project():
         "user": {
             "id": "user123",
             "login": "testuser",
-            "html_url": "https://github.com/testuser"
+            "html_url": "https://github.com/testuser",
         },
-        "assignees": []
+        "assignees": [],
     }
 
     mock_github_graphql = Mock(spec=GithubGraphqlIntegration)
@@ -162,14 +152,14 @@ def test_github_issue_pipeline_without_project():
     config = GithubIssuePipelineConfiguration(
         github_integration=mock_github,
         github_graphql_integration=mock_github_graphql,
-        triple_store=mock_triple_store
+        triple_store=mock_triple_store,
     )
 
     # Create pipeline parameters
     params = GithubIssuePipelineParameters(
         github_repository="org/repo",
         github_issue_id="123",
-        github_project_id=0  # No project
+        github_project_id=0,  # No project
     )
 
     # Create and run pipeline

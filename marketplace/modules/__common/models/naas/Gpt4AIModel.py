@@ -4,4 +4,4 @@ DESCRIPTION = "4k context window, cost-effective model"
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/openai_100x100.png"
 MODEL_TYPE = "chat"
 CONTEXT_WINDOW = 8192
-OWNER = "openai" 
+OWNER = "openai"

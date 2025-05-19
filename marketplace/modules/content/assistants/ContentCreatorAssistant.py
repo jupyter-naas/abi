@@ -1,12 +1,34 @@
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.Agent import (
+    Agent,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from langchain_anthropic import ChatAnthropic
-from src.core.modules.common.integrations import LinkedInIntegration, YouTubeIntegration, ReplicateIntegration, NewsAPIIntegration, ReplicateIntegration, PerplexityIntegration
-from src.core.modules.common.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
-from src.core.modules.common.integrations.YouTubeIntegration import YouTubeIntegrationConfiguration
-from src.core.modules.common.integrations.ReplicateIntegration import ReplicateIntegrationConfiguration
-from src.core.modules.common.integrations.NewsAPIIntegration import NewsAPIIntegrationConfiguration
-from src.core.modules.common.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from src.core.modules.common.integrations import (
+    LinkedInIntegration,
+    YouTubeIntegration,
+    ReplicateIntegration,
+    NewsAPIIntegration,
+    ReplicateIntegration,
+    PerplexityIntegration,
+)
+from src.core.modules.common.integrations.LinkedInIntegration import (
+    LinkedInIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.YouTubeIntegration import (
+    YouTubeIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.ReplicateIntegration import (
+    ReplicateIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.NewsAPIIntegration import (
+    NewsAPIIntegrationConfiguration,
+)
+from src.core.modules.common.integrations.PerplexityIntegration import (
+    PerplexityIntegrationConfiguration,
+)
 
 NAME = "Content Creator"
 SLUG = "content-creator"
@@ -56,52 +78,61 @@ Always prioritize:
 If you encounter situations requiring specialized knowledge or additional resources, acknowledge this and suggest appropriate solutions. Your goal is to help users create content that resonates with their audience and achieves their business objectives.
 """
 
+
 def create_content_creator_agent(
-        agent_shared_state: AgentSharedState = None, 
-        agent_configuration: AgentConfiguration = None
-    ) -> Agent:
+    agent_shared_state: AgentSharedState = None,
+    agent_configuration: AgentConfiguration = None,
+) -> Agent:
     model = ChatAnthropic(
         model=MODEL,
         temperature=TEMPERATURE,
-        anthropic_api_key=secret.get('ANTHROPIC_API_KEY')
+        anthropic_api_key=secret.get("ANTHROPIC_API_KEY"),
     )
     tools = []
 
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
-        )
-    
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
-    li_at = secret.get('li_at')
-    JSESSIONID = secret.get('JSESSIONID')
+    li_at = secret.get("li_at")
+    JSESSIONID = secret.get("JSESSIONID")
     if li_at and JSESSIONID:
-        tools += LinkedinIntegration.as_tools(LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID))
+        tools += LinkedinIntegration.as_tools(
+            LinkedinIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+        )
 
-    youtube_key = secret.get('YOUTUBE_API_KEY')
+    youtube_key = secret.get("YOUTUBE_API_KEY")
     if youtube_key:
-        tools += YouTubeIntegration.as_tools(YouTubeIntegrationConfiguration(api_key=youtube_key))
+        tools += YouTubeIntegration.as_tools(
+            YouTubeIntegrationConfiguration(api_key=youtube_key)
+        )
 
-    replicate_api_key = secret.get('REPLICATE_API_KEY')
+    replicate_api_key = secret.get("REPLICATE_API_KEY")
     if replicate_api_key:
-        tools += ReplicateIntegration.as_tools(ReplicateIntegrationConfiguration(api_key=replicate_api_key))
+        tools += ReplicateIntegration.as_tools(
+            ReplicateIntegrationConfiguration(api_key=replicate_api_key)
+        )
 
-    news_api_key = secret.get('NEWS_API_KEY')
+    news_api_key = secret.get("NEWS_API_KEY")
     if news_api_key:
-        tools += NewsAPIIntegration.as_tools(NewsAPIIntegrationConfiguration(api_key=news_api_key))
+        tools += NewsAPIIntegration.as_tools(
+            NewsAPIIntegrationConfiguration(api_key=news_api_key)
+        )
 
-    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
     if perplexity_api_key:
-        tools += PerplexityIntegration.as_tools(PerplexityIntegrationConfiguration(api_key=perplexity_api_key))
+        tools += PerplexityIntegration.as_tools(
+            PerplexityIntegrationConfiguration(api_key=perplexity_api_key)
+        )
 
     return Agent(
         name=NAME.lower().replace(" ", "_"),
         description=DESCRIPTION,
-        chat_model=model, 
-        tools=tools, 
-        state=agent_shared_state, 
-        configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        chat_model=model,
+        tools=tools,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    )

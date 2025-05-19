@@ -29,14 +29,14 @@
 abi:hasSkill a owl:ObjectProperty ;
     rdfs:label "has skill"@en ;
     rdfs:domain cco:ont00001262 ;
-    rdfs:range abi:ProfessionalSkills ;
+    rdfs:range cco:ont00000089 ;
     rdfs:subPropertyOf bfo:BFO_0000127 ;
     skos:definition "A relation between a person and a professional skill they possess."@en ;
     skos:example "John has the skill to play the piano."@en .
 
 abi:isSkillOf a owl:ObjectProperty ;
     rdfs:label "is skill of"@en ;
-    rdfs:domain abi:ProfessionalSkills ;
+    rdfs:domain cco:ont00000089 ;
     rdfs:range cco:ont00001262 ;
     rdfs:subPropertyOf bfo:BFO_0000127 ;
     skos:definition "A relation between a professional skill and the person who possesses it."@en ;

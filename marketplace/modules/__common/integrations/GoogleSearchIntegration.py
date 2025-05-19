@@ -7,25 +7,28 @@ from abi import logger
 
 LOGO_URL = "https://www.google.com/favicon.ico"
 
+
 @dataclass
 class GoogleSearchIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for GoogleSearch."""
+
     pass
+
 
 class GoogleSearchIntegration(Integration):
     """GoogleSearch integration for performing Google searches.
-    
+
     This class provides methods to search Google and get list of urls from search results.
     """
 
     __configuration: GoogleSearchIntegrationConfiguration
-    
+
     def __init__(self, configuration: GoogleSearchIntegrationConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
 
     def search_google(
-        self, 
+        self,
         query: str,
         num: int = 10,
         stop: int = 10,
@@ -33,25 +36,25 @@ class GoogleSearchIntegration(Integration):
         pause: int = 2,
     ) -> Optional[str]:
         """Search for and extract LinkedIn company URL from Google search results.
-        
+
         Args:
             query (str): Search query to perform
             num (int): Number of results to return. Defaults to 10
             stop (int): Number of results to stop at. Defaults to 10
-            
+
         Returns:
             Optional[str]: LinkedIn company URL if found, None otherwise
         """
         results = search(query, tld=tld, num=num, stop=stop, pause=pause)
         return results
-    
+
     def search_url(
-        self, 
+        self,
         query: str,
         pattern: str,
     ) -> Optional[str]:
         """Search for and extract LinkedIn URL from Google search results.
-        
+
         Args:
             query (str): Search query to perform
             pattern (str): Pattern to use to extract the LinkedIn URL
@@ -67,40 +70,41 @@ class GoogleSearchIntegration(Integration):
             if match is not None:
                 return match.group(0).replace(" ", "")
         return None
-        
+
     def search_linkedin_organization_url(
-        self, 
+        self,
         organization_name: str,
     ) -> str:
         """Search for and extract LinkedIn company URL from Google search results.
-        
+
         Args:
             organization_name (str): Name of the organization to search for
         """
         pattern = r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
-        query = organization_name.lower().replace(" ", "+")+"+linkedin"
+        query = organization_name.lower().replace(" ", "+") + "+linkedin"
         return self.search_url(query, pattern)
-    
+
     def search_linkedin_profile_url(
-        self, 
+        self,
         profile_name: str,
     ) -> str:
         """Search for and extract LinkedIn profile URL from Google search results.
-        
+
         Args:
             profile_name (str): Name of the profile to search for
         """
         pattern = r"https://.+\.linkedin\.[^/]+/in/[^?]+"
-        query = profile_name.lower().replace(" ", "+")+"+linkedin"
+        query = profile_name.lower().replace(" ", "+") + "+linkedin"
         return self.search_url(query, pattern)
+
 
 def as_tools(configuration: GoogleSearchIntegrationConfiguration):
     """Convert SerpAPI integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    
+
     integration = GoogleSearchIntegration(configuration)
-    
+
     class SearchSchema(BaseModel):
         query: str = Field(..., description="Search query")
 
@@ -109,7 +113,9 @@ def as_tools(configuration: GoogleSearchIntegrationConfiguration):
         pattern: str = Field(..., description="Pattern to use to extract the URL")
 
     class SearchLinkedInOrganizationSchema(BaseModel):
-        organization_name: str = Field(..., description="Name of the organization to search for")
+        organization_name: str = Field(
+            ..., description="Name of the organization to search for"
+        )
 
     class SearchLinkedInProfileSchema(BaseModel):
         profile_name: str = Field(..., description="Name of the profile to search for")
@@ -119,24 +125,26 @@ def as_tools(configuration: GoogleSearchIntegrationConfiguration):
             name="googlesearch_search",
             description="Search using Google Search",
             func=lambda **kwargs: integration.search_google(**kwargs),
-            args_schema=SearchSchema
+            args_schema=SearchSchema,
         ),
         StructuredTool(
             name="googlesearch_search_url",
             description="Search for a URL using Google Search",
             func=lambda **kwargs: integration.search_url(**kwargs),
-            args_schema=SearchURLSchema
+            args_schema=SearchURLSchema,
         ),
         StructuredTool(
             name="googlesearch_linkedin_organization",
             description="Search for LinkedIn organization URL using Google Search",
-            func=lambda **kwargs: integration.search_linkedin_organization_url(**kwargs),
-            args_schema=SearchLinkedInOrganizationSchema
+            func=lambda **kwargs: integration.search_linkedin_organization_url(
+                **kwargs
+            ),
+            args_schema=SearchLinkedInOrganizationSchema,
         ),
         StructuredTool(
             name="googlesearch_linkedin_profile",
             description="Search for LinkedIn profile URL using Google Search",
             func=lambda **kwargs: integration.search_linkedin_profile_url(**kwargs),
-            args_schema=SearchLinkedInProfileSchema
+            args_schema=SearchLinkedInProfileSchema,
         ),
-    ] 
+    ]
