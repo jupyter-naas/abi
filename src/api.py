@@ -10,9 +10,11 @@ from src import secret
 import subprocess
 import os
 from abi import logger
+
 # Authentication
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Annotated
+
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
@@ -33,6 +35,7 @@ favicon_name = os.path.basename(favicon_path)
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
 
+
 # Custom OAuth2 class that accepts query parameter
 class OAuth2QueryBearer(OAuth2):
     def __init__(
@@ -44,17 +47,19 @@ class OAuth2QueryBearer(OAuth2):
         flows = OAuthFlowsModel(password={"tokenUrl": tokenUrl})
         super().__init__(flows=flows, scheme_name=scheme_name, auto_error=auto_error)
 
-    async def __call__(self, token: str = None, authorization: str = Header(None)) -> str:
+    async def __call__(
+        self, token: str = None, authorization: str = Header(None)
+    ) -> str:
         # Check header first
         if authorization:
             scheme, header_token = get_authorization_scheme_param(authorization)
             if scheme.lower() == "bearer":
                 return header_token
-        
+
         # Then check query parameter
         if token:
             return token
-            
+
         # No token found in either place
         if self.auto_error:
             raise HTTPException(
@@ -64,8 +69,10 @@ class OAuth2QueryBearer(OAuth2):
             )
         return None
 
+
 # Replace the existing oauth2_scheme with:
 oauth2_scheme = OAuth2QueryBearer(tokenUrl="token")
+
 
 # Update the token validation dependency
 async def is_token_valid(token: str = Depends(oauth2_scheme)):
@@ -85,29 +92,31 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
 
     return {"access_token": "abi", "token_type": "bearer"}
 
+
 # Create Agents API Router
 agents_router = APIRouter(
     prefix="/agents",
     tags=["Agents"],
     responses={401: {"description": "Unauthorized"}},
-    dependencies=[Depends(is_token_valid)]  # Apply token verification
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
 )
 
 # Create Pipelines API Router
 pipelines_router = APIRouter(
-    prefix="/pipelines", 
+    prefix="/pipelines",
     tags=["Pipelines"],
     responses={401: {"description": "Unauthorized"}},
-    dependencies=[Depends(is_token_valid)]  # Apply token verification
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
 )
 
 # Create Pipelines API Router
 workflows_router = APIRouter(
-    prefix="/workflows", 
+    prefix="/workflows",
     tags=["Workflows"],
     responses={401: {"description": "Unauthorized"}},
-    dependencies=[Depends(is_token_valid)]  # Apply token verification
+    dependencies=[Depends(is_token_valid)],  # Apply token verification
 )
+
 
 def get_git_tag():
     try:
@@ -115,6 +124,7 @@ def get_git_tag():
     except subprocess.CalledProcessError:
         tag = "v0.0.1"
     return tag
+
 
 def custom_openapi():
     if app.openapi_schema:
@@ -124,28 +134,41 @@ def custom_openapi():
         description=DESCRIPTION,
         version=get_git_tag(),
         routes=app.routes,
-        tags=TAGS_METADATA
+        tags=TAGS_METADATA,
     )
     openapi_schema["info"]["x-logo"] = {
         "url": f"/static/{logo_name}",
-        "altText": "Logo"
+        "altText": "Logo",
     }
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
+
 app.openapi = custom_openapi
+
 
 @app.get("/docs", include_in_schema=False)
 def overridden_swagger():
-	return get_swagger_ui_html(openapi_url="/openapi.json", title=TITLE, swagger_favicon_url=f"/static/{favicon_name}")
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title=TITLE,
+        swagger_favicon_url=f"/static/{favicon_name}",
+    )
+
 
 @app.get("/redoc", include_in_schema=False)
 def overridden_redoc():
-	return get_redoc_html(openapi_url="/openapi.json", title=TITLE, redoc_favicon_url=f"/static/{favicon_name}")
+    return get_redoc_html(
+        openapi_url="/openapi.json",
+        title=TITLE,
+        redoc_favicon_url=f"/static/{favicon_name}",
+    )
+
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
+
 
 # Automatic loading of agents from modules
 from src.__modules__ import get_modules
@@ -160,17 +183,22 @@ app.include_router(agents_router)
 app.include_router(pipelines_router)
 app.include_router(workflows_router)
 
+
 def api():
     import uvicorn
+
     # uvicorn.run(app, host="0.0.0.0", port=9879, reload=True)
-    uvicorn.run('src.api:app', host="0.0.0.0", port=9879, reload=os.environ.get("ENV") == "dev")
+    uvicorn.run(
+        "src.api:app", host="0.0.0.0", port=9879, reload=os.environ.get("ENV") == "dev"
+    )
+
 
 # @app.post("/telegram")
 # async def telegram(req: Request):
 #     data = await req.json()
 #     chat_id = data['message']['chat']['id']
 #     text = data['message']['text']
-    
+
 #     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
 
 #     return data
