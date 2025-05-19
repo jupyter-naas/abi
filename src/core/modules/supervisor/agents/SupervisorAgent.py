@@ -17,7 +17,7 @@ from src.core.modules.support.agents.SupportAgent import (
     create_agent as create_support_agent,
 )
 
-NAME = "supervisor"
+NAME = "supervisor_agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
@@ -61,8 +61,6 @@ def create_agent(
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
             system_prompt=SYSTEM_PROMPT,
-            on_tool_usage=lambda x: print("Tool usage:", x),
-            on_tool_response=lambda x: print("Tool response:", x),
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
