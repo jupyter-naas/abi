@@ -9,7 +9,15 @@ git-deps: .git/hooks/pre-commit
 
 ###############@
 
-deps: git-deps .venv
+deps: uv git-deps .venv
+
+# Make sure uv exists otherwise tell the user to install it.
+uv:
+	@if ! command -v uv &> /dev/null; then \
+		echo "🚀 Oops! Looks like uv is missing from your system!"; \
+		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
+		exit 1; \
+	fi
 
 .venv:
 	uv sync
@@ -164,4 +172,4 @@ chat: .venv
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
