@@ -1,4 +1,4 @@
-from lib.abi.models.Model import ChatModel, ModelType
+from lib.abi.models.Model import ChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src import secret
 import os

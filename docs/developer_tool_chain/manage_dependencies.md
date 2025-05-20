@@ -36,7 +36,7 @@ make add dep="uvicorn[standard]"
 
 This will:
 - Add the dependency to your root `pyproject.toml`
-- Update the `poetry.lock` file
+- Update the `uv.lock` file
 - Install the package in your Docker environment
 
 ### Adding dependencies to the `lib/abi` project
@@ -52,7 +52,7 @@ make abi-add dep=numpy
 
 This will:
 - Add the dependency to the `lib/pyproject.toml` file
-- Update the `lib/poetry.lock` file
+- Update the `lib/uv.lock` file
 - Install the package in your Docker environment
 
 ## Updating Locked Dependencies
@@ -87,7 +87,7 @@ This allows you to run commands that depend on the installed packages without ha
 
 ## Development Dependencies
 
-Development dependencies in both `pyproject.toml` files are managed in the `[tool.poetry.group.dev.dependencies]` section. These are automatically installed when you run `make install`.
+Development dependencies in both `pyproject.toml` files are managed in the `[dependency-groups] dev =` section. These are automatically installed when you run `make install`.
 
 ## Docker Integration
 
@@ -109,7 +109,7 @@ make install
 
 ### Adding a dependency only for development
 
-Edit the appropriate `pyproject.toml` file manually to add the dependency under `[tool.poetry.group.dev.dependencies]`, then run:
+Edit the appropriate `pyproject.toml` file manually to add the dependency under `[dependency-groups] dev =`, then run:
 
 ```bash
 make lock
@@ -134,7 +134,7 @@ make test
 ## Best Practices
 
 1. Always use the Makefile targets to manage dependencies
-2. Keep the `poetry.lock` files under version control
+2. Keep the `uv.lock` files under version control
 3. When adding dependencies, consider which package (`src` or `lib/abi`) should own the dependency
 4. Regularly update dependencies to keep up with security patches
 5. When collaborating, pull changes and run `make install` to ensure your environment matches the updated lock files

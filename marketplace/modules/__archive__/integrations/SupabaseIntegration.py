@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
@@ -42,7 +42,7 @@ class SupabaseIntegration(Integration):
             self.__client: Client = create_client(
                 self.__configuration.url, self.__configuration.key
             )
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Supabase client: {str(e)}")
 

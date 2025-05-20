@@ -11,7 +11,6 @@ from src.core.modules.common.integrations.NaasIntegration import (
 from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
-from typing import Optional
 from abi.workflow.workflow import WorkflowParameters
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
@@ -243,7 +242,7 @@ class GenerateSlidesWorkflow(Workflow):
         )
 
         # Add new slides and add shapes
-        logger.info(f"-----> Creating new slides to presentation")
+        logger.info("-----> Creating new slides to presentation")
         presentation = (
             self.__powerpoint_integration.create_presentation()
         )  # Create empty presentation

@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
@@ -6,7 +6,6 @@ from lib.abi.integration.integration import (
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 import requests
-from datetime import datetime
 
 LOGO_URL = "https://logo.clearbit.com/mercury.com"
 

@@ -35,7 +35,7 @@ AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 )
 DESCRIPTION = "A Human Resources Agent that helps users to work with human resources."
-SYSTEM_PROMPT = f"""You are a Human Resources Agent that helps users to work with human resources.
+SYSTEM_PROMPT = """You are a Human Resources Agent that helps users to work with human resources.
 You must always use your tools to perform the actions you need to do.
 You can't use your internal knowledge.
 """
