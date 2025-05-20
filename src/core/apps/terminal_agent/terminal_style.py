@@ -58,7 +58,7 @@ def print_code(code, language="python"):
 
 
 def dict_to_equal_string(d: dict) -> str:
-    return '\n'.join([f'-{key}="{value}"' for key, value in d.items()])
+    return "\n".join([f'-{key}="{value}"' for key, value in d.items()])
 
 
 def print_tool_usage(message):
