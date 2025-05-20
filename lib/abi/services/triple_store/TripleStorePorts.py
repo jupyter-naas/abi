@@ -59,7 +59,9 @@ class ITripleStorePort(ABC):
 class ITripleStoreService(ABC):
     __ontology_adaptor: ITripleStorePort
 
-    __event_listeners: Dict[tuple, Dict[OntologyEvent, List[tuple[str, Callable, bool]]]]
+    __event_listeners: Dict[
+        tuple, Dict[OntologyEvent, List[tuple[str, Callable, bool]]]
+    ]
 
     __views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]]
 

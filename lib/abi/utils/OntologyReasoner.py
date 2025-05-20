@@ -37,11 +37,24 @@ class OntologyReasoner:
         new_graph = Graph()
 
         def filter_func(x: rdflib.query.ResultRow) -> bool:
-            return self.is_iri_uuid(x[0]) if isinstance(x, rdflib.query.ResultRow) and isinstance(x[0], URIRef) else False
-        
-        main_node : List[rdflib.query.ResultRow] = list(filter(filter_func, [result for result in results if isinstance(result, rdflib.query.ResultRow)]))
+            return (
+                self.is_iri_uuid(x[0])
+                if isinstance(x, rdflib.query.ResultRow) and isinstance(x[0], URIRef)
+                else False
+            )
 
-        main_node_uri : str = ""
+        main_node: List[rdflib.query.ResultRow] = list(
+            filter(
+                filter_func,
+                [
+                    result
+                    for result in results
+                    if isinstance(result, rdflib.query.ResultRow)
+                ],
+            )
+        )
+
+        main_node_uri: str = ""
         if len(main_node) == 0:
             # Create new IRI UUID
             main_node_uri = f"http://ontology.naas.ai/abi/{uuid.uuid4()}"
@@ -56,8 +69,18 @@ class OntologyReasoner:
 
         def not_filter_func(x: rdflib.query.ResultRow) -> bool:
             return not filter_func(x)
+
         # For each result, we need to get all triples and add them to the new node then remove existing triples
-        for result in list(filter(not_filter_func, [result for result in results if isinstance(result, rdflib.query.ResultRow)])):
+        for result in list(
+            filter(
+                not_filter_func,
+                [
+                    result
+                    for result in results
+                    if isinstance(result, rdflib.query.ResultRow)
+                ],
+            )
+        ):
             existing_iri = result[0]
             excluded_iris.append(existing_iri)
             for s, p, o in graph:
@@ -79,16 +102,20 @@ class OntologyReasoner:
         graph = Graph()
         graph.parse(data=ttl, format="turtle")
 
-        types : Dict[URIRef, URIRef] = {}
-        labels : Dict[URIRef, str] = {}
-        types_label : Dict[Tuple[URIRef, str], List[URIRef]] = {}
+        types: Dict[URIRef, URIRef] = {}
+        labels: Dict[URIRef, str] = {}
+        types_label: Dict[Tuple[URIRef, str], List[URIRef]] = {}
 
         pn = graph.namespaces()
 
         # Look for triples that have same label and same type
         for s, p, o in graph:
-            assert isinstance(s, URIRef) and isinstance(p, URIRef) and isinstance(o, URIRef)
-            
+            assert (
+                isinstance(s, URIRef)
+                and isinstance(p, URIRef)
+                and isinstance(o, URIRef)
+            )
+
             if p == RDF.type:
                 types[s] = o
             if p == RDFS.label:

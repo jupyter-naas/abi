@@ -43,11 +43,11 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         self.__live_graph = self.load()
 
     def load_triples(self, subject_hash: str) -> Graph:
-        obj : bytes = self.__object_storage_service.get_object(
+        obj: bytes = self.__object_storage_service.get_object(
             prefix=self.__triples_prefix, key=f"{subject_hash}.ttl"
         )
 
-        content : str = obj.decode("utf-8")
+        content: str = obj.decode("utf-8")
 
         return Graph().parse(data=str(content), format="turtle")
 
@@ -58,8 +58,8 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         )
 
     def insert(self, triples: Graph):
-        triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = self.triples_by_subject(
-            triples
+        triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = (
+            self.triples_by_subject(triples)
         )
 
         def __insert(
@@ -79,7 +79,7 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
 
             self.store(subject_hash, graph)
 
-        jobs : List[Job] = [
+        jobs: List[Job] = [
             Job(
                 queue=None,
                 func=__insert,
@@ -89,7 +89,7 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
             for subject in triples_by_subject
         ]
 
-        result_queue : queue.Queue[Job] = self.__insert_pool.submit_all(jobs)
+        result_queue: queue.Queue[Job] = self.__insert_pool.submit_all(jobs)
 
         while result_queue.qsize() < result_queue.maxsize:
             logger.debug(f"Inserting {result_queue.qsize()}/{result_queue.maxsize}")
@@ -123,7 +123,11 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         self.__live_graph -= triples
 
     def get_subject_graph(self, subject: str | URIRef) -> Graph:
-        subject_hash = self.iri_hash(URIRef(subject)) if isinstance(subject, str) else self.iri_hash(subject)
+        subject_hash = (
+            self.iri_hash(URIRef(subject))
+            if isinstance(subject, str)
+            else self.iri_hash(subject)
+        )
 
         try:
             graph = self.load_triples(subject_hash)
@@ -136,9 +140,9 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         triples = Graph()
 
         # Queue to stream files as they are discovered
-        files_queue : queue.Queue[str] = queue.Queue()
+        files_queue: queue.Queue[str] = queue.Queue()
         worker_pool = WorkerPool(num_workers=50)
-        result_queue : queue.Queue[Job] = queue.Queue()
+        result_queue: queue.Queue[Job] = queue.Queue()
         job_nbr = 0
 
         def list_objects_worker(files_queue: queue.Queue):
@@ -157,7 +161,7 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         # Process files as they are discovered
         while not files_queue.empty() or list_object_thread.is_alive():
             try:
-                file : str = files_queue.get(timeout=1.0)
+                file: str = files_queue.get(timeout=1.0)
 
                 file_hash = file.split("/")[-1].split(".")[0]
                 worker_pool.submit(

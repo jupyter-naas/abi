@@ -36,9 +36,7 @@ def create_agent(
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
     )
 
     # Set configuration

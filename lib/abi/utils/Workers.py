@@ -97,7 +97,7 @@ class WorkerPool:
 
     def submit_all(self, jobs: List[Job]) -> Queue[Job]:
         """Submit multiple jobs to the worker pool"""
-        queue : Queue[Job] = Queue(maxsize=len(jobs))
+        queue: Queue[Job] = Queue(maxsize=len(jobs))
 
         for job in jobs:
             if job.queue is None:

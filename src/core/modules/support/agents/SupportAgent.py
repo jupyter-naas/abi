@@ -52,7 +52,7 @@ SUGGESTIONS = [
         "value": "As a user, I would like to: [Feature Request]",
     },
     {
-        "label": "Report Bug", 
+        "label": "Report Bug",
         "value": "Report a bug on: [Bug Description]",
     },
 ]
@@ -64,9 +64,7 @@ def create_agent(
 ) -> Agent:
     # Init
     model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
     )
     tools = []
 
