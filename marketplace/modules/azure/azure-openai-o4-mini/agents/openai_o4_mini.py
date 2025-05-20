@@ -2,7 +2,8 @@ from ..models.openai_o4_mini import model
 from lib.abi.services.agent.Agent import Agent, AgentConfiguration
 
 def create_agent():
-    class AzureOpenAIO4MiniAgent(Agent): pass
+    class AzureOpenAIO4MiniAgent(Agent):
+        pass
     
     return AzureOpenAIO4MiniAgent(
         name=model.name,

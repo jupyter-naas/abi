@@ -14,7 +14,6 @@ from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
 from typing import Any
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
-import pydash as _
 from rdflib import Graph, URIRef, RDFS
 from abi.utils.SPARQL import get_class_uri_from_individual_uri
 

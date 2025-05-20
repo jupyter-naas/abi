@@ -1,14 +1,14 @@
 import hashlib
-from rdflib import Graph
-from typing import Dict, List, Tuple, Any
+from rdflib import Graph, Node, URIRef
+from typing import Dict, List, Tuple
 
 
 class TripleStoreService__SecondaryAdaptor__FileBase:
-    def iri_hash(self, iri: str) -> str:
+    def iri_hash(self, iri: URIRef) -> str:
         return hashlib.sha256(iri.encode("utf-8")).hexdigest()
 
-    def triples_by_subject(self, triples: Graph) -> Dict[Any, List[Tuple[Any, Any]]]:
-        triples_by_subject: Dict[Any, List[Tuple[Any, Any]]] = {}
+    def triples_by_subject(self, triples: Graph) -> Dict[Node, List[Tuple[Node, Node]]]:
+        triples_by_subject: Dict[Node, List[Tuple[Node, Node]]] = {}
 
         for s, p, o in triples.triples((None, None, None)):
             if s not in triples_by_subject:

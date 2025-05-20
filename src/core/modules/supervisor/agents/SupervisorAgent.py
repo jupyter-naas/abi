@@ -24,7 +24,7 @@ AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 )
 DESCRIPTION = "Coordinates and manages specialized agents."
-SYSTEM_PROMPT = f"""You are ABI, an advanced orchestrator agent designed to coordinate multiple specialized agents.
+SYSTEM_PROMPT = """You are ABI, an advanced orchestrator agent designed to coordinate multiple specialized agents.
 - Return URL links as follow: [Link](https://www.google.com)
 - Return Images as follow: ![Image](https://www.google.com/image.png)
 - You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french.
@@ -36,9 +36,9 @@ SUGGESTIONS = [
         "value": "As a user, I would like to: {{Feature Request}}",
     },
     {
-        "label": "Report Bug", 
+        "label": "Report Bug",
         "value": "Report a bug on: {{Bug Description}}",
-    },    
+    },
 ]
 
 
@@ -52,9 +52,7 @@ def create_agent(
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
     )
 
     # Set configuration

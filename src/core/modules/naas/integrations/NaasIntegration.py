@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,
@@ -11,15 +11,15 @@ import json
 import os
 from abi import logger
 import jwt
-from lib.abi.services.object_storage.ObjectStorageFactory import (
+from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
-    ObjectStorageExceptions,
     ObjectStorageService,
 )
 import pydash
 
 LOGO_URL = "https://logo.clearbit.com/naas.ai"
-REGEX = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+REGEX = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
 
 @dataclass
 class NaasIntegrationConfiguration(IntegrationConfiguration):
@@ -32,6 +32,7 @@ class NaasIntegrationConfiguration(IntegrationConfiguration):
 
     api_key: str
     base_url: str = "https://api.naas.ai"
+
 
 class NaasIntegration(Integration):
     """Naas integration class for interacting with Naas API.
@@ -528,7 +529,7 @@ class NaasIntegration(Integration):
             Dict: Response containing list of secrets
         """
         payload = {"page_size": 100, "page_number": 0}
-        return self._make_request("GET", f"/secret/", payload).get("secrets", [])
+        return self._make_request("GET", "/secret/", payload).get("secrets", [])
 
     def list_secrets_names(self) -> Dict:
         secrets = self.list_secrets()
@@ -545,7 +546,7 @@ class NaasIntegration(Integration):
             Dict: Response containing the created secret details
         """
         payload = {"secret": {"name": name, "value": value}}
-        return self._make_request("POST", f"/secret/", payload)
+        return self._make_request("POST", "/secret/", payload)
 
     def update_secret(self, secret_id: str, value: str) -> Dict:
         """Update an existing secret in a workspace.
@@ -660,7 +661,7 @@ class NaasIntegration(Integration):
 
         # Create storage if it doesn't exist
         if not storage_exist:
-            new_storage = self.create_workspace_storage(workspace_id, storage_name)
+            _ = self.create_workspace_storage(workspace_id, storage_name)
             logger.info(f"Created storage {storage_name} in workspace {workspace_id}")
 
         # Get storage credentials
@@ -842,16 +843,12 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     class GetWorkspaceSchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="ID of the workspace to retrieve", 
-            pattern=REGEX
+            ..., description="ID of the workspace to retrieve", pattern=REGEX
         )
 
     class UpdateWorkspaceSchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="ID of the workspace to update", 
-            pattern=REGEX
+            ..., description="ID of the workspace to update", pattern=REGEX
         )
         name: Optional[str] = Field(None, description="New name for the workspace")
         fav_icon: Optional[str] = Field(None, description="Favicon URL")
@@ -872,34 +869,52 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         )
 
     class DeleteWorkspaceSchema(BaseModel):
-        workspace_id: str = Field(..., description="ID of the workspace to delete", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="ID of the workspace to delete", pattern=REGEX
+        )
 
     class CreatePluginSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to create a plugin in", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="Workspace ID to create a plugin in", pattern=REGEX
+        )
         data: Dict = Field(..., description="Plugin configuration data")
 
     class GetPluginSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to get a plugin from", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="Workspace ID to get a plugin from", pattern=REGEX
+        )
         plugin_id: Optional[str] = Field(
             None,
             description="Optional plugin ID to get a specific plugin. If not provided, lists all plugins",
-            pattern=REGEX
+            pattern=REGEX,
         )
 
     class GetPluginsSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to get plugins from", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="Workspace ID to get plugins from", pattern=REGEX
+        )
 
     class UpdatePluginSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to update a plugin in", pattern=REGEX)
-        plugin_id: str = Field(..., description="ID of the plugin to update", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="Workspace ID to update a plugin in", pattern=REGEX
+        )
+        plugin_id: str = Field(
+            ..., description="ID of the plugin to update", pattern=REGEX
+        )
         data: Dict = Field(..., description="Updated plugin configuration data")
 
     class DeletePluginSchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to delete a plugin from", pattern=REGEX)
-        plugin_id: str = Field(..., description="ID of the plugin to delete", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="Workspace ID to delete a plugin from", pattern=REGEX
+        )
+        plugin_id: str = Field(
+            ..., description="ID of the plugin to delete", pattern=REGEX
+        )
 
     class CreateOntologySchema(BaseModel):
-        workspace_id: str = Field(..., description="Workspace ID to create an ontology in", pattern=REGEX)
+        workspace_id: str = Field(
+            ..., description="Workspace ID to create an ontology in", pattern=REGEX
+        )
         label: str = Field(..., description="Label for the ontology")
         source: str = Field(..., description="Ontology source/content")
         level: str = Field(
@@ -916,9 +931,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     class GetOntologySchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="Workspace ID to get an ontology from",
-            pattern=REGEX
+            ..., description="Workspace ID to get an ontology from", pattern=REGEX
         )
         ontology_id: Optional[str] = Field(
             "",
@@ -927,21 +940,15 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     class GetOntologiesSchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="Workspace ID to get ontologies from",
-            pattern=REGEX
+            ..., description="Workspace ID to get ontologies from", pattern=REGEX
         )
 
     class UpdateOntologySchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="Workspace ID to update an ontology in",
-            pattern=REGEX
+            ..., description="Workspace ID to update an ontology in", pattern=REGEX
         )
         ontology_id: str = Field(
-            ..., 
-            description="ID of the ontology to update", 
-            pattern=REGEX
+            ..., description="ID of the ontology to update", pattern=REGEX
         )
         download_url: Optional[str] = Field(
             None, description="Updated ontology download URL"
@@ -958,21 +965,15 @@ def as_tools(configuration: NaasIntegrationConfiguration):
 
     class DeleteOntologySchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="Workspace ID to delete an ontology from",
-            pattern=REGEX
+            ..., description="Workspace ID to delete an ontology from", pattern=REGEX
         )
         ontology_id: str = Field(
-            ..., 
-            description="ID of the ontology to delete",
-            pattern=REGEX
+            ..., description="ID of the ontology to delete", pattern=REGEX
         )
 
     class GetWorkspaceUsersSchema(BaseModel):
         workspace_id: str = Field(
-            ..., 
-            description="ID of the workspace to list users from",
-            pattern=REGEX
+            ..., description="ID of the workspace to list users from", pattern=REGEX
         )
 
     class InviteWorkspaceUserSchema(BaseModel):
@@ -982,7 +983,9 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             "member",
             description="Role to assign to the user - one of: 'member', 'admin', 'owner'",
         )
-        user_id: Optional[str] = Field("", description="User ID if known", pattern=REGEX)
+        user_id: Optional[str] = Field(
+            "", description="User ID if known", pattern=REGEX
+        )
 
     class GetWorkspaceUserSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
@@ -1035,7 +1038,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         workspace_id: Optional[str] = Field(
             None,
             description="Optional ID of the workspace. If not provided, uses personal workspace",
-            pattern=REGEX
+            pattern=REGEX,
         )
         storage_name: str = Field(..., description="Name of the storage")
 

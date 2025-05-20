@@ -1,12 +1,10 @@
 from dataclasses import dataclass
-from datetime import datetime
 import os
 import uuid
 import re
 import requests
 from rdflib import Graph
 from pydantic import BaseModel, Field
-from typing import Optional
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
 

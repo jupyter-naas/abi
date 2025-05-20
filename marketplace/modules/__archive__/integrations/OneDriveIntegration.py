@@ -1,5 +1,5 @@
-from typing import Dict, List, Optional
-from lib.abi.integration.integration import (
+from typing import Dict
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,
@@ -7,7 +7,6 @@ from lib.abi.integration.integration import (
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 import requests
-import json
 
 LOGO_URL = "https://logo.clearbit.com/microsoft.com"
 

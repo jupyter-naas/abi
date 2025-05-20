@@ -3,7 +3,8 @@ from ..models.google_gemini_2_0_flash import model
 
 def create_agent():
     
-    class GoogleGemini2FlashAgent(Agent): pass
+    class GoogleGemini2FlashAgent(Agent):
+        pass
     
     return GoogleGemini2FlashAgent(
         name=model.name,

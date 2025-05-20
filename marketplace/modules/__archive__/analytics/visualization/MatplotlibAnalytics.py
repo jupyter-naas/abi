@@ -1,11 +1,9 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime, timedelta
 import random
 from typing import List, Optional, Tuple, Dict, Union
-import seaborn as sns
 from abi import logger
 from wordcloud import WordCloud
 
@@ -363,7 +361,9 @@ class MatplotlibAnalytics(Integration):
             "background_color": background_color,
             "collocations": False,
             "max_words": 200,
-            "max_font_size": 40,
+            # Commented this max_font_size as it is set to None later on and don't know the side effect.
+            # I am assuming that python will take the later value.
+            # "max_font_size": 40,
             "min_font_size": 10,
             "prefer_horizontal": 0.9,
             "scale": 2,

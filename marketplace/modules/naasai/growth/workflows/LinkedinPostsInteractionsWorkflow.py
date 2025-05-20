@@ -4,7 +4,6 @@ from src.core.modules.common.integrations.LinkedInIntegration import (
     LinkedInIntegration,
     LinkedInIntegrationConfiguration,
 )
-from src import secret
 from dataclasses import dataclass
 from pydantic import Field
 import pandas as pd

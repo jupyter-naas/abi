@@ -1,10 +1,10 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
 )
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 from google.oauth2 import service_account
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
@@ -13,10 +13,7 @@ from google.analytics.data_v1beta.types import (
     DateRange,
     Metric,
     Dimension,
-    MetricType,
     FilterExpression,
-    Filter,
-    OrderBy,
 )
 
 LOGO_URL = (
@@ -59,7 +56,7 @@ class GoogleAnalyticsIntegration(Integration):
 
             # Initialize client
             self.__client = BetaAnalyticsDataClient(credentials=credentials)
-        except Exception as e:
+        except Exception:
             pass
             # logger.debug(f"Failed to initialize Analytics API client: {str(e)}")
 

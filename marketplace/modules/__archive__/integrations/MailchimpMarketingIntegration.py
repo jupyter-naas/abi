@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
 import requests
 from typing import Optional, List, Dict
@@ -790,7 +790,7 @@ def as_tools(configuration: MailchimpMarketingIntegrationConfiguration):
     """Convert MailchimpMarketing integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    from typing import Optional, List, Dict
+    from typing import Optional, List
 
     integration = MailchimpMarketingIntegration(configuration)
 

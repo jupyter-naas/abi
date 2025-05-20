@@ -9,8 +9,7 @@ from abi.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
     OntologyEvent,
 )
-from src import services
-from typing import Optional, Any
+from typing import Any
 from abi.utils.Graph import ABIGraph as Graph
 from rdflib import URIRef, Literal
 
@@ -111,7 +110,7 @@ class LinkedInGetOrganizationLogoPipeline(Pipeline):
             )
 
         # Save graph
-        logger.info(f"-----> Saving graph to ontology store")
+        logger.info("-----> Saving graph to ontology store")
         self.__configuration.triple_store.store(parameters.ontology_name, graph)
 
     def as_tools(self) -> list[StructuredTool]:
