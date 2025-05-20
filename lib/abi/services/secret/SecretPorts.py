@@ -4,7 +4,7 @@ from typing import Any
 
 class ISecretAdapter(ABC):
     @abstractmethod
-    def get(self, key: str) -> str:
+    def get(self, key: str, default: Any = None) -> str:
         raise NotImplementedError()
 
 
