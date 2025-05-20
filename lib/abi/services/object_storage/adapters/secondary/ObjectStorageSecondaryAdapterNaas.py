@@ -51,7 +51,7 @@ class ObjectStorageSecondaryAdapterNaas(IObjectStorageAdapter):
 
     def ensure_credentials(self) -> Credentials:
         if self.__credentials is None:
-            #TODO: Handle raise_for_status.
+            # TODO: Handle raise_for_status.
             self.__refresh_credentials()
 
         assert self.__credentials is not None
