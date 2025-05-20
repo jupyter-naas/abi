@@ -36,6 +36,7 @@ jobs:
 
       - name: Build Docker image
         run: |
+          pip install uv
           touch .env
           make build
           docker tag abi:latest ghcr.io/${{ github.repository }}/abi:latest
