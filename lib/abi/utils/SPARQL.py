@@ -3,6 +3,7 @@ from abi import logger
 from rdflib import URIRef, query
 from typing import Union
 
+
 # Transform SPARQL results to list of dictionaries using the labels as keys
 def results_to_list(results: query.Result) -> list[dict]:
     data = []

@@ -39,6 +39,12 @@ path=tests/
 test: 
 	@ uv run python -m pytest .
 
+ftest:
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+
+fmt:
+	@ uvx ruff format
+
 check-core:
 	uvx ruff check
 	.venv/bin/mypy -p lib.abi --follow-untyped-imports
@@ -165,6 +171,9 @@ chat-ontology-agent: .venv
 
 chat-support-agent: .venv
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
+
+pull-request-description:
+	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
 .DEFAULT_GOAL := default

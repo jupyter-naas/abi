@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+
 class ISecretAdapter(ABC):
     @abstractmethod
     def get(self, key: str) -> str:
