@@ -1,4 +1,5 @@
 from src import services
+from rdflib import URIRef, RDFS, Literal, RDF, OWL
 
 ontology_name = "person_ont00001262"
 graph = services.triple_store_service.get(ontology_name)
@@ -38,7 +39,6 @@ WHERE {{
 ORDER BY ?object
 """
 
-from rdflib import URIRef, RDFS, Literal, RDF, OWL
 
 results = services.triple_store_service.query(query)
 data = []

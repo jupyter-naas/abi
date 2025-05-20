@@ -9,7 +9,6 @@ from src.core.apps.sparql_terminal.terminal_style import (
     print_system_message,
 )
 
-import sys
 
 from src import services
 

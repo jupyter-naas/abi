@@ -5,11 +5,11 @@ from src.core.modules.common.integrations.HubSpotIntegration import (
     HubSpotIntegrationConfiguration,
 )
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Dict, Optional, List
 from langchain_core.tools import StructuredTool
 from fastapi import APIRouter
-from datetime import datetime, timedelta
+from datetime import datetime
 
 LOGO_URL = "https://logo.clearbit.com/hubspot.com"
 

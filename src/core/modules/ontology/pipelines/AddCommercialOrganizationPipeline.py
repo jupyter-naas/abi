@@ -2,12 +2,11 @@ from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
 from dataclasses import dataclass
-from abi import logger
 from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional
 from abi.utils.Graph import CCO, ABI
-from rdflib import URIRef, Literal, RDF, OWL, Graph
+from rdflib import URIRef, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,

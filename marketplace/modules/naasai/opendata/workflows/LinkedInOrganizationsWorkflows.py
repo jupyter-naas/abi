@@ -13,7 +13,7 @@ from src.core.modules.common.integrations.NaasIntegration import (
 )
 from dataclasses import dataclass
 from pydantic import Field
-from datetime import datetime, date, timedelta
+from datetime import datetime
 from abi import logger
 from typing import Optional, Tuple
 from abi.workflow.workflow import WorkflowParameters
@@ -24,7 +24,7 @@ import json
 import requests
 from src import config
 from src.services import services
-from lib.abi.services.object_storage.ObjectStoragePort import (
+from abi.services.object_storage.ObjectStoragePort import (
     Exceptions as ObjectStorageExceptions,
 )
 from abi.utils.String import create_id_from_string
@@ -97,7 +97,7 @@ class LinkedInOrganizationWorkflows(Workflow):
             data = json.loads(file_content)
             if "linkedin_url" in data:
                 linkedin_url = data["linkedin_url"]
-        except Exception as e:
+        except Exception:
             file_content = None
             data = None
             linkedin_url = None

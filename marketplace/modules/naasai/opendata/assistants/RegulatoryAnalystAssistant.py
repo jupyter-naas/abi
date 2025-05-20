@@ -23,7 +23,7 @@ DESCRIPTION = "Track regulatory changes that impact the business."
 MODEL = "gpt-4-1106-preview"
 TEMPERATURE = 0.3  # Assuming you want to keep the same temperature
 AVATAR_URL = "https://workspace-dev-ugc-public-access.s3.us-west-2.amazonaws.com/5d4797db-0ac2-418b-9b81-5b1c6e6cfc3a/images/1a68fcb5ac2148c09dd6dbc73da659f4"
-SYSTEM_PROMPT = f"""
+SYSTEM_PROMPT = """
 You are the Regulatory Analyst Assistant specializing in monitoring and analyzing regulatory changes that impact businesses. Your expertise covers:
 
 1. Regulatory Monitoring:

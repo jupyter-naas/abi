@@ -546,7 +546,7 @@ Please output a JSON object containing the following fields:
         logger.info(f"-----> Initializing storage for {parameters.organization_name}")
 
         # Get organization details
-        logger.info(f"-----> Getting organization details")
+        logger.info("-----> Getting organization details")
         organization_details = self.get_organization_details(parameters)
         industries = organization_details.get("industries")
         organization_industries_analysis = []
@@ -562,7 +562,7 @@ Please output a JSON object containing the following fields:
             )
 
         # Get offerings
-        logger.info(f"-----> Getting organization offerings")
+        logger.info("-----> Getting organization offerings")
         organization_offerings = self.get_organization_offerings(parameters)
 
         # Get markets analysis
@@ -580,33 +580,33 @@ Please output a JSON object containing the following fields:
             organization_markets_analysis.append(market_analysis)
 
         # Get capabilities
-        logger.info(f"-----> Getting organization capabilities")
+        logger.info("-----> Getting organization capabilities")
         organization_capabilities = self.get_organization_capabilities(parameters)
 
         # Get members
-        logger.info(f"-----> Getting organization members")
+        logger.info("-----> Getting organization members")
         organization_members = self.get_organization_members(parameters)
 
         # Get financials
-        logger.info(f"-----> Getting organization profit and loss")
+        logger.info("-----> Getting organization profit and loss")
         organization_profit_and_loss = self.get_organization_profit_and_loss(parameters)
 
         # Get key indicators
-        logger.info(f"-----> Getting organization key indicators")
+        logger.info("-----> Getting organization key indicators")
         organization_key_indicators = self.get_organization_key_indicators(parameters)
 
         # Get corporate structure
-        logger.info(f"-----> Getting organization corporate structure")
+        logger.info("-----> Getting organization corporate structure")
         organization_corporate_structure = self.get_organization_corporate_structure(
             parameters
         )
 
         # Get facilities
-        logger.info(f"-----> Getting organization facilities")
+        logger.info("-----> Getting organization facilities")
         organization_facilities = self.get_organization_facilities(parameters)
 
         # Get strategic alliances
-        logger.info(f"-----> Getting organization strategic alliances")
+        logger.info("-----> Getting organization strategic alliances")
         organization_strategic_alliances = self.get_organization_strategic_alliances(
             parameters
         )
@@ -734,15 +734,15 @@ Please output a JSON object containing the following fields:
         logger.info(f"-----> Initializing storage for {parameters.market_name}")
 
         # Get market data
-        logger.info(f"-----> Getting market details")
+        logger.info("-----> Getting market details")
         market_details = self.get_market_details(parameters)
 
         # Get market players
-        logger.info(f"-----> Getting market players")
+        logger.info("-----> Getting market players")
         market_players = self.get_market_players(parameters)
 
         # Get market risks and opportunities
-        logger.info(f"-----> Getting market risks and opportunities")
+        logger.info("-----> Getting market risks and opportunities")
         market_risks_and_opportunities = self.get_market_risks_and_opportunities(
             parameters
         )
@@ -907,23 +907,23 @@ Please output a JSON object containing the following fields:
         logger.info(f"-----> Initializing storage for {parameters.industry_name}")
 
         # Get industry data
-        logger.info(f"-----> Getting industry structure")
+        logger.info("-----> Getting industry structure")
         industry_structure = self.get_industry_structure(parameters)
 
         # Get industry demand and growth
-        logger.info(f"-----> Getting industry demand and growth")
+        logger.info("-----> Getting industry demand and growth")
         industry_demand_and_growth = self.get_industry_demand_and_growth(parameters)
 
         # Get industry technology
-        logger.info(f"-----> Getting industry technology")
+        logger.info("-----> Getting industry technology")
         industry_technology = self.get_industry_technology(parameters)
 
         # Get industry regulations
-        logger.info(f"-----> Getting industry regulations")
+        logger.info("-----> Getting industry regulations")
         industry_regulations = self.get_industry_regulations(parameters)
 
         # Get industry economics
-        logger.info(f"-----> Getting industry economics")
+        logger.info("-----> Getting industry economics")
         industry_economics = self.get_industry_economics(parameters)
 
         # Concatenate all data

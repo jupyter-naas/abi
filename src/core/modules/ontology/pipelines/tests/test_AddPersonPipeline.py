@@ -1,7 +1,5 @@
 from src import services
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
-    AddIndividualPipeline,
-    AddIndividualPipelineParameters,
     AddIndividualPipelineConfiguration,
 )
 from src.core.modules.ontology.pipelines.AddPersonPipeline import (

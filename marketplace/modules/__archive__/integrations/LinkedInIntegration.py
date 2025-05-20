@@ -1,9 +1,8 @@
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import requests
-from datetime import datetime
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
     IntegrationConfiguration,

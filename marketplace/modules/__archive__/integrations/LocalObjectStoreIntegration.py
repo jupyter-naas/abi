@@ -1,4 +1,4 @@
-from lib.abi.integration.integration import (
+from abi.integration.integration import (
     Integration,
     IntegrationConfiguration,
     IntegrationConnectionError,
@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Union, BinaryIO
 import os
 import shutil
 from datetime import datetime
-import pathlib
 
 
 @dataclass

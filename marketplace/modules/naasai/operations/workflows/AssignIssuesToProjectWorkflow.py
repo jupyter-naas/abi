@@ -7,9 +7,8 @@ from src.core.modules.common.integrations.GithubGraphqlIntegration import (
     GithubGraphqlIntegration,
     GithubGraphqlIntegrationConfiguration,
 )
-from src import secret
 from dataclasses import dataclass
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Optional
 from abi import logger
 import pydash as _

@@ -1,7 +1,5 @@
 
 from langchain_core.language_models.chat_models import BaseChatModel
-
-from dataclasses import dataclass
 from typing import Any
 from enum import Enum
 

@@ -55,7 +55,7 @@ AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 )
 DESCRIPTION = "A Ontology Agent that helps users to work with ontologies."
-SYSTEM_PROMPT = f"""You are a Ontology Agent that helps users to work with ontologies.
+SYSTEM_PROMPT = """You are a Ontology Agent that helps users to work with ontologies.
 You have the possibility to add or retrieve data from triple store with your tools.
 You must ALWAYS identify the best tool to use to answer the user's question.
 

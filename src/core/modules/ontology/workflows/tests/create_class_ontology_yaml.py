@@ -1,9 +1,7 @@
 from src.core.modules.naas.integrations.NaasIntegration import (
-    NaasIntegration,
     NaasIntegrationConfiguration,
 )
 from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow import (
-    ConvertOntologyGraphToYamlWorkflow,
     ConvertOntologyGraphToYamlConfiguration,
 )
 from src.core.modules.ontology.workflows.CreateClassOntologyYamlWorkflow import (

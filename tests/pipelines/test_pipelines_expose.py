@@ -3,9 +3,7 @@ import pytest
 from pathlib import Path
 import importlib.util
 import sys
-from typing import Type
 from abi.pipeline import Pipeline
-from abi.utils.Expose import Expose
 
 
 def get_pipeline_classes():

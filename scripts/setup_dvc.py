@@ -1,6 +1,4 @@
 # Load .env file
-import requests
-import pydash
 from common import get_config, get_storage_credentials
 
 if __name__ == "__main__":

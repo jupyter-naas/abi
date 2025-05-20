@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
 from abi.utils.Expose import Expose
 from pydantic import BaseModel
 

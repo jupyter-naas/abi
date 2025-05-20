@@ -1,10 +1,8 @@
 import dash
 from dash import html, dcc
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -47,15 +45,15 @@ def create_layout():
     data = generate_fake_data()
 
     # Navbar style
-    navbar_style = {
-        "display": "flex",
-        "justifyContent": "space-between",
-        "alignItems": "center",
-        "padding": "1rem",
-        "backgroundColor": "white",
-        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
-        "marginBottom": "2rem",
-    }
+    #    navbar_style = {
+    #        "display": "flex",
+    #        "justifyContent": "space-between",
+    #        "alignItems": "center",
+    #        "padding": "1rem",
+    #        "backgroundColor": "white",
+    #        "boxShadow": "0 2px 4px rgba(0,0,0,0.1)",
+    #        "marginBottom": "2rem",
+    #    }
 
     # KPI box style
     kpi_box_style = {
