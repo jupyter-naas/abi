@@ -1,6 +1,7 @@
 from abi.services.secret.SecretPorts import ISecretAdapter, ISecretService
 from typing import Any
 
+
 class Secret(ISecretService):
     """Secret service for managing and retrieving secrets.
 
