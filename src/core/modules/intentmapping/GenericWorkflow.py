@@ -31,6 +31,7 @@ class GenericWorkflow(Generic[T]):
         return results_to_list(results)
 
     def as_tools(self) -> list[StructuredTool]:
+        print(f"Arguments model: {self.arguments_model}")
         return [
             StructuredTool(
                 name=self.name,

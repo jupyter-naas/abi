@@ -254,13 +254,13 @@ class Agent(Expose):
         graph.add_edge(START, "call_model")
 
         graph.add_node(self.call_tools)
-        # TODO: Investigate if we need to uncomment this line. But It seems that is causing models + tools parrallel execution issues.
-        #graph.add_edge("call_tools", "call_model")
+        # graph.add_edge("call_tools", "call_model")
 
         for agent in self.__agents:
             logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
-            graph.add_edge(agent.name, "call_model")
+            # WARNING: This is not needed because the handoff is done as a tool, and therefore, after a handoff, the model will be called thanks to: graph.add_edge("call_tools", "call_model")
+            #graph.add_edge(agent.name, "call_model")
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -300,6 +300,9 @@ class Agent(Expose):
             return [Command(goto="__end__", update={"messages": [last_message]})]
             
         tool_calls : list[ToolCall] = last_message.tool_calls
+        
+        assert len(tool_calls) > 0, state["messages"][-1]
+        
         results: list[Command] = []
         for tool_call in tool_calls:
             tool_ : BaseTool = self.__tools_by_name[tool_call["name"]]
@@ -314,14 +317,15 @@ class Agent(Expose):
             # is different from the ToolNode implementation
             if "state" in tool_input_fields:
                 # inject state
-                args = {**tool_call, "args": {**tool_call["args"], "state": state}}
+                args = {**tool_call, "state": state}
             
-            #self.__notify_tool_usage(state["messages"][-1])
-            if tool_call['name'].startswith('transfer_to_'):
+
+            is_handoff = tool_call['name'].startswith('transfer_to_')
+            if is_handoff is True:
                 args = {"state": state, "tool_call_id": tool_call['id']}
-                
+                        
             tool_response = tool_.invoke(args)
-            #self.__notify_tool_response(tool_response)
+
             if isinstance(tool_response, ToolMessage):
                 results.append(Command(update={"messages": [tool_response]}))
 
@@ -332,7 +336,10 @@ class Agent(Expose):
                 raise ValueError(
                     f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
                 )
+
         assert len(results) > 0, state
+        results.append(Command(goto="call_model"))
+
         return results
 
     @property
