@@ -3,7 +3,7 @@ name = "src"
 version = "0.1.0"
 description = "AI system"
 authors = [{ name = "AI Team", email = "aiteam@company.com" }]
-requires-python = "~=3.9"
+requires-python = "~=3.10"
 readme = "README.md"
 dependencies = [
     "pyyaml>=6.0.1,<7",
@@ -14,10 +14,10 @@ dependencies = [
     "replicate>=1.0.4,<2",
     "pydash>=8.0.4,<9",
     "pandas>=2.2.3,<3",
-    "click>=8.1.7,<9",
+    "click>=8.2.0,<9",
     "jwt>=1.3.1,<2",
     "pyjwt>=2.10.1,<3",
-    "boto3>=1.35.82,<2",
+    "boto3>=1.38.19,<2",
     "google>=3.0.0,<4",
     "google-auth-oauthlib>=1.2.1,<2",
     "google-api-python-client>=2.155.0,<3",
@@ -46,6 +46,7 @@ dependencies = [
     "jinja2>=3.1.6,<4",
     "mypy>=1.15.0",
     "types-requests>=2.31.0.6",
+    "pyperclip>=1.9.0",
 ]
 
 [project.scripts]

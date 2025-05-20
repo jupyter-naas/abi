@@ -82,16 +82,16 @@ def load_workflows():
 
         # Arguments Model with validation patterns
         arguments_model = create_model(
-            f"{query['label'].capitalize()}Arguments",
+            f"{str(query['label']).capitalize()}Arguments",
             **{
-                arguments[argument]["name"]: (
+                str(arguments[argument]["name"]): (
                     str,
                     Field(
                         ...,
-                        description=arguments[argument]["description"],
-                        pattern=arguments[argument]["validationPattern"],
+                        description=str(arguments[argument]["description"]),
+                        pattern=str(arguments[argument]["validationPattern"]),
                         # You could also add additional metadata from validationFormat if needed
-                        example=arguments[argument]["validationFormat"],
+                        example=str(arguments[argument]["validationFormat"]),
                     ),
                 )
                 for argument in query.get("hasArgument")
@@ -99,9 +99,9 @@ def load_workflows():
         )
 
         p = GenericWorkflow[arguments_model](
-            query["label"],
-            query["description"],
-            query["sparqlTemplate"],
+            str(query["label"]),
+            str(query["description"]),
+            str(query["sparqlTemplate"]),
             arguments_model,
         )
         workflows.append(p)
