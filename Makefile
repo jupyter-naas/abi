@@ -51,7 +51,7 @@ check-core:
 	#.venv/bin/mypy -p src.core --follow-untyped-imports
 
 .venv/lib/python3.10/site-packages/abi: .venv
-	ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi
+	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
 
 check: .venv/lib/python3.10/site-packages/abi check-core
 	.venv/bin/mypy -p src.custom --follow-untyped-imports
