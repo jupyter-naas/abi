@@ -39,7 +39,8 @@ def create_agent():
         pyperclip.copy(description)
         return "Pull request description stored in the clipboard"
 
-    class PullRequestDescriptionAgent(Agent): pass
+    class PullRequestDescriptionAgent(Agent):
+        pass
 
     return PullRequestDescriptionAgent(
         name="Pull Request Description Agent",
