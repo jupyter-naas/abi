@@ -21,13 +21,16 @@ uv:
 	@ uv python find 3.10 > /dev/null || uv python install 3.10 && uv python pin 3.10
 
 .venv:
-	uv sync
+	@ uv sync
+
+install:
+	@ uv sync
 
 dev-build:
 	@ docker compose build
 
 abi-add: .venv
-	cd lib && uv add $(dep)
+	cd lib && uv add $(dep) && uv lock
 
 add:
 	uv add $(dep) && uv lock
@@ -104,9 +107,8 @@ help:
 	@echo ""
 	@echo "ENVIRONMENT SETUP:"
 	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
+	@echo "  install                  Install all dependencies (similar to .venv)"
 	@echo "  dev-build                Build all Docker containers defined in docker-compose.yml"
-	@echo "  add dep=<package>        Add a new dependency to the project"
-	@echo "  abi-add dep=<package>    Add a new dependency to the lib directory"
 	@echo "  lock                     Update the Poetry lock file without installing packages"
 	@echo ""
 	@echo "DEVELOPMENT:"

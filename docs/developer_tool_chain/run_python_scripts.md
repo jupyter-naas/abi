@@ -1,21 +1,13 @@
 # Run Python Scripts
 
-## Running Python Scripts with Docker and Poetry
+## Running Python Scripts with uv
 
 There are multiple ways to run Python scripts in this project:
 
-### Using the Docker Shell
-
-The recommended way to run Python scripts is through the Docker container:
+### Using uv
 
 ```bash
-make sh
-```
-
-This opens a shell in the Docker container with the poetry environment already activated. Then run your script:
-
-```bash
-poetry run python src/custom/modules/your_module_name/pipelines/your_pipeline_name.py
+uv run python src/custom/modules/your_module_name/pipelines/your_pipeline_name.py
 ```
 
 ### Running Specific Applications
@@ -70,15 +62,9 @@ if __name__ == "__main__":
     print(result.serialize(format="turtle"))
 ```
 
-### Running Your Script
-
-Inside the Docker container:
-```bash
-poetry run python src/custom/modules/your_module_name/pipelines/your_pipeline_name.py
-```
-
 ## Debugging Tips
 
 - Use print statements or Python's built-in `logging` module to debug your scripts
 - When running scripts directly, you can use the `-v` flag with pytest for more verbose output
 - For interactive debugging, you can use `import pdb; pdb.set_trace()` or `breakpoint()` in Python 3.7+
+- The debugger is configured for vscode in `.vscode/launch.json`
