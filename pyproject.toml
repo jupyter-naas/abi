@@ -46,6 +46,7 @@ dependencies = [
     "jinja2>=3.1.6,<4",
     "mypy>=1.15.0",
     "types-requests>=2.31.0.6",
+    "pyperclip>=1.9.0",
 ]
 
 [project.scripts]
