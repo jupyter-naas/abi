@@ -26,27 +26,27 @@ def get_modules():
     global __modules, __loaded
     if not __loaded:
         for modulepath in MODULE_PATH:
-            for module in Path(modulepath).glob("*/"):
-                if (
-                    module.is_dir()
-                    and module.name != "__pycache__"
-                    and "disabled" not in module.name
-                ):
-                    module_relative_path = ".".join(
-                        modulepath.split("/") + [module.name]
-                    )
-
-                    # We import the module for it to be initialized.
-                    imported_module = importlib.import_module(module_relative_path)
-
-                    module_path = os.path.join(modulepath, module.name)
-                    module_import_path = ".".join(module_path.split("/"))
-
-                    mod = IModule(module_path, module_import_path, imported_module)
-                    mod.load()
-
-                    __modules.append(mod)
-
+            for module in Path(modulepath).glob('*/'):
+                if module.is_dir() and module.name != '__pycache__' and "disabled" not in module.name:
+                    try:
+                        module_relative_path = '.'.join(modulepath.split('/') + [module.name])
+                        
+                        # We import the module for it to be initialized.
+                        imported_module = importlib.import_module(module_relative_path)
+                        
+                        
+                        module_path = os.path.join(modulepath, module.name)
+                        module_import_path = '.'.join(module_path.split('/'))
+                        
+                        mod = IModule(module_path, module_import_path, imported_module)
+                        mod.load()
+                        
+                        __modules.append(mod)
+                    except Exception as e:
+                        import traceback
+                        print(f"❌ Error loading module {module.name}: {e}")
+                        traceback.print_exc()
+        
         __loaded = True
 
     return __modules

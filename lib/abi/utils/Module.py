@@ -36,13 +36,19 @@ class IModule(ABC):
         self.agents = []
 
     def load(self):
-        # self.__load_agents()
-        self.__load_triggers()
-        self.__load_ontologies()
-
+        try:
+            #self.__load_agents()
+            self.__load_triggers()
+            self.__load_ontologies()
+        except Exception as e:
+            print(f"❌ Error loading module {self.module_import_path}: {e}")
+    
     def load_agents(self):
-        self.__load_agents()
-
+        try:
+            self.__load_agents()
+        except Exception as e:
+            print(f"❌ Error loading agents for module {self.module_import_path}: {e}")
+    
     def __load_agents(self):
         # Load agents
         agents_path = os.path.join(self.module_path, "agents")
