@@ -56,18 +56,26 @@ def print_code(code, language="python"):
         )
     )
 
+
 def dict_to_equal_string(d: dict) -> str:
-    return '\n- '.join([f'{key}={value}' for key, value in d.items()])
+    return "\n- ".join([f"{key}={value}" for key, value in d.items()])
+
 
 def print_tool_usage(message):
     print_message = ""
     tool_name = message.tool_calls[0]["name"]
     arguments = ""
-    if 'args' in message.tool_calls[0] and len(message.tool_calls[0]["args"].values()) > 0:
+    if (
+        "args" in message.tool_calls[0]
+        and len(message.tool_calls[0]["args"].values()) > 0
+    ):
         arguments += dict_to_equal_string(message.tool_calls[0]["args"])
-    
+
     if tool_name.startswith("transfer_to_"):
-        tool_label = " ".join(word.capitalize() for word in tool_name.split("transfer_to_")[1].replace("_", " ").split())
+        tool_label = " ".join(
+            word.capitalize()
+            for word in tool_name.split("transfer_to_")[1].replace("_", " ").split()
+        )
         print_message = f"\n🧞 [bold blue]Delegated to [/bold blue]{tool_label}"
     else:
         tool_label = tool_name.capitalize().replace("_", " ")
@@ -86,7 +94,9 @@ def clear_screen():
 def print_welcome_message(agent):
     # Set terminal title
     set_terminal_title()
-    agent_label = " ".join(word.capitalize() for word in agent.name.replace('_', ' ').split())
+    agent_label = " ".join(
+        word.capitalize() for word in agent.name.replace("_", " ").split()
+    )
     welcome_text = Text.assemble(
         (f"Welcome to {agent_label}\n\n", "bold green"),
         ("Description:\n", "yellow"),
@@ -120,10 +130,14 @@ def get_user_input(agent_label):
         console.print()  # Add a blank line after the user's input
         return user_input
     except EOFError:
-        console.print(f"\n[bold red]{agent_label}:[/bold red] Conversation ended by user.")
+        console.print(
+            f"\n[bold red]{agent_label}:[/bold red] Conversation ended by user."
+        )
         return "exit"
     except KeyboardInterrupt:
-        console.print(f"\n[bold red]{agent_label}:[/bold red] Conversation ended by user.")
+        console.print(
+            f"\n[bold red]{agent_label}:[/bold red] Conversation ended by user."
+        )
         return "exit"
 
 

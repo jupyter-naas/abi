@@ -76,12 +76,14 @@ class TripleStoreService(ITripleStoreService):
     def __init__(
         self,
         ontology_adaptor: ITripleStorePort,
-        views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = [(None, RDF.type, None)],
+        views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = [
+            (None, RDF.type, None)
+        ],
         trigger_worker_pool_size: int = 10,
     ):
         self.__ontology_adaptor = ontology_adaptor
         self.__event_listeners = {}
-        self.__views : List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = views
+        self.__views: List[Tuple[URIRef | None, URIRef | None, URIRef | None]] = views
 
         self.__trigger_worker_pool = WorkerPool(trigger_worker_pool_size)
 
@@ -207,7 +209,7 @@ class TripleStoreService(ITripleStoreService):
         query = f'SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'
         logger.debug(f"Query: {query}")
         # Check if schema with filePath == filepath already exists and grab all triples
-        schema_triples : rdflib.query.Result = self.query(query)
+        schema_triples: rdflib.query.Result = self.query(query)
 
         logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
         # If schema with filePath == filepath already exists, we check if the file has been modified.
@@ -221,7 +223,9 @@ class TripleStoreService(ITripleStoreService):
             subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
 
             # Select * from subject
-            triples : rdflib.query.Result = self.query(f"SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}")
+            triples: rdflib.query.Result = self.query(
+                f"SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"
+            )
 
             # Load schema into a dict
             schema_dict = {}
@@ -334,13 +338,13 @@ class TripleStoreService(ITripleStoreService):
             )
 
     def get_schema_graph(self) -> Graph:
-        contents : rdflib.query.Result = self.query("SELECT ?s ?o WHERE { ?s internal:content ?o . }")
+        contents: rdflib.query.Result = self.query(
+            "SELECT ?s ?o WHERE { ?s internal:content ?o . }"
+        )
 
         graph = Graph()
 
-
         for row in contents:
-            
             assert isinstance(row, rdflib.query.ResultRow)
             _, o = row
 
