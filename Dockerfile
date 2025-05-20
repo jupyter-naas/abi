@@ -8,15 +8,6 @@ COPY . .
 
 RUN pip install uv
 
-# RUN pip install poetry
-# RUN poetry config virtualenvs.in-project true
-
-# # Install Rust toolchain
-# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
-# RUN . "$HOME/.cargo/env"
-# RUN pip install maturin[patchelf]
-
-
 # Add build argument for architecture
 ARG TARGETARCH
 
@@ -29,4 +20,4 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     && unzip awscliv2.zip \
     && ./aws/install
 
-CMD ["poetry", "run", "chat-single-assistant"]
+CMD ["uv", "run", "chat-single-assistant"]

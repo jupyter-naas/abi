@@ -74,12 +74,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install poetry
-          poetry install
+          pip install uv
+          uv sync
           
       - name: Generate analytics report
         run: |
-          poetry run python -m src.custom.modules.your_module_name.analytics.reports.generate_report
+          uv run python -m src.custom.modules.your_module_name.analytics.reports.generate_report
         env:
           # Add any required environment variables/secrets
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
