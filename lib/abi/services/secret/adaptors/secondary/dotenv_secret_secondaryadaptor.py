@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 from typing import Any
 
+
 class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     def __init__(self):
         load_dotenv()

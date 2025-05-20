@@ -41,6 +41,9 @@ test:
 ftest:
 	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
 
+fmt:
+	@ uvx ruff format
+
 check-core:
 	uvx ruff check
 	.venv/bin/mypy -p lib.abi --follow-untyped-imports

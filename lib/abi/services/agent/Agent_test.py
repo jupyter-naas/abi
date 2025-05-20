@@ -177,6 +177,7 @@ def test_agent_duplication(model):
 #     assert events[0]["event"] == "message"
 #     assert events[1]["event"] == "done"
 
+
 def test_agent_one_tool_agent_response(model):
     from abi.services.agent.Agent import Agent, AgentConfiguration
     from langchain_core.tools import tool
@@ -191,12 +192,14 @@ def test_agent_one_tool_agent_response(model):
         description="A test agent",
         chat_model=model,
         tools=[add_one],
-        configuration=AgentConfiguration(system_prompt="""You are a test agent. You must add one to the input and return the result.
+        configuration=AgentConfiguration(
+            system_prompt="""You are a test agent. You must add one to the input and return the result.
         Your output must be like:
         
         
         <user_input> + one = result
-        """),
+        """
+        ),
     )
 
     chunks = []
@@ -205,5 +208,5 @@ def test_agent_one_tool_agent_response(model):
         print(chunk)
 
     assert len(chunks) == 3
-    assert 'call_model' in chunks[-1]
-    assert chunks[-1]['call_model']['messages'][0].content == "42 + one = 43"
+    assert "call_model" in chunks[-1]
+    assert chunks[-1]["call_model"]["messages"][0].content == "42 + one = 43"
