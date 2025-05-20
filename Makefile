@@ -38,6 +38,9 @@ path=tests/
 test: 
 	@ uv run python -m pytest .
 
+ftest:
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+
 check-core:
 	uvx ruff check
 	.venv/bin/mypy -p lib.abi --follow-untyped-imports
