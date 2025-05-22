@@ -119,7 +119,7 @@ trivy-container-scan: build
 #########################
 
 api: deps
-	uv run api
+	uv run src/api.py
 
 api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
