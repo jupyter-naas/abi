@@ -8,11 +8,11 @@ NAME = "gemini-2.0-flash"
 DESCRIPTION = "Google's most advanced, multimodal flagship model that's cheaper and faster than GPT-4 Turbo."
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/google_100x100.png"
 CONTEXT_WINDOW = 128000
-OWNER = "google" 
+OWNER = "google"
 
 
 if "GOOGLE_API_KEY" not in os.environ:
-    os.environ["GOOGLE_API_KEY"] = secret.get("GOOGLE_API_KEY", '')
+    os.environ["GOOGLE_API_KEY"] = secret.get("GOOGLE_API_KEY", "")
 
 model = ChatModel(
     model_id=ID,
@@ -27,5 +27,5 @@ model = ChatModel(
         timeout=None,
         max_retries=2,
     ),
-    context_window=CONTEXT_WINDOW
+    context_window=CONTEXT_WINDOW,
 )
