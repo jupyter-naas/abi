@@ -53,9 +53,16 @@ fmt:
 #########################
 
 check-core:
+	# Linting
 	uvx ruff check
+
+	# Static Analysis
 	.venv/bin/mypy -p lib.abi --follow-untyped-imports
 	#.venv/bin/mypy -p src.core --follow-untyped-imports
+
+	uv run pyrefly check lib src tests
+
+
 
 check-custom:
 	@.venv/bin/mypy -p src.custom --follow-untyped-imports

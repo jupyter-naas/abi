@@ -65,6 +65,11 @@ dev = [
     "ipykernel>=6.29.5,<7",
 ]
 
+[tool.uv]
+dev-dependencies = [
+    "pyrefly>=0.16.1",
+]
+
 
 [tool.uv.sources]
 abi = { path = "./lib", editable = true }
