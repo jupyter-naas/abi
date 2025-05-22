@@ -104,6 +104,9 @@ logger.debug("Loading triggers")
 for module in modules:
     # Loading triggers
     for trigger in module.triggers:
+        if trigger is None:
+            logger.warning(f"None trigger for module {module.name}")
+            continue
         if len(trigger) == 3:
             topic, event_type, callback = trigger
             services.triple_store_service.subscribe(topic, event_type, callback)
