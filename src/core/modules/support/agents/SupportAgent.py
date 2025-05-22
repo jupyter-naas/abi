@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from abi.services.agent.Agent import (
     Agent,
@@ -17,6 +16,8 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
     GitHubSupportWorkflows,
     GitHubSupportWorkflowsConfiguration,
 )
+from langchain_core.language_models.chat_models import BaseChatModel
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "support_agent"
 MODEL = "gpt-4o"
@@ -63,9 +64,7 @@ def create_agent(
     agent_configuration: AgentConfiguration = None,
 ) -> Agent:
     # Init
-    model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
-    )
+    model: BaseChatModel = default_chat_model()
     tools = []
 
     if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):

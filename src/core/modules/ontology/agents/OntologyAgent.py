@@ -4,9 +4,8 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     MemorySaver,
 )
-from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
-from src import secret, services
+from src import services
 
 # Foundational
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
@@ -47,6 +46,8 @@ from src.core.modules.ontology.pipelines.AddTickerPipeline import (
     AddTickerPipeline,
     AddTickerPipelineConfiguration,
 )
+from src.core.modules.common.models.default import default_chat_model
+from langchain_core.language_models.chat_models import BaseChatModel
 
 NAME = "Ontology Agent"
 MODEL = "o3-mini"
@@ -100,9 +101,8 @@ def create_agent(
     triple_store = services.triple_store_service
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
-    )
+    model: BaseChatModel = default_chat_model()
+
     # Init store
     triple_store = services.triple_store_service
 

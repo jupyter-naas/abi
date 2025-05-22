@@ -1,17 +1,27 @@
 services:
-  abi:
-    build: .
+  # abi:
+  #   build: .
+  #   ports:
+  #     - 9879:9879
+  #     - 8501:8501
+  #   volumes:
+  #     - .:/app
+  #     - cargo-cache:/root/.cargo
+  #   environment:
+  #     - PYTHONPATH=/app
+  #   env_file:
+  #     - .env
+  #   command: ["uv", "run"]
+
+  ollama:
+    image: alpine/ollama
     ports:
-      - 9879:9879
-      - 8501:8501
+      - 11434:11434
     volumes:
-      - .:/app
-      - cargo-cache:/root/.cargo
+      - ollama-cache:/root/.ollama
     environment:
-      - PYTHONPATH=/app
-    env_file:
-      - .env
-    command: ["uv", "run"]
+      - OLLAMA_HOST=0.0.0.0
 
 volumes:
-  cargo-cache:
+  # cargo-cache:
+  ollama-cache:
