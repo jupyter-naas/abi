@@ -86,6 +86,10 @@ api-prod:
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
+api-dev:
+	@ docker build -t abi-dev -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-dev
+
 sparql-terminal: .venv
 	@ uv run python -m src.core.apps.sparql_terminal.main	
 
@@ -178,7 +182,10 @@ build: build.linux.x86_64
 #   - Dockerfile: Dockerfile.linux.x86_64
 #   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
 build.linux.x86_64: .venv
-	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+	DOCKER_BUILDKIT=1 docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+	
+	@# Show container size
+	@docker image ls abi
 
 # -------------------------------------------------------------------------------------------------
 
