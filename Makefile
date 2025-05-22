@@ -9,16 +9,23 @@ git-deps: .git/hooks/pre-commit
 
 ###############@
 
-deps: uv git-deps .venv
+deps: uv git-deps .venv .env
 
 # Make sure uv exists otherwise tell the user to install it.
 uv:
-	@if ! command -v uv &> /dev/null; then \
+	@if ! uv --version &> /dev/null; then \
 		echo "🚀 Oops! Looks like uv is missing from your system!"; \
 		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
 		exit 1; \
 	fi
 	@ uv python find 3.10 > /dev/null || uv python install 3.10 && uv python pin 3.10
+
+.env:
+	@if [ ! -f .env ]; then \
+		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
+		cp .env.example .env; \
+		echo "✅ .env file initialized with .env.example"; \
+	fi
 
 .venv:
 	@ uv sync
