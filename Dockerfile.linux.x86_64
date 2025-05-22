@@ -20,7 +20,13 @@ ADD --chown=abi:abi ./README.md /app/README.md
 ADD --chown=abi:abi ./marketplace/ /app/marketplace
 ADD --chown=abi:abi ./.git /app/.git
 
-RUN git describe --tags > /app/VERSION && rm -rf /app/.git
+# Get version from git tags or use a fallback
+RUN if git describe --tags > /app/VERSION 2>/dev/null; then \
+        echo "Version detected from git tags"; \
+    else \
+        echo "unknown" > /app/VERSION; \
+    fi && \
+    rm -rf /app/.git
 
 # Install uv and build the application
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
