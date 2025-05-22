@@ -1,6 +1,7 @@
 from abi.services.secret.SecretPorts import ISecretAdapter, ISecretService
 from typing import Any
 
+
 class Secret(ISecretService):
     """Secret service for managing and retrieving secrets.
 
@@ -21,5 +22,5 @@ class Secret(ISecretService):
     def __init__(self, adapter: ISecretAdapter):
         self.__adapter = adapter
 
-    def get(self, key: str, default: Any = None) -> str:
+    def get(self, key: str, default: Any = None) -> str | None:
         return self.__adapter.get(key, default)

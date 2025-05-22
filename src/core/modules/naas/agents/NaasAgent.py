@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -11,6 +10,8 @@ from src.core.modules.naas.integrations import NaasIntegration
 from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
+from langchain_core.language_models.chat_models import BaseChatModel
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "naas_agent"
 MODEL = "gpt-4o"
@@ -35,9 +36,8 @@ def create_agent(
     agents = []
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
-    )
+    model: BaseChatModel = default_chat_model()
+
 
     # Set configuration
     if agent_configuration is None:

@@ -11,6 +11,10 @@ git-deps: .git/hooks/pre-commit
 
 deps: uv git-deps .venv .env
 
+ollama:
+	docker compose up -d ollama
+	docker compose exec ollama ollama pull llama3.2:latest
+
 # Make sure uv exists otherwise tell the user to install it.
 uv:
 	@if ! command -v uv >/dev/null 2>&1; then \
@@ -118,7 +122,7 @@ trivy-container-scan: build
 
 #########################
 
-api: deps
+api: deps ollama
 	uv run src/api.py
 
 api-prod: deps
@@ -228,26 +232,27 @@ build.linux.x86_64: deps
 
 # -------------------------------------------------------------------------------------------------
 
-chat-naas-agent: deps
+chat-naas-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: deps
+chat-supervisor-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
 
-chat-ontology-agent: deps
+chat-ontology-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
 
-chat-support-agent: deps
+chat-support-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
-pull-request-description: deps
+pull-request-description: deps ollama
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
 .DEFAULT_GOAL := default
 
-chat: deps
+agent=SupervisorAgent
+chat: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv ollama

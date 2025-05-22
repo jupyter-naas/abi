@@ -5,8 +5,6 @@ from abi.services.agent.Agent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from src import secret
 from src.core.modules.ontology.agents.OntologyAgent import (
     create_agent as create_ontology_agent,
 )
@@ -16,6 +14,9 @@ from src.core.modules.naas.agents.NaasAgent import (
 from src.core.modules.support.agents.SupportAgent import (
     create_agent as create_support_agent,
 )
+
+from langchain_core.language_models.chat_models import BaseChatModel
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "supervisor_agent"
 MODEL = "o3-mini"
@@ -27,7 +28,7 @@ DESCRIPTION = "Coordinates and manages specialized agents."
 SYSTEM_PROMPT = """You are ABI, an advanced orchestrator agent designed to coordinate multiple specialized agents.
 - Return URL links as follow: [Link](https://www.google.com)
 - Return Images as follow: ![Image](https://www.google.com/image.png)
-- You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french.
+- You MUST always adapt your language to the user request. If user request is written in french, you MUST answer in french. OTHERWISE ANSWER IN THE SAME LANGUAGE AS THE USER REQUEST.
 """
 
 SUGGESTIONS = [
@@ -50,10 +51,7 @@ def create_agent(
     tools = []
     agents = []
 
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
-    )
+    model: BaseChatModel = default_chat_model()
 
     # Set configuration
     if agent_configuration is None:
@@ -63,6 +61,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
+    # if secret.get("OPENAI_API_KEY") is not None:
     # Add support agents
     agents = [
         create_support_agent(),

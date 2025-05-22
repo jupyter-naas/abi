@@ -8,5 +8,5 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     def __init__(self):
         load_dotenv()
 
-    def get(self, key: str, default: Any = None) -> str:
+    def get(self, key: str, default: Any = None) -> str | None:
         return os.getenv(key, default)

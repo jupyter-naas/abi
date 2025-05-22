@@ -46,6 +46,8 @@ dependencies = [
     "types-requests>=2.31.0.6",
     "pyperclip>=1.9.0",
     "streamlit>=1.45.1",
+    "langchain-ollama>=0.3.3",
+    "ollama>=0.4.8",
 ]
 
 [project.scripts]
