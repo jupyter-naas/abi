@@ -105,7 +105,9 @@ for module in modules:
     # Loading triggers
     for trigger in module.triggers:
         if trigger is None:
-            logger.warning(f"None trigger found for module {module.module_import_path}.")
+            logger.warning(
+                f"None trigger found for module {module.module_import_path}."
+            )
             continue
         if len(trigger) == 3:
             topic, event_type, callback = trigger
