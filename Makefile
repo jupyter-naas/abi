@@ -18,7 +18,7 @@ uv:
 		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
 		exit 1; \
 	fi
-	@ uv python find 3.10 > /dev/null || uv python install 3.10 && uv python pin 3.10
+	@ uv python find 3.10 > /dev/null || (uv python install 3.10 && uv python pin 3.10)
 
 .env:
 	@if [ ! -f .env ]; then \
@@ -30,42 +30,42 @@ uv:
 .venv:
 	@ uv sync
 
-.venv/lib/python3.10/site-packages/abi: .venv
+.venv/lib/python3.10/site-packages/abi: deps
 	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
 
 
-install:
+install: dep
 	@ uv sync
 
-dev-build:
+dev-build: deps
 	@ docker compose build
 
-abi-add: .venv
+abi-add: deps
 	cd lib && uv add $(dep) && uv lock
 
-add:
+add: deps
 	uv add $(dep) && uv lock
 
-lock:
+lock: deps
 	@ uv lock
 
 path=tests/
-test: 
+test:  deps
 	@ uv run python -m pytest .
 
-ftest:
+ftest: deps
 	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
 
-fmt:
+fmt: deps
 	@ uvx ruff format
 
 #########################
 # Linting, Static Analysis, Security
 #########################
 
-check: .venv/lib/python3.10/site-packages/abi check-core check-custom
+check: deps .venv/lib/python3.10/site-packages/abi check-core check-custom
 
-check-core:
+check-core: deps
 	@echo ""
 	@echo "  _____ _____ _____ _____"
 	@echo " |     |     |     |     |"
@@ -90,7 +90,7 @@ check-core:
 	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
 	@echo "\n✅ CORE security checks passed!"
 
-check-custom:
+check-custom: deps
 	@echo ""
 	@echo "  _____ _____ _____ _____ _____ _____"
 	@echo " |     |     |     |     |     |     |"
@@ -118,40 +118,40 @@ trivy-container-scan: build
 
 #########################
 
-api: .venv
+api: deps
 	uv run api
 
-api-prod:
+api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
-api-dev:
+api-dev: deps
 	@ docker build -t abi-dev -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-dev
 
-sparql-terminal: .venv
+sparql-terminal: deps
 	@ uv run python -m src.core.apps.sparql_terminal.main	
 
-dvc-login: .venv
+dvc-login: deps
 	@ uv run run python scripts/setup_dvc.py | sh
 
-storage-pull: .venv
+storage-pull: deps
 	@ echo "Pulling storage..."
 	@ uv run python scripts/storage_pull.py | sh
 
-storage-push: .venv storage-pull
+storage-push: deps storage-pull
 	@ echo "Pushing storage..."
 	@ uv run run python scripts/storage_push.py | sh
 
-triplestore-prod-remove: .venv
+triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
 	@ uv run python scripts/triplestore_prod_remove.py
 
-triplestore-prod-override: .venv
+triplestore-prod-override: deps
 	@ echo "Overriding production triplestore..."
 	@ uv run python scripts/triplestore_prod_override.py
 
-triplestore-prod-pull: .venv
+triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
 	@ uv run python scripts/triplestore_prod_pull.py
 
@@ -220,7 +220,7 @@ build: build.linux.x86_64
 #   - Image name: abi
 #   - Dockerfile: Dockerfile.linux.x86_64
 #   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
-build.linux.x86_64: .venv
+build.linux.x86_64: deps
 	DOCKER_BUILDKIT=1 docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
 	
 	@# Show container size
@@ -228,25 +228,25 @@ build.linux.x86_64: .venv
 
 # -------------------------------------------------------------------------------------------------
 
-chat-naas-agent: .venv
+chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: .venv
+chat-supervisor-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
 
-chat-ontology-agent: .venv
+chat-ontology-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
 
-chat-support-agent: .venv
+chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
-pull-request-description:
+pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
 .DEFAULT_GOAL := default
 
-chat: .venv
+chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
