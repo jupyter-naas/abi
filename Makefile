@@ -12,8 +12,12 @@ git-deps: .git/hooks/pre-commit
 deps: uv git-deps .venv .env
 
 ollama:
-	docker compose up -d ollama
-	docker compose exec ollama ollama pull llama3.2:latest
+	@if grep -q '^OLLAMA_ENABLED=true' .env; then \
+		docker compose up -d ollama; \
+		docker compose exec ollama ollama pull llama3.2:latest; \
+	else \
+		docker compose down ollama; \
+	fi
 
 # Make sure uv exists otherwise tell the user to install it.
 uv:
@@ -26,9 +30,26 @@ uv:
 
 .env:
 	@if [ ! -f .env ]; then \
-		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
+		echo "\n📝 Environment Setup\n";\
+		echo "------------------\n";\
+		echo "• Creating .env file from template\n";\
 		cp .env.example .env; \
-		echo "✅ .env file initialized with .env.example"; \
+		echo "✅ Environment file initialized successfully\n";\
+		echo "\n\n📦 Ollama Setup Information\n";\
+		echo "------------------------\n";\
+		echo "• Ollama is enabled by default";\
+		echo "• To disable: Comment out OLLAMA_ENABLED=true in .env\n";\
+		echo "Configuration:\n";\
+		echo "• Model: llama3.2:latest";\
+		echo "• Port: 11434\n";\
+		echo "Requirements:\n";\
+		echo "• Docker installed and running";\
+		echo "• Minimum 5GB RAM allocated to Docker\n";\
+		echo "\n\033[1;33m⚡ Performance Tip\033[0m\n";\
+		echo "\033[4mFor improved agent performance, configure OPENAI_API_KEY in .env\033[0m\n";\
+		echo "• GPT-4 will be used instead of Ollama (llama3.2:latest)\n";\
+		echo "• You can then comment out OLLAMA_ENABLED=true to save resources\n";\
+		read -p "Press Enter to continue"; \
 	fi
 
 .venv:
