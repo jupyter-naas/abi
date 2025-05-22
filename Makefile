@@ -13,7 +13,7 @@ deps: uv git-deps .venv .env
 
 # Make sure uv exists otherwise tell the user to install it.
 uv:
-	@if ! uv --version &> /dev/null; then \
+	@if ! command -v uv >/dev/null 2>&1; then \
 		echo "🚀 Oops! Looks like uv is missing from your system!"; \
 		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
 		exit 1; \
