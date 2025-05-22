@@ -48,17 +48,36 @@ ftest:
 fmt:
 	@ uvx ruff format
 
+#########################
+# Linting, Static Analysis, Security
+#########################
+
 check-core:
 	uvx ruff check
 	.venv/bin/mypy -p lib.abi --follow-untyped-imports
 	#.venv/bin/mypy -p src.core --follow-untyped-imports
 
+check-custom:
+	@.venv/bin/mypy -p src.custom --follow-untyped-imports
+
+bandit:
+	docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r
+
+#########################
+
+
 .venv/lib/python3.10/site-packages/abi: .venv
 	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
 
-check: .venv/lib/python3.10/site-packages/abi check-core
-	.venv/bin/mypy -p src.custom --follow-untyped-imports
-  
+check: .venv/lib/python3.10/site-packages/abi check-core check-custom bandit
+	
+
+pytype:
+	uv run pytype lib
+
+pyre:
+	echo "TODO: Setup pyre https://github.com/facebook/pyre-check?tab=readme-ov-file"
+
 api: .venv
 	uv run api
 
@@ -149,6 +168,9 @@ help:
 
 # Default build target that triggers the Linux x86_64 build
 build: build.linux.x86_64
+
+sec-scan: build
+	docker save abi:latest -o abi.tar && trivy image --input abi.tar && rm abi.tar
 
 # Builds a Docker image for Linux x86_64 architecture
 # Usage: make build.linux.x86_64
