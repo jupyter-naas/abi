@@ -6,7 +6,7 @@ from abi.services.triple_store.TripleStorePorts import (
 from abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import (
     TripleStoreService__SecondaryAdaptor__FileBase,
 )
-from rdflib import Graph, RDFS, query, URIRef
+from rdflib import Graph, RDFS, query, URIRef, BNode
 import rdflib
 from typing import List, Dict, Tuple, Any
 import os
@@ -164,8 +164,8 @@ class TripleStoreService__SecondaryAdaptor__Filesystem(
     ):
         s, _, o = triple
 
-        assert isinstance(s, URIRef)
-        assert isinstance(o, URIRef)
+        assert isinstance(s, BNode) or isinstance(s, URIRef), type(s)
+        assert isinstance(o, BNode) or isinstance(o, URIRef), type(o)
 
         partition_hash = self.iri_hash(o)
 

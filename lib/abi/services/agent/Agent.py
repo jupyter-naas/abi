@@ -537,8 +537,8 @@ class Agent(Expose):
     def as_api(
         self,
         router: APIRouter,
-        route_name: str,
-        name: str,
+        route_name: str = "",
+        name: str = "",
         description: str = "",
         description_stream: str = "",
         tags: list[str | Enum] | None = None,

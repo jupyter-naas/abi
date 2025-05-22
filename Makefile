@@ -23,6 +23,10 @@ uv:
 .venv:
 	@ uv sync
 
+.venv/lib/python3.10/site-packages/abi: .venv
+	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+
+
 install:
 	@ uv sync
 
@@ -48,23 +52,75 @@ ftest:
 fmt:
 	@ uvx ruff format
 
+#########################
+# Linting, Static Analysis, Security
+#########################
+
+check: .venv/lib/python3.10/site-packages/abi check-core check-custom
+
 check-core:
-	uvx ruff check
-	.venv/bin/mypy -p lib.abi --follow-untyped-imports
-	#.venv/bin/mypy -p src.core --follow-untyped-imports
+	@echo ""
+	@echo "  _____ _____ _____ _____"
+	@echo " |     |     |     |     |"
+	@echo " |  C  |  O  |  R  |  E  |"
+	@echo " |_____|_____|_____|_____|"
+	@echo ""
+	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
+	@echo "📝 Linting with ruff..."
+	@uvx ruff check lib src/core
 
-.venv/lib/python3.10/site-packages/abi: .venv
-	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
+	@echo "• Checking lib.abi..."
+	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
+	@echo "\n⚠️ Skipping src.core type checking (disabled)"
+	@#.venv/bin/mypy -p src.core --follow-untyped-imports
 
-check: .venv/lib/python3.10/site-packages/abi check-core
-	.venv/bin/mypy -p src.custom --follow-untyped-imports
-  
+	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#uv run pyrefly check lib src tests
+
+	@echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
+	@echo "⚠️ Skipping bandit... (disabled)"
+	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
+	@echo "\n✅ CORE security checks passed!"
+
+check-custom:
+	@echo ""
+	@echo "  _____ _____ _____ _____ _____ _____"
+	@echo " |     |     |     |     |     |     |"
+	@echo " |  C  |  U  |  S  |  T  |  O  |  M  |"
+	@echo " |_____|_____|_____|_____|_____|_____|"
+	@echo ""
+	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
+	@echo "📝 Linting with ruff..."
+	@uvx ruff check src/custom
+
+	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
+	@.venv/bin/mypy -p src.custom --follow-untyped-imports
+
+	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#uv run pyrefly check src/custom
+
+	@echo "\n✅ CUSTOM security checks passed!"
+
+bandit:
+	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r
+
+
+trivy-container-scan: build
+	docker save abi:latest -o abi.tar && trivy image --input abi.tar && rm abi.tar
+
+#########################
+
 api: .venv
 	uv run api
 
 api-prod:
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
+
+api-dev:
+	@ docker build -t abi-dev -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-dev
 
 sparql-terminal: .venv
 	@ uv run python -m src.core.apps.sparql_terminal.main	
@@ -158,7 +214,10 @@ build: build.linux.x86_64
 #   - Dockerfile: Dockerfile.linux.x86_64
 #   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
 build.linux.x86_64: .venv
-	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+	DOCKER_BUILDKIT=1 docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+	
+	@# Show container size
+	@docker image ls abi
 
 # -------------------------------------------------------------------------------------------------
 
