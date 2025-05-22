@@ -72,4 +72,4 @@ ENV PATH="/app/.local/bin:$PATH"
 # Make sure uv is fully setup
 RUN uv sync --no-dev
 
-CMD ["uv", "run", "--no-dev", "api"]
+CMD ["uv", "run", "--no-dev", "src/api.py"]
