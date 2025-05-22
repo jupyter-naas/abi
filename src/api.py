@@ -186,10 +186,16 @@ app.include_router(workflows_router)
 def api():
     import uvicorn
 
+    if os.environ.get("ENV") == "dev":
+        uvicorn.run(
+            "src.api:app", host="0.0.0.0", port=9879, reload=os.environ.get("ENV") == "dev", reload_dirs=["src", "lib"], log_level="debug"
+        )
+    else:
+        uvicorn.run(
+            app, host="0.0.0.0", port=9879
+        )    
     # uvicorn.run(app, host="0.0.0.0", port=9879, reload=True)
-    uvicorn.run(
-        "src.api:app", host="0.0.0.0", port=9879, reload=os.environ.get("ENV") == "dev"
-    )
+
 
 
 # @app.post("/telegram")
