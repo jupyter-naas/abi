@@ -62,13 +62,14 @@ check-core:
 
 	uv run pyrefly check lib src tests
 
-
-
 check-custom:
 	@.venv/bin/mypy -p src.custom --follow-untyped-imports
 
 bandit:
 	docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r
+
+trivy-container-scan: build
+	docker save abi:latest -o abi.tar && trivy image --input abi.tar && rm abi.tar
 
 #########################
 
@@ -175,9 +176,6 @@ help:
 
 # Default build target that triggers the Linux x86_64 build
 build: build.linux.x86_64
-
-sec-scan: build
-	docker save abi:latest -o abi.tar && trivy image --input abi.tar && rm abi.tar
 
 # Builds a Docker image for Linux x86_64 architecture
 # Usage: make build.linux.x86_64
