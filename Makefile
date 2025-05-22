@@ -23,6 +23,10 @@ uv:
 .venv:
 	@ uv sync
 
+.venv/lib/python3.10/site-packages/abi: .venv
+	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+
+
 install:
 	@ uv sync
 
@@ -52,6 +56,8 @@ fmt:
 # Linting, Static Analysis, Security
 #########################
 
+check: .venv/lib/python3.10/site-packages/abi check-core check-custom bandit
+
 check-core:
 	# Linting
 	uvx ruff check
@@ -72,19 +78,6 @@ trivy-container-scan: build
 	docker save abi:latest -o abi.tar && trivy image --input abi.tar && rm abi.tar
 
 #########################
-
-
-.venv/lib/python3.10/site-packages/abi: .venv
-	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
-
-check: .venv/lib/python3.10/site-packages/abi check-core check-custom bandit
-	
-
-pytype:
-	uv run pytype lib
-
-pyre:
-	echo "TODO: Setup pyre https://github.com/facebook/pyre-check?tab=readme-ov-file"
 
 api: .venv
 	uv run api
