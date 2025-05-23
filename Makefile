@@ -137,23 +137,23 @@ dvc-login: deps
 
 storage-pull: deps
 	@ echo "Pulling storage..."
-	@ uv run python scripts/storage_pull.py | sh
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_pull.py | sh'
 
 storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ uv run run python scripts/storage_push.py | sh
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
 
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
-	@ uv run python scripts/triplestore_prod_remove.py
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_remove.py'
 
 triplestore-prod-override: deps
 	@ echo "Overriding production triplestore..."
-	@ uv run python scripts/triplestore_prod_override.py
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_override.py'
 
 triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
-	@ uv run python scripts/triplestore_prod_pull.py
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
 
 clean:
 	@echo "Cleaning up build artifacts..."
