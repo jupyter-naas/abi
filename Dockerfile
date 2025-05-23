@@ -4,8 +4,6 @@ WORKDIR /app
 # Install CA certificates
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
-COPY . .
-
 RUN pip install uv
 
 # Add build argument for architecture
@@ -20,4 +18,3 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     && unzip awscliv2.zip \
     && ./aws/install
 
-CMD ["uv", "run", "chat-single-assistant"]

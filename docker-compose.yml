@@ -5,8 +5,17 @@ services:
       - 9879:9879
       - 8501:8501
     volumes:
-      - .:/app
+      - ./scripts:/app/scripts
+      - ./uv.lock:/app/uv.lock
+      - ./config.yaml:/app/config.yaml
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./Makefile:/app/Makefile
+      - ./storage:/app/storage
+      - ./src:/app/src
+      - ./lib:/app/lib
+      - ./README.md:/app/README.md
       - cargo-cache:/root/.cargo
+      - venv_cache:/app/.venv
     environment:
       - PYTHONPATH=/app
     env_file:
@@ -15,3 +24,4 @@ services:
 
 volumes:
   cargo-cache:
+  venv_cache:
