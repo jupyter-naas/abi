@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
-from typing import Any
+from langchain_core.tools import StructuredTool, BaseTool
+from typing import Any, Union
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Graph, URIRef, RDFS
 from abi.utils.SPARQL import get_class_uri_from_individual_uri
@@ -59,7 +59,7 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
             self.__configuration.convert_ontology_graph_config
         )
 
-    def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Graph:
+    def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Union[str, None]:
         s, p, o = triple
         # logger.debug(f"==> Triggering Create Individual Ontology YAML Workflow: {s} {p} {o}")
         if (
@@ -142,7 +142,7 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
         )
         return ontology_id
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(

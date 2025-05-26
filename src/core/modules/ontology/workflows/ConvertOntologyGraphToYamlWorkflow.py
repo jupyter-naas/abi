@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
@@ -151,7 +151,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
         logger.debug(message)
         return ontology_id
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
