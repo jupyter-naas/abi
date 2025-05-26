@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Union
 from abi.integration.integration import (
     Integration,
     IntegrationConnectionError,
@@ -60,7 +60,7 @@ class NaasIntegration(Integration):
         self.base_url = self.__configuration.base_url
 
     def _make_request(
-        self, method: str, endpoint: str, data: Dict = None, params: Dict = None
+        self, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None
     ) -> Dict:
         """Make HTTP request to Naas API."""
         url = os.path.join(self.base_url, endpoint.lstrip("/"))
@@ -150,7 +150,7 @@ class NaasIntegration(Integration):
         """Get all workspaces."""
         return self._make_request("GET", "/workspace/")
 
-    def get_personal_workspace(self) -> str:
+    def get_personal_workspace(self) -> Union[str, None]:
         """Get personal workspace ID."""
         workspaces = self.get_workspaces()
         for workspace in workspaces.get("workspaces", []):
@@ -217,7 +217,7 @@ class NaasIntegration(Integration):
         payload = {"workspace_id": workspace_id, "payload": json.dumps(data)}
         return self._make_request("POST", f"/workspace/{workspace_id}/plugin", payload)
 
-    def get_plugin(self, workspace_id: str, plugin_id: str = None) -> Dict:
+    def get_plugin(self, workspace_id: str, plugin_id: Optional[str] = None) -> Dict:
         """Get plugin details by ID or list all plugins.
 
         Args:
@@ -268,8 +268,8 @@ class NaasIntegration(Integration):
         key: str,
         value: str,
         plugins: List[Dict[str, str]] = [],
-        workspace_id: str = None,
-    ) -> Dict[str, str]:
+        workspace_id: Optional[str] = None,
+    ) -> Union[str, None]:
         """Search for an assistant by key/value pair in payload.
 
         Returns:
@@ -292,9 +292,9 @@ class NaasIntegration(Integration):
         label: str,
         source: str,
         level: str,
-        description: str = None,
-        download_url: str = None,
-        logo_url: str = None,
+        description: Optional[str] = None,
+        download_url: Optional[str] = None,
+        logo_url: Optional[str] = None,
         is_public: bool = False,
     ) -> Dict:
         """Create a new ontology.
@@ -348,11 +348,11 @@ class NaasIntegration(Integration):
         self,
         workspace_id: str,
         ontology_id: str,
-        download_url: str = None,
-        source: str = None,
-        level: str = None,
-        description: str = None,
-        logo_url: str = None,
+        download_url: Optional[str] = None,
+        source: Optional[str] = None,
+        level: Optional[str] = None,
+        description: Optional[str] = None,
+        logo_url: Optional[str] = None,
         is_public: bool = False,
     ) -> Dict:
         """Update an existing ontology.
@@ -367,11 +367,12 @@ class NaasIntegration(Integration):
             logo_url (str): Logo URL
             is_public (bool): Whether the ontology is public
         """
-        field_masks = []
-
-        ontology = {}
-        ontology["id"] = ontology_id
-        ontology["workspace_id"] = workspace_id
+        field_masks: List[str] = []
+        
+        ontology: Dict[str, Any] = {
+            "id": ontology_id,
+            "workspace_id": workspace_id
+        }
 
         if download_url:
             ontology["download_url"] = download_url
@@ -423,8 +424,8 @@ class NaasIntegration(Integration):
         self,
         workspace_id: str,
         role: str = "member",
-        email: str = None,
-        user_id: str = None,
+        email: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Dict:
         """Invite a user to a workspace.
 
@@ -468,7 +469,11 @@ class NaasIntegration(Integration):
         )
 
     def update_workspace_user(
-        self, workspace_id: str, user_id: str, role: str = None, status: str = None
+        self,
+        workspace_id: str,
+        user_id: str,
+        role: Optional[str] = None,
+        status: Optional[str] = None
     ) -> Dict:
         """Update a user's role or status in a workspace.
 
@@ -522,12 +527,8 @@ class NaasIntegration(Integration):
         """
         return self._make_request("GET", f"/secret/{secret_id}")
 
-    def list_secrets(self) -> Dict:
-        """List all secrets in a workspace.
-
-        Returns:
-            Dict: Response containing list of secrets
-        """
+    def list_secrets(self) -> List[Dict]:
+        """List all secrets in a workspace."""
         payload = {"page_size": 100, "page_number": 0}
         return self._make_request("GET", "/secret/", payload).get("secrets", [])
 
@@ -638,8 +639,8 @@ class NaasIntegration(Integration):
         )
 
     def get_storage_credentials(
-        self, workspace_id: str = None, storage_name: str = None
-    ) -> tuple[Dict, str]:
+        self, workspace_id: Optional[str] = None, storage_name: Optional[str] = None
+    ) -> Dict:
         """Get or create storage credentials.
 
         Args:
@@ -714,7 +715,7 @@ class NaasIntegration(Integration):
         object_name: str,
         visibility: str = "public",
         content_disposition: str = "inline",
-        password: str = None,
+        password: Optional[str] = None,
     ):
         naas_storage: ObjectStorageService = (
             ObjectStorageFactory.ObjectStorageServiceNaas(
@@ -783,7 +784,7 @@ class NaasIntegration(Integration):
         self,
         model_id: str,
         prompt: str,
-        system_prompt: str = None,
+        system_prompt: Optional[str] = None,
         temperature: float = 0.3,
     ) -> Dict:
         """Create a completion using a specified model.
