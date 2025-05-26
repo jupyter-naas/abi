@@ -9,8 +9,8 @@ A Radio Antenna that consists of a flat rectangular sheet (or patch) of metal mo
 Not defined.
 
 ### Aliases
-- Microstrip Patch Antenna
 - Rectangular Microstrip Antenna
+- Microstrip Patch Antenna
 
 ### URI
 https://www.commoncoreontologies.org/ont00001300

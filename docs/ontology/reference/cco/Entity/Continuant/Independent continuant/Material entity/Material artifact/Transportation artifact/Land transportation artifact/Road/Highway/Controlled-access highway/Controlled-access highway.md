@@ -9,9 +9,9 @@ A Highway that is designed for high-speed vehicular traffic, with all traffic fl
 Not defined.
 
 ### Aliases
+- Freeway
 - Expressway
 - Motorway
-- Freeway
 
 ### URI
 https://www.commoncoreontologies.org/ont00001015
