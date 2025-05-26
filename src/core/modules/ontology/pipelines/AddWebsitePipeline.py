@@ -1,8 +1,8 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
+from langchain.tools import BaseTool
 from dataclasses import dataclass
-from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional, List
 from abi.utils.Graph import ABI
@@ -12,6 +12,7 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
 )
+from fastapi import APIRouter
 
 
 @dataclass
@@ -21,7 +22,6 @@ class AddWebsitePipelineConfiguration(PipelineConfiguration):
     Attributes:
         triple_store (ITripleStoreService): The triple store service to use
     """
-
     triple_store: ITripleStoreService
     add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
@@ -88,15 +88,15 @@ class AddWebsitePipeline(Pipeline):
         self.__configuration.triple_store.insert(graph)
         return website_uri
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_add_website",
+                name="add_website",
                 description="Add a website to the ontology. Requires the website URL.",
                 func=lambda **kwargs: self.run(AddWebsitePipelineParameters(**kwargs)),
                 args_schema=AddWebsitePipelineParameters,
             )
         ]
-
+    
     def as_api(self, router: APIRouter) -> None:
         pass
