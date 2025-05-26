@@ -5,7 +5,7 @@ from abi.integration.integration import (
 )
 from dataclasses import dataclass
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 
 LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
 
@@ -43,7 +43,7 @@ class GithubGraphqlIntegration(Integration):
 
     def execute_query(
         self, query: str, variables: Optional[Dict] = None
-    ) -> Dict[str, Any]:
+    ) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Execute a GraphQL query against Github's API.
 
         Args:
@@ -98,7 +98,7 @@ class GithubGraphqlIntegration(Integration):
         variables = {"org": organization, "number": int(number)}
         return self.execute_query(query, variables)
 
-    def get_project_details(self, project_node_id: str) -> Dict[str, Any]:
+    def get_project_details(self, project_node_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Get detailed information about a GitHub Project.
 
         Args:

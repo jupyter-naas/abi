@@ -1,8 +1,8 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
+from langchain.tools import BaseTool
 from dataclasses import dataclass
-from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional
 from abi.utils.Graph import ABI
@@ -47,7 +47,6 @@ class AddTickerPipeline(Pipeline):
 
     def run(self, parameters: AddTickerPipelineParameters) -> str:
         graph = Graph()
-
         ticker_uri = parameters.individual_uri
         if parameters.label and not ticker_uri:
             ticker_uri, graph = self.__add_individual_pipeline.run(
@@ -87,15 +86,15 @@ class AddTickerPipeline(Pipeline):
         self.__configuration.triple_store.insert(graph)
         return ticker_uri
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_add_ticker",
+                name="add_ticker",
                 description="Add a ticker symbol to the ontology. Requires the ticker symbol.",
                 func=lambda **kwargs: self.run(AddTickerPipelineParameters(**kwargs)),
                 args_schema=AddTickerPipelineParameters,
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(self) -> None:
         pass

@@ -1,10 +1,11 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
+from langchain.tools import BaseTool
 from dataclasses import dataclass
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, List
+from typing import Optional
 from abi.utils.Graph import ABI
 from rdflib import URIRef, Literal, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
@@ -13,6 +14,7 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipelineParameters,
 )
 
+URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 @dataclass
 class AddLinkedInPagePipelineConfiguration(PipelineConfiguration):
@@ -25,36 +27,14 @@ class AddLinkedInPagePipelineConfiguration(PipelineConfiguration):
     triple_store: ITripleStoreService
     add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
-
 class AddLinkedInPagePipelineParameters(PipelineParameters):
-    label: str = Field(
-        ...,
-        description="LinkedIn page URL (e.g., 'https://www.linkedin.com/(in|company|school|edu)/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*') to be added in class: http://ontology.naas.ai/abi/LinkedInProfilePage or http://ontology.naas.ai/abi/LinkedInCompanyPage or http://ontology.naas.ai/abi/LinkedInSchoolPage or http://ontology.naas.ai/abi/LinkedInEducationPage",
-    )
-    individual_uri: Optional[str] = Field(
-        None,
-        description="URI of the individual if already known. It must start with 'http://ontology.naas.ai/abi/'.",
-    )
-    linkedin_id: Optional[str] = Field(
-        None,
-        description="LinkedIn unique ID of the individual. It must starts with 'ACoAAA'",
-    )
-    linkedin_url: Optional[str] = Field(
-        None,
-        description="LinkedIn URL with the LinkedIn ID as identifier. It must starts with 'https://www.linkedin.com/in/ACoAAA'",
-    )
-    linkedin_public_id: Optional[str] = Field(
-        None, description="LinkedIn Public ID of the individual."
-    )
-    linkedin_public_url: Optional[str] = Field(
-        None,
-        description="LinkedIn Public URL of the individual with the LinkedIn Public ID as identifier. It must starts with 'https://www.linkedin.com/in/'",
-    )
-    owner_uris: Optional[List[str]] = Field(
-        None,
-        description="Owners URI from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443. It must start with 'http://ontology.naas.ai/abi/'.",
-    )
-
+    label: Optional[str] = Field(None, description="LinkedIn page URL to be added.", pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+")
+    individual_uri: Optional[str] = Field(None, description="URI of the individual if already known.", pattern=URI_REGEX)
+    linkedin_id: Optional[str] = Field(None, description="LinkedIn unique ID of the individual.")
+    linkedin_url: Optional[str] = Field(None, description="LinkedIn URL with the LinkedIn ID as identifier.")
+    linkedin_public_id: Optional[str] = Field(None, description="LinkedIn Public ID of the individual.")
+    linkedin_public_url: Optional[str] = Field(None, description="LinkedIn Public URL of the individual with the LinkedIn Public ID as identifier.", pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+")
+    owner_uri: Optional[str] = Field(None, description="URI of the owner from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443")
 
 class AddLinkedInPagePipeline(Pipeline):
     """Pipeline for adding a new LinkedIn page to the ontology."""
@@ -68,91 +48,100 @@ class AddLinkedInPagePipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddLinkedInPagePipelineParameters) -> str:
-        # Initialize a new graph
-        graph = Graph()
+    def run(self, parameters: AddLinkedInPagePipelineParameters) -> Graph:
+        # Initialize graphs
+        graph_insert = Graph()
+        graph_remove = Graph()
 
-        # Get class URI
-        if "/in/" in parameters.label:
-            identifier = "/in/"
-            class_uri = ABI.LinkedInProfilePage
-        elif "/company/" in parameters.label:
-            identifier = "/company/"
-            class_uri = ABI.LinkedInCompanyPage
-        elif "/school/" in parameters.label:
-            identifier = "/school/"
-            class_uri = ABI.LinkedInSchoolPage
+        # Get class URI based on LinkedIn URL type
+        class_uri = ABI.LinkedInProfilePage
+        if parameters.label:
+            if "/in/" in parameters.label:
+                identifier = "/in/"
+                class_uri = ABI.LinkedInProfilePage
+            elif "/company/" in parameters.label or "/showcase/" in parameters.label:
+                identifier = "/company/"
+                class_uri = ABI.LinkedInCompanyPage
+            elif "/school/" in parameters.label:
+                identifier = "/school/"
+                class_uri = ABI.LinkedInSchoolPage
+            
+            # Get LinkedIn Public ID from URL if not provided
+            linkedin_public_id = parameters.linkedin_public_id
+            if not linkedin_public_id:
+                linkedin_public_id = parameters.label.split(identifier)[-1].split('/')[0]
+
+            # Get LinkedIn Public URL if not provided
+            linkedin_public_url = parameters.linkedin_public_url
+            if not linkedin_public_url:
+                linkedin_public_url = "https://www.linkedin.com" + identifier + linkedin_public_id
+        
+        # Create or get subject URI & graph
+        if parameters.label and not parameters.individual_uri:
+            if not linkedin_public_url:
+                linkedin_public_url = parameters.label
+            individual_uri, graph = self.__add_individual_pipeline.run(AddIndividualPipelineParameters(
+                class_uri=class_uri,
+                individual_label=linkedin_public_url
+            ))
         else:
-            raise ValueError(
-                f"Invalid LinkedIn URL: {parameters.label}. It must start with 'https://www.linkedin.com/(in|company|school|edu)/[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*'."
-            )
+            individual_uri = URIRef(individual_uri)
+            graph = self.__configuration.triple_store.get_subject_graph(individual_uri)
+        
+        # Update existing objects
+        linkedin_id_exists = False
+        linkedin_url_exists = False
+        linkedin_public_id_exists = False
+        linkedin_public_url_exists = False
+        owner_uri_exists = False
+        for s, p, o in graph:
+            if str(p) == "http://ontology.naas.ai/abi/linkedin_id":
+                linkedin_id_exists = True
+                if parameters.linkedin_id is not None and str(o) != parameters.linkedin_id:
+                    graph_remove.add((s, p, o))
+                    graph_insert.add((s, p, Literal(parameters.linkedin_id)))
+            elif str(p) == "http://ontology.naas.ai/abi/linkedin_url":
+                linkedin_url_exists = True
+                if parameters.linkedin_url is not None and str(o) != parameters.linkedin_url:
+                    graph_remove.add((s, p, o))
+                    graph_insert.add((s, p, Literal(parameters.linkedin_url)))
+            elif str(p) == "http://ontology.naas.ai/abi/linkedin_public_id":
+                linkedin_public_id_exists = True
+                if 'linkedin_public_id' in locals() and linkedin_public_id and str(o) != linkedin_public_id:
+                    graph_remove.add((s, p, o))
+                    graph_insert.add((s, p, Literal(linkedin_public_id)))
+            elif str(p) == "http://ontology.naas.ai/abi/linkedin_public_url":
+                linkedin_public_url_exists = True
+                if 'linkedin_public_url' in locals() and linkedin_public_url and str(o) != linkedin_public_url:
+                    graph_remove.add((s, p, o))
+                    graph_insert.add((s, p, Literal(linkedin_public_url)))
+            elif str(p) == "http://ontology.naas.ai/abi/isLinkedInPageOf":
+                owner_uri_exists = True
+                if parameters.owner_uri is not None and str(o) != parameters.owner_uri:
+                    graph_remove.add((s, p, o))
+                    graph_remove.add((o, ABI.hasLinkedInPage, s))
+                    graph_insert.add((s, ABI.isLinkedInPageOf, URIRef(parameters.owner_uri)))
+                    graph_insert.add((URIRef(parameters.owner_uri), ABI.hasLinkedInPage, s))
 
-        # Create LinkedIn page URI
-        linkedin_page_uri = parameters.individual_uri
-        if parameters.label and not linkedin_page_uri:
-            linkedin_page_uri, graph = self.__add_individual_pipeline.run(
-                AddIndividualPipelineParameters(
-                    class_uri=class_uri, individual_label=parameters.label
-                )
-            )
-        else:
-            if linkedin_page_uri.startswith("http://ontology.naas.ai/abi/"):
-                linkedin_page_uri = URIRef(linkedin_page_uri)
-            else:
-                raise ValueError(
-                    f"Invalid LinkedIn Page URI: {linkedin_page_uri}. It must start with 'http://ontology.naas.ai/abi/'."
-                )
-
-        # Add LinkedIn Public ID if provided
-        linkedin_public_id = parameters.linkedin_public_id
-        if not linkedin_public_id:
-            linkedin_public_id = parameters.label.split(identifier)[-1].split("/")[0]
-        graph.add(
-            (linkedin_page_uri, ABI.linkedin_public_id, Literal(linkedin_public_id))
-        )
-
-        # Add LinkedIn Public URL if provided
-        linkedin_public_url = parameters.linkedin_public_url
-        if not linkedin_public_url:
-            linkedin_public_url = (
-                "https://www.linkedin.com" + identifier + linkedin_public_id
-            )
-        graph.add(
-            (linkedin_page_uri, ABI.linkedin_public_url, Literal(linkedin_public_url))
-        )
-
-        # Add LinkedIn ID if provided
-        if parameters.linkedin_id:
-            graph.add(
-                (linkedin_page_uri, ABI.linkedin_id, Literal(parameters.linkedin_id))
-            )
-
-        # Add LinkedIn URL if provided
-        if parameters.linkedin_url:
-            graph.add(
-                (linkedin_page_uri, ABI.linkedin_url, Literal(parameters.linkedin_url))
-            )
-
-        # Add owners URI if provided
-        if parameters.owner_uris:
-            for owner_uri in parameters.owner_uris:
-                if owner_uri.startswith("http://ontology.naas.ai/abi/"):
-                    graph.add(
-                        (linkedin_page_uri, ABI.isLinkedInPageOf, URIRef(owner_uri))
-                    )
-                    graph.add(
-                        (URIRef(owner_uri), ABI.hasLinkedInPage, linkedin_page_uri)
-                    )
-                else:
-                    raise ValueError(
-                        f"Invalid Owner URI: {owner_uri}. It must start with 'http://ontology.naas.ai/abi/'."
-                    )
+        # Add new objects
+        if parameters.linkedin_id and not linkedin_id_exists:
+            graph_insert.add((URIRef(individual_uri), URIRef(ABI.linkedin_id), Literal(parameters.linkedin_id)))
+        if parameters.linkedin_url and not linkedin_url_exists:
+            graph_insert.add((URIRef(individual_uri), URIRef(ABI.linkedin_url), Literal(parameters.linkedin_url)))
+        if parameters.linkedin_public_id and not linkedin_public_id_exists:
+            graph_insert.add((URIRef(individual_uri), URIRef(ABI.linkedin_public_id), Literal(parameters.linkedin_public_id)))
+        if parameters.linkedin_public_url and not linkedin_public_url_exists:
+            graph_insert.add((URIRef(individual_uri), URIRef(ABI.linkedin_public_url), Literal(parameters.linkedin_public_url)))
+        if parameters.owner_uri and not owner_uri_exists:
+            graph_insert.add((URIRef(individual_uri), URIRef(ABI.isLinkedInPageOf), URIRef(parameters.owner_uri)))
+            graph_insert.add((URIRef(parameters.owner_uri), URIRef(ABI.hasLinkedInPage), URIRef(individual_uri)))
 
         # Save the graph
-        self.__configuration.triple_store.insert(graph)
-        return linkedin_page_uri
-
-    def as_tools(self) -> list[StructuredTool]:
+        self.__configuration.triple_store.insert(graph_insert)
+        self.__configuration.triple_store.remove(graph_remove)
+        return graph
+    
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
                 name="ontology_add_linkedin_page",
@@ -164,5 +153,5 @@ class AddLinkedInPagePipeline(Pipeline):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(self, router: Optional[APIRouter] = None) -> None:
         pass
