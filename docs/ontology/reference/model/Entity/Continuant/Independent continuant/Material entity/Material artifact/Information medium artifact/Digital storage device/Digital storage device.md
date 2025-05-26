@@ -6,8 +6,8 @@
 An Information Medium Artifact that is designed to bear some Information Content Entity by means of recording that information in digital (binary) format.
 
 ### Examples
-- A computer's Hard Disk Drive
 - A portable USB Drive
+- A computer's Hard Disk Drive
 
 ### Aliases
 Not defined.
