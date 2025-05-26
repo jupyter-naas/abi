@@ -13,7 +13,8 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     CCO,
     URI_REGEX,
 )
-
+from fastapi import APIRouter
+from enum import Enum
 
 @dataclass
 class AddCommercialOrganizationPipelineConfiguration(PipelineConfiguration):
@@ -30,32 +31,31 @@ class AddCommercialOrganizationPipelineConfiguration(PipelineConfiguration):
 
 class AddCommercialOrganizationPipelineParameters(PipelineParameters):
     label: str = Field(
-        ...,
-        description="Name of the commercial organization to be added in class: https://www.commoncoreontologies.org/ont00000443",
+        description="Name of the commercial organization to be added in class: https://www.commercoreontologies.org/ont00000443",
         example="Naas.ai",
     )
     legal_uri: Optional[str] = Field(
-        ...,
+        default=None,
         description="Individual URI from class: https://www.commoncoreontologies.org/ont00001331",
         pattern=URI_REGEX,
     )
     ticker_uri: Optional[str] = Field(
-        ...,
+        default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/Ticker",
         pattern=URI_REGEX,
     )
     website_uri: Optional[str] = Field(
-        ...,
+        default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/Website",
         pattern=URI_REGEX,
     )
     linkedin_page_uri: Optional[str] = Field(
-        ...,
+        default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/LinkedInOrganizationPage",
         pattern=URI_REGEX,
     )
     logo_url: Optional[str] = Field(
-        ...,
+        default=None,
         description="Logo URL of the commercial organization.",
         pattern="https?:\/\/.*",
     )
@@ -125,5 +125,15 @@ class AddCommercialOrganizationPipeline(Pipeline):
             )
         ]
 
-    def as_api(self) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

@@ -11,6 +11,8 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
 )
+from fastapi import APIRouter
+from enum import Enum
 
 
 @dataclass
@@ -95,5 +97,15 @@ class AddTickerPipeline(Pipeline):
             )
         ]
 
-    def as_api(self) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

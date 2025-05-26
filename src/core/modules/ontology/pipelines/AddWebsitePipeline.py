@@ -9,10 +9,11 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
-    ABI
+    ABI,
+    URI_REGEX
 )
 from fastapi import APIRouter
-
+from enum import Enum
 
 @dataclass
 class AddWebsitePipelineConfiguration(PipelineConfiguration):
@@ -27,12 +28,12 @@ class AddWebsitePipelineConfiguration(PipelineConfiguration):
 
 class AddWebsitePipelineParameters(PipelineParameters):
     label: str = Field(
-        ...,
         description="Website URL (e.g., 'https://www.example.com') to be added in class: http://ontology.naas.ai/abi/Website",
     )
     individual_uri: Optional[str] = Field(
         None,
         description="URI of the individual if already known. It must start with 'http://ontology.naas.ai/abi/'.",
+        pattern=URI_REGEX
     )
     owner_uris: Optional[List[str]] = Field(
         None,
@@ -97,5 +98,15 @@ class AddWebsitePipeline(Pipeline):
             )
         ]
     
-    def as_api(self, router: APIRouter) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

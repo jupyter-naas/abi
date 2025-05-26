@@ -14,7 +14,7 @@ from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     CCO,
     URI_REGEX,
 )
-
+from enum import Enum   
 
 @dataclass
 class AddPersonPipelineConfiguration(PipelineConfiguration):
@@ -170,5 +170,15 @@ class AddPersonPipeline(Pipeline):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

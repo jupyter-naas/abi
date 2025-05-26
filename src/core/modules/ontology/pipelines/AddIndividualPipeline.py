@@ -23,6 +23,8 @@ from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflowParameters,
     SearchIndividualWorkflowConfiguration,
 )
+from fastapi import APIRouter
+from enum import Enum
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 CCO = Namespace("https://www.commoncoreontologies.org/")
@@ -46,7 +48,7 @@ class AddIndividualPipelineParameters(PipelineParameters):
     class_uri: str = Field(
         description="Class URI to add the individual to. Use tool `ontology_search_class` to search for a class URI in the ontology.",
         pattern="https?:\/\/.*",
-        example="https://www.commoncoreontologies.org/ont00000443",
+        example="https://www.commoncoreontologies.org/ont00000443"
     )
     individual_label: str = Field(
         description="Individual label to add to the ontology.",
@@ -114,5 +116,15 @@ class AddIndividualPipeline(Pipeline):
             )
         ]
 
-    def as_api(self) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None
