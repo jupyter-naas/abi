@@ -1,7 +1,6 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
-from langchain_core.tools import StructuredTool
-from langchain.tools import BaseTool
+from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
 from typing import Optional
@@ -52,6 +51,9 @@ class AddLegalNamePipeline(Pipeline):
     def run(self, parameters: AddLegalNamePipelineParameters) -> Graph:
         # Init graph
         graph_insert = Graph()
+        organization_uri = None
+        if parameters.organization_uri:
+            organization_uri = URIRef(parameters.organization_uri)
 
         # Add legal name    
         if parameters.label and not parameters.individual_uri:
@@ -61,16 +63,19 @@ class AddLegalNamePipeline(Pipeline):
                     individual_label=parameters.label
                 )
             )
-        legal_name_uri = URIRef(parameters.individual_uri)
+            legal_name_uri = URIRef(legal_name_uri)
+        else:
+            graph = self.__configuration.triple_store.get_subject_graph(parameters.individual_uri)
+            legal_name_uri = URIRef(parameters.individual_uri)
 
         # Update properties
         organization_uri_exists = False
         for s, p, o in graph:
-            if str(p) == str(ABI.isLegalNameOf) and str(o) == str(parameters.organization_uri):
+            if str(p) == str(ABI.isLegalNameOf) and str(o) == str(organization_uri):
                 organization_uri_exists = True
 
         if not organization_uri_exists:
-            graph_insert.add((legal_name_uri, ABI.isLegalNameOf, URIRef(parameters.organization_uri)))
+            graph_insert.add((legal_name_uri, ABI.isLegalNameOf, organization_uri))
 
         self.__configuration.triple_store.insert(graph_insert)
         graph += graph_insert

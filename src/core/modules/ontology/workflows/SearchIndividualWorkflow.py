@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pydantic import Field
 from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
 
 
@@ -66,10 +66,10 @@ class SearchIndividualWorkflow(Workflow):
         results = self.__configuration.triple_store.query(query)
         return results_to_list(results)
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_search_individual",
+                name="search_individual",
                 description="Search an ontology individual based on its label. It will return the most relevant individual using matching with rdfs:label",
                 func=lambda class_uri, search_label: self.search_individual(
                     SearchIndividualWorkflowParameters(

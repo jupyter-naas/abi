@@ -2,8 +2,7 @@ from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
 )
-from langchain.tools import BaseTool
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from abi import logger
 from pydantic import Field
