@@ -1,11 +1,12 @@
 from src import services
 from rdflib import RDFS, URIRef
-import pydash as _
+import pydash
 import os
 import urllib.parse
 from abi import logger
 import shutil
-from mappings import rdf_terms, rdfs_terms, owl_terms, skos_terms, dc_terms
+from mappings import rdf_terms, rdfs_terms, owl_terms, skos_terms, dc_terms # type: ignore
+import json
 
 ONTOLOGY_DICT = {
     "abi": "http://ontology.naas.ai/abi/",
@@ -30,6 +31,8 @@ class OntologyDocs:
         self.mapping_oprop = {}
         self.ontologies_dict = ONTOLOGY_DICT
         self.operators = ONTOLOGY_OPERATORS
+        # Add pydash as instance variable
+        self._ = pydash
 
     def rdf_to_md(self):
         """Translate RDF graph to YAML.
@@ -176,7 +179,7 @@ class OntologyDocs:
 
     def load_classes(self):
         # We filter the classes from the ontology.
-        _onto_classes = _.filter_(
+        _onto_classes = self._.filter_(
             self.onto,
             lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
             if "type" in x
@@ -187,7 +190,7 @@ class OntologyDocs:
         # We remove the subclassOf that are restrictions to keep it simple for now.
         # TODO: Resolve the restrictions to be able to display/use them later on.
         for cls in _onto_classes:
-            cls["subclassOf"] = _.filter_(
+            cls["subclassOf"] = self._.filter_(
                 cls.get("subclassOf", []), lambda x: True if "http" in x else False
             )
 
@@ -205,7 +208,7 @@ class OntologyDocs:
 
             self.amount_per_level[level] += 1
 
-            subclassOf = _.filter_(
+            subclassOf = self._.filter_(
                 self.onto_classes, lambda x: cls_id in x["subclassOf"]
             )
             for subclass in subclassOf:
@@ -263,15 +266,15 @@ class OntologyDocs:
             res = (
                 [
                     self.get_linked_classes(e, "unionOf")
-                    for e in _.get(cls, "unionOf", [])
+                    for e in self._.get(cls, "unionOf", [])
                 ]
                 + [
                     self.get_linked_classes(e, "intersectionOf")
-                    for e in _.get(cls, "intersectionOf", [])
+                    for e in self._.get(cls, "intersectionOf", [])
                 ]
                 + [
                     self.get_linked_classes(e, "complementOf")
-                    for e in _.get(cls, "complementOf", [])
+                    for e in self._.get(cls, "complementOf", [])
                 ]
             )
             return res
@@ -297,21 +300,21 @@ class OntologyDocs:
                     ):
                         right[operator] = right[operator][operator]
 
-                    return {operator: _.flatten([left[operator], right[operator]])}
+                    return {operator: self._.flatten([left[operator], right[operator]])}
                 else:
-                    return {operator: _.flatten([left, right])}
+                    return {operator: self._.flatten([left, right])}
             else:
                 return {operator: left}
 
     # We map the ranges and domains to the classes by calling get_linked_classes.
     def map_ranges_domains(self, x):
         if "domain" in x:
-            x["domain"] = _.map_(
+            x["domain"] = self._.map_(
                 x["domain"],
                 lambda x: x if "http" in x else self.get_linked_classes(x)[0],
             )
         if "range" in x:
-            x["range"] = _.map_(
+            x["range"] = self._.map_(
                 x["range"],
                 lambda x: x if "http" in x else self.get_linked_classes(x)[0],
             )
@@ -319,7 +322,7 @@ class OntologyDocs:
 
     def load_object_properties(self):
         # We filter the object properties from the ontology.
-        _onto_oprop = _.filter_(
+        _onto_oprop = self._.filter_(
             self.onto,
             lambda x: "http://www.w3.org/2002/07/owl#ObjectProperty" in x["type"]
             if "type" in x
@@ -336,7 +339,7 @@ class OntologyDocs:
 
     def load_data_properties(self):
         # We filter the data properties from the ontology.
-        _onto_dprop = _.filter_(
+        _onto_dprop = self._.filter_(
             self.onto,
             lambda x: "http://www.w3.org/2002/07/owl#DatatypeProperty" in x["type"]
             if "type" in x
@@ -353,9 +356,6 @@ class OntologyDocs:
         Returns:
             dict: Dictionary containing ontology data structures
         """
-        import json
-        import os
-
         # Create the docs/ontology/reference/model directory if it doesn't exist
         os.makedirs("docs/ontology/reference/model", exist_ok=True)
 
@@ -387,10 +387,8 @@ class OntologyDocs:
         reference_dir = os.path.join("docs", "ontology", "reference")
         folder = "model"
         dir_path = os.path.join(reference_dir, folder)
-        # onto_classes = _.filter_(self.onto_classes.values(), lambda x: "is curated in foundry" in x)
         onto_classes = self.onto_classes.values()
         print("Foundry classes : ", len(onto_classes))
-        # print(onto_classes)
 
         # Loop on classes
         for onto_class in onto_classes:
@@ -542,7 +540,7 @@ class OntologyDocs:
                 parents = [h["uri"] for h in hierarchy]
 
                 # H3 : Data Properties
-                dproperties = _.filter_(
+                dproperties = self._.filter_(
                     self.onto_dprop.values(),
                     lambda x: "domain" in x
                     and any(uri in x["domain"] for uri in parents),
@@ -556,7 +554,7 @@ class OntologyDocs:
                     d_domain = dprop.get("domain")
                     if isinstance(d_domain, list):
                         d_domain_uri = d_domain[0]
-                        d_domain_class_dict = _.filter_(
+                        d_domain_class_dict = self._.filter_(
                             self.onto_classes.values(),
                             lambda x: x["__id"] == d_domain_uri,
                         )[0]
@@ -625,7 +623,7 @@ class OntologyDocs:
                     markdown_content += "\n"
 
                 # H3 : Object Properties
-                oproperties = _.filter_(
+                oproperties = self._.filter_(
                     self.onto_oprop.values(),
                     lambda x: "domain" in x
                     and any(uri in x["domain"] for uri in parents),
@@ -639,7 +637,7 @@ class OntologyDocs:
                     o_domain = oprop.get("domain")
                     if isinstance(o_domain, list):
                         o_domain_uri = o_domain[0]
-                        o_domain_class_dict = _.filter_(
+                        o_domain_class_dict = self._.filter_(
                             self.onto_classes.values(),
                             lambda x: x["__id"] == o_domain_uri,
                         )[0]
@@ -655,7 +653,7 @@ class OntologyDocs:
                     o_range = oprop.get("range")
                     if isinstance(o_range, list):
                         o_range_uri = o_range[0]
-                        o_range_class_dict = _.filter_(
+                        o_range_class_dict = self._.filter_(
                             self.onto_classes.values(),
                             lambda x: x["__id"] == o_range_uri,
                         )
@@ -674,7 +672,7 @@ class OntologyDocs:
                     o_inverse_of = oprop.get("inverseOf")
                     if isinstance(o_inverse_of, list):
                         o_inverse_of_uri = o_inverse_of[0]
-                        o_inverse_of_class_dict = _.filter_(
+                        o_inverse_of_class_dict = self._.filter_(
                             self.onto_oprop.values(),
                             lambda x: x["__id"] == o_inverse_of_uri,
                         )
