@@ -1,16 +1,18 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool
+from langchain.tools import BaseTool
 from dataclasses import dataclass
-from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional
-from abi.utils.Graph import CCO, ABI
 from rdflib import URIRef, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
+    ABI,
+    CCO,
+    URI_REGEX,
 )
 
 
@@ -27,11 +29,13 @@ class AddLegalNamePipelineParameters(PipelineParameters):
     )
     individual_uri: Optional[str] = Field(
         None,
-        description="URI of the individual if already known. It must start with 'http://ontology.naas.ai/abi/'.",
+        description="URI of the individual if already known.",
+        pattern=URI_REGEX,
     )
     organization_uri: Optional[str] = Field(
         None,
-        description="Organization URI from class: https://www.commoncoreontologies.org/ont00000443. It must start with 'http://ontology.naas.ai/abi/'.",
+        description="Organization URI from class: https://www.commoncoreontologies.org/ont00000443.",
+        pattern=URI_REGEX,
     )
 
 
@@ -45,52 +49,37 @@ class AddLegalNamePipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddLegalNamePipelineParameters) -> str:
-        graph = Graph()
+    def run(self, parameters: AddLegalNamePipelineParameters) -> Graph:
+        # Init graph
+        graph_insert = Graph()
 
-        legal_name_uri = parameters.individual_uri
-        if parameters.label and not legal_name_uri:
+        # Add legal name    
+        if parameters.label and not parameters.individual_uri:
             legal_name_uri, graph = self.__add_individual_pipeline.run(
                 AddIndividualPipelineParameters(
-                    class_uri=CCO.ont00001331, individual_label=parameters.label
+                    class_uri=CCO.ont00001331, 
+                    individual_label=parameters.label
                 )
             )
-        else:
-            if legal_name_uri.startswith("http://ontology.naas.ai/abi/"):
-                legal_name_uri = URIRef(legal_name_uri)
-            else:
-                raise ValueError(
-                    f"Invalid Legal Name URI: {legal_name_uri}. It must start with 'http://ontology.naas.ai/abi/'."
-                )
+        legal_name_uri = URIRef(parameters.individual_uri)
 
-        if parameters.organization_uri:
-            if parameters.organization_uri.startswith("http://ontology.naas.ai/abi/"):
-                graph.add(
-                    (
-                        legal_name_uri,
-                        ABI.isLegalNameOf,
-                        URIRef(parameters.organization_uri),
-                    )
-                )
-                graph.add(
-                    (
-                        URIRef(parameters.organization_uri),
-                        ABI.hasLegalName,
-                        legal_name_uri,
-                    )
-                )
-            else:
-                raise ValueError(
-                    f"Invalid Organization URI: {parameters.organization_uri}. It must start with 'http://ontology.naas.ai/abi/'."
-                )
+        # Update properties
+        organization_uri_exists = False
+        for s, p, o in graph:
+            if str(p) == str(ABI.isLegalNameOf) and str(o) == str(parameters.organization_uri):
+                organization_uri_exists = True
 
-        self.__configuration.triple_store.insert(graph)
-        return legal_name_uri
+        if not organization_uri_exists:
+            graph_insert.add((legal_name_uri, ABI.isLegalNameOf, URIRef(parameters.organization_uri)))
 
-    def as_tools(self) -> list[StructuredTool]:
+        self.__configuration.triple_store.insert(graph_insert)
+        graph += graph_insert
+        return graph
+
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_add_legal_name",
+                name="add_legal_name",
                 description="Add a legal name to the ontology. Requires the legal name.",
                 func=lambda **kwargs: self.run(
                     AddLegalNamePipelineParameters(**kwargs)
@@ -99,5 +88,5 @@ class AddLegalNamePipeline(Pipeline):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(self) -> None:
         pass

@@ -2,6 +2,7 @@ from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import (
     ITripleStoreService,
 )
+from langchain.tools import BaseTool
 from langchain_core.tools import StructuredTool
 from dataclasses import dataclass
 from abi import logger
@@ -27,7 +28,7 @@ from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 CCO = Namespace("https://www.commoncoreontologies.org/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
-
+URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 @dataclass
 class AddIndividualPipelineConfiguration(PipelineConfiguration):
@@ -66,7 +67,7 @@ class AddIndividualPipeline(Pipeline):
             configuration.search_individual_configuration
         )
 
-    def run(self, parameters: AddIndividualPipelineParameters) -> Tuple[str, Graph]:
+    def run(self, parameters: AddIndividualPipelineParameters) -> Tuple[URIRef, Graph]:
         # Search for individual
         search_individual_result = self.__search_individual_workflow.search_individual(
             SearchIndividualWorkflowParameters(
@@ -102,10 +103,10 @@ class AddIndividualPipeline(Pipeline):
         )
         return individual_uri, graph
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_add_individual",
+                name="add_individual",
                 description="Add a new individual/instance to triple store.",
                 func=lambda **kwargs: self.run(
                     AddIndividualPipelineParameters(**kwargs)

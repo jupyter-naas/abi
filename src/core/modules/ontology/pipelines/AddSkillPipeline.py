@@ -1,8 +1,8 @@
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
+from langchain.tools import BaseTool
 from langchain_core.tools import StructuredTool
 from dataclasses import dataclass
-from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional, List
 from rdflib import Literal, Graph, URIRef
@@ -95,15 +95,15 @@ class AddSkillPipeline(Pipeline):
         self.__configuration.triple_store.insert(graph)
         return skill_uri
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_add_skill",
+                name="add_skill",
                 description="Add a skill with a name and description to the ontology.",
                 func=lambda **kwargs: self.run(AddSkillPipelineParameters(**kwargs)),
                 args_schema=AddSkillPipelineParameters,
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(self) -> None:
         pass

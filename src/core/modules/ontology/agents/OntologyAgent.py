@@ -7,6 +7,9 @@ from abi.services.agent.Agent import (
 from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from src import secret, services
+from typing import Optional
+from enum import Enum
+from pydantic import SecretStr
 
 # Foundational
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
@@ -91,17 +94,19 @@ SUGGESTIONS = [
 
 
 def create_agent(
-    agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None,
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Init
-    tools = []
-    agents = []
+    tools: list = []
+    agents: list = []
     triple_store = services.triple_store_service
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
     # Init store
     triple_store = services.triple_store_service
@@ -183,7 +188,6 @@ def create_agent(
 
     # Override tools
     from src.core.modules.intentmapping import get_tools
-
     tools.extend(get_tools())
 
     # Use provided configuration or create default one
@@ -214,8 +218,10 @@ class OntologyAgent(Agent):
         name: str = "Ontology Agent",
         description: str = "API endpoints to call the Ontology agent completion.",
         description_stream: str = "API endpoints to call the Ontology agent stream completion.",
-        tags: list[str] = [],
-    ):
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )

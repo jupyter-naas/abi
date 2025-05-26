@@ -1,8 +1,8 @@
 from .TemplatableSparqlQuery import load_workflows
 from abi import logger
 
-workflows = []
-tools = []
+workflows: list = []
+tools: list = []
 
 
 def get_workflows():

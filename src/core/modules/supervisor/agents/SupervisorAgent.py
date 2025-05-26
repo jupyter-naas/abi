@@ -16,6 +16,9 @@ from src.core.modules.naas.agents.NaasAgent import (
 from src.core.modules.support.agents.SupportAgent import (
     create_agent as create_support_agent,
 )
+from typing import Optional
+from enum import Enum
+from pydantic import SecretStr
 
 NAME = "supervisor_agent"
 MODEL = "o3-mini"
@@ -43,16 +46,18 @@ SUGGESTIONS = [
 
 
 def create_agent(
-    agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None,
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Init
-    tools = []
-    agents = []
+    tools: list = []
+    agents: list = []
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
 
     # Set configuration
@@ -90,8 +95,10 @@ class SupervisorAgent(Agent):
         name: str = NAME.capitalize(),
         description: str = "API endpoints to call the Supervisor agent completion.",
         description_stream: str = "API endpoints to call the Supervisor agent stream completion.",
-        tags: list[str] = [],
-    ):
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )
