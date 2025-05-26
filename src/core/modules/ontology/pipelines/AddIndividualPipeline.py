@@ -44,13 +44,13 @@ class AddIndividualPipelineConfiguration(PipelineConfiguration):
 
 class AddIndividualPipelineParameters(PipelineParameters):
     class_uri: str = Field(
-        ...,
         description="Class URI to add the individual to. Use tool `ontology_search_class` to search for a class URI in the ontology.",
         pattern="https?:\/\/.*",
         example="https://www.commoncoreontologies.org/ont00000443",
     )
     individual_label: str = Field(
-        ..., description="Individual label to add to the ontology.", example="Naas.ai"
+        description="Individual label to add to the ontology.",
+        example="Naas.ai"
     )
 
 
