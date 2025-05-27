@@ -7,57 +7,180 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix cco: <https://www.commoncoreontologies.org/> .
-@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix abi: <http://ontology.naas.ai/abi/linkedin#> .
 
-<http://ontology.naas.ai/abi/linkedin.ttl> rdf:type owl:Ontology ;
-                                        owl:imports <> ;
-                                        owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/linkedin.ttl> ;
-                                        dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-                                        dc:description "Application ontology for LinkedIn."@en ;
-                                        dc:license "" ;
-                                        dc:title "LinkedIn Application Ontology" .
+<http://ontology.naas.ai/abi/LinkedInOntology.ttl> rdf:type owl:Ontology ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Application ontology for LinkedIn."@en ;
+    dc:title "LinkedIn Application Ontology" .
 
 #################################################################
 #    Classes
 #################################################################
 
-abi:LinkedInPage a owl:Class ;
+abi:SocialPage a owl:Class ;
     rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "Social Page" ;
+    skos:definition "A page on a social media platform that represents an entity's presence, containing information specific to that entity type." ;
+    skos:example "A social media page could be a Facebook profile, LinkedIn company page, or Twitter account." ;
+    rdfs:comment "A social page must be registered on a social media platform" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInPage a owl:Class ;
+    rdfs:subClassOf abi:SocialPage ;
     rdfs:label "LinkedIn Page" ;
     skos:definition "A LinkedIn page that represents an entity's presence on LinkedIn, containing information specific to that entity type such as professional details, organizational information, or educational programs." ;
     skos:example "A LinkedIn page could be a profile page showing work experience, a company page with job postings, or a school page highlighting academic programs." ;
-    rdfs:comment "A LinkedIn page must be registered in https://www.linkedin.com/" .
+    rdfs:comment "A LinkedIn page must be registered in https://www.linkedin.com/" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
 
 abi:LinkedInProfilePage a owl:Class ;
     rdfs:subClassOf abi:LinkedInPage ;
     rdfs:label "LinkedIn Profile Page" ;
     skos:definition "A LinkedIn profile page that includes information such as a person's professional history, skills, and endorsements, representing the individual's professional identity on the web." ;
     skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues." ;
-    rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" .
+    rdfs:comment "A LinkedIn profile page must be registered in https://www.linkedin.com/in/" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
 
 abi:LinkedInCompanyPage a owl:Class ;
     rdfs:subClassOf abi:LinkedInPage ;
     rdfs:label "LinkedIn Company Page" ;
     skos:definition "A LinkedIn company page that includes information such as the company's overview, products/services, job postings, and updates, representing the organization's professional presence on LinkedIn." ;
     skos:example "Microsoft's LinkedIn company page, which showcases their company information, latest news, job opportunities, and employee insights." ;
-    rdfs:comment "A LinkedIn company page must be registered in https://www.linkedin.com/company/" .
+    rdfs:comment "A LinkedIn company page must be registered in https://www.linkedin.com/company/" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
 
 abi:LinkedInSchoolPage a owl:Class ;
     rdfs:subClassOf abi:LinkedInPage ;
     rdfs:label "LinkedIn School Page" ;
     skos:definition "A LinkedIn school page that includes information about the school's programs, faculty, students, and events, representing the educational institution's professional presence on LinkedIn." ;
-    rdfs:comment "A LinkedIn school page must be registered in https://www.linkedin.com/school/" .
+    rdfs:comment "A LinkedIn school page must be registered in https://www.linkedin.com/school/" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
 
-abi:ActOfPostingOnLinkedIn a owl:Class ;
-    rdfs:label "Act of Posting on LinkedIn"@en ;
-    rdfs:subClassOf cco:ont00000517 ;
-    skos:definition "A process of creating and publishing content on the LinkedIn platform."@en ;
-    skos:example "When a user composes a post about their recent job promotion and shares it with their professional network on the LinkedIn platform."@en .
+abi:LinkedInJobSearchPage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInPage ;
+    rdfs:label "LinkedIn Job Search Page" ;
+    skos:definition "A LinkedIn job search page that includes information about job opportunities, company reviews, and industry trends, representing the job search process on LinkedIn." ;
+    rdfs:comment "A LinkedIn job search page must be registered in https://www.linkedin.com/jobs/" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry".
+abi:LinkedInProperty a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "LinkedIn Property" ;
+    skos:definition "Represents a property of a LinkedIn entity." ;
+    skos:example "John Doe's LinkedIn profile page has properties such as Profile, Education, Position, etc." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
 
-abi:LinkedInPost a owl:Class ;
-    rdfs:label "LinkedIn Post"@en ;
-    rdfs:subClassOf bfo:BFO_0000031 ; # Generically dependent continuant
-    skos:definition "A social media post with associated content and metrics"@en .
+abi:LinkedInProfile a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Profile" ;
+    skos:definition "Represents a profile of a LinkedIn entity stored in type 'com.linkedin.voyager.identity.profile.Profile'." ;
+    skos:example "John Doe's Profile included entityUrn, firstName, lastName, birthDate, headline, summary, etc." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInPatent a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Patent" ;
+    skos:definition "Represents patent information on a LinkedIn profile." ;
+    skos:example "A patent listing on a LinkedIn profile showing invention details and patent numbers." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInHonor a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Honor" ;
+    skos:definition "Represents honors and awards received by a LinkedIn profile holder." ;
+    skos:example "An award or recognition listed on a LinkedIn profile such as 'Employee of the Year'." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInEducation a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Education" ;
+    skos:definition "Represents educational background information on a LinkedIn profile." ;
+    skos:example "Educational details like university degrees, majors, and graduation dates." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInVolunteerExperience a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Volunteer Experience" ;
+    skos:definition "Represents volunteer work experience on a LinkedIn profile." ;
+    skos:example "Volunteer work at non-profit organizations or community service activities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInVolunteerCause a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Volunteer Cause" ;
+    skos:definition "Represents causes supported through volunteer work on LinkedIn." ;
+    skos:example "Social causes or charitable organizations supported by the profile holder." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInTestScore a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Test Score" ;
+    skos:definition "Represents standardized test scores on a LinkedIn profile." ;
+    skos:example "Test scores from GMAT, GRE, or professional certification exams." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInSkill a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Skill" ;
+    skos:definition "Represents professional skills listed on a LinkedIn profile." ;
+    skos:example "Technical skills, soft skills, and other professional competencies." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInProject a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Project" ;
+    skos:definition "Represents projects worked on by the LinkedIn profile holder." ;
+    skos:example "Professional or academic projects with descriptions and outcomes." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInCertification a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Certification" ;
+    skos:definition "Represents professional certifications on a LinkedIn profile." ;
+    skos:example "Industry certifications, professional licenses, or training completions." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInLanguage a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Language" ;
+    skos:definition "Represents language proficiencies on a LinkedIn profile." ;
+    skos:example "Language skills with proficiency levels like native, fluent, or intermediate." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInCourse a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Course" ;
+    skos:definition "Represents courses taken by the LinkedIn profile holder." ;
+    skos:example "Professional development courses or academic coursework." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInPublication a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Publication" ;
+    skos:definition "Represents published works on a LinkedIn profile." ;
+    skos:example "Research papers, articles, books, or other published content." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInPositionGroup a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Position Group" ;
+    skos:definition "Represents grouped positions at the same company on LinkedIn." ;
+    skos:example "Multiple roles held at the same organization over time." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInOrganization a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Organization" ;
+    skos:definition "Represents organizational affiliations on LinkedIn." ;
+    skos:example "Professional organizations, industry groups, or alumni associations." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:LinkedInPosition a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Position" ;
+    skos:definition "Represents job positions held by the LinkedIn profile holder." ;
+    skos:example "Current and past job roles with titles, companies, and descriptions." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
 
 abi:LinkedInIndustry a owl:Class ;
     rdfs:subClassOf abi:Industry ;
@@ -65,51 +188,298 @@ abi:LinkedInIndustry a owl:Class ;
     skos:definition "Industry referenced on LinkedIn." ;
     skos:example "Events Services, Hospitality, Travel Arrangements, etc." .
 
-abi:LinkedInOrganizationSize a owl:Class ;
-    rdfs:subClassOf cco:ont00000958 ;
-    rdfs:label "LinkedIn Organization Size"@en ;
-    skos:definition "Represents a range of staff size within an organization." ;
-    skos:example "Micro Enterprise, Small Enterprise, SMEs, Large Enterprise." ;
-    rdfs:comment "LinkedIn organization sizes are used to categorize the size of an organization." .
+abi:LinkedInFollowingInfo a owl:Class ;
+    rdfs:subClassOf abi:LinkedInProperty ;
+    rdfs:label "LinkedIn Following Info" ;
+    skos:definition "Information about following relationships on LinkedIn, including follower counts and following status." ;
+    skos:example "A company page having 521,188 followers and tracking whether a user follows that page." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
 
 #################################################################
 #    Object Properties
 #################################################################
 
-abi:hasLinkedInPage a owl:ObjectProperty ;
+abi:hasSocialPage a owl:ObjectProperty ;
     rdfs:domain [ rdf:type owl:Class ;
                   owl:unionOf ( cco:ont00001180
                                cco:ont00001262
                              )
                 ] ;
-    rdfs:range abi:LinkedInPage ;
-    owl:inverseOf abi:isLinkedInPageOf ;
-    rdfs:label "has linkedin page"@en ;
-    skos:definition "Relates an entity to its LinkedIn page."@en ;
-    skos:example "John Doe's LinkedIn profile page, which lists his work experience at various companies, skills such as programming and data analysis, and endorsements from colleagues."@en .
+    rdfs:range abi:SocialPage ;
+    rdfs:label "has social page"@en ;
+    skos:definition "Relates an person or organization to its social media pages."@en ;
+    skos:example "John Doe's social media pages on various platforms like LinkedIn, Twitter, etc."@en ;
+    owl:inverseOf abi:isSocialPageOf .
 
-abi:isLinkedInPageOf a owl:ObjectProperty ;
-    rdfs:domain abi:LinkedInPage ;
+abi:isSocialPageOf a owl:ObjectProperty ;
+    rdfs:domain abi:SocialPage ;
     rdfs:range [ rdf:type owl:Class ;
                  owl:unionOf ( cco:ont00001180
                               cco:ont00001262
                             )
                ] ;
-    owl:inverseOf abi:hasLinkedInPage ;
-    rdfs:label "is linkedin page of"@en ;
-    skos:definition "Relates a LinkedIn page to the entity it represents."@en ;
-    skos:example "A LinkedIn profile page that represents John Doe's professional presence."@en .
+    owl:inverseOf abi:hasSocialPage ;
+    rdfs:label "is social page of"@en ;
+    skos:definition "Relates a social media page to the person or organization it represents."@en ;
+    skos:example "A social media page that represents John Doe's online presence."@en .
+
+abi:hasProfile a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfilePage ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "has profile"@en ;
+    skos:definition "Relates a LinkedIn profile page to its profile."@en ;
+    skos:example "John Doe's LinkedIn profile page has a profile with a first name, last name, etc."@en .
+
+abi:isProfileOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProfilePage ;
+    rdfs:label "is profile of"@en ;
+    skos:definition "Relates a LinkedIn profile to the LinkedIn profile page it belongs to."@en ;
+    skos:example "John Doe's profile is the profile of his LinkedIn profile page."@en .
+
+abi:hasPatent a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has patent"@en ;
+    skos:definition "Relates a LinkedIn profile to its patents."@en ;
+    skos:example "John Doe's profile has patents listed on LinkedIn."@en ;
+    owl:inverseOf abi:isPatentOf .
+
+abi:isPatentOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is patent of"@en ;
+    skos:definition "Relates a patent to the LinkedIn profile it belongs to."@en ;
+    skos:example "A patent is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasPatent .
+
+abi:hasHonor a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has honor"@en ;
+    skos:definition "Relates a LinkedIn profile to its honors."@en ;
+    skos:example "John Doe's profile has honors and awards listed on LinkedIn."@en ;
+    owl:inverseOf abi:isHonorOf .
+
+abi:isHonorOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is honor of"@en ;
+    skos:definition "Relates an honor to the LinkedIn profile it belongs to."@en ;
+    skos:example "An honor is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasHonor .
+
+abi:hasEducation a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has education"@en ;
+    skos:definition "Relates a LinkedIn profile to its education history."@en ;
+    skos:example "John Doe's profile has education details listed on LinkedIn."@en ;
+    owl:inverseOf abi:isEducationOf .
+
+abi:isEducationOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is education of"@en ;
+    skos:definition "Relates an education entry to the LinkedIn profile it belongs to."@en ;
+    skos:example "An education entry is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasEducation .
+
+abi:hasVolunteerExperience a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has volunteer experience"@en ;
+    skos:definition "Relates a LinkedIn profile to its volunteer experience."@en ;
+    skos:example "John Doe's profile has volunteer work listed on LinkedIn."@en ;
+    owl:inverseOf abi:isVolunteerExperienceOf .
+
+abi:isVolunteerExperienceOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is volunteer experience of"@en ;
+    skos:definition "Relates a volunteer experience to the LinkedIn profile it belongs to."@en ;
+    skos:example "A volunteer experience is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasVolunteerExperience .
+
+abi:hasVolunteerCause a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has volunteer cause"@en ;
+    skos:definition "Relates a LinkedIn profile to its volunteer causes."@en ;
+    skos:example "John Doe's profile has volunteer causes listed on LinkedIn."@en ;
+    owl:inverseOf abi:isVolunteerCauseOf .
+
+abi:isVolunteerCauseOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is volunteer cause of"@en ;
+    skos:definition "Relates a volunteer cause to the LinkedIn profile it belongs to."@en ;
+    skos:example "A volunteer cause is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasVolunteerCause .
+
+abi:hasTestScore a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has test score"@en ;
+    skos:definition "Relates a LinkedIn profile to its test scores."@en ;
+    skos:example "John Doe's profile has test scores listed on LinkedIn."@en ;
+    owl:inverseOf abi:isTestScoreOf .
+
+abi:isTestScoreOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is test score of"@en ;
+    skos:definition "Relates a test score to the LinkedIn profile it belongs to."@en ;
+    skos:example "A test score is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasTestScore .
+
+abi:hasSkill a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has skill"@en ;
+    skos:definition "Relates a LinkedIn profile to its skills."@en ;
+    skos:example "John Doe's profile has skills listed on LinkedIn."@en ;
+    owl:inverseOf abi:isSkillOf .
+
+abi:isSkillOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is skill of"@en ;
+    skos:definition "Relates a skill to the LinkedIn profile it belongs to."@en ;
+    skos:example "A skill is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasSkill .
+
+abi:hasProject a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has project"@en ;
+    skos:definition "Relates a LinkedIn profile to its projects."@en ;
+    skos:example "John Doe's profile has projects listed on LinkedIn."@en ;
+    owl:inverseOf abi:isProjectOf .
+
+abi:isProjectOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is project of"@en ;
+    skos:definition "Relates a project to the LinkedIn profile it belongs to."@en ;
+    skos:example "A project is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasProject .
+
+abi:hasCertification a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has certification"@en ;
+    skos:definition "Relates a LinkedIn profile to its certifications."@en ;
+    skos:example "John Doe's profile has certifications listed on LinkedIn."@en ;
+    owl:inverseOf abi:isCertificationOf .
+
+abi:isCertificationOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is certification of"@en ;
+    skos:definition "Relates a certification to the LinkedIn profile it belongs to."@en ;
+    skos:example "A certification is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasCertification .
+
+abi:hasLanguage a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has language"@en ;
+    skos:definition "Relates a LinkedIn profile to its languages."@en ;
+    skos:example "John Doe's profile has languages listed on LinkedIn."@en ;
+    owl:inverseOf abi:isLanguageOf .
+
+abi:isLanguageOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is language of"@en ;
+    skos:definition "Relates a language to the LinkedIn profile it belongs to."@en ;
+    skos:example "A language is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasLanguage .
+
+abi:hasCourse a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has course"@en ;
+    skos:definition "Relates a LinkedIn profile to its courses."@en ;
+    skos:example "John Doe's profile has courses listed on LinkedIn."@en ;
+    owl:inverseOf abi:isCourseOf .
+
+abi:isCourseOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is course of"@en ;
+    skos:definition "Relates a course to the LinkedIn profile it belongs to."@en ;
+    skos:example "A course is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasCourse .
+
+abi:hasPublication a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has publication"@en ;
+    skos:definition "Relates a LinkedIn profile to its publications."@en ;
+    skos:example "John Doe's profile has publications listed on LinkedIn."@en ;
+    owl:inverseOf abi:isPublicationOf .
+
+abi:isPublicationOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is publication of"@en ;
+    skos:definition "Relates a publication to the LinkedIn profile it belongs to."@en ;
+    skos:example "A publication is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasPublication .
+
+abi:hasPositionGroup a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has position group"@en ;
+    skos:definition "Relates a LinkedIn profile to its position groups."@en ;
+    skos:example "John Doe's profile has position groups listed on LinkedIn."@en ;
+    owl:inverseOf abi:isPositionGroupOf .
+
+abi:isPositionGroupOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is position group of"@en ;
+    skos:definition "Relates a position group to the LinkedIn profile it belongs to."@en ;
+    skos:example "A position group is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasPositionGroup .
+
+abi:hasOrganization a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has organization"@en ;
+    skos:definition "Relates a LinkedIn profile to its organizations."@en ;
+    skos:example "John Doe's profile has organizations listed on LinkedIn."@en ;
+    owl:inverseOf abi:isOrganizationOf .
+
+abi:isOrganizationOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is organization of"@en ;
+    skos:definition "Relates an organization to the LinkedIn profile it belongs to."@en ;
+    skos:example "An organization is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasOrganization .
+
+abi:hasPosition a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProfile ;
+    rdfs:range abi:LinkedInProperty ;
+    rdfs:label "has position"@en ;
+    skos:definition "Relates a LinkedIn profile to its positions."@en ;
+    skos:example "John Doe's profile has positions listed on LinkedIn."@en ;
+    owl:inverseOf abi:isPositionOf .
+
+abi:isPositionOf a owl:ObjectProperty ;
+    rdfs:domain abi:LinkedInProperty ;
+    rdfs:range abi:LinkedInProfile ;
+    rdfs:label "is position of"@en ;
+    skos:definition "Relates a position to the LinkedIn profile it belongs to."@en ;
+    skos:example "A position is listed on John Doe's LinkedIn profile."@en ;
+    owl:inverseOf abi:hasPosition .
 
 #################################################################
 #    Data properties
 #################################################################
-
-abi:page_name a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPage ;
-    rdfs:range xsd:string ;
-    rdfs:label "Page Name"@en ;
-    skos:definition "The name of the LinkedIn page."@en ;
-    skos:example "The name of John Doe's LinkedIn profile page is 'John Doe'."@en .
 
 abi:linkedin_id a owl:DatatypeProperty ;
     rdfs:domain abi:LinkedInPage ;
@@ -139,131 +509,35 @@ abi:linkedin_public_url a owl:DatatypeProperty ;
     skos:definition "The public URL of the LinkedIn page. It uses the LinkedIn Public ID as identifier."@en ;
     skos:example "The public URL of John Doe's LinkedIn profile page is 'https://www.linkedin.com/in/johndoe'."@en .
 
-abi:entity_urn a owl:DatatypeProperty ;
+abi:entityUrn a owl:DatatypeProperty ;
     rdfs:domain abi:LinkedInPage ;
     rdfs:range xsd:string ;
     rdfs:label "Entity URN"@en ;
     skos:definition "The URN of the entity."@en ;
     skos:example "The URN of the entity is 'urn:li:fs_normalized_company:1234567890'."@en .
 
-abi:summary a owl:DatatypeProperty ;
+abi:followerCount a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInFollowingInfo ;
+    rdfs:range xsd:nonNegativeInteger ;
+    rdfs:label "Follower Count"@en ;
+    skos:definition "The number of followers for a LinkedIn entity."@en ;
+    skos:example "A LinkedIn company page having 521,188 followers."@en .
+
+abi:localizedName a owl:DatatypeProperty ;
     rdfs:domain abi:LinkedInPage ;
     rdfs:range xsd:string ;
-    rdfs:label "Summary"@en ;
-    skos:definition "The summary of the LinkedIn page."@en ;
-    skos:example "The summary of the LinkedIn page is 'This is a summary of the LinkedIn page.'."@en .
+    rdfs:label "Localized Name"@en ;
+    skos:definition "The localized name of the entity."@en ;
+    skos:example "The localized name of the entity is 'Microsoft'."@en .
 
-abi:title a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
+abi:description a owl:DatatypeProperty ;
+    rdfs:domain abi:LinkedInPage ;
     rdfs:range xsd:string ;
-    rdfs:label "Title"@en ;
-    skos:definition "The title of the LinkedIn post."@en ;
-    skos:example "The title of the LinkedIn post is 'Announcing our new product'."@en .
+    rdfs:label "Description"@en ;
+    skos:definition "The description of the entity."@en ;
+    skos:example "The description of the entity is 'Microsoft is a software company that develops and sells software products and services.'."@en .
 
-abi:content a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:string ;
-    rdfs:label "Content"@en ;
-    skos:definition "The content of the LinkedIn post."@en ;
-    skos:example "The content of the LinkedIn post is 'We are excited to announce...'."@en .
 
-abi:author a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:string ;
-    rdfs:label "Author"@en ;
-    skos:definition "The author of the LinkedIn post."@en ;
-    skos:example "The author of the LinkedIn post is 'John Doe'."@en .
-
-abi:author_url a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:string ;
-    rdfs:label "Author URL"@en ;
-    skos:definition "The URL of the author's LinkedIn profile."@en ;
-    skos:example "The author URL is 'https://www.linkedin.com/in/johndoe'."@en .
-
-abi:published_date a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:dateTime ;
-    rdfs:label "Published Date"@en ;
-    skos:definition "The date when the LinkedIn post was published."@en ;
-    skos:example "The post was published on 2024-01-01T12:00:00."@en .
-
-abi:views a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Views"@en ;
-    skos:definition "The number of views on the LinkedIn post."@en ;
-    skos:example "The LinkedIn post has 1000 views."@en .
-
-abi:likes a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Likes"@en ;
-    skos:definition "The number of likes on the LinkedIn post."@en ;
-    skos:example "The LinkedIn post has 100 likes."@en .
-
-abi:comments a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Comments"@en ;
-    skos:definition "The number of comments on the LinkedIn post."@en ;
-    skos:example "The LinkedIn post has 50 comments."@en .
-
-abi:shares a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Shares"@en ;
-    skos:definition "The number of shares of the LinkedIn post."@en ;
-    skos:example "The LinkedIn post has 25 shares."@en .
-
-abi:engagements a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Engagements"@en ;
-    skos:definition "The total number of engagements on the LinkedIn post."@en ;
-    skos:example "The LinkedIn post has 175 total engagements."@en .
-
-abi:engagement_score a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:float ;
-    rdfs:label "Engagement Score"@en ;
-    skos:definition "The engagement score of the LinkedIn post."@en ;
-    skos:example "The LinkedIn post has an engagement score of 4.5."@en .
-
-abi:type a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:string ;
-    rdfs:label "Type"@en ;
-    skos:definition "The type of the LinkedIn post."@en ;
-    skos:example "The type of the LinkedIn post is 'article'."@en .
-
-abi:length a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Length"@en ;
-    skos:definition "The length of the LinkedIn post content."@en ;
-    skos:example "The LinkedIn post is 500 characters long."@en .
-
-abi:url a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:string ;
-    rdfs:label "URL"@en ;
-    skos:definition "The URL of the LinkedIn post."@en ;
-    skos:example "The URL of the LinkedIn post is 'https://www.linkedin.com/posts/johndoe_announcement-activity-123456789'."@en .
-
-abi:date_extract a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:string ;
-    rdfs:label "Date Extract"@en ;
-    skos:definition "The date when the LinkedIn post data was extracted."@en ;
-    skos:example "The post data was extracted on 2024-01-02."@en .
-
-abi:scenario_order a owl:DatatypeProperty ;
-    rdfs:domain abi:LinkedInPost ;
-    rdfs:range xsd:integer ;
-    rdfs:label "Scenario Order"@en ;
-    skos:definition "The order of the post in a scenario."@en ;
-    skos:example "This post is number 3 in the scenario sequence."@en .
 
 
 
