@@ -6,7 +6,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from abi import logger
 from pydantic import Field
-from typing import Tuple, Annotated
+from typing import Annotated
 from rdflib import (
     Graph,
     URIRef,
@@ -66,7 +66,7 @@ class AddIndividualPipeline(Pipeline):
             configuration.search_individual_configuration
         )
 
-    def run(self, parameters: PipelineParameters) -> Tuple[URIRef, Graph]:
+    def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, AddIndividualPipelineParameters):
             raise ValueError("Parameters must be of type AddIndividualPipelineParameters")
         
@@ -83,9 +83,7 @@ class AddIndividualPipeline(Pipeline):
                 logger.debug(
                     f"🔍 Found individual '{parameters.individual_label}' in the ontology: {individual_uri} from class: {parameters.class_uri}"
                 )
-                return URIRef(
-                    individual_uri
-                ), self.__configuration.triple_store.get_subject_graph(individual_uri)
+                return self.__configuration.triple_store.get_subject_graph(individual_uri)
 
         # Init graph
         graph = Graph()
@@ -100,7 +98,7 @@ class AddIndividualPipeline(Pipeline):
         graph.add((individual_uri, RDF.type, URIRef(parameters.class_uri)))
         graph.add((individual_uri, RDFS.label, Literal(parameters.individual_label)))
         self.__configuration.triple_store.insert(graph)
-        return individual_uri, graph
+        return graph
 
     def as_tools(self) -> list[BaseTool]:
         return [
@@ -113,8 +111,8 @@ class AddIndividualPipeline(Pipeline):
                 args_schema=AddIndividualPipelineParameters,
             ),
             StructuredTool(
-                name="add_commercial_organization_to_triple_store",
-                description="Add a new commercial organization to triple store.",
+                name="add_commercial_organization",
+                description="Add a new commercial organization to ontology.",
                 func=lambda **kwargs: self.run(
                     AddIndividualPipelineParameters(
                         class_uri="https://www.commoncoreontologies.org/ont00000443",
@@ -124,11 +122,66 @@ class AddIndividualPipeline(Pipeline):
                 args_schema=AddIndividualPipelineParameters,
             ),
             StructuredTool(
-                name="add_person_to_triple_store",
-                description="Add a new person to triple store.",
+                name="add_person",
+                description="Add a new person to ontology.",
                 func=lambda **kwargs: self.run(
                     AddIndividualPipelineParameters(
                         class_uri="https://www.commoncoreontologies.org/ont00001262",
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
+            StructuredTool(
+                name="add_website",
+                description="Add a new website to ontology.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri=ABI.Website,
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
+            StructuredTool(
+                name="add_skill",
+                description="Add a new skill to ontology.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri=CCO.ont00000089,
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
+            StructuredTool(
+                name="add_legal_name",
+                description="Add a new legal name of a commercial organization.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri=CCO.ont00001331,
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
+            StructuredTool(
+                name="add_ticker_symbol",
+                description="Add a new ticker symbol to triple store.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri=ABI.Ticker,
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
+            StructuredTool(
+                name="add_linkedin_page",
+                description="Add a new LinkedIn page represented by a profile or organization to triple store.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri=ABI.LinkedInProfilePage,
                         individual_label=kwargs["individual_label"]
                     )
                 ),

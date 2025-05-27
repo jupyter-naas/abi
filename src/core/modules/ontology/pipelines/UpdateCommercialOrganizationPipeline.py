@@ -66,7 +66,7 @@ class UpdateCommercialOrganizationPipeline(Pipeline):
         # Initialize graphs
         graph_insert = Graph()
 
-        # Create or get subject URI & graph
+        # Get subject URI & graph
         individual_uri = URIRef(parameters.individual_uri)
         graph = self.__configuration.triple_store.get_subject_graph(individual_uri)
 
