@@ -46,6 +46,10 @@ class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
         ...,
         description="The graph serialized as turtle format"
     )]
+    ontology_id: Annotated[str | None, Field(
+        ...,
+        description="The ID of the ontology"
+    )] = None
     label: Annotated[str, Field(
         ...,
         description="The label of the ontology"
@@ -77,7 +81,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
         # Initialize parameters
         logger.debug(f"==> Converting ontology graph to YAML: {parameters.label}")
         yaml_data = None
-        ontology_id: str | None = None
+        ontology_id = parameters.ontology_id
 
         # Create Graph from turtle string
         g = Graph()
@@ -93,7 +97,13 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
             visibility="public",
         )
         # Save asset URL to JSON
-        asset_url = asset.get("asset").get("url")
+        if asset is None:
+            raise ValueError("Failed to upload asset to Naas")
+            
+        asset_url = asset.get("asset", {}).get("url")
+        if not asset_url:
+            raise ValueError("Asset URL not found in response")
+            
         if asset_url.endswith("/"):
             asset_url = asset_url[:-1]
 

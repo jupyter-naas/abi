@@ -1,7 +1,7 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
+from langchain_core.tools import tool, Tool
 
 # from langchain_anthropic import ChatAnthropic
 # from langchain_ollama import ChatOllama
@@ -42,6 +42,13 @@ def execute_python_code(code: str) -> Any:
                 os.remove(temp_file_path)
     except Exception as e:
         return f"Error: {e}"
+
+# Convert the function to a Tool instance
+execute_python_code_tool = Tool.from_function(
+    func=execute_python_code,
+    name="execute_python_code",
+    description="Execute python code."
+)
 
 
 def create_agent(
@@ -116,7 +123,7 @@ def create_agent(
                     temperature=1,
                     api_key=SecretStr(secret.get("OPENAI_API_KEY")),
                 ),
-                tools=[execute_python_code],
+                tools=[execute_python_code_tool],
                 configuration=AgentConfiguration(
                     system_prompt="You are a python code execution agent. You can execute python code and return the result. ONLY EXECUTE SAFE CODE THAT WON'T HARM THE SYSTEM. The PYTHON CODE MUST PRINT THE RESULT AND NOT RETURN IT FOR YOU TO GRAB THE RESULT."
                 ),
