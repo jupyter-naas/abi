@@ -26,7 +26,7 @@ If you don't have access to any tool, ask the user to set their access token in 
 Always be clear and professional in your communication while helping users interact with Naas services.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 """
-SUGGESTIONS = []
+SUGGESTIONS: list[str] = []
 
 
 def create_agent(

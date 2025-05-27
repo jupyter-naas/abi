@@ -43,18 +43,17 @@ class AddIndividualPipelineConfiguration(PipelineConfiguration):
     triple_store: ITripleStoreService
     search_individual_configuration: SearchIndividualWorkflowConfiguration
 
-
+@dataclass
 class AddIndividualPipelineParameters(PipelineParameters):
+    individual_label: str = Field(
+        description="Individual label to add to the ontology.",
+        example="Naas.ai"
+    )
     class_uri: str = Field(
         description="Class URI to add the individual to. Use tool `ontology_search_class` to search for a class URI in the ontology.",
         pattern="https?:\/\/.*",
         example="https://www.commoncoreontologies.org/ont00000443"
     )
-    individual_label: str = Field(
-        description="Individual label to add to the ontology.",
-        example="Naas.ai"
-    )
-
 
 class AddIndividualPipeline(Pipeline):
     """Pipeline for adding a named individual."""
@@ -99,15 +98,12 @@ class AddIndividualPipeline(Pipeline):
         graph.add((individual_uri, RDF.type, URIRef(parameters.class_uri)))
         graph.add((individual_uri, RDFS.label, Literal(parameters.individual_label)))
         self.__configuration.triple_store.insert(graph)
-        logger.debug(
-            f"✅ Added individual '{parameters.individual_label}' to the ontology: {individual_uri} from class: {parameters.class_uri}"
-        )
         return individual_uri, graph
 
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="add_individual",
+                name="add_individual_to_triple_store",
                 description="Add a new individual/instance to triple store.",
                 func=lambda **kwargs: self.run(
                     AddIndividualPipelineParameters(**kwargs)

@@ -356,7 +356,7 @@ class GithubIntegration(Integration):
         limit: Optional[int] = -1,
         since: Optional[str] = None,
         labels: Optional[str] = None,
-    ) -> Dict:
+    ) -> List[Dict]:
         """Get issues from a repository.
 
         Args:
@@ -422,7 +422,7 @@ class GithubIntegration(Integration):
         since: Optional[str] = None,
         per_page: int = 30,
         page: int = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """List comments on issues and pull requests for a repository.
 
         Args:
@@ -1090,7 +1090,7 @@ def as_tools(configuration: GithubIntegrationConfiguration):
             func=lambda org, repo_name: integration.delete_organization_repository(
                 org, repo_name
             ),
-            args_schema=None,
+            args_schema=DeleteOrganizationRepositorySchema,
         ),
         StructuredTool(
             name="github_list_repository_activities",

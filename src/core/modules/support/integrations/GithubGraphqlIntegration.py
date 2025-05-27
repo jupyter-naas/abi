@@ -76,7 +76,7 @@ class GithubGraphqlIntegration(Integration):
                 f"Github GraphQL API request failed: {str(e)}"
             )
 
-    def get_project_node_id(self, organization: str, number: int) -> str:
+    def get_project_node_id(self, organization: str, number: int) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Get the node ID of an organization project.
 
         Args:
@@ -164,7 +164,7 @@ class GithubGraphqlIntegration(Integration):
         variables = {"projectId": project_node_id}
         return self.execute_query(query, variables)
 
-    def get_project_fields(self, project_id: str):
+    def get_project_fields(self, project_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Get information about project fields in a GitHub Project.
 
         Args:
@@ -214,7 +214,7 @@ class GithubGraphqlIntegration(Integration):
         variables = {"projectId": project_id}
         return self.execute_query(query, variables)
 
-    def get_item_id_from_node_id(self, node_id: str) -> Dict[str, Any]:
+    def get_item_id_from_node_id(self, node_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Retrieves a project item ID from a node ID using the GitHub GraphQL API.
 
         Args:
@@ -260,7 +260,7 @@ class GithubGraphqlIntegration(Integration):
         variables = {"nodeId": node_id}
         return self.execute_query(query, variables)
 
-    def get_item_details(self, item_id: str) -> Dict[str, Any]:
+    def get_item_details(self, item_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Retrieves a project item using its ID from the GitHub GraphQL API.
 
         Args:
@@ -351,7 +351,7 @@ class GithubGraphqlIntegration(Integration):
         priority_field_id: Optional[str] = None,
         status_option_id: Optional[str] = None,
         priority_option_id: Optional[str] = None,
-    ) -> dict:
+    ) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """
         Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields.
 
@@ -382,11 +382,13 @@ class GithubGraphqlIntegration(Integration):
 
         # Add issue to project
         variables = {"projectId": project_node_id, "issueId": issue_node_id}
+        add_result = self.execute_query(add_mutation, variables)
 
-        data = self.execute_query(add_mutation, variables)
+        if isinstance(add_result, IntegrationConnectionError):
+            return add_result
 
         # Get the item ID from the response
-        item_id = data["data"]["addProjectV2ItemById"]["item"]["id"]
+        item_id = add_result["data"]["addProjectV2ItemById"]["item"]["id"]
 
         # Update status field if provided
         if status_field_id and status_option_id:
@@ -410,7 +412,9 @@ class GithubGraphqlIntegration(Integration):
                 "fieldId": status_field_id,
                 "optionId": status_option_id,
             }
-            data = self.execute_query(status_mutation, variables)
+            status_result = self.execute_query(status_mutation, variables)
+            if isinstance(status_result, IntegrationConnectionError):
+                return status_result
 
         # Update priority field if provided
         if priority_field_id and priority_option_id:
@@ -434,9 +438,11 @@ class GithubGraphqlIntegration(Integration):
                 "fieldId": priority_field_id,
                 "optionId": priority_option_id,
             }
-            data = self.execute_query(priority_mutation, variables)
+            priority_result = self.execute_query(priority_mutation, variables)
+            if isinstance(priority_result, IntegrationConnectionError):
+                return priority_result
 
-        return data
+        return add_result
 
 
 def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
