@@ -7,6 +7,8 @@ from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
 from langchain_core.tools import StructuredTool, BaseTool
 from typing import Annotated
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
+from fastapi import APIRouter
+from enum import Enum
 
 
 @dataclass
@@ -75,3 +77,16 @@ class UpdateWebsitePipeline(Pipeline):
                 args_schema=UpdateWebsitePipelineParameters,
             )
         ] 
+    
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None 
