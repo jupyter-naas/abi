@@ -111,7 +111,29 @@ class AddIndividualPipeline(Pipeline):
                     AddIndividualPipelineParameters(**kwargs)
                 ),
                 args_schema=AddIndividualPipelineParameters,
-            )
+            ),
+            StructuredTool(
+                name="add_commercial_organization_to_triple_store",
+                description="Add a new commercial organization to triple store.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri="https://www.commoncoreontologies.org/ont00000443",
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
+            StructuredTool(
+                name="add_person_to_triple_store",
+                description="Add a new person to triple store.",
+                func=lambda **kwargs: self.run(
+                    AddIndividualPipelineParameters(
+                        class_uri="https://www.commoncoreontologies.org/ont00001262",
+                        individual_label=kwargs["individual_label"]
+                    )
+                ),
+                args_schema=AddIndividualPipelineParameters,
+            ),
         ]
 
     def as_api(
