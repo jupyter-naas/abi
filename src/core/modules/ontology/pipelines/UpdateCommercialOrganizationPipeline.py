@@ -5,34 +5,24 @@ from dataclasses import dataclass
 from pydantic import Field
 from typing import Optional, Annotated
 from rdflib import URIRef, Literal, Graph
-from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
-    AddIndividualPipeline,
-    AddIndividualPipelineConfiguration,
-    AddIndividualPipelineParameters,
-    ABI,
-    CCO,
-    URI_REGEX,
-)
+from abi.utils.Graph import ABI,URI_REGEX
 from fastapi import APIRouter
 from enum import Enum
 
 @dataclass
-class AddCommercialOrganizationPipelineConfiguration(PipelineConfiguration):
-    """Configuration for AddCommercialOrganizationPipeline.
+class UpdateCommercialOrganizationPipelineConfiguration(PipelineConfiguration):
+    """Configuration for UpdateCommercialOrganizationPipeline.
 
     Attributes:
         triple_store (ITripleStoreService): The triple store service to use
-        add_individual_pipeline_configuration (AddIndividualPipelineConfiguration): The configuration for the add individual pipeline
     """
 
     triple_store: ITripleStoreService
-    add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
-
-class AddCommercialOrganizationPipelineParameters(PipelineParameters):
-    label: Annotated[str, Field(
-        description="Name of the commercial organization to be added in class: https://www.commercoreontologies.org/ont00000443",
-        example="Naas.ai"
+class UpdateCommercialOrganizationPipelineParameters(PipelineParameters):
+    individual_uri: Annotated[str, Field(
+        description="URI of the commercial organization extracted from class: https://www.commercoreontologies.org/ont00000443",
+        pattern=URI_REGEX
     )]
     legal_uri: Annotated[Optional[str], Field(
         default=None,
@@ -60,34 +50,25 @@ class AddCommercialOrganizationPipelineParameters(PipelineParameters):
         pattern="https?:\/\/.*"
     )]
 
+class UpdateCommercialOrganizationPipeline(Pipeline):
+    """Pipeline for updating a commercial organization in the ontology."""
 
-class AddCommercialOrganizationPipeline(Pipeline):
-    """Pipeline for adding a new commercial organization to the ontology."""
+    __configuration: UpdateCommercialOrganizationPipelineConfiguration
 
-    __configuration: AddCommercialOrganizationPipelineConfiguration
-
-    def __init__(self, configuration: AddCommercialOrganizationPipelineConfiguration):
+    def __init__(self, configuration: UpdateCommercialOrganizationPipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__add_individual_pipeline = AddIndividualPipeline(
-            configuration.add_individual_pipeline_configuration
-        )
 
     def run(self, parameters: PipelineParameters) -> Graph:
-        if not isinstance(parameters, AddCommercialOrganizationPipelineParameters):
-            raise ValueError("Parameters must be of type AddCommercialOrganizationPipelineParameters")
+        if not isinstance(parameters, UpdateCommercialOrganizationPipelineParameters):
+            raise ValueError("Parameters must be of type UpdateCommercialOrganizationPipelineParameters")
         
         # Initialize graphs
         graph_insert = Graph()
 
         # Create or get subject URI & graph
-        individual_uri, graph = self.__add_individual_pipeline.run(
-            AddIndividualPipelineParameters(
-                class_uri=CCO.ont00000443,
-                individual_label=parameters.label
-            )
-        )
-        individual_uri = URIRef(individual_uri)
+        individual_uri = URIRef(parameters.individual_uri)
+        graph = self.__configuration.triple_store.get_subject_graph(individual_uri)
 
         # Update properties
         if parameters.legal_uri:
@@ -119,12 +100,12 @@ class AddCommercialOrganizationPipeline(Pipeline):
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="add_commercial_organization",
-                description="Add a commercial organization with a name and optional website URL to the ontology. Use your internal knowledge to find the website URL.",
+                name="update_commercial_organization",
+                description="Update a commercial organization properties",
                 func=lambda **kwargs: self.run(
-                    AddCommercialOrganizationPipelineParameters(**kwargs)
+                    UpdateCommercialOrganizationPipelineParameters(**kwargs)
                 ),
-                args_schema=AddCommercialOrganizationPipelineParameters,
+                args_schema=UpdateCommercialOrganizationPipelineParameters,
             )
         ]
 

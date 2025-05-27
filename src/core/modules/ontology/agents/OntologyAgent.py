@@ -22,9 +22,9 @@ from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
 )
 
 # Specialized
-from src.core.modules.ontology.pipelines.AddCommercialOrganizationPipeline import (
-    AddCommercialOrganizationPipeline,
-    AddCommercialOrganizationPipelineConfiguration,
+from src.core.modules.ontology.pipelines.UpdateCommercialOrganizationPipeline import (
+    UpdateCommercialOrganizationPipeline,
+    UpdateCommercialOrganizationPipelineConfiguration,
 )
 from src.core.modules.ontology.pipelines.AddLinkedInPagePipeline import (
     AddLinkedInPagePipeline,
@@ -202,15 +202,10 @@ def create_agent(
     add_skill_pipeline = AddSkillPipeline(add_skill_pipeline_configuration)
     tools += add_skill_pipeline.as_tools()
 
-    add_commercial_organization_pipeline_configuration = (
-        AddCommercialOrganizationPipelineConfiguration(
-            triple_store, add_individual_pipeline_configuration
-        )
-    )
-    add_commercial_organization_pipeline = AddCommercialOrganizationPipeline(
-        add_commercial_organization_pipeline_configuration
-    )
-    tools += add_commercial_organization_pipeline.as_tools()
+    # Update Commercial Organization
+    tools += UpdateCommercialOrganizationPipeline(
+        UpdateCommercialOrganizationPipelineConfiguration(triple_store)
+    ).as_tools()
 
     add_linkedin_page_pipeline_configuration = AddLinkedInPagePipelineConfiguration(
         triple_store, add_individual_pipeline_configuration
