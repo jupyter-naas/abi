@@ -1087,7 +1087,7 @@ def as_tools(configuration: GithubIntegrationConfiguration):
         StructuredTool(
             name="github_delete_organization_repository",
             description="Delete a repository for an organization",
-            func=lambda org, repo_name: integration.delete_organization_repository(
+            func=lambda org, repo_name: integration.delete_repository(
                 org, repo_name
             ),
             args_schema=DeleteOrganizationRepositorySchema,
