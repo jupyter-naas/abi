@@ -11,25 +11,25 @@ from src.core.apps.terminal_agent.terminal_style import (
 from abi.services.agent.Agent import Agent
 from langgraph.types import Command
 from langchain_core.messages import ToolMessage
-from typing import Union
+from typing import Union, Optional, Any
 # import json
 
 
-def on_tool_response(message: Union[str, Command, dict, ToolMessage]):
+def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) -> None:
     try:
-        message_content = ""
+        message_content: str = ""
         if isinstance(message, str):
             message_content = message
         elif isinstance(message, dict) and "content" in message:
-            message_content = message["content"]
-        elif isinstance(message, Command):
-            message_content = message.content
+            message_content = str(message["content"])
+        # elif isinstance(message, Command):
+        #     message_content = str(message.kwargs.get("content", ""))
         elif isinstance(message, ToolMessage):
-            message_content = message.content
+            message_content = str(message.content)
         else:
             print("Unknown message type:")
             print(type(message))
-            message_content = message
+            message_content = str(message)
 
         # This would nicely display JSON but it takes a lot of screen space
         # try:
@@ -83,7 +83,7 @@ def run_agent(agent: Agent):
         print_divider()
 
 
-def generic_run_agent(agent_class: str = None):
+def generic_run_agent(agent_class: Optional[str] = None) -> None:
     """Run an agent dynamically loaded from the src/modules directory.
 
     This method provides a generic way to run any agent that is loaded from the modules
