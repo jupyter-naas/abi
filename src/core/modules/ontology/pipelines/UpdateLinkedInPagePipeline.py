@@ -6,30 +6,23 @@ from fastapi import APIRouter
 from pydantic import Field
 from typing import Optional, Annotated
 from rdflib import URIRef, Literal, Graph
-from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
-    AddIndividualPipeline,
-    AddIndividualPipelineConfiguration,
-    AddIndividualPipelineParameters,
-    ABI,
-)
+from abi.utils.Graph import ABI, URI_REGEX
 from enum import Enum
 
 @dataclass
-class AddLinkedInPagePipelineConfiguration(PipelineConfiguration):
-    """Configuration for AddLinkedInPagePipeline.
+class UpdateLinkedInPagePipelineConfiguration(PipelineConfiguration):
+    """Configuration for UpdateLinkedInPagePipeline.
 
     Attributes:
         triple_store (ITripleStoreService): The triple store service to use
     """
-
     triple_store: ITripleStoreService
-    add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
-class AddLinkedInPagePipelineParameters(PipelineParameters):
-    label: Annotated[Optional[str], Field(
-        None,
-        description="LinkedIn page URL to be added.",
-        pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+"
+
+class UpdateLinkedInPagePipelineParameters(PipelineParameters):
+    individual_uri: Annotated[str, Field(
+        description="URI of the LinkedIn page.",
+        pattern=URI_REGEX
     )]
     linkedin_id: Annotated[Optional[str], Field(
         None,
@@ -50,56 +43,29 @@ class AddLinkedInPagePipelineParameters(PipelineParameters):
     )]
     owner_uri: Annotated[Optional[str], Field(
         None,
-        description="URI of the owner from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443"
+        description="URI of the owner from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443",
+        pattern=URI_REGEX
     )]
 
-class AddLinkedInPagePipeline(Pipeline):
-    """Pipeline for adding a new LinkedIn page to the ontology."""
+class UpdateLinkedInPagePipeline(Pipeline):
+    """Pipeline for updating a LinkedIn page in the ontology."""
 
-    __configuration: AddLinkedInPagePipelineConfiguration
+    __configuration: UpdateLinkedInPagePipelineConfiguration
 
-    def __init__(self, configuration: AddLinkedInPagePipelineConfiguration):
+    def __init__(self, configuration: UpdateLinkedInPagePipelineConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
-        self.__add_individual_pipeline = AddIndividualPipeline(
-            configuration.add_individual_pipeline_configuration
-        )
 
     def run(self, parameters: PipelineParameters) -> Graph:
-        if not isinstance(parameters, AddLinkedInPagePipelineParameters):
-            raise ValueError("Parameters must be of type AddLinkedInPagePipelineParameters")
+        if not isinstance(parameters, UpdateLinkedInPagePipelineParameters):
+            raise ValueError("Parameters must be of type UpdateLinkedInPagePipelineParameters")
         
         # Initialize graphs
         graph_insert = Graph()
         
-        # Determine class URI and process LinkedIn URL components
-        class_uri = ABI.LinkedInProfilePage
-        if parameters.label:
-            if "/in/" in parameters.label:
-                identifier = "/in/"
-                class_uri = ABI.LinkedInProfilePage
-            elif "/company/" in parameters.label or "/showcase/" in parameters.label:
-                identifier = "/company/"
-                class_uri = ABI.LinkedInCompanyPage
-            elif "/school/" in parameters.label:
-                identifier = "/school/"
-                class_uri = ABI.LinkedInSchoolPage
-            
-            # Extract LinkedIn Public ID and URL if not provided
-            if not parameters.linkedin_public_id:
-                parameters.linkedin_public_id = parameters.label.split(identifier)[-1].split('/')[0]
-            if not parameters.linkedin_public_url:
-                parameters.linkedin_public_url = f"https://www.linkedin.com{identifier}{parameters.linkedin_public_id}"
-
-        # Create or get subject URI & graph
-        url_to_use = parameters.linkedin_public_url or parameters.label
-        individual_uri, graph = self.__add_individual_pipeline.run(
-            AddIndividualPipelineParameters(
-                class_uri=class_uri,
-                individual_label=url_to_use
-            )
-        )
-        individual_uri = URIRef(individual_uri)
+        # Get existing graph
+        graph = self.__configuration.triple_store.get_subject_graph(parameters.individual_uri)
+        individual_uri = URIRef(parameters.individual_uri)
 
         # Update properties
         if parameters.linkedin_id:
@@ -137,12 +103,12 @@ class AddLinkedInPagePipeline(Pipeline):
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_add_linkedin_page",
-                description="Add a LinkedIn page to the ontology. Requires the LinkedIn page URL.",
+                name="update_linkedin_page",
+                description="Update a LinkedIn page in the ontology.",
                 func=lambda **kwargs: self.run(
-                    AddLinkedInPagePipelineParameters(**kwargs)
+                    UpdateLinkedInPagePipelineParameters(**kwargs)
                 ),
-                args_schema=AddLinkedInPagePipelineParameters,
+                args_schema=UpdateLinkedInPagePipelineParameters,
             )
         ]
 
@@ -157,4 +123,4 @@ class AddLinkedInPagePipeline(Pipeline):
     ) -> None:
         if tags is None:
             tags = []
-        return None
+        return None 
