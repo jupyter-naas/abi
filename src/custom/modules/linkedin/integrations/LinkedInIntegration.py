@@ -1,16 +1,10 @@
-from typing import Dict, Optional
+from typing import Dict
 import requests
 import urllib.parse
 from dataclasses import dataclass
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
-from src import services
-import json
-from abi import logger
 import os
-from datetime import datetime
-import pydash
-
-LOGO_URL = "https://logo.clearbit.com/linkedin.com"
+from abi.utils.Storage import get_json, save_json
 
 @dataclass
 class LinkedInIntegrationConfiguration(IntegrationConfiguration):
@@ -54,8 +48,7 @@ class LinkedInIntegration(Integration):
             "X-Requested-With": "XMLHttpRequest",
             "X-Restli-Protocol-Version": "2.0.0"
         }
-
-    def _make_request(self, method: str, endpoint: str, params: Dict = None) -> Dict:
+    def _make_request(self, method: str, endpoint: str, params: Dict | None = None) -> Dict:
         """Make HTTP request to LinkedIn API."""
         url = f"{self.__configuration.base_url}{endpoint}"
 
@@ -72,33 +65,13 @@ class LinkedInIntegration(Integration):
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
         
-    def _get_cached_data(self, prefix: str, filename: str) -> Optional[dict]:
+    def _get_cached_data(self, prefix: str, filename: str) -> Dict:
         """Get data from cache if it exists."""
-        try:
-            file_content = services.storage_service.get_object(
-                os.path.join(self.__configuration.data_store_path, prefix),
-                filename + ".json"
-            ).decode("utf-8")
-            data = json.loads(file_content)
-            logger.debug(f"Data found in storage for {prefix}/{filename}")
-            return data
-        except Exception as e:
-            logger.debug(f"No cached data found for {prefix}/{filename}: {str(e)}")
-            return None
+        return get_json(os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
 
     def _save_to_cache(self, prefix: str, filename: str, data: dict) -> None:
         """Save data to cache."""
-        services.storage_service.put_object(
-            prefix=os.path.join(self.__configuration.data_store_path, prefix),
-            key=filename + ".json",
-            content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
-        )
-        # Save copy with timestamp
-        services.storage_service.put_object(
-            prefix=os.path.join(self.__configuration.data_store_path, prefix),
-            key=f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}.json",
-            content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
-        )
+        save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
 
     def get_organization_id(self, url: str) -> str:
         """Extract organization ID from LinkedIn URL.
@@ -140,7 +113,7 @@ class LinkedInIntegration(Integration):
 
         # Get data from cache
         data = self._get_cached_data(prefix=prefix, filename=filename)
-        if data is not None:
+        if len(data) > 0:
             return data
         
         # Set up parameters for the request
@@ -171,13 +144,14 @@ class LinkedInIntegration(Integration):
         
         # Get data from cache
         data = self._get_cached_data(prefix=prefix, filename=filename)
-        if data is not None:
+        if len(data) > 0:
             return data
         
         endpoint = f"/identity/profiles/{profile_id}/profileView"
         data = self._make_request("GET", endpoint)
         self._save_to_cache(prefix=prefix, filename=filename, data=data)
         return data
+
     
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
@@ -191,9 +165,6 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
 
     class GetProfileViewSchema(BaseModel):
         linkedin_url: str = Field(..., description="LinkedIn profile URL", pattern=r"https://www\.linkedin\.com/in/[^/]+/")
-
-    class GetPostsFeedSchema(BaseModel):
-        profile_id: str = Field(..., description="LinkedIn profile ID", pattern=r"^ACoAAA.*$")
 
     return [
         StructuredTool(
@@ -209,4 +180,3 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             args_schema=GetProfileViewSchema
         ),
     ]
-
