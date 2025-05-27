@@ -6,7 +6,7 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
-from typing import Annotated, List, Dict
+from typing import Annotated, List, Dict, Optional
 from enum import Enum
 
 @dataclass
@@ -18,18 +18,17 @@ class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
 
 class SearchIndividualWorkflowParameters(WorkflowParameters):
     """Parameters for SearchIndividual workflow."""
-
-    class_uri: Annotated[str, Field(
-        ...,
-        description="Class URI to use to search for individuals.",
-        pattern="https?:\/\/.*",
-        example="https://www.commoncoreontologies.org/ont00000443",
-    )]
     search_label: Annotated[str, Field(
         ...,
         description="Individual label to search for in the ontology schema.",
         example="Naas.ai",
     )]
+    class_uri: Optional[Annotated[str, Field(
+        ...,
+        description="Class URI to use to search for individuals.",
+        pattern="https?:\/\/.*",
+        example="https://www.commoncoreontologies.org/ont00000443",
+    )]] = None
 
 
 class SearchIndividualWorkflow(Workflow):
@@ -42,14 +41,17 @@ class SearchIndividualWorkflow(Workflow):
         self.__configuration = configuration
 
     def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> List[Dict]:
+        # Base query without class filter
         query = f"""
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
-            # Filter On Class URI and ensure individual is a NamedIndividual
+            # Ensure individual is a NamedIndividual
             ?individual_uri a ?class_uri ;
                             a owl:NamedIndividual ;
                             rdfs:label ?label .
-            FILTER(?class_uri = <{parameters.class_uri}>)
+            
+            # Add class filter if class_uri is provided
+            {f'FILTER(?class_uri = <{parameters.class_uri}>)' if parameters.class_uri else ''}
             
             # Calculate scores for perfect and partial matches
             BIND(IF(LCASE(STR(?label)) = LCASE("{parameters.search_label}"), 10, 0) AS ?perfect_score)
