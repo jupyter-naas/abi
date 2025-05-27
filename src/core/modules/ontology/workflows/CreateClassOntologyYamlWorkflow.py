@@ -102,8 +102,12 @@ class CreateClassOntologyYamlWorkflow(Workflow):
         """
         results = services.triple_store_service.query(query)
         result_list = results_to_list(results)
-        ontology_label = result_list[0]["label"]
-        ontology_description = result_list[0]["definition"]
+        if result_list:
+            ontology_label = result_list[0]["label"]
+            ontology_description = result_list[0]["definition"]
+        else:
+            ontology_label = ""
+            ontology_description = ""
 
         # Get triples from class uri
         query = f"""
