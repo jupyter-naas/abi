@@ -13,6 +13,7 @@ from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from typing import Any, Union
+from enum import Enum
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Graph, URIRef, RDFS
 from abi.utils.SPARQL import get_class_uri_from_individual_uri
@@ -122,8 +123,8 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
             return graph
 
         # Get label from individual URI
-        ontology_label = None
-        ontology_description = None
+        ontology_label = "Untitled"  # Default value
+        ontology_description = "Untitled Ontology"  # Default value
         for s, p, o in graph:
             if p == RDFS.label and s == URIRef(parameters.individual_uri):
                 ontology_label = str(o)
@@ -155,5 +156,13 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[Union[str, Enum]] | None = None
+    ) -> None:
         pass
