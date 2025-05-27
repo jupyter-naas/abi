@@ -66,7 +66,10 @@ class AddIndividualPipeline(Pipeline):
             configuration.search_individual_configuration
         )
 
-    def run(self, parameters: AddIndividualPipelineParameters) -> Tuple[URIRef, Graph]:
+    def run(self, parameters: PipelineParameters) -> Tuple[URIRef, Graph]:
+        if not isinstance(parameters, AddIndividualPipelineParameters):
+            raise ValueError("Parameters must be of type AddIndividualPipelineParameters")
+        
         # Search for individual
         search_individual_result = self.__search_individual_workflow.search_individual(
             SearchIndividualWorkflowParameters(

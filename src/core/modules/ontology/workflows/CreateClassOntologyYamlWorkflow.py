@@ -16,7 +16,7 @@ from typing import Any, Union, Annotated
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Graph, URIRef, RDFS, Literal, RDF, OWL
 from abi.utils.SPARQL import results_to_list, get_class_uri_from_individual_uri
-
+from enum import Enum
 
 @dataclass
 class CreateClassOntologyYamlConfiguration(WorkflowConfiguration):
@@ -184,5 +184,15 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

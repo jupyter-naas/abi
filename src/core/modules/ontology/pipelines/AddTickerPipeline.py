@@ -48,7 +48,10 @@ class AddTickerPipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddTickerPipelineParameters) -> str:
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, AddTickerPipelineParameters):
+            raise ValueError("Parameters must be of type AddTickerPipelineParameters")
+        
         graph = Graph()
         ticker_uri = parameters.individual_uri
         if parameters.label and not ticker_uri:
@@ -87,7 +90,7 @@ class AddTickerPipeline(Pipeline):
                 )
 
         self.__configuration.triple_store.insert(graph)
-        return ticker_uri
+        return graph
 
     def as_tools(self) -> list[BaseTool]:
         return [

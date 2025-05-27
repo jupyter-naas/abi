@@ -18,6 +18,7 @@ from abi.utils.SPARQL import get_class_uri_from_individual_uri
 from abi.utils.Storage import save_triples
 import os
 from typing import Annotated
+from enum import Enum
 
 URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
@@ -80,7 +81,7 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
             "https://www.commoncoreontologies.org/ont00000443",  # Commercial Organization
         ]
         if class_uri in class_uri_triggers:
-            return self.graph_to_yaml(CreateIndividualOntologyYamlParameters(individual_uri=s))
+            return self.graph_to_yaml(CreateIndividualOntologyYamlParameters(individual_uri=s, distance=2))
         return None
     
     def __add_object_graphs(self, graph: Graph, distance: int) -> Graph:
@@ -186,5 +187,16 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None
+

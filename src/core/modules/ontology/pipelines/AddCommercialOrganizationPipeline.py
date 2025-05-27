@@ -73,7 +73,10 @@ class AddCommercialOrganizationPipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddCommercialOrganizationPipelineParameters) -> Graph:
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, AddCommercialOrganizationPipelineParameters):
+            raise ValueError("Parameters must be of type AddCommercialOrganizationPipelineParameters")
+        
         # Initialize graphs
         graph_insert = Graph()
 
