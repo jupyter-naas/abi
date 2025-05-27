@@ -9,8 +9,8 @@ A Wave Process Profile in which the displacement of participating particles is p
 Not defined.
 
 ### Aliases
-- Longitudinal Wave
 - Compression Wave
+- Longitudinal Wave
 
 ### URI
 https://www.commoncoreontologies.org/ont00001227

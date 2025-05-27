@@ -6,8 +6,8 @@
 A Language that is developed through conscious planning and premeditation, rather than one that was developed through use and repetition.
 
 ### Examples
-- Python Programming Language
 - Esperanto
+- Python Programming Language
 
 ### Aliases
 Not defined.
