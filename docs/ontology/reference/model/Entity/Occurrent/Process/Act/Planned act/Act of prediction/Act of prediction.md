@@ -7,8 +7,8 @@ A Planned Act that involves the generation of a Predictive Information Content e
 
 ### Examples
 - a chess master predicting the next 8 moves his opponent will make
-- using sample exit polls data to predict the winners of an election
 - predicting that a particular stock will double in value over the next fiscal quarter
+- using sample exit polls data to predict the winners of an election
 
 ### Aliases
 Not defined.

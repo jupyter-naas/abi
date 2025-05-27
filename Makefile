@@ -79,8 +79,8 @@ check-core: deps
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking lib.abi..."
 	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
-	@echo "\n⚠️ Skipping src.core type checking (disabled)"
-	@#.venv/bin/mypy -p src.core --follow-untyped-imports
+	@echo "• Checking src.core..."
+	@.venv/bin/mypy -p src.core --follow-untyped-imports
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check lib src tests

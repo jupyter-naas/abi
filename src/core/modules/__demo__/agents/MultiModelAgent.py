@@ -1,11 +1,12 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
+from langchain_core.tools import tool, Tool
 
 # from langchain_anthropic import ChatAnthropic
 # from langchain_ollama import ChatOllama
-from typing import Any
+from typing import Any, Optional
+from pydantic import SecretStr
 
 
 @tool
@@ -42,10 +43,17 @@ def execute_python_code(code: str) -> Any:
     except Exception as e:
         return f"Error: {e}"
 
+# Convert the function to a Tool instance
+execute_python_code_tool = Tool.from_function(
+    func=execute_python_code,
+    name="execute_python_code",
+    description="Execute python code."
+)
+
 
 def create_agent(
-    agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None,
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     class MultiModelAgent(Agent):
         pass
@@ -56,14 +64,14 @@ def create_agent(
         name="multi_model_agent",
         description="A multi-model agent that can use different models to answer questions.",
         chat_model=ChatOpenAI(
-            model="o3-mini", temperature=1, api_key=secret.get("OPENAI_API_KEY")
+            model="o3-mini", temperature=1, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
         ),
         tools=[
             Agent(
                 name="o3-mini_agent",
                 description="A agent using o3-mini that can answer questions.",
                 chat_model=ChatOpenAI(
-                    model="o3-mini", temperature=1, api_key=secret.get("OPENAI_API_KEY")
+                    model="o3-mini", temperature=1, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
                 ),
                 tools=[],
                 configuration=AgentConfiguration(
@@ -76,7 +84,7 @@ def create_agent(
                 chat_model=ChatOpenAI(
                     model="gpt-4o-mini",
                     temperature=1,
-                    api_key=secret.get("OPENAI_API_KEY"),
+                    api_key=SecretStr(secret.get("OPENAI_API_KEY")),
                 ),
                 tools=[],
                 configuration=AgentConfiguration(
@@ -87,7 +95,7 @@ def create_agent(
                 name="gpt-4-1_agent",
                 description="A agent using gpt-4.1 that can answer questions.",
                 chat_model=ChatOpenAI(
-                    model="gpt-4.1", temperature=1, api_key=secret.get("OPENAI_API_KEY")
+                    model="gpt-4.1", temperature=1, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
                 ),
                 tools=[],
                 configuration=AgentConfiguration(
@@ -100,7 +108,7 @@ def create_agent(
                 chat_model=ChatOpenAI(
                     model="gpt-4o-mini",
                     temperature=1,
-                    api_key=secret.get("OPENAI_API_KEY"),
+                    api_key=SecretStr(secret.get("OPENAI_API_KEY")),
                 ),
                 tools=[],
                 configuration=AgentConfiguration(
@@ -113,9 +121,9 @@ def create_agent(
                 chat_model=ChatOpenAI(
                     model="gpt-4o-mini",
                     temperature=1,
-                    api_key=secret.get("OPENAI_API_KEY"),
+                    api_key=SecretStr(secret.get("OPENAI_API_KEY")),
                 ),
-                tools=[execute_python_code],
+                tools=[execute_python_code_tool],
                 configuration=AgentConfiguration(
                     system_prompt="You are a python code execution agent. You can execute python code and return the result. ONLY EXECUTE SAFE CODE THAT WON'T HARM THE SYSTEM. The PYTHON CODE MUST PRINT THE RESULT AND NOT RETURN IT FOR YOU TO GRAB THE RESULT."
                 ),
