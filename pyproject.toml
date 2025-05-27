@@ -47,6 +47,8 @@ dependencies = [
     "pyperclip>=1.9.0",
     "streamlit>=1.45.1",
     "pydantic>=2.11.4",
+    "watchdog>=6.0.0",
+    "langchain-google-genai>=2.1.4",
 ]
 
 [project.scripts]
