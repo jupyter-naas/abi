@@ -77,7 +77,10 @@ class AddPersonPipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddPersonPipelineParameters) -> str:
+    def run(self, parameters: PipelineParameters) -> str:
+        if not isinstance(parameters, AddPersonPipelineParameters):
+            raise ValueError("Parameters must be of type AddPersonPipelineParameters")
+        
         # Initialize graphs
         graph_insert = Graph()
         graph_remove = Graph()

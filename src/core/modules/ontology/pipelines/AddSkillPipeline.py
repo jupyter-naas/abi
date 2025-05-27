@@ -60,7 +60,10 @@ class AddSkillPipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddSkillPipelineParameters) -> str:
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, AddSkillPipelineParameters):
+            raise ValueError("Parameters must be of type AddSkillPipelineParameters")
+        
         # Initialize a new graph
         graph = Graph()
 
@@ -97,7 +100,7 @@ class AddSkillPipeline(Pipeline):
 
         # Save the graph
         self.__configuration.triple_store.insert(graph)
-        return skill_uri
+        return graph
 
     def as_tools(self) -> list[BaseTool]:
         return [
