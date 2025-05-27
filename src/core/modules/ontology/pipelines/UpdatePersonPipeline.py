@@ -43,7 +43,7 @@ class UpdatePersonPipelineParameters(PipelineParameters):
         description="LinkedIn Page URI of the person from class: http://ontology.naas.ai/abi/LinkedInProfilePage or http://ontology.naas.ai/abi/LinkedInCompanyPage or http://ontology.naas.ai/abi/LinkedInSchoolPage.",
         pattern=URI_REGEX
     )]
-    skill_uri: Annotated[Optional[List[str]], Field(
+    skill_uris: Annotated[Optional[List[str]], Field(
         None,
         description="Skill URI of the person from class: https://www.commoncoreontologies.org/ont00000089",
         pattern=URI_REGEX
@@ -74,10 +74,11 @@ class UpdatePersonPipeline(Pipeline):
             check_linkedin_page = list(graph.triples((individual_uri, ABI.hasLinkedInPage, URIRef(parameters.linkedin_page_uri))))
             if len(check_linkedin_page) == 0:
                 graph_insert.add((individual_uri, ABI.hasLinkedInPage, URIRef(parameters.linkedin_page_uri)))
-        if parameters.skill_uri:
-            check_skill = list(graph.triples((individual_uri, ABI.hasSkill, URIRef(parameters.skill_uri))))
-            if len(check_skill) == 0:
-                graph_insert.add((individual_uri, ABI.hasSkill, URIRef(parameters.skill_uri)))
+        if parameters.skill_uris:
+            for skill_uri in parameters.skill_uris:
+                check_skill = list(graph.triples((individual_uri, ABI.hasSkill, URIRef(skill_uri))))
+                if len(check_skill) == 0:
+                    graph_insert.add((individual_uri, ABI.hasSkill, URIRef(skill_uri)))
         if parameters.first_name:
             check_first_name = list(graph.triples((individual_uri, ABI.first_name, Literal(parameters.first_name))))
             if len(check_first_name) == 0:

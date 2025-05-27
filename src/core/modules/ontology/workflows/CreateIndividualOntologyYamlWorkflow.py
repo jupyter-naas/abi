@@ -131,8 +131,8 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
 
         # Get label from individual URI
         ontology_id = None
-        ontology_label = None 
-        ontology_description = None
+        ontology_label = "" 
+        ontology_description = ""
         ontology_logo_url = ""
         new_ontology = True
         for s, p, o in graph:
