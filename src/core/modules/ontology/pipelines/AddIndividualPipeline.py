@@ -6,7 +6,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from abi import logger
 from pydantic import Field
-from typing import Tuple
+from typing import Tuple, Annotated
 from rdflib import (
     Graph,
     URIRef,
@@ -43,17 +43,16 @@ class AddIndividualPipelineConfiguration(PipelineConfiguration):
     triple_store: ITripleStoreService
     search_individual_configuration: SearchIndividualWorkflowConfiguration
 
-@dataclass
 class AddIndividualPipelineParameters(PipelineParameters):
-    individual_label: str = Field(
+    individual_label: Annotated[str, Field(
         description="Individual label to add to the ontology.",
         example="Naas.ai"
-    )
-    class_uri: str = Field(
+    )]
+    class_uri: Annotated[str, Field(
+        pattern=r'https?:\/\/.*',
         description="Class URI to add the individual to. Use tool `ontology_search_class` to search for a class URI in the ontology.",
-        pattern="https?:\/\/.*",
         example="https://www.commoncoreontologies.org/ont00000443"
-    )
+    )]
 
 class AddIndividualPipeline(Pipeline):
     """Pipeline for adding a named individual."""

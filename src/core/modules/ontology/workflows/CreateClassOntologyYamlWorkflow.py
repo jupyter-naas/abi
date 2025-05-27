@@ -12,7 +12,7 @@ from pydantic import Field
 from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
-from typing import Any, Union
+from typing import Any, Union, Annotated
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Graph, URIRef, RDFS, Literal, RDF, OWL
 from abi.utils.SPARQL import results_to_list, get_class_uri_from_individual_uri
@@ -42,7 +42,10 @@ class CreateClassOntologyYamlParameters(WorkflowParameters):
         display_relations_names (bool): Whether to display relation names in the visualization
     """
 
-    class_uri: str = Field(..., description="The URI of the class to convert to YAML")
+    class_uri: Annotated[str, Field(
+        ...,
+        description="The URI of the class to convert to YAML"
+    )]
 
 
 class CreateClassOntologyYamlWorkflow(Workflow):

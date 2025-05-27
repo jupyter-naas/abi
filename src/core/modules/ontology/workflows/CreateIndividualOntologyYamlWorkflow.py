@@ -17,6 +17,7 @@ from rdflib import Graph, URIRef, RDFS, Literal
 from abi.utils.SPARQL import get_class_uri_from_individual_uri
 from abi.utils.Storage import save_triples
 import os
+from typing import Annotated
 
 URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
@@ -45,12 +46,15 @@ class CreateIndividualOntologyYamlParameters(WorkflowParameters):
         display_relations_names (bool): Whether to display relation names in the visualization
     """
 
-    individual_uri: str = Field(
+    individual_uri: Annotated[str, Field(
         ..., 
         description="The URI of the individual to convert to YAML",
         pattern=URI_REGEX
-    )
-    distance: int = 2
+    )]
+    distance: Annotated[int, Field(
+        default=2,
+        description="The distance to the individual to convert to YAML"
+    )]
 
 
 class CreateIndividualOntologyYamlWorkflow(Workflow):

@@ -6,7 +6,7 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
-
+from typing import Annotated
 
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
@@ -18,17 +18,17 @@ class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
 class SearchIndividualWorkflowParameters(WorkflowParameters):
     """Parameters for SearchIndividual workflow."""
 
-    class_uri: str = Field(
+    class_uri: Annotated[str, Field(
         ...,
         description="Class URI to use to search for individuals.",
         pattern="https?:\/\/.*",
         example="https://www.commoncoreontologies.org/ont00000443",
-    )
-    search_label: str = Field(
+    )]
+    search_label: Annotated[str, Field(
         ...,
         description="Individual label to search for in the ontology schema.",
         example="Naas.ai",
-    )
+    )]
 
 
 class SearchIndividualWorkflow(Workflow):
