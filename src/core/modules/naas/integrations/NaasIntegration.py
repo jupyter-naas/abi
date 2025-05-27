@@ -275,14 +275,16 @@ class NaasIntegration(Integration):
         Returns:
             Dict[str, str]: Dictionary containing the assistant ID and name
         """
-        if not plugins:
+        if not plugins and workspace_id is not None:
             plugins = self.get_plugins(workspace_id).get("workspace_plugins", [])
         for i, a in enumerate(plugins):
             plugin_id = a.get("id")
-            a_json = json.loads(a.get("payload"))
-            identifier = a_json.get(key)
-            if identifier == value:
-                return plugin_id
+            payload = a.get("payload")
+            if payload:
+                a_json = json.loads(payload)
+                identifier = a_json.get(key)
+                if identifier == value:
+                    return plugin_id
         return None
 
     # Ontology methods
@@ -532,9 +534,9 @@ class NaasIntegration(Integration):
         payload = {"page_size": 100, "page_number": 0}
         return self._make_request("GET", "/secret/", payload).get("secrets", [])
 
-    def list_secrets_names(self) -> Dict:
+    def list_secrets_names(self) -> List[str]:
         secrets = self.list_secrets()
-        return [secret.get("name") for secret in secrets]
+        return [secret.get("name", "") for secret in secrets]
 
     def create_secret(self, name: str, value: str) -> Dict:
         """Create a new secret in a workspace.
@@ -639,8 +641,10 @@ class NaasIntegration(Integration):
         )
 
     def get_storage_credentials(
-        self, workspace_id: Optional[str] = None, storage_name: Optional[str] = None
-    ) -> Dict:
+        self,
+        workspace_id: Optional[str] = None,
+        storage_name: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Get or create storage credentials.
 
         Args:
@@ -648,8 +652,10 @@ class NaasIntegration(Integration):
             storage_name (str, optional): Name of the storage
 
         Returns:
-            tuple[Dict, str]: Tuple containing (credentials, workspace_id)
+            Dict[str, Any]: Dictionary containing the storage credentials
         """
+        if workspace_id is None or storage_name is None:
+            raise ValueError("workspace_id and storage_name must be provided")
 
         # List storage
         result = self.list_workspace_storage(workspace_id)
@@ -666,9 +672,7 @@ class NaasIntegration(Integration):
             logger.info(f"Created storage {storage_name} in workspace {workspace_id}")
 
         # Get storage credentials
-        credentials = self.create_workspace_storage_credentials(
-            workspace_id, storage_name
-        )
+        credentials = self.create_workspace_storage_credentials(workspace_id, storage_name)
         return credentials
 
     def create_asset(
@@ -678,7 +682,7 @@ class NaasIntegration(Integration):
         object_name: str,
         visibility: str = "public",
         content_disposition: str = "inline",
-        password: str = None,
+        password: Optional[str] = None,
     ) -> Dict:
         """Create a new asset in the workspace.
 
@@ -688,7 +692,7 @@ class NaasIntegration(Integration):
             object_name (str): Name of the object/file in storage
             visibility (str, optional): Asset visibility. Defaults to "private"
             content_disposition (str, optional): Content disposition header. Defaults to "inline"
-            password (str, optional): Password protection for asset. Defaults to None
+            password (Optional[str], optional): Password protection for asset. Defaults to None
 
         Returns:
             Dict: Response containing the created asset details
@@ -716,7 +720,7 @@ class NaasIntegration(Integration):
         visibility: str = "public",
         content_disposition: str = "inline",
         password: Optional[str] = None,
-    ):
+    ) -> Dict[str, Any]:
         naas_storage: ObjectStorageService = (
             ObjectStorageFactory.ObjectStorageServiceNaas(
                 self.__configuration.api_key,
@@ -727,7 +731,7 @@ class NaasIntegration(Integration):
 
         naas_storage.put_object(prefix=prefix, key=object_name, content=data)
 
-        data = {
+        request_data = {
             "workspace_id": workspace_id,
             "asset_creation": {
                 "workspace_id": workspace_id,
@@ -741,7 +745,7 @@ class NaasIntegration(Integration):
         # Check if an asset already exists.
         try:
             url = f"https://api.naas.ai/workspace/{workspace_id}/asset/"
-            response = requests.post(url, headers=self.headers, json=data)
+            response = requests.post(url, headers=self.headers, json=request_data)
             asset = response.json()
             logger.debug(f"Asset created: {asset}")
             error_message = pydash.get(asset, "error.message")

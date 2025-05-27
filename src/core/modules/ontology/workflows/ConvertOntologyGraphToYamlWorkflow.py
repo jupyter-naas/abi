@@ -14,6 +14,7 @@ from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
 from typing import Dict
+from enum import Enum
 import pydash as _
 from rdflib import Graph
 from src.core.modules.ontology.mappings import COLORS_NODES
@@ -71,6 +72,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
         # Initialize parameters
         logger.debug(f"==> Converting ontology graph to YAML: {parameters.label}")
         yaml_data = None
+        ontology_id: str | None = None
 
         # Create Graph from turtle string
         g = Graph()
@@ -113,9 +115,8 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
             ontologies = self.__naas_integration.get_ontologies(workspace_id).get(
                 "ontologies", []
             )
-            ontology_id = None
             for ontology in ontologies:
-                if ontology.get("label") == onto_label:
+                if ontology and isinstance(ontology, dict) and ontology.get("label") == onto_label:
                     ontology_id = ontology.get("id")
                     break
 
@@ -130,10 +131,8 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
                     download_url=asset_url,
                     logo_url=onto_logo_url,
                 )
-                ontology_id = _.get(res, "ontology.id")
-                message = (
-                    f"✅ Ontology '{onto_label}' ({ontology_id}) successfully created."
-                )
+                ontology_id = str(_.get(res, "ontology.id", ""))
+                message = f"✅ Ontology '{onto_label}' ({ontology_id}) successfully created."
             else:
                 # Update existing ontology
                 res = self.__naas_integration.update_ontology(
@@ -149,6 +148,8 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
                     f"✅ Ontology '{onto_label}' ({ontology_id}) successfully updated."
                 )
         logger.debug(message)
+        if ontology_id is None:
+            raise ValueError("Failed to create or update ontology")
         return ontology_id
 
     def as_tools(self) -> list[BaseTool]:
@@ -164,5 +165,13 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
         pass

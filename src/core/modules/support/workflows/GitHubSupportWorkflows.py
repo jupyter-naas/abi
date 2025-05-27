@@ -11,10 +11,12 @@ from src.core.modules.support.integrations.GithubGraphqlIntegration import (
 from src import config
 from dataclasses import dataclass
 from pydantic import Field
-from typing import List, Dict
+from typing import List, Dict, Optional, Union
 from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool
+from enum import Enum
 
 
 @dataclass
@@ -131,14 +133,15 @@ class GitHubSupportWorkflows(Workflow):
     def get_issue(self, parameters: GetIssueParameters) -> Dict:
         """Gets details of a GitHub issue."""
         issue = self.__github_integration.get_issue(
-            repo_name=parameters.repo_name, issue_number=parameters.issue_number
+            repo_name=parameters.repo_name, 
+            issue_id=parameters.issue_number
         )
         return issue
 
     def report_bug(self, parameters: ReportBugParameters) -> Dict:
         """Creates a new bug report issue and adds it to the project."""
         project_node_id = "PVT_kwDOBESWNM4AKRt3"
-        assignees = []
+        assignees: List[str] = []
         labels = ["bug"]
         status_field_id = "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
         priority_field_id = "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
@@ -171,7 +174,7 @@ class GitHubSupportWorkflows(Workflow):
         """Creates a new feature request issue and adds it to the project."""
         repo_name = parameters.repo_name
         project_node_id = "PVT_kwDOBESWNM4AKRt3"
-        assignees = []
+        assignees: List[str] = []
         labels = ["enhancement"]
         status_field_id = "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
         status_option_id = "97363483"
@@ -196,7 +199,7 @@ class GitHubSupportWorkflows(Workflow):
         )
         return issue
 
-    def as_tools(self) -> List[StructuredTool]:
+    def as_tools(self) -> List["BaseTool"]:
         """Returns a list of LangChain tools for all support workflows.
 
         Returns:
@@ -247,7 +250,15 @@ class GitHubSupportWorkflows(Workflow):
             ),
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: Optional[List[Union[str, Enum]]] = None
+    ) -> None:
         """Adds API endpoints for all support workflows to the given router.
 
         Args:
