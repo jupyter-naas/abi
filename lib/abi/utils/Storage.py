@@ -6,23 +6,69 @@ from typing import Tuple, Dict
 import pandas as pd
 from datetime import datetime
 from rdflib import Graph
+import yaml
+
+def __make_copy(dir_path: str, file_name: str, content: bytes) -> Tuple[str, str]:
+    """
+    Make a copy of a file in storage with timestamp in the name.
+    """
+    file_name = f"{datetime.now()}_{file_name}"
+    services.storage_service.put_object(
+        prefix=dir_path,
+        key=file_name,
+        content=content
+    )
+    return dir_path, file_name
+
+def get_yaml(dir_path: str, file_name: str) -> Dict:
+    """
+    Get a YAML file from storage.
+    """
+    try:
+        file_content = services.storage_service.get_object(dir_path, file_name).decode("utf-8")
+        return yaml.safe_load(file_content)
+    except Exception as e:
+        logger.info(f"Error getting YAML data from {dir_path}: {e}")
+        return {}
+
+def save_yaml(data: Dict, dir_path: str, file_name: str, copy: bool = True) -> Tuple[str, str]:
+    """
+    Save a YAML file to storage.
+    """
+    content = yaml.dump(data, indent=4, allow_unicode=True).encode("utf-8")
+    services.storage_service.put_object(
+        prefix=dir_path,
+        key=file_name,
+        content=content
+    )
+    if copy:
+        __make_copy(dir_path, file_name, content)
+    return dir_path, file_name
+
 
 def get_csv(dir_path: str, file_name: str, sep: str = ";", encoding: str = "utf-8") -> pd.DataFrame:
     """
     Get a CSV file from storage.
     """
-    file_content = services.storage_service.get_object(dir_path, file_name).decode(encoding)
-    return pd.read_csv(file_content, sep=sep)
+    try:
+        file_content = services.storage_service.get_object(dir_path, file_name).decode(encoding)
+        return pd.read_csv(file_content, sep=sep)
+    except Exception as e:
+        logger.info(f"Error getting CSV data from {dir_path}: {e}")
+        return pd.DataFrame()
 
-def save_csv(data: pd.DataFrame, dir_path: str, file_name: str, sep: str = ";", encoding: str = "utf-8") -> Tuple[str, str]:
+def save_csv(data: pd.DataFrame, dir_path: str, file_name: str, sep: str = ";", encoding: str = "utf-8", copy: bool = True) -> Tuple[str, str]:
     """
     Save a CSV file to storage.
     """
+    content = data.to_csv(index=False, encoding=encoding, sep=sep).encode(encoding)
     services.storage_service.put_object(
         prefix=dir_path,
         key=file_name,
-        content=data.to_csv(index=False, encoding=encoding, sep=sep).encode(encoding)
+        content=content
     )
+    if copy:
+        __make_copy(dir_path, file_name, content)
     return dir_path, file_name
   
 def get_json(dir_path: str, file_name: str) -> Dict:
@@ -41,17 +87,14 @@ def save_json(data: dict, dir_path: str, file_name: str, copy: bool = True) -> T
     """
     Save JSON data to storage.
     """
+    content = json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
     services.storage_service.put_object(
         prefix=dir_path,
         key=file_name,
-        content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
+        content=content
     )
     if copy:
-        services.storage_service.put_object(
-            prefix=dir_path,
-            key=f"{datetime.now()}_{file_name}",
-            content=json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
-        )
+        __make_copy(dir_path, file_name, json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8"))
     return dir_path, file_name
 
 def get_triples(dir_path: str, file_name: str, format: str = "turtle") -> Graph:
@@ -67,16 +110,18 @@ def get_triples(dir_path: str, file_name: str, format: str = "turtle") -> Graph:
         logger.info(f"Error getting triples from {dir_path}: {e}")
         return Graph()
 
-def save_triples(graph: Graph, dir_path: str, file_name: str, format: str = "turtle") -> Tuple[str, str]:
+def save_triples(graph: Graph, dir_path: str, file_name: str, format: str = "turtle", copy: bool = True) -> Tuple[str, str]:
     """
     Save RDFlib Graph data to storage in Turtle format.
     """
-    turtle_content = graph.serialize(format=format)
+    turtle_content = graph.serialize(format=format).encode("utf-8")
     services.storage_service.put_object(
         prefix=dir_path,
         key=file_name,
-        content=turtle_content.encode("utf-8")
+        content=turtle_content
     )
+    if copy:
+        __make_copy(dir_path, file_name, turtle_content)
     return dir_path, file_name
 
 def get_powerpoint_presentation(dir_path: str, file_name: str) -> BytesIO:
@@ -99,7 +144,7 @@ def get_powerpoint_presentation(dir_path: str, file_name: str) -> BytesIO:
         logger.info(f"Error getting PowerPoint presentation from {dir_path}: {e}")
         return BytesIO()
 
-def save_powerpoint_presentation(presentation, dir_path: str, file_name: str) -> Tuple[str, str]:
+def save_powerpoint_presentation(presentation, dir_path: str, file_name: str, copy: bool = True) -> Tuple[str, str]:
     """
     Save a PowerPoint presentation to a file and create an asset in Naas.
 
@@ -123,4 +168,6 @@ def save_powerpoint_presentation(presentation, dir_path: str, file_name: str) ->
         key=file_name,
         content=byte_stream.getvalue()
     )
+    if copy:
+        __make_copy(dir_path, file_name, byte_stream.getvalue())
     return dir_path, file_name
