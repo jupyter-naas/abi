@@ -1,19 +1,10 @@
-FROM python:3.9
+FROM python:3.10
 WORKDIR /app
 
 # Install CA certificates
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
 
-COPY . .
-
-RUN pip install poetry
-RUN poetry config virtualenvs.in-project true
-
-# Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
-RUN . "$HOME/.cargo/env"
-RUN pip install maturin[patchelf]
-
+RUN pip install uv
 
 # Add build argument for architecture
 ARG TARGETARCH
@@ -27,4 +18,3 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     && unzip awscliv2.zip \
     && ./aws/install
 
-CMD ["poetry", "run", "chat-single-assistant"]

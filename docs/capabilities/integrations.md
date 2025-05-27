@@ -80,7 +80,7 @@ To create a new integration in ABI, follow these steps:
 ### Integration Template
 
 ```python
-from lib.abi.integration.integration import Integration, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConfiguration
 from dataclasses import dataclass
 
 @dataclass

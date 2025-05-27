@@ -74,3 +74,75 @@ jobs:
 
           naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
            || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+
+  streamlit-demo:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_NAME: ${{ github.event.repository.name }}-demo-streamlit
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.ACCESS_TOKEN }}
+      
+      - name: Install naas-python
+        run: |
+          pip install naas-python
+          pip install --upgrade pydantic==2.7.4
+      
+      - name: Create Naas Container registry
+        run: |
+          naas-python registry create --name ${{ env.REGISTRY_NAME }} || echo "Registry already exists"
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+
+      - name: Push latest abi container
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/abi:latest
+          docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
+
+          docker build -t streamlit-demo -f src/core/modules/__demo__/apps/streamlit/Dockerfile .
+
+          export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
+
+          # Generate timestamp to tag image
+          TIMESTAMP=$(date +%s)
+
+          docker tag streamlit-demo $URI:$TIMESTAMP
+
+          naas-python registry docker-login -n ${{ env.REGISTRY_NAME }}
+
+          docker push $URI:$TIMESTAMP
+          
+          ENV_CONFIG="{\
+            \"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\
+            \"NAAS_API_KEY\":\"$NAAS_CREDENTIALS_JWT_TOKEN\",\
+            \"GITHUB_ACCESS_TOKEN\":\"$ACCESS_TOKEN\",\
+            \"ABI_API_KEY\":\"$ABI_API_KEY\",\
+            \"GOOGLE_API_KEY\":\"$GOOGLE_API_KEY\"\
+          }"
+
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"

@@ -10,11 +10,11 @@ Designed for flexibility and scalability, ABI provides a customizable framework 
 ### API Overview
 The ABI API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
 This document describes the current version of the ABI API, which provides access to agents, pipelines, workflows, integrations, ontology management and analytics features.
-        """
+        """,
     },
     {
         "name": "Authentication",
-        "description": f"""
+        "description": """
 Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer `<token>`') or as a query parameter (e.g. '?token=`<token>`'). 
 The token must match the `ABI_API_KEY` environment variable.
 Contact your administrator to get the token.
@@ -26,9 +26,9 @@ import requests
 
 url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion"
 
-headers = {{
-    "Authorization": f"Bearer {{token}}"
-}}
+headers = {
+    "Authorization": f"Bearer {token}"
+}
 
 response = requests.post(url, headers=headers)
 print(response.json())
@@ -44,7 +44,7 @@ url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/comp
 response = requests.post(url)
 print(response.json())
 ```
-        """
+        """,
     },
     {
         "name": "Connections",
@@ -207,7 +207,7 @@ Required:
 Required:
 - `ZEROBOUNCE_API_KEY`: API key of your ZeroBounce account. [Get your API key](https://app.zerobounce.net/)
 
-        """
+        """,
     },
     {
         "name": "Agents",
@@ -233,20 +233,20 @@ Each agent can be accessed through dedicated endpoints that allow:
 
 Agents leverage various tools including integrations, pipelines and workflows to accomplish tasks. They can be extended with custom tools and knowledge to enhance their capabilities.
 
-        """
+        """,
     },
     {
-        "name": "Pipelines", 
+        "name": "Pipelines",
         "description": """
 API endpoints for interacting with ABI's pipelines.
-        """
+        """,
     },
     {
         "name": "Workflows",
         "description": """
 API endpoints for interacting with ABI's workflows.
-        """
-    }
+        """,
+    },
 ]
 
 API_LANDING_HTML = """

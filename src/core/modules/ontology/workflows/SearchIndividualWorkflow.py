@@ -4,46 +4,54 @@ from dataclasses import dataclass
 from pydantic import Field
 from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
-from abi import logger
+from typing import Annotated, List, Dict, Optional
+from enum import Enum
 
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for SearchIndividual workflow."""
+
     triple_store: ITripleStoreService
+
 
 class SearchIndividualWorkflowParameters(WorkflowParameters):
     """Parameters for SearchIndividual workflow."""
-    class_uri: str = Field(
-        ..., 
-        description="Class URI to use to search for individuals.", 
-        pattern="https?:\/\/.*",
-        example="https://www.commoncoreontologies.org/ont00000443"
-    )
-    search_label: str = Field(
-        ..., 
+    search_label: Annotated[str, Field(
+        ...,
         description="Individual label to search for in the ontology schema.",
-        example="Naas.ai"
-    )
+        example="Naas.ai",
+    )]
+    class_uri: Optional[Annotated[str, Field(
+        ...,
+        description="Class URI to use to search for individuals.",
+        pattern="https?:\/\/.*",
+        example="https://www.commoncoreontologies.org/ont00000443",
+    )]] = None
+
 
 class SearchIndividualWorkflow(Workflow):
     """Workflow for searching ontology individuals."""
+
     __configuration: SearchIndividualWorkflowConfiguration
-    
+
     def __init__(self, configuration: SearchIndividualWorkflowConfiguration):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> dict:
+    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> List[Dict] | None: 
+        # Base query without class filter
         query = f"""
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
-            # Filter On Class URI and ensure individual is a NamedIndividual
+            # Ensure individual is a NamedIndividual
             ?individual_uri a ?class_uri ;
                             a owl:NamedIndividual ;
                             rdfs:label ?label .
-            FILTER(?class_uri = <{parameters.class_uri}>)
+            
+            # Add class filter if class_uri is provided
+            {f'FILTER(?class_uri = <{parameters.class_uri}>)' if parameters.class_uri else ''}
             
             # Calculate scores for perfect and partial matches
             BIND(IF(LCASE(STR(?label)) = LCASE("{parameters.search_label}"), 10, 0) AS ?perfect_score)
@@ -61,15 +69,30 @@ class SearchIndividualWorkflow(Workflow):
         results = self.__configuration.triple_store.query(query)
         return results_to_list(results)
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
-                name="ontology_search_individual",
+                name="search_individual",
                 description="Search an ontology individual based on its label. It will return the most relevant individual using matching with rdfs:label",
-                func=lambda class_uri, search_label: self.search_individual(SearchIndividualWorkflowParameters(class_uri=class_uri, search_label=search_label)),
-                args_schema=SearchIndividualWorkflowParameters
+                func=lambda class_uri, search_label: self.search_individual(
+                    SearchIndividualWorkflowParameters(
+                        class_uri=class_uri, search_label=search_label
+                    )
+                ),
+                args_schema=SearchIndividualWorkflowParameters,
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        pass 
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None
+

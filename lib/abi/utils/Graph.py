@@ -1,8 +1,6 @@
 from rdflib import Namespace, URIRef, Literal, Graph as rdfgraph
-from rdflib.namespace import RDF, RDFS, OWL, DC, XSD, SKOS, DCTERMS
+from rdflib.namespace import RDF, RDFS, OWL, SKOS
 from urllib.parse import quote
-from typing import Union
-from typing import overload
 from datetime import datetime, date
 import pytz
 from abi import logger
@@ -13,12 +11,12 @@ TIME = Namespace("http://www.w3.org/2006/time#")
 XSD = Namespace("http://www.w3.org/2001/XMLSchema#")
 CCO = Namespace("https://www.commoncoreontologies.org/")
 DCTERMS = Namespace("http://purl.org/dc/terms/")
+URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 class ABIGraph(rdfgraph):
-    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
+
         self.bind("bfo", BFO)
         self.bind("skos", SKOS)
         self.bind("abi", ABI)
@@ -36,21 +34,47 @@ class ABIGraph(rdfgraph):
                     self.add((uri, ABI[x], Literal(value, datatype=XSD.integer)))
                 elif isinstance(value, datetime):
                     if value.tzinfo is None:
-                        value = value.replace(tzinfo=pytz.utc)  # Apply UTC timezone if none
-                    self.add((uri, ABI[x], Literal(value.strftime("%Y-%m-%dT%H:%M:%S%z"), datatype=XSD.dateTime)))
+                        value = value.replace(
+                            tzinfo=pytz.utc
+                        )  # Apply UTC timezone if none
+                    self.add(
+                        (
+                            uri,
+                            ABI[x],
+                            Literal(
+                                value.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                                datatype=XSD.dateTime,
+                            ),
+                        )
+                    )
                 elif isinstance(value, date):
-                    self.add((uri, ABI[x], Literal(value.strftime("%Y-%m-%d"), datatype=XSD.date)))
-        self.add((uri, DCTERMS.modified, Literal(str(datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")), datatype=XSD.dateTime)))
-    
+                    self.add(
+                        (
+                            uri,
+                            ABI[x],
+                            Literal(value.strftime("%Y-%m-%d"), datatype=XSD.date),
+                        )
+                    )
+        self.add(
+            (
+                uri,
+                DCTERMS.modified,
+                Literal(
+                    str(datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")),
+                    datatype=XSD.dateTime,
+                ),
+            )
+        )
+
     # Add OWL NamedIndividual to Graph
     def add_individual(
         self,
-        uri : URIRef,
+        uri: URIRef,
         label,
         is_a,
         lang="en",
         skip_if_exists=True,
-        **data_properties
+        **data_properties,
     ) -> URIRef:
         if (uri, RDF.type, is_a) in self and skip_if_exists:
             logger.debug(f"🟡 '{label}' ({str(uri)}) already exists in ontology.")
@@ -59,13 +83,22 @@ class ABIGraph(rdfgraph):
             self.add((uri, RDF.type, OWL.NamedIndividual))
             self.add((uri, RDF.type, URIRef(is_a)))
             self.add((uri, RDFS.label, Literal(str(label), lang=lang)))
-            self.add((uri, DCTERMS.created, Literal(str(datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")), datatype=XSD.dateTime)))
+            self.add(
+                (
+                    uri,
+                    DCTERMS.created,
+                    Literal(
+                        str(datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")),
+                        datatype=XSD.dateTime,
+                    ),
+                )
+            )
             logger.debug(f"🟢 '{label}' ({str(uri)}) successfully added to ontology.")
-        
+
         # Add data properties to NamedIndividual
         self.add_data_properties(uri, lang, **data_properties)
         return uri
-    
+
     def add_individual_to_prefix(
         self,
         prefix: Namespace,
@@ -74,12 +107,14 @@ class ABIGraph(rdfgraph):
         is_a: URIRef,
         lang="en",
         skip_if_exists=True,
-        **data_properties
+        **data_properties,
     ) -> URIRef:
         uid = str(uid).split(":")[-1]
         type_name = str(is_a).split("/")[-1]
         uri = URIRef(quote(f"{str(prefix)}{type_name}#{uid}", safe=":/#"))
-        return self.add_individual(uri, label, is_a, lang, skip_if_exists, **data_properties)
+        return self.add_individual(
+            uri, label, is_a, lang, skip_if_exists, **data_properties
+        )
 
     def add_process(
         self,
@@ -105,11 +140,13 @@ class ABIGraph(rdfgraph):
         spatiotemporal_region=None,
         spatiotemporal_region_oprop=BFO.BFO_0000200,
         skip_if_exists=True,
-        **data_properties
+        **data_properties,
     ):
         # Init
-        uri = self.add_individual_to_prefix(prefix, uid, label, is_a, lang, skip_if_exists, **data_properties)
-            
+        uri = self.add_individual_to_prefix(
+            prefix, uid, label, is_a, lang, skip_if_exists, **data_properties
+        )
+
         # Add participants
         for participant in participants:
             self.add((uri, participants_oprop, participant))
@@ -124,12 +161,12 @@ class ABIGraph(rdfgraph):
         for oi in occurs_in:
             self.add((uri, occurs_in_oprop, oi))
             self.add((oi, occurs_in_oprop_inverse, uri))
-        
+
         # Add concretizes
         for concretize in concretizes:
             self.add((uri, concretizes_oprop, concretize))
             self.add((concretize, concretizes_oprop_inverse, uri))
-            
+
         # Add occupies_temporal_region
         if temporal_region:
             self.add((uri, temporal_region_oprop, temporal_region))
