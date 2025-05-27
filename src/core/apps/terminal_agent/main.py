@@ -22,8 +22,8 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
             message_content = message
         elif isinstance(message, dict) and "content" in message:
             message_content = str(message["content"])
-        elif isinstance(message, Command):
-            message_content = str(message.data.get("content", ""))
+        # elif isinstance(message, Command):
+        #     message_content = str(message.kwargs.get("content", ""))
         elif isinstance(message, ToolMessage):
             message_content = str(message.content)
         else:

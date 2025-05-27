@@ -59,7 +59,7 @@ class GetIssueParameters(WorkflowParameters):
         config.github_support_repository,
         description=f"Repository name in format owner/repo. Ask the users if they want to use the default {config.github_support_repository} or a different repository.",
     )
-    issue_number: int = Field(..., description="The number of the issue to get")
+    issue_number: str = Field(..., description="The number of the issue to get")
 
 
 class ReportBugParameters(WorkflowParameters):

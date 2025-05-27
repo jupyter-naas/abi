@@ -6,7 +6,7 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
-from typing import Annotated
+from typing import Annotated, List, Dict
 
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
@@ -40,7 +40,7 @@ class SearchIndividualWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> dict:
+    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> List[Dict]:
         query = f"""
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {{
