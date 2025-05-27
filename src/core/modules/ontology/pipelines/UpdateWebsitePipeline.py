@@ -4,8 +4,7 @@ from pydantic import Field
 from rdflib import Graph, URIRef
 from abi.utils.Graph import ABI, URI_REGEX
 from abi.pipeline import PipelineConfiguration, Pipeline, PipelineParameters
-from langchain.tools import StructuredTool
-from langchain.schema import BaseTool
+from langchain.tools import StructuredTool, BaseTool
 from typing import Annotated
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 
