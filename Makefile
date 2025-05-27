@@ -28,7 +28,7 @@ uv:
 	fi
 
 .venv:
-	@ uv sync
+	@ uv sync --all-extras
 
 .venv/lib/python3.10/site-packages/abi: deps
 	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
@@ -53,8 +53,9 @@ path=tests/
 test:  deps
 	@ uv run python -m pytest .
 
+q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
