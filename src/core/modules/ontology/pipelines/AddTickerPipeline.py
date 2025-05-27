@@ -3,13 +3,14 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional
-from abi.utils.Graph import ABI
+from typing import Optional, Annotated
 from rdflib import URIRef, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
+    URI_REGEX,
+    ABI
 )
 from fastapi import APIRouter
 from enum import Enum
@@ -22,18 +23,19 @@ class AddTickerPipelineConfiguration(PipelineConfiguration):
 
 
 class AddTickerPipelineParameters(PipelineParameters):
-    label: str = Field(
-        ...,
-        description="Ticker symbol (e.g., 'AAPL', 'GOOGL') to be added in class: http://ontology.naas.ai/abi/Ticker",
-    )
-    individual_uri: Optional[str] = Field(
+    label: Annotated[str, Field(
+        description="Ticker symbol (e.g., 'AAPL', 'GOOGL') to be added in class: http://ontology.naas.ai/abi/Ticker"
+    )]
+    individual_uri: Annotated[Optional[str], Field(
         None,
         description="URI of the individual if already known. It must start with 'http://ontology.naas.ai/abi/'.",
-    )
-    organization_uri: Optional[str] = Field(
+        pattern=URI_REGEX
+    )]
+    organization_uri: Annotated[Optional[str], Field(
         None,
         description="Organization URI from class: https://www.commoncoreontologies.org/ont00000443. It must start with 'http://ontology.naas.ai/abi/'.",
-    )
+        pattern=URI_REGEX
+    )]
 
 
 class AddTickerPipeline(Pipeline):

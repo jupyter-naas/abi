@@ -3,7 +3,7 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from rdflib import Literal, Graph, URIRef
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
@@ -30,19 +30,22 @@ class AddSkillPipelineConfiguration(PipelineConfiguration):
 
 
 class AddSkillPipelineParameters(PipelineParameters):
-    name: Optional[str] = Field(
+    name: Annotated[Optional[str], Field(
         None,
-        description="Name of the skill (e.g. 'Python Programming') to be added in class: https://www.commoncoreontologies.org/ont00000089",
-    )
-    individual_uri: Optional[str] = Field(
+        description="Name of the skill (e.g. 'Python Programming') to be added in class: https://www.commoncoreontologies.org/ont00000089"
+    )]
+    individual_uri: Annotated[Optional[str], Field(
         None,
-        description="URI of the skill if already known. It must start with 'http://ontology.naas.ai/abi/'.",
-    )
-    description: Optional[str] = Field(None, description="Description of the skill")
-    person_uris: Optional[List[str]] = Field(
+        description="URI of the skill if already known. It must start with 'http://ontology.naas.ai/abi/'."
+    )]
+    description: Annotated[Optional[str], Field(
+        None, 
+        description="Description of the skill"
+    )]
+    person_uris: Annotated[Optional[List[str]], Field(
         None,
-        description="List of person URIs from class: https://www.commoncoreontologies.org/ont00001262. URIs must start with 'http://ontology.naas.ai/abi/'.",
-    )
+        description="List of person URIs from class: https://www.commoncoreontologies.org/ont00001262. URIs must start with 'http://ontology.naas.ai/abi/'."
+    )]
 
 
 class AddSkillPipeline(Pipeline):

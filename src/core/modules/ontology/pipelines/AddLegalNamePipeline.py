@@ -3,7 +3,7 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional
+from typing import Optional, Annotated
 from rdflib import URIRef, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
@@ -24,20 +24,19 @@ class AddLegalNamePipelineConfiguration(PipelineConfiguration):
 
 
 class AddLegalNamePipelineParameters(PipelineParameters):
-    label: str = Field(
-        ...,
-        description="Legal name to be added in class: https://www.commoncoreontologies.org/ont00001331",
-    )
-    individual_uri: Optional[str] = Field(
+    label: Annotated[str, Field(
+        description="Legal name to be added in class: https://www.commoncoreontologies.org/ont00001331"
+    )]
+    individual_uri: Annotated[Optional[str], Field(
         None,
         description="URI of the individual if already known.",
-        pattern=URI_REGEX,
-    )
-    organization_uri: Optional[str] = Field(
+        pattern=URI_REGEX
+    )]
+    organization_uri: Annotated[Optional[str], Field(
         None,
         description="Organization URI from class: https://www.commoncoreontologies.org/ont00000443.",
-        pattern=URI_REGEX,
-    )
+        pattern=URI_REGEX
+    )]
 
 
 class AddLegalNamePipeline(Pipeline):

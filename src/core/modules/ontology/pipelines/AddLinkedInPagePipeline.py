@@ -4,7 +4,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional
+from typing import Optional, Annotated
 from rdflib import URIRef, Literal, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
@@ -26,12 +26,32 @@ class AddLinkedInPagePipelineConfiguration(PipelineConfiguration):
     add_individual_pipeline_configuration: AddIndividualPipelineConfiguration
 
 class AddLinkedInPagePipelineParameters(PipelineParameters):
-    label: str = Field(None, description="LinkedIn page URL to be added.", pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+")
-    linkedin_id: Optional[str] = Field(None, description="LinkedIn unique ID of the individual.")
-    linkedin_url: Optional[str] = Field(None, description="LinkedIn URL with the LinkedIn ID as identifier.")
-    linkedin_public_id: Optional[str] = Field(None, description="LinkedIn Public ID of the individual.")
-    linkedin_public_url: Optional[str] = Field(None, description="LinkedIn Public URL of the individual with the LinkedIn Public ID as identifier.", pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+")
-    owner_uri: Optional[str] = Field(None, description="URI of the owner from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443")
+    label: Annotated[Optional[str], Field(
+        None,
+        description="LinkedIn page URL to be added.",
+        pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+"
+    )]
+    linkedin_id: Annotated[Optional[str], Field(
+        None,
+        description="LinkedIn unique ID of the individual."
+    )]
+    linkedin_url: Annotated[Optional[str], Field(
+        None,
+        description="LinkedIn URL with the LinkedIn ID as identifier."
+    )]
+    linkedin_public_id: Annotated[Optional[str], Field(
+        None,
+        description="LinkedIn Public ID of the individual."
+    )]
+    linkedin_public_url: Annotated[Optional[str], Field(
+        None,
+        description="LinkedIn Public URL of the individual with the LinkedIn Public ID as identifier.",
+        pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+"
+    )]
+    owner_uri: Annotated[Optional[str], Field(
+        None,
+        description="URI of the owner from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443"
+    )]
 
 class AddLinkedInPagePipeline(Pipeline):
     """Pipeline for adding a new LinkedIn page to the ontology."""

@@ -3,7 +3,7 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional
+from typing import Optional, Annotated
 from rdflib import URIRef, Literal, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
@@ -30,35 +30,35 @@ class AddCommercialOrganizationPipelineConfiguration(PipelineConfiguration):
 
 
 class AddCommercialOrganizationPipelineParameters(PipelineParameters):
-    label: str = Field(
+    label: Annotated[str, Field(
         description="Name of the commercial organization to be added in class: https://www.commercoreontologies.org/ont00000443",
-        example="Naas.ai",
-    )
-    legal_uri: Optional[str] = Field(
+        example="Naas.ai"
+    )]
+    legal_uri: Annotated[Optional[str], Field(
         default=None,
         description="Individual URI from class: https://www.commoncoreontologies.org/ont00001331",
-        pattern=URI_REGEX,
-    )
-    ticker_uri: Optional[str] = Field(
+        pattern=URI_REGEX
+    )]
+    ticker_uri: Annotated[Optional[str], Field(
         default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/Ticker",
-        pattern=URI_REGEX,
-    )
-    website_uri: Optional[str] = Field(
+        pattern=URI_REGEX
+    )]
+    website_uri: Annotated[Optional[str], Field(
         default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/Website",
-        pattern=URI_REGEX,
-    )
-    linkedin_page_uri: Optional[str] = Field(
+        pattern=URI_REGEX
+    )]
+    linkedin_page_uri: Annotated[Optional[str], Field(
         default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/LinkedInOrganizationPage",
-        pattern=URI_REGEX,
-    )
-    logo_url: Optional[str] = Field(
+        pattern=URI_REGEX
+    )]
+    logo_url: Annotated[Optional[str], Field(
         default=None,
         description="Logo URL of the commercial organization.",
-        pattern="https?:\/\/.*",
-    )
+        pattern="https?:\/\/.*"
+    )]
 
 
 class AddCommercialOrganizationPipeline(Pipeline):
