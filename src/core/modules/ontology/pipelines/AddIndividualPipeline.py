@@ -76,7 +76,7 @@ class AddIndividualPipeline(Pipeline):
                 class_uri=parameters.class_uri, search_label=parameters.individual_label
             )
         )
-        if len(search_individual_result) > 0:
+        if search_individual_result:
             score = int(search_individual_result[0]["score"])
             if score > 8:
                 individual_uri = search_individual_result[0]["individual_uri"]

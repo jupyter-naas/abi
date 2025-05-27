@@ -40,7 +40,7 @@ class SearchIndividualWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> List[Dict]:
+    def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> List[Dict] | None: 
         # Base query without class filter
         query = f"""
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
