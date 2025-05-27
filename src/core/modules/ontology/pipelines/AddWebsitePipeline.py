@@ -3,7 +3,7 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from rdflib import URIRef, Graph
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
@@ -27,18 +27,18 @@ class AddWebsitePipelineConfiguration(PipelineConfiguration):
 
 
 class AddWebsitePipelineParameters(PipelineParameters):
-    label: str = Field(
-        description="Website URL (e.g., 'https://www.example.com') to be added in class: http://ontology.naas.ai/abi/Website",
-    )
-    individual_uri: Optional[str] = Field(
+    label: Annotated[str, Field(
+        description="Website URL (e.g., 'https://www.example.com') to be added in class: http://ontology.naas.ai/abi/Website"
+    )]
+    individual_uri: Annotated[Optional[str], Field(
         None,
         description="URI of the individual if already known. It must start with 'http://ontology.naas.ai/abi/'.",
         pattern=URI_REGEX
-    )
-    owner_uris: Optional[List[str]] = Field(
+    )]
+    owner_uris: Annotated[Optional[List[str]], Field(
         None,
-        description="Owners URI from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443",
-    )
+        description="Owners URI from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443"
+    )]
 
 
 class AddWebsitePipeline(Pipeline):

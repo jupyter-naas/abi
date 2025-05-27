@@ -13,7 +13,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
-from typing import Dict
+from typing import Dict, Annotated
 from enum import Enum
 import pydash as _
 from rdflib import Graph
@@ -43,12 +43,18 @@ class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
         display_relations_names (bool): Whether to display relation names in the visualization
     """
 
-    graph: str = Field(..., description="The graph serialized as turtle format")
-    label: str = Field(..., description="The label of the ontology")
-    description: str = Field(
+    graph: Annotated[str, Field(
+        ...,
+        description="The graph serialized as turtle format"
+    )]
+    label: Annotated[str, Field(
+        ...,
+        description="The label of the ontology"
+    )]
+    description: Annotated[str, Field(
         ...,
         description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'",
-    )
+    )]
     logo_url: str = (
         "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
     )

@@ -4,7 +4,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from rdflib import URIRef, Literal, Graph, XSD
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
@@ -29,41 +29,41 @@ class AddPersonPipelineConfiguration(PipelineConfiguration):
 
 
 class AddPersonPipelineParameters(PipelineParameters):
-    name: Optional[str] = Field(
-        None, 
-        description="Person's name. It must have a first name and a last name (e.g. 'Florent  Ravenel') to be added in class: https://www.commoncoreontologies.org/ont00001262", 
+    name: Annotated[Optional[str], Field(
+        None,
+        description="Person's name. It must have a first name and a last name (e.g. 'Florent  Ravenel') to be added in class: https://www.commoncoreontologies.org/ont00001262",
         pattern=r'^[A-Za-z]+\s+[A-Za-z]+.+$',
         example="Florent Ravenel"
-    )
-    individual_uri: Optional[str] = Field(
-        None, 
-        description="URI of the person if already known.", 
+    )]
+    individual_uri: Annotated[Optional[str], Field(
+        None,
+        description="URI of the person if already known.",
         pattern=URI_REGEX,
         example="https://www.commoncoreontologies.org/ont00001262/Florent_Ravenel"
-    )
-    first_name: Optional[str] = Field(
-        None, 
-        description="First name of the person. It can be identified as the first word (before the space) of the person's name (e.g. 'Florent Ravenel' -> 'Florent')"
-    )
-    last_name: Optional[str] = Field(
-        None, 
-        description="Last name of the person. It can be identified as the last word (after the space) of the person's name (e.g. 'Florent Ravenel' -> 'Ravenel')"
-    )
-    date_of_birth: Optional[str] = Field(
-        None, 
-        description="Date of birth of the person. It must be in the format 'YYYY-MM-DD' (e.g. '1990-01-01').", 
-        pattern=r"^\d{4}-\d{2}-\d{2}$"
-    )
-    linkedin_page_uri: Optional[str] = Field(
+    )]
+    first_name: Annotated[Optional[str], Field(
         None,
-        description="LinkedIn Page URI of the person from class: http://ontology.naas.ai/abi/LinkedInProfilePage or http://ontology.naas.ai/abi/LinkedInCompanyPage or http://ontology.naas.ai/abi/LinkedInSchoolPage.", 
+        description="First name of the person. It can be identified as the first word (before the space) of the person's name (e.g. 'Florent Ravenel' -> 'Florent')"
+    )]
+    last_name: Annotated[Optional[str], Field(
+        None,
+        description="Last name of the person. It can be identified as the last word (after the space) of the person's name (e.g. 'Florent Ravenel' -> 'Ravenel')"
+    )]
+    date_of_birth: Annotated[Optional[str], Field(
+        None,
+        description="Date of birth of the person. It must be in the format 'YYYY-MM-DD' (e.g. '1990-01-01').",
+        pattern=r"^\d{4}-\d{2}-\d{2}$"
+    )]
+    linkedin_page_uri: Annotated[Optional[str], Field(
+        None,
+        description="LinkedIn Page URI of the person from class: http://ontology.naas.ai/abi/LinkedInProfilePage or http://ontology.naas.ai/abi/LinkedInCompanyPage or http://ontology.naas.ai/abi/LinkedInSchoolPage.",
         pattern=URI_REGEX
-    )
-    skill_uri: Optional[List[str]] = Field(
-        None, 
+    )]
+    skill_uri: Annotated[Optional[List[str]], Field(
+        None,
         description="Skill URI of the person from class: https://www.commoncoreontologies.org/ont00000089",
         pattern=URI_REGEX
-    )
+    )]
 
 class AddPersonPipeline(Pipeline):
     """Pipeline for adding a new person to the ontology."""
