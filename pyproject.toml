@@ -46,6 +46,7 @@ dependencies = [
     "types-requests>=2.31.0.6",
     "pyperclip>=1.9.0",
     "streamlit>=1.45.1",
+    "pydantic>=2.11.4",
 ]
 
 [project.scripts]
