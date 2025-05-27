@@ -1,17 +1,20 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.modules.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
-from src import secret, config, services
+from src.core.modules.naas.integrations.NaasIntegration import (
+    NaasIntegration,
+    NaasIntegrationConfiguration,
+)
+from src import config
 from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
-from typing import Any
+from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
-from typing import Dict
+from typing import Dict, Annotated
+from enum import Enum
 import pydash as _
 from rdflib import Graph
 from src.core.modules.ontology.mappings import COLORS_NODES
@@ -19,15 +22,17 @@ from src.core.modules.ontology.mappings import COLORS_NODES
 @dataclass
 class ConvertOntologyGraphToYamlConfiguration(WorkflowConfiguration):
     """Configuration for ConvertOntologyGraphToYaml workflow.
-    
+
     Attributes:
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
+
     naas_integration_config: NaasIntegrationConfiguration
+
 
 class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
     """Parameters for ConvertOntologyGraphToYaml workflow execution.
-    
+
     Attributes:
         ontology_name (str): The name of the ontology store to use
         label (str): The label of the ontology
@@ -36,27 +41,47 @@ class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-    graph: str = Field(..., description="The graph serialized as turtle format")
-    label: str = Field(..., description="The label of the ontology")
-    description: str = Field(..., description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'")
-    logo_url: str = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
-    level: str ='USE_CASE'
+
+    graph: Annotated[str, Field(
+        ...,
+        description="The graph serialized as turtle format"
+    )]
+    ontology_id: Annotated[str | None, Field(
+        ...,
+        description="The ID of the ontology"
+    )] = None
+    label: Annotated[str, Field(
+        ...,
+        description="The label of the ontology"
+    )]
+    description: Annotated[str, Field(
+        ...,
+        description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'",
+    )]
+    logo_url: str = (
+        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
+    )
+    level: str = "USE_CASE"
     display_relations_names: bool = True
     class_colors_mapping: Dict[str, str] = COLORS_NODES
 
+
 class ConvertOntologyGraphToYamlWorkflow(Workflow):
     """Workflow for converting ontology graph to YAML."""
-    
+
     __configuration: ConvertOntologyGraphToYamlConfiguration
 
     def __init__(self, configuration: ConvertOntologyGraphToYamlConfiguration):
         self.__configuration = configuration
-        self.__naas_integration = NaasIntegration(self.__configuration.naas_integration_config)
+        self.__naas_integration = NaasIntegration(
+            self.__configuration.naas_integration_config
+        )
 
     def graph_to_yaml(self, parameters: ConvertOntologyGraphToYamlParameters) -> str:
         # Initialize parameters
         logger.debug(f"==> Converting ontology graph to YAML: {parameters.label}")
         yaml_data = None
+        ontology_id = parameters.ontology_id
 
         # Create Graph from turtle string
         g = Graph()
@@ -64,24 +89,30 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
 
         # Upload asset to Naas
         asset = self.__naas_integration.upload_asset(
-            data=parameters.graph.encode('utf-8'),  # Use the original turtle string
+            data=parameters.graph.encode("utf-8"),  # Use the original turtle string
             workspace_id=config.workspace_id,
             storage_name=config.storage_name,
             prefix="assets",
             object_name=str(parameters.label + ".ttl"),
-            visibility="public"
+            visibility="public",
         )
         # Save asset URL to JSON
-        asset_url = asset.get("asset").get("url")
+        if asset is None:
+            raise ValueError("Failed to upload asset to Naas")
+            
+        asset_url = asset.get("asset", {}).get("url")
+        if not asset_url:
+            raise ValueError("Asset URL not found in response")
+            
         if asset_url.endswith("/"):
             asset_url = asset_url[:-1]
 
         # Convert to YAML
         try:
             yaml_data = OntologyYaml.rdf_to_yaml(
-                g, 
+                g,
                 display_relations_names=parameters.display_relations_names,
-                class_colors_mapping=parameters.class_colors_mapping
+                class_colors_mapping=parameters.class_colors_mapping,
             )
         except Exception as e:
             message = f"Error converting ontology to YAML: {e}"
@@ -96,10 +127,11 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
             onto_level = parameters.level
 
             # Get ontology ID if it exists
-            ontologies = self.__naas_integration.get_ontologies(workspace_id).get("ontologies", [])
-            ontology_id = None
+            ontologies = self.__naas_integration.get_ontologies(workspace_id).get(
+                "ontologies", []
+            )
             for ontology in ontologies:
-                if ontology.get("label") == onto_label:
+                if ontology and isinstance(ontology, dict) and ontology.get("label") == onto_label:
                     ontology_id = ontology.get("id")
                     break
 
@@ -114,7 +146,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
                     download_url=asset_url,
                     logo_url=onto_logo_url,
                 )
-                ontology_id = _.get(res, "ontology.id")
+                ontology_id = str(_.get(res, "ontology.id", ""))
                 message = f"✅ Ontology '{onto_label}' ({ontology_id}) successfully created."
             else:
                 # Update existing ontology
@@ -127,20 +159,34 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
                     download_url=asset_url,
                     logo_url=onto_logo_url,
                 )
-                message = f"✅ Ontology '{onto_label}' ({ontology_id}) successfully updated."
+                message = (
+                    f"✅ Ontology '{onto_label}' ({ontology_id}) successfully updated."
+                )
         logger.debug(message)
+        if ontology_id is None:
+            raise ValueError("Failed to create or update ontology")
         return ontology_id
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
                 name="ontology_convert_graph_to_yaml",
                 description="Convert an ontology graph to YAML.",
-                func=lambda **kwargs: self.graph_to_yaml(ConvertOntologyGraphToYamlParameters(**kwargs)),
-                args_schema=ConvertOntologyGraphToYamlParameters
+                func=lambda **kwargs: self.graph_to_yaml(
+                    ConvertOntologyGraphToYamlParameters(**kwargs)
+                ),
+                args_schema=ConvertOntologyGraphToYamlParameters,
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
         pass

@@ -1,15 +1,13 @@
-from pydantic import BaseModel, Field, create_model
-from typing import TypeVar, Generic, Type
-from langchain_core.tools import StructuredTool
+from pydantic import Field, create_model
 
-from lib.abi import logger
+from abi import logger
 
 from .GenericWorkflow import GenericWorkflow
 
 
 def templatable_queries():
     from src import services
-    
+
     results = services.triple_store_service.query("""
         PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -24,26 +22,30 @@ def templatable_queries():
     """)
 
     queries = {}
-    
+
     for result in results:
         query, label, description, sparqlTemplate, hasArgument = result
         queries[query] = {
             "label": label,
             "description": description,
             "sparqlTemplate": sparqlTemplate,
-            "hasArgument": [hasArgument] if (query not in queries or queries[query].get("hasArgument") is None) else queries[query].get("hasArgument") + [hasArgument]
+            "hasArgument": [hasArgument]
+            if (query not in queries or queries[query].get("hasArgument") is None)
+            else queries[query].get("hasArgument") + [hasArgument],
         }
 
     arguments = {}
     for templatableQuery in queries:
-        
         for argument in queries[templatableQuery].get("hasArgument"):
-            q = """
+            q = (
+                """
                 PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
                 
                 SELECT ?argument ?name ?description ?validationPattern ?validationFormat
                 WHERE {
-                    BIND(<""" + str(argument) + """> AS ?argument)
+                    BIND(<"""
+                + str(argument)
+                + """> AS ?argument)
                     ?argument a intentMapping:QueryArgument ;
                         intentMapping:argumentName ?name ;
                         intentMapping:argumentDescription ?description ;
@@ -51,19 +53,23 @@ def templatable_queries():
                         intentMapping:validationFormat ?validationFormat .
                 }
             """
-            logger.debug(f'Query: {q}')
+            )
+            logger.debug(f"Query: {q}")
             results = services.triple_store_service.query(q)
-            
+
             for result in results:
-                argument, name, description, validationPattern, validationFormat = result
-                
+                argument, name, description, validationPattern, validationFormat = (
+                    result
+                )
+
                 arguments[argument] = {
                     "name": name,
                     "description": description,
                     "validationPattern": validationPattern,
-                    "validationFormat": validationFormat
+                    "validationFormat": validationFormat,
                 }
     return queries, arguments
+
 
 def load_workflows():
     workflows = []
@@ -76,23 +82,28 @@ def load_workflows():
 
         # Arguments Model with validation patterns
         arguments_model = create_model(
-            f"{query['label'].capitalize()}Arguments", 
+            f"{str(query['label']).capitalize()}Arguments",
             **{
-                arguments[argument]["name"]: (
-                    str, 
+                str(arguments[argument]["name"]): (
+                    str,
                     Field(
                         ...,
-                        description=arguments[argument]["description"],
-                        pattern=arguments[argument]["validationPattern"],
+                        description=str(arguments[argument]["description"]),
+                        pattern=str(arguments[argument]["validationPattern"]),
                         # You could also add additional metadata from validationFormat if needed
-                        example=arguments[argument]["validationFormat"]
-                    )
+                        example=str(arguments[argument]["validationFormat"]),
+                    ),
                 )
                 for argument in query.get("hasArgument")
-            }
+            },
         )
 
-        p = GenericWorkflow[arguments_model](query["label"], query["description"], query["sparqlTemplate"], arguments_model)
+        p = GenericWorkflow[arguments_model](
+            str(query["label"]),
+            str(query["description"]),
+            str(query["sparqlTemplate"]),
+            arguments_model,
+        )
         workflows.append(p)
 
     return workflows

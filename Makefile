@@ -1,63 +1,159 @@
-.venv:
-	@ docker compose run --rm --remove-orphans abi poetry install
+# Git hooks setups
 
-dev-build:
+.git/hooks/pre-commit:
+	@mkdir -p .git/hooks
+	@echo 'cd "$(git rev-parse --show-toplevel)" || exit 1;make check' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+
+git-deps: .git/hooks/pre-commit
+
+###############@
+
+deps: uv git-deps .venv .env
+
+# Make sure uv exists otherwise tell the user to install it.
+uv:
+	@if ! command -v uv >/dev/null 2>&1; then \
+		echo "🚀 Oops! Looks like uv is missing from your system!"; \
+		echo "📚 Don't worry - you can get it here: https://docs.astral.sh/uv/getting-started/installation/"; \
+		exit 1; \
+	fi
+	@ uv python find 3.10 > /dev/null || (uv python install 3.10 && uv python pin 3.10)
+
+.env:
+	@if [ ! -f .env ]; then \
+		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
+		cp .env.example .env; \
+		echo "✅ .env file initialized with .env.example"; \
+	fi
+
+.venv:
+	@ uv sync
+
+.venv/lib/python3.10/site-packages/abi: deps
+	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+
+
+install: dep
+	@ uv sync
+
+dev-build: deps
 	@ docker compose build
 
-install:
-	@ docker compose run --rm --remove-orphans abi poetry install
-	@ docker compose run --rm --remove-orphans abi poetry update abi
+abi-add: deps
+	cd lib && uv add $(dep) && uv lock
 
-abi-add: .venv
-	@ docker compose run --rm abi bash -c 'cd lib && poetry add $(dep) && poetry lock'
+add: deps
+	uv add $(dep) && uv lock
 
-add:
-	@ docker compose run --rm abi bash -c 'poetry add $(dep) && poetry lock'
-
-lock:
-	@ docker compose run --rm --remove-orphans abi poetry lock
+lock: deps
+	@ uv lock
 
 path=tests/
-test: 
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python -m pytest tests'
+test:  deps
+	@ uv run python -m pytest .
+
+ftest: deps
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+
+fmt: deps
+	@ uvx ruff format
+
+#########################
+# Linting, Static Analysis, Security
+#########################
+
+check: deps .venv/lib/python3.10/site-packages/abi check-core check-custom
+
+check-core: deps
+	@echo ""
+	@echo "  _____ _____ _____ _____"
+	@echo " |     |     |     |     |"
+	@echo " |  C  |  O  |  R  |  E  |"
+	@echo " |_____|_____|_____|_____|"
+	@echo ""
+	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
+	@echo "📝 Linting with ruff..."
+	@uvx ruff check lib src/core
+
+	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
+	@echo "• Checking lib.abi..."
+	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
+	@echo "• Checking src.core..."
+	@.venv/bin/mypy -p src.core --follow-untyped-imports
+
+	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#uv run pyrefly check lib src tests
+
+	@echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
+	@echo "⚠️ Skipping bandit... (disabled)"
+	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
+	@echo "\n✅ CORE security checks passed!"
+
+check-custom: deps
+	@echo ""
+	@echo "  _____ _____ _____ _____ _____ _____"
+	@echo " |     |     |     |     |     |     |"
+	@echo " |  C  |  U  |  S  |  T  |  O  |  M  |"
+	@echo " |_____|_____|_____|_____|_____|_____|"
+	@echo ""
+	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
+	@echo "📝 Linting with ruff..."
+	@uvx ruff check src/custom
+
+	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
+	@.venv/bin/mypy -p src.custom --follow-untyped-imports
+
+	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#uv run pyrefly check src/custom
+
+	@echo "\n✅ CUSTOM security checks passed!"
+
+bandit:
+	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r
 
 
+trivy-container-scan: build
+	docker save abi:latest -o abi.tar && trivy image --input abi.tar && rm abi.tar
 
-sh: .venv
-	@ docker compose run --rm --remove-orphans -it abi bash
-  
-api: .venv
-	@ docker compose run --rm --remove-orphans -p 9879:9879 abi poetry run api
+#########################
 
-api-prod:
+api: deps
+	uv run src/api.py
+
+api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
-sparql-terminal: .venv
-	@ docker compose run --rm --remove-orphans -it abi bash -c 'poetry run python -m src.core.apps.sparql_terminal.main'
+api-dev: deps
+	@ docker build -t abi-dev -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-dev
 
-dvc-login: .venv
-	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/setup_dvc.py | sh'
+sparql-terminal: deps
+	@ uv run python -m src.core.apps.sparql_terminal.main	
 
-storage-pull: .venv
+dvc-login: deps
+	@ uv run run python scripts/setup_dvc.py | sh
+
+storage-pull: deps
 	@ echo "Pulling storage..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/storage_pull.py | sh'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_pull.py | sh'
 
-storage-push: .venv storage-pull
+storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ docker compose run --rm --remove-orphans  abi bash -c 'poetry run python scripts/storage_push.py | sh'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
 
-triplestore-prod-remove: .venv
+triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
-	@ docker compose run --rm -it --remove-orphans  abi bash -c 'poetry run python scripts/triplestore_prod_remove.py'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_remove.py'
 
-triplestore-prod-override: .venv
+triplestore-prod-override: deps
 	@ echo "Overriding production triplestore..."
-	@ docker compose run -it --rm --remove-orphans  abi bash -c 'poetry run python scripts/triplestore_prod_override.py'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_override.py'
 
-triplestore-prod-pull: .venv
+triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'poetry run python scripts/triplestore_prod_pull.py'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
 
 clean:
 	@echo "Cleaning up build artifacts..."
@@ -74,14 +170,11 @@ help:
 	@echo ""
 	@echo "ENVIRONMENT SETUP:"
 	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
+	@echo "  install                  Install all dependencies (similar to .venv)"
 	@echo "  dev-build                Build all Docker containers defined in docker-compose.yml"
-	@echo "  install                  Install all dependencies and update the abi package"
-	@echo "  add dep=<package>        Add a new dependency to the project"
-	@echo "  abi-add dep=<package>    Add a new dependency to the lib directory"
 	@echo "  lock                     Update the Poetry lock file without installing packages"
 	@echo ""
 	@echo "DEVELOPMENT:"
-	@echo "  sh                       Open an interactive bash shell in the ABI Docker container"
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
@@ -127,23 +220,34 @@ build: build.linux.x86_64
 #   - Image name: abi
 #   - Dockerfile: Dockerfile.linux.x86_64
 #   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
-build.linux.x86_64: .venv
-	docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+build.linux.x86_64: deps
+	DOCKER_BUILDKIT=1 docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+	
+	@# Show container size
+	@docker image ls abi
 
 # -------------------------------------------------------------------------------------------------
 
-chat-naas-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent'
+chat-naas-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent'
+chat-supervisor-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
 
-chat-ontology-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent'
+chat-ontology-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
 
-chat-support-agent: .venv
-	@ docker compose run abi bash -c 'poetry install && poetry run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent'
+chat-support-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
-.DEFAULT_GOAL := help
+pull-request-description: deps
+	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help
+default: deps help
+.DEFAULT_GOAL := default
+
+chat: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
+
+
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv

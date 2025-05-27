@@ -1,32 +1,36 @@
 from src import services
 from abi import logger
-from rdflib import URIRef
+from rdflib import URIRef, query
+from typing import Union, List, Dict
+
 
 # Transform SPARQL results to list of dictionaries using the labels as keys
-def results_to_list(results: list[dict]) -> list[dict]:
+def results_to_list(results: query.Result) -> Union[List[Dict], None]:
     data = []
     for row in results:
+        assert isinstance(row, query.ResultRow)
         logger.debug(f"==> Row: {row}")
         data_dict = {}
         for key in row.labels:
             data_dict[key] = str(row[key]) if row[key] else None
         data.append(data_dict)
-    return data
+    return data if len(data) > 0 else None
+
 
 # Get the class URI for a given URI from the triple store
-def get_class_uri_from_individual_uri(uri: str) -> str:
+def get_class_uri_from_individual_uri(uri: str) -> Union[str, None]:
     """
     Get the class URI for a given URI from the triple store.
-    
+
     Args:
         uri (str): The URI to look up
-        
+
     Returns:
         str: The class URI if found, None otherwise
     """
     if not str(uri).startswith("http://ontology.naas.ai/abi/"):
         return None
-    
+
     # Init
     g = services.triple_store_service.get_subject_graph(uri)
 
