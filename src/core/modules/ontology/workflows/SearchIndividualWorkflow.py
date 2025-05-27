@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
 from typing import Annotated, List, Dict
+from enum import Enum
 
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
@@ -80,5 +81,16 @@ class SearchIndividualWorkflow(Workflow):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None
+

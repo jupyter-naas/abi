@@ -53,7 +53,10 @@ class AddWebsitePipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddWebsitePipelineParameters) -> str:
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, AddWebsitePipelineParameters):
+            raise ValueError("Parameters must be of type AddWebsitePipelineParameters")
+        
         # Initialize a new graph
         graph = Graph()
 
@@ -86,7 +89,7 @@ class AddWebsitePipeline(Pipeline):
 
         # Save the graph
         self.__configuration.triple_store.insert(graph)
-        return website_uri
+        return graph
 
     def as_tools(self) -> list[BaseTool]:
         return [

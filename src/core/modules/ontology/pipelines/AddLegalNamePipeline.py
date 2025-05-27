@@ -49,7 +49,10 @@ class AddLegalNamePipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddLegalNamePipelineParameters) -> Graph:
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, AddLegalNamePipelineParameters):
+            raise ValueError("Parameters must be of type AddLegalNamePipelineParameters")
+        
         # Init graph
         graph_insert = Graph()
         organization_uri = None

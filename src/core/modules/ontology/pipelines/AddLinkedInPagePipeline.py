@@ -65,7 +65,10 @@ class AddLinkedInPagePipeline(Pipeline):
             configuration.add_individual_pipeline_configuration
         )
 
-    def run(self, parameters: AddLinkedInPagePipelineParameters) -> Graph:
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, AddLinkedInPagePipelineParameters):
+            raise ValueError("Parameters must be of type AddLinkedInPagePipelineParameters")
+        
         # Initialize graphs
         graph_insert = Graph()
         

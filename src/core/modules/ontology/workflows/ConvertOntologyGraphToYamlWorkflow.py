@@ -19,7 +19,6 @@ import pydash as _
 from rdflib import Graph
 from src.core.modules.ontology.mappings import COLORS_NODES
 
-
 @dataclass
 class ConvertOntologyGraphToYamlConfiguration(WorkflowConfiguration):
     """Configuration for ConvertOntologyGraphToYaml workflow.
