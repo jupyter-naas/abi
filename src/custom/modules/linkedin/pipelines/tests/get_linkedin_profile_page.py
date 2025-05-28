@@ -30,7 +30,7 @@ configuration = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIO
 linkedin_integration = LinkedInIntegration(configuration)
 
 ## Parameters
-linkedin_url = "https://www.linkedin.com/in/giacomodecolle/"
+linkedin_url = "https://www.linkedin.com/in/jeremyravenel/"
 data_store_path = "datastore/linkedin/get_profile_view"
 
 # Integration
@@ -79,7 +79,6 @@ profile_urn = data.get("*profile")
 lk_profile_id = str(string_to_uuid(profile_urn))
 profile_uri = ABI[lk_profile_id]
 profile_data = pydash.filter_(included, lambda x: x.get("entityUrn") == profile_urn)[0]
-save_json(dict(sorted(profile_data.items())), output_dir, f"{profile_id}_Profile_{lk_profile_id}.json", copy=False)
 name = (profile_data.get("firstName", "") + " " + profile_data.get("lastName", "")).strip()
 print(f"==> Create LinkedIn Profile: {name} ({profile_uri})")
 graph_profile_data = Graph()
@@ -240,7 +239,6 @@ for k, v in data.items():
                 graph_view_data.add((view_uri, RDF.type, LINKEDIN[class_label]))
 
             element_data = pydash.filter_(included, lambda x: x.get("entityUrn") == view_data_element)[0]
-            save_json(dict(sorted(element_data.items())), output_dir, f"{profile_id}_{class_label}_{view_id}.json", copy=False)
             graph_view_data = add_properties(graph_view_data, view_uri, element_data)
 
             graph_view_data.add((view_uri, LINKEDIN[relation_label_inverse], profile_uri))
@@ -258,6 +256,7 @@ graph_insert.bind("linkedin", LINKEDIN)
 graph_insert.bind("bfo", BFO)
 graph_insert += graph_linkedin_page
 graph_insert += graph_profile_data
+
 save_triples(
     graph_insert, 
     output_dir, 
