@@ -2,7 +2,7 @@ from src import secret
 from src.core.modules.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
 from src.custom.modules.linkedin.integrations.LinkedInIntegration import LinkedInIntegration, LinkedInIntegrationConfiguration
 import pydash
-from abi.utils.Storage import save_json, save_triples, save_yaml
+from abi.utils.Storage import save_triples, save_yaml
 import os
 from rdflib import Graph, URIRef, RDF, OWL, RDFS, Literal, XSD, Namespace
 from src import services
