@@ -2,7 +2,7 @@ from src import services
 from abi import logger
 from io import BytesIO
 import json
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Union
 import pandas as pd
 from datetime import datetime
 from rdflib import Graph
@@ -18,6 +18,29 @@ def __make_copy(dir_path: str, file_name: str, content: bytes) -> Tuple[str, str
         key=file_name,
         content=content
     )
+    return dir_path, file_name
+
+def get_image(dir_path: str, file_name: str) -> Union[BytesIO, None]:
+    """
+    Get an image from storage.
+    """
+    try:
+        return services.storage_service.get_object(dir_path, file_name)
+    except Exception as e:
+        logger.info(f"Error getting image from {dir_path}: {e}")
+        return None
+
+def save_image(image: BytesIO, dir_path: str, file_name: str, copy: bool = True) -> Tuple[str, str]:
+    """
+    Save an image to storage.
+    """
+    services.storage_service.put_object(
+        prefix=dir_path,
+        key=file_name,
+        content=image
+    )
+    if copy:
+        __make_copy(dir_path, file_name, image.getvalue())
     return dir_path, file_name
 
 def get_yaml(dir_path: str, file_name: str) -> Dict:
@@ -82,12 +105,12 @@ def get_json(dir_path: str, file_name: str) -> Dict:
     except Exception as e:
         logger.info(f"Error getting JSON data from {dir_path}: {e}")
         return {}
-
-def save_json(data: dict, dir_path: str, file_name: str, copy: bool = True) -> Tuple[str, str]:
+    
+def save_json(data: dict, dir_path: str, file_name: str, copy: bool = True, sort_keys: bool = True) -> Tuple[str, str]:
     """
     Save JSON data to storage.
     """
-    content = json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8")
+    content = json.dumps(data, indent=4, ensure_ascii=False, sort_keys=sort_keys).encode("utf-8")
     services.storage_service.put_object(
         prefix=dir_path,
         key=file_name,
