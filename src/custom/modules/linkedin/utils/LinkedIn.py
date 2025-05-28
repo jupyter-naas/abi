@@ -10,13 +10,13 @@ def get_last_day_of_month(year, month):
     last_day = calendar.monthrange(year, month)[1]
     return last_day
 
-def get_date(data: dict, date_type: str) -> str:
-    date_iso = None
+def get_date(data: dict, date_type: str) -> str | None:
+    date_iso: datetime | None = None
     date_format_iso = "%Y-%m-%dT%H:%M:%S.%fZ"
     m = "01"
     d = "01"
     H = "00"
-    M = "00"
+    M = "00" 
     S = "00"
     if date_type == "end":
         m = "12"
@@ -41,4 +41,5 @@ def get_date(data: dict, date_type: str) -> str:
             date_iso = datetime.strptime(
                 f"{year}-{month}-{day}T{H}:{M}:{S}.000Z", date_format_iso
             )
-    return date_iso.strftime(date_format_iso)
+        return date_iso.strftime(date_format_iso) if date_iso else None
+    return None
