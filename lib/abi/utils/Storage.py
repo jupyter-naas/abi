@@ -2,7 +2,7 @@ from src import services
 from abi import logger
 from io import BytesIO
 import json
-from typing import Tuple, Dict, Union
+from typing import Tuple, Dict
 import pandas as pd
 from datetime import datetime
 from rdflib import Graph
@@ -20,7 +20,7 @@ def __make_copy(dir_path: str, file_name: str, content: bytes) -> Tuple[str, str
     )
     return dir_path, file_name
 
-def get_image(dir_path: str, file_name: str) -> Union[BytesIO, None]:
+def get_image(dir_path: str, file_name: str) -> bytes | None:
     """
     Get an image from storage.
     """
@@ -30,7 +30,7 @@ def get_image(dir_path: str, file_name: str) -> Union[BytesIO, None]:
         logger.info(f"Error getting image from {dir_path}: {e}")
         return None
 
-def save_image(image: BytesIO, dir_path: str, file_name: str, copy: bool = True) -> Tuple[str, str]:
+def save_image(image: bytes, dir_path: str, file_name: str, copy: bool = True) -> Tuple[str, str]:
     """
     Save an image to storage.
     """
@@ -40,7 +40,7 @@ def save_image(image: BytesIO, dir_path: str, file_name: str, copy: bool = True)
         content=image
     )
     if copy:
-        __make_copy(dir_path, file_name, image.getvalue())
+        __make_copy(dir_path, file_name, image)
     return dir_path, file_name
 
 def get_yaml(dir_path: str, file_name: str) -> Dict:
