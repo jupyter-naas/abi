@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from abi.services.secret.Secret import Secret
 from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
     DotenvSecretSecondaryAdaptor,
@@ -13,8 +15,6 @@ from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
 import atexit
-from dotenv import load_dotenv
-load_dotenv()
 
 @atexit.register
 def shutdown_services():
