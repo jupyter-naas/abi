@@ -4,7 +4,9 @@ import urllib.parse
 from dataclasses import dataclass
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 import os
-from abi.utils.Storage import get_json, save_json
+from abi.utils.Storage import get_json, save_json, save_image
+import pydash
+
 
 @dataclass
 class LinkedInIntegrationConfiguration(IntegrationConfiguration):
@@ -48,10 +50,84 @@ class LinkedInIntegration(Integration):
             "X-Requested-With": "XMLHttpRequest",
             "X-Restli-Protocol-Version": "2.0.0"
         }
-    def _make_request(self, method: str, endpoint: str, params: Dict | None = None) -> Dict:
-        """Make HTTP request to LinkedIn API."""
-        url = f"{self.__configuration.base_url}{endpoint}"
 
+    def __save_images(self, data: dict, key: str, output_dir: str):
+        """
+        Extracts picture URLs from a nested dictionary.
+
+        Args:
+            data (dict): The dictionary containing picture data.
+            key (str): The key to extract picture URLs from.
+            output_dir (str): The directory to save the images to.
+
+        Returns:
+            list: A list of picture URLs.
+        """
+        entity_urn = data.get("entityUrn")
+        if key == "logo":
+            root_url = pydash.get(data, f"{key}.image.rootUrl")
+            artifacts = pydash.get(data, f"{key}.image.artifacts", [])
+        else:
+            root_url = pydash.get(data, f"{key}.rootUrl")
+            artifacts = pydash.get(data, f"{key}.artifacts", [])
+        if root_url:
+            for x in artifacts:
+                file_url = x.get("fileIdentifyingUrlPathSegment")
+                image_url = f"{root_url}{file_url}"
+                response = requests.get(image_url)
+                save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
+
+
+    def __get_cached_data(self, prefix: str, filename: str) -> Dict:
+        """Get data from cache if it exists."""
+        return get_json(os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
+
+    def __save_to_cache(self, prefix: str, filename: str, data: dict) -> Dict:
+        """Save data to cache."""
+        save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
+        
+        # Initialize output directory
+        output_dir = os.path.join(self.__configuration.data_store_path, prefix)
+
+        # Save dict data
+        output_dir_data = os.path.join(output_dir, "data")
+        data_dict = data.get("data", {})
+        if len(get_json(output_dir_data, f"{filename}_data.json")) == 0:
+            save_json(data_dict, output_dir_data, f"{filename}_data.json")
+
+        # Save dict included
+        output_dir_included = os.path.join(output_dir, "included")
+        included = data.get("included", [])
+        if len(get_json(output_dir_included, f"{filename}_included.json")) == 0:
+            save_json(included, output_dir_included, f"{filename}_included.json")
+        for include in included:
+            dict_type = include.get("$type")
+            dict_label = dict_type.split(".")[-1].strip()
+            output_dir_dict_type = os.path.join(output_dir_included, dict_label)
+            entity_urn = include.get("entityUrn")
+            if len(get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
+                save_json(include, output_dir_dict_type, f"{entity_urn}.json")
+            for key in ["logo", "backgroundImage", "profile"]:
+                if include.get(key):
+                    self.__save_images(include, key, output_dir_dict_type)
+        return data
+
+    def _make_request(
+        self,
+        prefix: str,
+        filename: str,
+        method: str, 
+        endpoint: str, 
+        params: Dict | None = None,
+    ) -> Dict:
+        """Make HTTP request to LinkedIn API."""
+        # Get data from cache
+        data = self.__get_cached_data(prefix=prefix, filename=filename)
+        if len(data) > 0 and self.__configuration.use_cache:
+            return data
+        
+        # Make request
+        url = f"{self.__configuration.base_url}{endpoint}"
         try:
             response = requests.request(
                 method=method,
@@ -61,17 +137,9 @@ class LinkedInIntegration(Integration):
                 params=params
             )
             response.raise_for_status()
-            return response.json() if response.content else {}
+            return self.__save_to_cache(prefix=prefix, filename=filename, data=response.json()) if response.content else {}
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
-        
-    def _get_cached_data(self, prefix: str, filename: str) -> Dict:
-        """Get data from cache if it exists."""
-        return get_json(os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
-
-    def _save_to_cache(self, prefix: str, filename: str, data: dict) -> None:
-        """Save data to cache."""
-        save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
 
     def get_organization_id(self, url: str) -> str:
         """Extract organization ID from LinkedIn URL.
@@ -109,12 +177,6 @@ class LinkedInIntegration(Integration):
         # Get organization ID
         org_id = self.get_organization_id(linkedin_url)
         prefix = os.path.join("get_organization_info", org_id)
-        filename = f"{org_id}"
-
-        # Get data from cache
-        data = self._get_cached_data(prefix=prefix, filename=filename)
-        if len(data) > 0:
-            return data
         
         # Set up parameters for the request
         params = {
@@ -124,8 +186,7 @@ class LinkedInIntegration(Integration):
         }
         
         endpoint = f"/organization/companies?{urllib.parse.urlencode(params)}"
-        data = self._make_request("GET", endpoint)
-        self._save_to_cache(prefix=prefix, filename=filename, data=data)
+        data = self._make_request(prefix=prefix, filename=org_id, method="GET", endpoint=endpoint)
         return data
     
     def get_profile_view(self, linkedin_url: str) -> Dict:
@@ -140,19 +201,11 @@ class LinkedInIntegration(Integration):
         # Get organization ID
         profile_id = self.get_profile_id(linkedin_url)
         prefix = os.path.join("get_profile_view", profile_id)
-        filename = f"{profile_id}"
-        
-        # Get data from cache
-        data = self._get_cached_data(prefix=prefix, filename=filename)
-        if len(data) > 0:
-            return data
         
         endpoint = f"/identity/profiles/{profile_id}/profileView"
-        data = self._make_request("GET", endpoint)
-        self._save_to_cache(prefix=prefix, filename=filename, data=data)
+        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
         return data
 
-    
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
