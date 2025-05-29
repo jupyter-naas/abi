@@ -16,8 +16,9 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
     GitHubSupportWorkflows,
     GitHubSupportWorkflowsConfiguration,
 )
-from langchain_core.language_models.chat_models import BaseChatModel
-from src.core.modules.common.models.default import default_chat_model
+from typing import Optional
+from enum import Enum
+from pydantic import SecretStr
 
 NAME = "support_agent"
 MODEL = "gpt-4o"
@@ -60,12 +61,16 @@ SUGGESTIONS = [
 
 
 def create_agent(
-    agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None,
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Init
-    model: BaseChatModel = default_chat_model()
-    tools = []
+    model = ChatOpenAI(
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+    )
+    tools: list = []
 
     if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):
         github_integration_config = GithubIntegrationConfiguration(
@@ -111,8 +116,10 @@ class SupportAssistant(Agent):
         name: str = NAME.capitalize(),
         description: str = "API endpoints to call the Support agent completion.",
         description_stream: str = "API endpoints to call the Support agent stream completion.",
-        tags: list[str] = [],
-    ):
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )

@@ -53,7 +53,7 @@ uv:
 	fi
 
 .venv:
-	@ uv sync
+	@ uv sync --all-extras
 
 .venv/lib/python3.10/site-packages/abi: deps
 	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
@@ -76,10 +76,14 @@ lock: deps
 
 path=tests/
 test:  deps
-	@ uv run python -m pytest .
+	@ uv run python -m pytest -n 4 .
 
+test-abi: deps
+	@ uv run python -m pytest -n 4 lib
+
+q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
@@ -104,8 +108,8 @@ check-core: deps
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking lib.abi..."
 	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
-	@echo "\n⚠️ Skipping src.core type checking (disabled)"
-	@#.venv/bin/mypy -p src.core --follow-untyped-imports
+	@echo "• Checking src.core..."
+	@.venv/bin/mypy -p src.core --follow-untyped-imports
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check lib src tests
@@ -162,23 +166,23 @@ dvc-login: deps
 
 storage-pull: deps
 	@ echo "Pulling storage..."
-	@ uv run python scripts/storage_pull.py | sh
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_pull.py | sh'
 
 storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ uv run run python scripts/storage_push.py | sh
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
 
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
-	@ uv run python scripts/triplestore_prod_remove.py
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_remove.py'
 
 triplestore-prod-override: deps
 	@ echo "Overriding production triplestore..."
-	@ uv run python scripts/triplestore_prod_override.py
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_override.py'
 
 triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
-	@ uv run python scripts/triplestore_prod_pull.py
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
 
 clean:
 	@echo "Cleaning up build artifacts..."

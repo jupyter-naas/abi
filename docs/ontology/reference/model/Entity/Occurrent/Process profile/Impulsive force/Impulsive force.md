@@ -10,8 +10,8 @@ Not defined.
 
 ### Aliases
 - Imp
-- Impulse
 - J
+- Impulse
 
 ### URI
 https://www.commoncoreontologies.org/ont00000772

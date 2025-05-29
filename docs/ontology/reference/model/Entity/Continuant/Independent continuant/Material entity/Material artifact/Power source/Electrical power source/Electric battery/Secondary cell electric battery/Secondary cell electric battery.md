@@ -9,8 +9,8 @@ An Electric Battery that is designed to be recharged.
 Not defined.
 
 ### Aliases
-- Rechargeable Battery
 - Secondary Cell Battery
+- Rechargeable Battery
 
 ### URI
 https://www.commoncoreontologies.org/ont00001105

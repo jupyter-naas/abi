@@ -7,8 +7,8 @@ requires-python = "~=3.10"
 readme = "README.md"
 dependencies = [
     "pyyaml>=6.0.1,<7",
-    "abi[all]",
-    "requests>=2.32.3,<3",
+    "abi[ssh]",
+    "requests[socks]>=2.32.3,<3",
     "fastapi>=0.115.5,<0.116",
     "uvicorn[standard]>=0.32.1,<0.33",
     "replicate>=1.0.4,<2",
@@ -48,6 +48,9 @@ dependencies = [
     "streamlit>=1.45.1",
     "langchain-ollama>=0.3.3",
     "ollama>=0.4.8",
+    "pydantic>=2.11.4",
+    "watchdog>=6.0.0",
+    "langchain-google-genai>=2.1.4",
 ]
 
 [project.scripts]
@@ -67,6 +70,7 @@ dev-dependencies = [
     "pytest>=8.3.4,<9",
     "mypy>=1.15.0",
     "pyrefly>=0.16.1",
+    "pytest-xdist>=3.7.0",
 ]
 
 
