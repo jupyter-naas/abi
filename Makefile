@@ -11,6 +11,21 @@ git-deps: .git/hooks/pre-commit
 
 deps: uv git-deps .venv .env
 
+ollama-wait:
+	@while ! curl http://127.0.0.1:11434 > /dev/null 2>&1; do \
+		clear; \
+		echo "🔴 Waiting for ollama to start...\n\n\tIf it's not installed go to https://ollama.com/download to install it and run it.\n\n"; \
+		sleep 5; \
+	done
+
+ollama:
+	@if grep -q '^OLLAMA_ENABLED=true' .env; then \
+		make ollama-wait; \
+		curl http://localhost:11434/api/pull -d '{"model": "llama3.2"}' && echo "Ollama is ready and model pulled";\
+	else \
+		docker compose down ollama; \
+	fi
+
 # Make sure uv exists otherwise tell the user to install it.
 uv:
 	@if ! command -v uv >/dev/null 2>&1; then \
@@ -22,9 +37,26 @@ uv:
 
 .env:
 	@if [ ! -f .env ]; then \
-		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
+		echo "\n📝 Environment Setup\n";\
+		echo "------------------\n";\
+		echo "• Creating .env file from template\n";\
 		cp .env.example .env; \
-		echo "✅ .env file initialized with .env.example"; \
+		echo "✅ Environment file initialized successfully\n";\
+		echo "\n\n📦 Ollama Setup Information\n";\
+		echo "------------------------\n";\
+		echo "• Ollama is enabled by default";\
+		echo "• To disable: Comment out OLLAMA_ENABLED=true in .env\n";\
+		echo "Configuration:\n";\
+		echo "• Model: llama3.2:latest";\
+		echo "• Port: 11434\n";\
+		echo "Requirements:\n";\
+		echo "• Docker installed and running";\
+		echo "• Minimum 5GB RAM allocated to Docker\n";\
+		echo "\n\033[1;33m⚡ Performance Tip\033[0m\n";\
+		echo "\033[4mFor improved agent performance, configure OPENAI_API_KEY in .env\033[0m\n";\
+		echo "• GPT-4 will be used instead of Ollama (llama3.2:latest)\n";\
+		echo "• You can then comment out OLLAMA_ENABLED=true to save resources\n";\
+		[ -t 0 ] && read -p "Press Enter to continue" || true; \
 	fi
 
 .venv:
@@ -122,7 +154,7 @@ trivy-container-scan: build
 
 #########################
 
-api: deps
+api: deps ollama
 	uv run src/api.py
 
 api-prod: deps
@@ -232,27 +264,27 @@ build.linux.x86_64: deps
 
 # -------------------------------------------------------------------------------------------------
 
-chat-naas-agent: deps
+chat-naas-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: deps
+chat-supervisor-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
 
-chat-ontology-agent: deps
+chat-ontology-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
 
-chat-support-agent: deps
+chat-support-agent: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
-pull-request-description: deps
+pull-request-description: deps ollama
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
 .DEFAULT_GOAL := default
 
-agent=SupervisorAgent
-chat: deps
+agent=OntologyAgent
+chat: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv ollama
