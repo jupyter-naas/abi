@@ -5,7 +5,7 @@ from abi.integration.integration import (
 )
 from dataclasses import dataclass
 import requests
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
 LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
@@ -42,13 +42,25 @@ class GithubIntegration(Integration):
         }
 
     def _make_request(
-        self, method: str, endpoint: str, data: Dict = None, params: Dict = None
+        self, 
+        method: str, 
+        endpoint: str, 
+        data: Optional[Dict] = None, 
+        params: Optional[Dict] = None,
+        headers: Optional[Dict] = None
     ) -> Dict:
         """Make HTTP request to Github API."""
         url = f"{self.__configuration.base_url}{endpoint}"
+        request_headers = self.headers.copy()
+        if headers:
+            request_headers.update(headers)
         try:
             response = requests.request(
-                method=method, url=url, headers=self.headers, json=data, params=params
+                method=method, 
+                url=url, 
+                headers=request_headers, 
+                json=data, 
+                params=params
             )
             response.raise_for_status()
             return response.json() if response.content else {}
@@ -86,7 +98,7 @@ class GithubIntegration(Integration):
         """Get a repository by full name (format: 'owner/repo')."""
         return self._make_request("GET", f"/repos/{repo_name}")
 
-    def list_organization_repositories(self, org: str) -> List[Dict]:
+    def list_organization_repositories(self, org: str) -> Dict:
         """Get all repositories for a given owner.
 
         Args:
@@ -175,9 +187,7 @@ class GithubIntegration(Integration):
             - For security_and_analysis changes, admin/owner/security manager required
             - Some org settings may restrict changing repository visibility
         """
-        headers = {"Accept": accept}
-
-        data = {}
+        data: Dict[str, Any] = {}
         if name is not None:
             data["name"] = name
         if description is not None:
@@ -230,29 +240,23 @@ class GithubIntegration(Integration):
             data["web_commit_signoff_required"] = web_commit_signoff_required
 
         return self._make_request(
-            "PATCH", f"/repos/{org}/{repo_name}", headers=headers, data=data
+            "PATCH", 
+            f"/repos/{org}/{repo_name}", 
+            headers={"Accept": accept}, 
+            data=data
         )
 
     def delete_repository(
-        self, repo_name: str, accept: str = "application/vnd.github+json"
+        self, 
+        repo_name: str, 
+        accept: str = "application/vnd.github+json"
     ) -> None:
-        """Deletes a repository.
-
-        Args:
-            repo_name (str): Repository name in 'owner/repo' format
-            accept (str, optional): Media type for the response format. Defaults to "application/vnd.github+json"
-
-        Returns:
-            None
-
-        Note:
-            - Requires admin access to repository
-            - Organization owners may prevent members from deleting repos
-            - OAuth tokens need delete_repo scope
-            - Fine-grained tokens need "Administration" repository write permissions
-        """
-        headers = {"Accept": accept}
-        self._make_request("DELETE", f"/repos/{repo_name}", headers=headers)
+        """Deletes a repository."""
+        self._make_request(
+            "DELETE", 
+            f"/repos/{repo_name}", 
+            headers={"Accept": accept}
+        )
 
     def list_repository_activities(
         self,
@@ -310,7 +314,7 @@ class GithubIntegration(Integration):
             "GET", f"/repos/{repo_name}/activity", headers=headers, params=params
         )
 
-    def get_repository_contributors(self, repo_name: str) -> List[Dict]:
+    def get_repository_contributors(self, repo_name: str) -> Dict:
         """Get a list of contributors for the specified repository.
 
         Args:
@@ -369,7 +373,7 @@ class GithubIntegration(Integration):
         Returns:
             List[Dict]: List of issues matching the specified criteria
         """
-        all_issues = []
+        all_issues: List[Dict] = []
         page = 1
         per_page = 100  # Max allowed by GitHub API
 
@@ -393,14 +397,17 @@ class GithubIntegration(Integration):
                 "GET", f"/repos/{repo_name}/issues?{query_string}"
             )
 
-            if len(response) == 0:
+            if not isinstance(response, list):
                 break
 
             all_issues.extend(response)
 
             # Break if we've reached the requested limit
-            if limit != -1 and len(all_issues) >= limit:
+            if limit is not None and limit != -1 and len(all_issues) >= limit:
                 all_issues = all_issues[:limit]
+                break
+
+            if len(response) == 0:
                 break
 
             page += 1
@@ -415,7 +422,7 @@ class GithubIntegration(Integration):
         since: Optional[str] = None,
         per_page: int = 30,
         page: int = 1,
-    ) -> List[Dict]:
+    ) -> Dict:
         """List comments on issues and pull requests for a repository.
 
         Args:
@@ -1080,7 +1087,7 @@ def as_tools(configuration: GithubIntegrationConfiguration):
         StructuredTool(
             name="github_delete_organization_repository",
             description="Delete a repository for an organization",
-            func=lambda org, repo_name: integration.delete_organization_repository(
+            func=lambda org, repo_name: integration.delete_repository(
                 org, repo_name
             ),
             args_schema=DeleteOrganizationRepositorySchema,

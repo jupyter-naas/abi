@@ -1,11 +1,11 @@
 from src import services
 from abi import logger
 from rdflib import URIRef, query
-from typing import Union
+from typing import Union, List, Dict
 
 
 # Transform SPARQL results to list of dictionaries using the labels as keys
-def results_to_list(results: query.Result) -> list[dict]:
+def results_to_list(results: query.Result) -> Union[List[Dict], None]:
     data = []
     for row in results:
         assert isinstance(row, query.ResultRow)
@@ -14,7 +14,7 @@ def results_to_list(results: query.Result) -> list[dict]:
         for key in row.labels:
             data_dict[key] = str(row[key]) if row[key] else None
         data.append(data_dict)
-    return data
+    return data if len(data) > 0 else None
 
 
 # Get the class URI for a given URI from the triple store
