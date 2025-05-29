@@ -9,8 +9,8 @@ A Rail Transport Vehicle that consists of a series of connected Train Cars or Ra
 Not defined.
 
 ### Aliases
-- Railroad Train
 - Railway Train
+- Railroad Train
 
 ### URI
 https://www.commoncoreontologies.org/ont00001030

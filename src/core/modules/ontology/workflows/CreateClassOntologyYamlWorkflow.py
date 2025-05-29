@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from pydantic import Field
 from abi import logger
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
-from typing import Any
+from langchain_core.tools import StructuredTool, BaseTool
+from typing import Any, Union, Annotated
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Graph, URIRef, RDFS, Literal, RDF, OWL
 from abi.utils.SPARQL import results_to_list, get_class_uri_from_individual_uri
-
+from enum import Enum
 
 @dataclass
 class CreateClassOntologyYamlConfiguration(WorkflowConfiguration):
@@ -42,7 +42,10 @@ class CreateClassOntologyYamlParameters(WorkflowParameters):
         display_relations_names (bool): Whether to display relation names in the visualization
     """
 
-    class_uri: str = Field(..., description="The URI of the class to convert to YAML")
+    class_uri: Annotated[str, Field(
+        ...,
+        description="The URI of the class to convert to YAML"
+    )]
 
 
 class CreateClassOntologyYamlWorkflow(Workflow):
@@ -56,7 +59,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             self.__configuration.convert_ontology_graph_config
         )
 
-    def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Graph:
+    def trigger(self, event: OntologyEvent, triple: tuple[Any, Any, Any]) -> Union[str, None]:
         s, p, o = triple
         # logger.debug(f"==> Triggering Create Class Ontology YAML Workflow: {s} {p} {o}")
         if (
@@ -99,8 +102,12 @@ class CreateClassOntologyYamlWorkflow(Workflow):
         """
         results = services.triple_store_service.query(query)
         result_list = results_to_list(results)
-        ontology_label = result_list[0]["label"]
-        ontology_description = result_list[0]["definition"]
+        if result_list:
+            ontology_label = result_list[0]["label"]
+            ontology_description = result_list[0]["definition"]
+        else:
+            ontology_label = ""
+            ontology_description = ""
 
         # Get triples from class uri
         query = f"""
@@ -168,7 +175,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
         )
         return ontology_id
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
@@ -181,5 +188,15 @@ class CreateClassOntologyYamlWorkflow(Workflow):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

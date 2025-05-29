@@ -10,8 +10,8 @@ the axial rotation of the Earth as seen from above the North Pole
 
 ### Aliases
 - CCW Rotational Motion
-- Anti-Clockwise Rotation
 - Counter-Clockwise Rotation
+- Anti-Clockwise Rotation
 
 ### URI
 https://www.commoncoreontologies.org/ont00001109

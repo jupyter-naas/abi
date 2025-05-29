@@ -6,9 +6,9 @@
 A Language that is developed and evolves through use and repetition, rather than through conscious planning or premeditation.
 
 ### Examples
-- Mandarin (Chinese)
-- Spanish
 - English
+- Spanish
+- Mandarin (Chinese)
 
 ### Aliases
 Not defined.
