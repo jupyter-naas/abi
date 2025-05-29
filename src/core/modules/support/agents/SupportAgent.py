@@ -1,3 +1,4 @@
+from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from abi.services.agent.Agent import (
     Agent,

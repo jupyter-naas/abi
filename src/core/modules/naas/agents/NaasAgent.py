@@ -13,6 +13,8 @@ from src.core.modules.naas.integrations.NaasIntegration import (
 from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
+from langchain_openai import ChatOpenAI
+import os
 
 NAME = "naas_agent"
 MODEL = "gpt-4o"
@@ -40,7 +42,7 @@ def create_agent(
     model = ChatOpenAI(
         model=MODEL, 
         temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+        api_key=SecretStr(os.environ.get("OPENAI_API_KEY") or '')
     )
 
     # Set configuration
