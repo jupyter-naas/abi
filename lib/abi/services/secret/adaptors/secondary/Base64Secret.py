@@ -1,6 +1,8 @@
 from abi.services.secret.SecretPorts import ISecretAdapter
 from typing import Dict, Any
 import base64
+from dotenv import dotenv_values
+from io import StringIO
 
 
 class Base64Secret(ISecretAdapter):
@@ -9,26 +11,26 @@ class Base64Secret(ISecretAdapter):
         self.base64_secret_key = base64_secret_key
 
     def __get_base64_secret(self) -> str:
-        return self.secret_adapter.get(self.base64_secret_key, "")
+        return str(self.secret_adapter.get(self.base64_secret_key, ""))
 
-    def __get_decoded_secrets(self) -> Dict[str, str]:
+    def __get_decoded_secrets(self) -> Dict[str, str | None]:
         base64_secret = self.__get_base64_secret()
 
         if base64_secret == "":
             return {}
 
         base64_secret_content = base64.b64decode(base64_secret).decode("utf-8")
-        decoded_secrets = {}
-        for line in base64_secret_content.split("\n"):
-            if "=" in line:
-                key, value = line.split("=", 1)
-                decoded_secrets[str(key)] = str(value)
+        decoded_secrets = dotenv_values(stream=StringIO(base64_secret_content))
+
+        for key, value in decoded_secrets.items():
+            decoded_secrets[key] = str(value)
+
         return decoded_secrets
 
-    def __encode_secrets(self, secrets: Dict[str, str]) -> str:
+    def __encode_secrets(self, secrets: Dict[str, str | None]) -> str:
         secret_string = ""
         for key, value in secrets.items():
-            secret_string += f"{key}={value}\n"
+            secret_string += f'{key}="{value}"\n'
         return base64.b64encode(secret_string.encode("utf-8")).decode("utf-8")
 
     def get(self, key: str, default: Any = None) -> str | Any | None:
@@ -50,5 +52,5 @@ class Base64Secret(ISecretAdapter):
             self.base64_secret_key, self.__encode_secrets(decoded_secrets)
         )
 
-    def list(self) -> Dict[str, str]:
+    def list(self) -> Dict[str, str | None]:
         return self.__get_decoded_secrets()
