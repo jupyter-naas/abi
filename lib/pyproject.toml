@@ -13,6 +13,7 @@ dependencies = [
     "boto3>=1.38.19,<2",
     "langchain-openai>=0.3.3,<0.4",
     "sparqlwrapper>=2.0.0",
+    "click>=8.2.1",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +21,9 @@ ssh = [
     "paramiko>=3.5.1",
     "sshtunnel>=0.4.0",
 ]
+
+[project.scripts]
+abi = "abi.cli:main"
 
 [build-system]
 requires = ["hatchling"]
