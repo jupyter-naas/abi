@@ -49,7 +49,7 @@ uv:
 		echo "\033[4mFor improved agent performance, configure OPENAI_API_KEY in .env\033[0m\n";\
 		echo "• GPT-4 will be used instead of Ollama (llama3.2:latest)\n";\
 		echo "• You can then comment out OLLAMA_ENABLED=true to save resources\n";\
-		read -p "Press Enter to continue"; \
+		[ -t 0 ] && read -p "Press Enter to continue" || true; \
 	fi
 
 .venv:
