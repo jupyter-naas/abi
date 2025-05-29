@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from abi.services.secret.Secret import Secret
 from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
     DotenvSecretSecondaryAdaptor,
@@ -13,6 +14,11 @@ from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
 import atexit
+import os
+import asyncio
+
+logger.debug("Loading environment variables")
+load_dotenv()
 
 
 @atexit.register
@@ -95,10 +101,26 @@ services = init_services(config, secret)
 logger.debug("Loading modules")
 modules = get_modules()
 
-for module in modules:
-    # Loading ontologies
-    for ontology in module.ontologies:
-        services.triple_store_service.load_schema(ontology)
+
+async def load_ontologies_async():
+    """Load all ontologies asynchronously"""
+    tasks = []
+    for module in modules:
+        # Loading ontologies
+        for ontology in module.ontologies:
+            # Create async task for each load_schema call
+            task = asyncio.create_task(
+                asyncio.to_thread(services.triple_store_service.load_schema, ontology)
+            )
+            tasks.append(task)
+
+    # Wait for all tasks to complete
+    if tasks:
+        await asyncio.gather(*tasks)
+
+
+# Run the async ontology loading
+asyncio.run(load_ontologies_async())
 
 logger.debug("Loading triggers")
 for module in modules:
