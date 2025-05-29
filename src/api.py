@@ -123,8 +123,13 @@ workflows_router = APIRouter(
 def get_git_tag():
     try:
         tag = subprocess.check_output(["git", "describe", "--tags"]).strip().decode()
-    except subprocess.CalledProcessError:
-        tag = "v0.0.1"
+    except Exception as _:
+        # if file VERSION exists, use it
+        if os.path.exists("VERSION"):
+            with open("VERSION", "r") as f:
+                tag = f.read().strip()
+        else:
+            tag = "v0.0.1"
     return tag
 
 
