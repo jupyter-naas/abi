@@ -53,12 +53,15 @@ path=tests/
 test:  deps
 	@ uv run python -m pytest -n 4 .
 
+test-abi: deps
+	@ uv run python -m pytest -n 4 lib
+
 q=''
 ftest: deps
 	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
-	@ uvx ruff format
+	@ uvx ruff format && uvx ruff check --fix
 
 #########################
 # Linting, Static Analysis, Security
