@@ -16,7 +16,7 @@ class ISecretAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def list(self) -> Dict[str, str]:
+    def list(self) -> Dict[str, str | None]:
         raise NotImplementedError()
 
 
@@ -36,5 +36,5 @@ class ISecretService(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def list(self) -> Dict[str, str]:
+    def list(self) -> Dict[str, str | None]:
         raise NotImplementedError()
