@@ -206,7 +206,8 @@ class TripleStoreService(ITripleStoreService):
     def load_schema(self, filepath: str):
         logger.debug(f"Loading schema: {filepath}")
 
-        query = f'SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'
+        query = f'''PREFIX internal: <http://triple-store.internal#>
+        SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
         logger.debug(f"Query: {query}")
         # Check if schema with filePath == filepath already exists and grab all triples
         schema_triples: rdflib.query.Result = self.query(query)
@@ -224,7 +225,8 @@ class TripleStoreService(ITripleStoreService):
 
             # Select * from subject
             triples: rdflib.query.Result = self.query(
-                f"SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"
+                f"""PREFIX internal: <http://triple-store.internal#>
+                SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
             )
 
             # Load schema into a dict
@@ -339,7 +341,8 @@ class TripleStoreService(ITripleStoreService):
 
     def get_schema_graph(self) -> Graph:
         contents: rdflib.query.Result = self.query(
-            "SELECT ?s ?o WHERE { ?s internal:content ?o . }"
+            """PREFIX internal: <http://triple-store.internal#>
+            SELECT ?s ?o WHERE { ?s internal:content ?o . }"""
         )
 
         graph = Graph()

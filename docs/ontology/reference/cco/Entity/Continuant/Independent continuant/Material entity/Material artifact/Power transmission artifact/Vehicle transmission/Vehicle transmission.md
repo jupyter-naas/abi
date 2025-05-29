@@ -9,8 +9,8 @@ A Power Transmission Artifact that is designed to vary the output speed and torq
 Not defined.
 
 ### Aliases
-- Gearbox
 - Transmission
+- Gearbox
 
 ### URI
 https://www.commoncoreontologies.org/ont00000301

@@ -1,7 +1,11 @@
+from dotenv import dotenv_values
 from abi.services.secret.Secret import Secret
-from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
-    DotenvSecretSecondaryAdaptor,
+from abi.services.secret.adaptors.secondary import (
+    dotenv_secret_secondaryadaptor,
+    NaasSecret,
+    Base64Secret,
 )
+from abi.services.secret.SecretPorts import ISecretAdapter
 from src.services import init_services
 from src import cli
 from src.__modules__ import get_modules
@@ -13,6 +17,8 @@ from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
 import atexit
+import os
+import asyncio
 
 
 @atexit.register
@@ -86,7 +92,51 @@ class Config:
 
 
 logger.debug("Loading config")
-secret = Secret(DotenvSecretSecondaryAdaptor())
+secrets_adapters: List[ISecretAdapter] = [
+    dotenv_secret_secondaryadaptor.DotenvSecretSecondaryAdaptor()
+]
+
+naas_api_key = os.getenv("NAAS_API_KEY")
+naas_api_url = os.getenv("NAAS_API_URL", None)
+
+logger.debug(
+    "Loading secrets into environment variables. Priority: Environment variables > .env > Naas Secrets"
+)
+secrets = {}
+if naas_api_key is not None:
+    naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
+    base64_adapter = Base64Secret.Base64Secret(
+        naas_secret_adapter, os.environ.get("ABI_BASE64_SECRET_NAME", "abi_secrets")
+    )
+    abi_secrets = base64_adapter.list()
+
+    if abi_secrets is not None and len(abi_secrets) > 0:
+        logger.debug("Loading Secrets from Naas Secrets")
+        for key, value in abi_secrets.items():
+            if os.getenv(key) is None:
+                secrets[key] = value
+            else:
+                logger.debug(f"Secret {key} already set in environment variables")
+
+    secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
+
+logger.debug("Loading Secrets from .env file")
+envfile_values = dotenv_values()
+for key, value in envfile_values.items():
+    if os.getenv(key) is None:
+        secrets[key] = value
+    else:
+        logger.debug(f"Secret {key} already set in environment variables")
+
+logger.debug("Applying secrets to environment variables.")
+
+# Apply secrets to environment variables
+for key, value in secrets.items():
+    if value is not None:
+        os.environ.setdefault(key, value)
+
+
+secret = Secret(secrets_adapters)
 config = Config.from_yaml()
 
 logger.debug("Initializing services")
@@ -95,10 +145,26 @@ services = init_services(config, secret)
 logger.debug("Loading modules")
 modules = get_modules()
 
-for module in modules:
-    # Loading ontologies
-    for ontology in module.ontologies:
-        services.triple_store_service.load_schema(ontology)
+
+async def load_ontologies_async():
+    """Load all ontologies asynchronously"""
+    tasks = []
+    for module in modules:
+        # Loading ontologies
+        for ontology in module.ontologies:
+            # Create async task for each load_schema call
+            task = asyncio.create_task(
+                asyncio.to_thread(services.triple_store_service.load_schema, ontology)
+            )
+            tasks.append(task)
+
+    # Wait for all tasks to complete
+    if tasks:
+        await asyncio.gather(*tasks)
+
+
+# Run the async ontology loading
+asyncio.run(load_ontologies_async())
 
 logger.debug("Loading triggers")
 for module in modules:
