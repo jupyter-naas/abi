@@ -1,5 +1,5 @@
 from abi.services.secret.SecretPorts import ISecretAdapter, ISecretService
-from typing import Any
+from typing import Any, List, Dict
 
 
 class Secret(ISecretService):
@@ -17,10 +17,32 @@ class Secret(ISecretService):
         >>> api_key = secret_service.get("API_KEY")
     """
 
-    __adapter: ISecretAdapter
+    __adapters: List[ISecretAdapter]
 
-    def __init__(self, adapter: ISecretAdapter):
-        self.__adapter = adapter
+    def __init__(self, adapters: List[ISecretAdapter]):
+        self.__adapters = adapters
 
     def get(self, key: str, default: Any = None) -> str:
-        return self.__adapter.get(key, default)
+        for adapter in self.__adapters:
+            value = adapter.get(key, None)
+
+            if value is not None:
+                return value
+
+        return default
+    
+    def set(self, key: str, value: str):
+        for adapter in self.__adapters:
+            adapter.set(key, value)
+    
+    def remove(self, key: str):
+        for adapter in self.__adapters:
+            adapter.remove(key)
+    
+    def list(self) -> Dict[str, str]:
+        secrets = {}
+
+        for adapter in [adapter for adapter in self.__adapters][::-1]:
+            secrets.update(adapter.list())
+
+        return secrets
