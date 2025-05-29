@@ -282,7 +282,7 @@ pull-request-description: deps ollama
 default: deps help
 .DEFAULT_GOAL := default
 
-agent=SupervisorAgent
+agent=OntologyAgent
 chat: deps ollama
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 

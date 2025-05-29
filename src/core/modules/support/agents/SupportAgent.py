@@ -20,6 +20,7 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
 from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "support_agent"
 MODEL = "gpt-4o"
@@ -66,11 +67,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Init
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    model = default_chat_model()
     tools: list = []
 
     if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):

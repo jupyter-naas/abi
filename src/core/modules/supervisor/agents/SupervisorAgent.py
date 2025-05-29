@@ -16,9 +16,7 @@ from src.core.modules.support.agents.SupportAgent import (
 )
 from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
-from langchain_openai import ChatOpenAI
-import os
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "supervisor_agent"
 MODEL = "o3-mini"
@@ -108,11 +106,12 @@ def create_agent(
     agents: list = []
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(os.environ.get("OPENAI_API_KEY") or '')
-    )
+    model = default_chat_model()
+    # model = ChatOpenAI(
+    #     model=MODEL, 
+    #     temperature=TEMPERATURE, 
+    #     api_key=SecretStr(os.environ.get("OPENAI_API_KEY") or '')
+    # )
 
     # Set configuration
     if agent_configuration is None:

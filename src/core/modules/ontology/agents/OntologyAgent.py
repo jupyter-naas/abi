@@ -6,11 +6,9 @@ from abi.services.agent.Agent import (
 )
 from fastapi import APIRouter
 from src import services
+from src.core.modules.common.models.default import default_chat_model
 from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
-from langchain_openai import ChatOpenAI
-import os
 
 # Foundational
 from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
@@ -125,11 +123,7 @@ def create_agent(
     triple_store = services.triple_store_service
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(os.environ.get("OPENAI_API_KEY") or '')
-    )
+    model = default_chat_model()
     # Init store
     triple_store = services.triple_store_service
 

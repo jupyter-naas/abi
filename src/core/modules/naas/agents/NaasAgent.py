@@ -15,6 +15,7 @@ from enum import Enum
 from pydantic import SecretStr
 from langchain_openai import ChatOpenAI
 import os
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "naas_agent"
 MODEL = "gpt-4o"
@@ -39,11 +40,7 @@ def create_agent(
     agents: list = []
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(os.environ.get("OPENAI_API_KEY") or '')
-    )
+    model = default_chat_model()
 
     # Set configuration
     if agent_configuration is None:
