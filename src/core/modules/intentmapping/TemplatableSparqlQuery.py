@@ -1,8 +1,21 @@
 from pydantic import Field, create_model
+import asyncio
 
 from abi import logger
 
 from .GenericWorkflow import GenericWorkflow
+
+
+async def async_asyncio_thread_jobs(jobs):
+    tasks = []
+    for job in jobs:
+        task = asyncio.create_task(asyncio.to_thread(*job))
+        tasks.append(task)
+    return await asyncio.gather(*tasks)
+
+
+def asyncio_thread_job(jobs):
+    return asyncio.run(async_asyncio_thread_jobs(jobs))
 
 
 def templatable_queries():
@@ -35,7 +48,9 @@ def templatable_queries():
         }
 
     arguments = {}
-    for templatableQuery in queries:
+
+    def __load_arguments(templatableQuery):
+        arguments = {}
         for argument in queries[templatableQuery].get("hasArgument"):
             q = (
                 """
@@ -68,6 +83,12 @@ def templatable_queries():
                     "validationPattern": validationPattern,
                     "validationFormat": validationFormat,
                 }
+        return arguments
+
+    jobs = [(__load_arguments, templatableQuery) for templatableQuery in queries]
+    for args in asyncio_thread_job(jobs):
+        arguments.update(args)
+
     return queries, arguments
 
 
@@ -75,6 +96,8 @@ def load_workflows():
     workflows = []
 
     queries, arguments = templatable_queries()
+
+    # workflows = asyncio.run(__load_queries(queries, arguments))
 
     # Now for each query, we need to create a Pydantic BaseModel based on the arguments
     for _query in queries:

@@ -67,6 +67,7 @@ dev-dependencies = [
     "pytest>=8.3.4,<9",
     "mypy>=1.15.0",
     "pyrefly>=0.16.1",
+    "pytest-xdist>=3.7.0",
 ]
 
 

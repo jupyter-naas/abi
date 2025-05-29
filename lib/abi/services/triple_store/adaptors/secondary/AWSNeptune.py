@@ -7,11 +7,11 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from rdflib import Graph, URIRef
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
+from io import StringIO
 import rdflib
-from typing import Tuple, Any
+from typing import Tuple, Any, overload
 import paramiko
 from sshtunnel import SSHTunnelForwarder
-from io import StringIO
 import tempfile
 import socket
 
@@ -19,8 +19,6 @@ from rdflib.plugins.sparql.results.xmlresults import XMLResultParser
 from rdflib.query import ResultRow
 from rdflib.term import Identifier
 from rdflib.namespace import _NAMESPACE_PREFIXES_RDFLIB, _NAMESPACE_PREFIXES_CORE
-
-from SPARQLWrapper import SPARQLWrapper
 
 from enum import Enum
 
@@ -45,6 +43,7 @@ class AWSNeptune(ITripleStorePort):
     aws_region_name: str
     aws_access_key_id: str
     aws_secret_access_key: str
+    db_instance_identifier: str
 
     bastion_host: str
     bastion_port: int
@@ -59,12 +58,20 @@ class AWSNeptune(ITripleStorePort):
     # SSH tunnel to the Bastion host
     tunnel: SSHTunnelForwarder
 
+    default_graph_name: URIRef
+
     def __init__(
-        self, aws_region_name: str, aws_access_key_id: str, aws_secret_access_key: str
+        self,
+        aws_region_name: str,
+        aws_access_key_id: str,
+        aws_secret_access_key: str,
+        db_instance_identifier: str,
+        default_graph_name: URIRef = NEPTUNE_DEFAULT_GRAPH_NAME,
     ):
         assert isinstance(aws_region_name, str)
         assert isinstance(aws_access_key_id, str)
         assert isinstance(aws_secret_access_key, str)
+        assert isinstance(db_instance_identifier, str)
 
         self.aws_region_name = aws_region_name
 
@@ -74,19 +81,24 @@ class AWSNeptune(ITripleStorePort):
             region_name=aws_region_name,
         )
 
+        self.db_instance_identifier = db_instance_identifier
+
         self.client = self.session.client("neptune", region_name=self.aws_region_name)
-        self.neptune_sparql_endpoint = self.client.describe_db_instances()[
-            "DBInstances"
-        ][0]["Endpoint"]["Address"]
-        self.neptune_port = self.client.describe_db_instances()["DBInstances"][0][
-            "Endpoint"
-        ]["Port"]
+
+        cluster_endpoints = self.client.describe_db_instances(
+            DBInstanceIdentifier=self.db_instance_identifier
+        )["DBInstances"]
+        self.neptune_sparql_endpoint = cluster_endpoints[0]["Endpoint"]["Address"]
+
+        self.neptune_port = cluster_endpoints[0]["Endpoint"]["Port"]
 
         self.credentials = self.session.get_credentials()
 
         self.neptune_sparql_url = (
             f"https://{self.neptune_sparql_endpoint}:{self.neptune_port}/sparql"
         )
+
+        self.default_graph_name = default_graph_name
 
     def __get_signed_headers(
         self,
@@ -104,7 +116,7 @@ class AWSNeptune(ITripleStorePort):
         ).add_auth(request)
         return request.headers
 
-    def __post_query(self, data: Any, timeout: int = 10) -> requests.Response:
+    def submit_query(self, data: Any, timeout: int = 60) -> requests.Response:
         headers = {}
         headers["Accept"] = "application/sparql-results+xml"
         headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -132,28 +144,36 @@ class AWSNeptune(ITripleStorePort):
 
         return response
 
-    def insert(self, triples: Graph):
-        query = self.graph_to_query(triples, QueryType.INSERT_DATA)
+    @overload
+    def insert(self, triples: Graph, graph_name: URIRef): ...
+    @overload
+    def insert(self, triples: Graph): ...
 
-        s = SPARQLWrapper("")
-        s.setQuery(query)
+    def insert(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is None:
+            graph_name = self.default_graph_name
 
-        query_type = str(s.queryType).upper()
-        if query_type in ["SELECT", "CONSTRUCT", "ASK", "DESCRIBE"]:
-            data = {"query": query}
-        else:
-            data = {"update": query}
+        query = self.graph_to_query(triples, QueryType.INSERT_DATA, graph_name)
 
-        response = self.__post_query(data)
+        response = self.submit_query({QueryMode.UPDATE.value: query})
         return response
 
-    def remove(self, triples: Graph):
-        query = self.graph_to_query(triples, QueryType.DELETE_DATA)
-        response = self.__post_query({"update": query})
+    @overload
+    def remove(self, triples: Graph, graph_name: URIRef): ...
+    @overload
+    def remove(self, triples: Graph): ...
+
+    def remove(self, triples: Graph, graph_name: URIRef | None = None):
+        if graph_name is None:
+            graph_name = self.default_graph_name
+        query = self.graph_to_query(triples, QueryType.DELETE_DATA, graph_name)
+        response = self.submit_query({"update": query})
         return response
 
     def get(self) -> Graph:
-        response = self.__post_query("query=select ?s ?p ?o where {?s ?p ?o}")
+        response = self.submit_query(
+            {QueryMode.QUERY.value: "select ?s ?p ?o where {?s ?p ?o}"}
+        )
         result = XMLResultParser().parse(StringIO(response.text))
 
         graph = Graph()
@@ -181,7 +201,7 @@ class AWSNeptune(ITripleStorePort):
     def query(
         self, query: str, query_mode: QueryMode = QueryMode.QUERY
     ) -> rdflib.query.Result:
-        response = self.__post_query({query_mode.value: query})
+        response = self.submit_query({query_mode.value: query})
         try:
             result = XMLResultParser().parse(StringIO(response.text))
             return result
@@ -204,7 +224,9 @@ class AWSNeptune(ITripleStorePort):
 
         return graph
 
-    def graph_to_query(self, graph: Graph, query_type: QueryType) -> str:
+    def graph_to_query(
+        self, graph: Graph, query_type: QueryType, graph_name: URIRef
+    ) -> str:
         """
         Convert an RDFLib graph to a SPARQL INSERT statement.
 
@@ -235,9 +257,9 @@ class AWSNeptune(ITripleStorePort):
 
         # Combine everything into a SPARQL query
         query = "\n".join(namespaces)
-        query += f"\n\n{query_type.value} {{\n"
+        query += f"\n\n{query_type.value} {{ GRAPH <{str(graph_name)}> {{\n"
         query += "\n".join(triples)
-        query += "\n}"
+        query += "\n}}"
 
         return query
 
@@ -247,7 +269,7 @@ class AWSNeptune(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        result = self.__post_query(
+        result = self.submit_query(
             {QueryMode.UPDATE.value: f"CREATE GRAPH <{str(graph_name)}>"}
         )
         print(result.text)
@@ -256,7 +278,37 @@ class AWSNeptune(ITripleStorePort):
         assert graph_name is not None
         assert isinstance(graph_name, URIRef)
 
-        self.__post_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{str(graph_name)}>"})
+        self.submit_query({QueryMode.UPDATE.value: f"CLEAR GRAPH <{str(graph_name)}>"})
+
+    def drop_graph(self, graph_name: URIRef):
+        assert graph_name is not None
+        assert isinstance(graph_name, URIRef)
+
+        self.submit_query({QueryMode.UPDATE.value: f"DROP GRAPH <{str(graph_name)}>"})
+
+    def copy_graph(self, source_graph_name: URIRef, target_graph_name: URIRef):
+        assert source_graph_name is not None
+        assert isinstance(source_graph_name, URIRef)
+        assert target_graph_name is not None
+        assert isinstance(target_graph_name, URIRef)
+
+        self.submit_query(
+            {
+                QueryMode.UPDATE.value: f"COPY GRAPH <{str(source_graph_name)}> TO <{str(target_graph_name)}>"
+            }
+        )
+
+    def add_graph_to_graph(self, source_graph_name: URIRef, target_graph_name: URIRef):
+        assert source_graph_name is not None
+        assert isinstance(source_graph_name, URIRef)
+        assert target_graph_name is not None
+        assert isinstance(target_graph_name, URIRef)
+
+        self.submit_query(
+            {
+                QueryMode.UPDATE.value: f"ADD GRAPH <{str(source_graph_name)}> TO <{str(target_graph_name)}>"
+            }
+        )
 
 
 class AWSNeptuneSSHTunnel(AWSNeptune):
@@ -265,15 +317,19 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         aws_region_name: str,
         aws_access_key_id: str,
         aws_secret_access_key: str,
+        db_instance_identifier: str,
         bastion_host: str,
         bastion_port: int,
         bastion_user: str,
         bastion_private_key: str,
+        default_graph_name: URIRef = NEPTUNE_DEFAULT_GRAPH_NAME,
     ):
         super().__init__(
             aws_region_name=aws_region_name,
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
+            db_instance_identifier=db_instance_identifier,
+            default_graph_name=default_graph_name,
         )
 
         assert isinstance(bastion_host, str)
@@ -360,6 +416,7 @@ if __name__ == "__main__":
         aws_region_name=os.environ["AWS_REGION"],
         aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        db_instance_identifier=os.environ["AWS_NEPTUNE_DB_CLUSTER_IDENTIFIER"],
         bastion_host=os.environ["AWS_BASTION_HOST"],
         bastion_port=int(os.environ["AWS_BASTION_PORT"]),
         bastion_user=os.environ["AWS_BASTION_USER"],

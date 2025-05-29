@@ -37,6 +37,9 @@ class Services:
         self.triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(
             self.config.triple_store_path
         )
+        # self.triple_store_service = (
+        #     TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel()
+        # )
 
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
