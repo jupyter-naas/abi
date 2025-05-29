@@ -1,4 +1,5 @@
 import os
+from abi import logger
 
 from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory,
@@ -34,9 +35,16 @@ class Services:
         self.storage_service = (
             ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
         )
-        self.triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(
-            self.config.triple_store_path
-        )
+
+        if self.secret.get("USE_AWS_NEPTUNE", None) == "true":
+            logger.debug("Using AWS Neptune")
+            self.triple_store_service = (
+                TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel()
+            )
+        else:
+            self.triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(
+                self.config.triple_store_path
+            )
 
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
@@ -44,11 +52,17 @@ class Services:
             workspace_id=self.config.workspace_id,
             storage_name=self.config.storage_name,
         )
-        self.triple_store_service = TripleStoreFactory.TripleStoreServiceNaas(
-            naas_api_key=self.secret.get("NAAS_API_KEY"),
-            workspace_id=self.config.workspace_id,
-            storage_name=self.config.storage_name,
-        )
+        if self.secret.get("USE_AWS_NEPTUNE", None) == "true":
+            logger.debug("Using AWS Neptune")
+            self.triple_store_service = (
+                TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel()
+            )
+        else:
+            self.triple_store_service = TripleStoreFactory.TripleStoreServiceNaas(
+                naas_api_key=self.secret.get("NAAS_API_KEY"),
+                workspace_id=self.config.workspace_id,
+                storage_name=self.config.storage_name,
+            )
 
 
 services: Services = None

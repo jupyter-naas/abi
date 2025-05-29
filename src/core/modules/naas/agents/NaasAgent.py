@@ -11,6 +11,9 @@ from src.core.modules.naas.integrations import NaasIntegration
 from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
+from typing import Optional
+from enum import Enum
+from pydantic import SecretStr
 
 NAME = "naas_agent"
 MODEL = "gpt-4o"
@@ -23,20 +26,22 @@ If you don't have access to any tool, ask the user to set their access token in 
 Always be clear and professional in your communication while helping users interact with Naas services.
 Always provide all the context (tool response, draft, etc.) to the user in your final response.
 """
-SUGGESTIONS = []
+SUGGESTIONS: list[str] = []
 
 
 def create_agent(
-    agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None,
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Init
-    tools = []
-    agents = []
+    tools: list = []
+    agents: list = []
 
     # Set model
     model = ChatOpenAI(
-        model=MODEL, temperature=TEMPERATURE, api_key=secret.get("OPENAI_API_KEY")
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
 
     # Set configuration
@@ -72,8 +77,10 @@ class NaasAgent(Agent):
         name: str = NAME.capitalize().replace("_", " "),
         description: str = "API endpoints to call the Naas agent completion.",
         description_stream: str = "API endpoints to call the Naas agent stream completion.",
-        tags: list[str] = [],
-    ):
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )
