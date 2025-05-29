@@ -28,7 +28,7 @@ uv:
 	fi
 
 .venv:
-	@ uv sync
+	@ uv sync --all-extras
 
 .venv/lib/python3.10/site-packages/abi: deps
 	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
@@ -51,10 +51,11 @@ lock: deps
 
 path=tests/
 test:  deps
-	@ uv run python -m pytest .
+	@ uv run python -m pytest -n 4 .
 
+q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
@@ -246,6 +247,7 @@ pull-request-description: deps
 default: deps help
 .DEFAULT_GOAL := default
 
+agent=SupervisorAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
