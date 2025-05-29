@@ -11,10 +11,17 @@ git-deps: .git/hooks/pre-commit
 
 deps: uv git-deps .venv .env
 
+ollama-wait:
+	@while ! curl http://127.0.0.1:11434 > /dev/null 2>&1; do \
+		clear; \
+		echo "🔴 Waiting for ollama to start...\n\n\tIf it's not installed go to https://ollama.com/download to install it and run it.\n\n"; \
+		sleep 5; \
+	done
+
 ollama:
 	@if grep -q '^OLLAMA_ENABLED=true' .env; then \
-		docker compose up -d ollama; \
-		docker compose exec ollama ollama pull llama3.2:latest; \
+		make ollama-wait; \
+		curl http://localhost:11434/api/pull -d '{"model": "llama3.2"}' && echo "Ollama is ready and model pulled";\
 	else \
 		docker compose down ollama; \
 	fi
