@@ -551,7 +551,7 @@ class Agent(Expose):
             name (str): Optional name to add to the endpoints. Defaults to ""
             description (str): Optional description to add to the endpoints. Defaults to ""
             description_stream (str): Optional description to add to the stream endpoints. Defaults to ""
-            tags (list[str]): Optional list of tags to add to the endpoints. Defaults to []
+            tags (list[str]): Optional list of tags to add to the endpoints. Defaults to None
         """
 
         class CompletionQuery(BaseModel):

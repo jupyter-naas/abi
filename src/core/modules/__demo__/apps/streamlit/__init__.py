@@ -1,7 +1,7 @@
 import streamlit as st
 
 from abi.services.agent.Agent import Agent, AgentConfiguration
-from langchain_core.tools import tool
+from langchain_core.tools import tool, Tool
 
 from src.installed.modules.google.google_gemini_2_0_flash.models.google_gemini_2_0_flash import (
     model as gemini_model,
@@ -14,11 +14,18 @@ def add_one(x: int) -> int:
     return x + 1
 
 
+# Convert the BaseTool to a Tool
+add_one_tool = Tool.from_function(
+    func=add_one,
+    name="add_one",
+    description="Add one to the input"
+)
+
 agent = Agent(
     name="ABI",
     description="You are ABI, a helpful assistant.",
     chat_model=gemini_model.model,
-    tools=[add_one],
+    tools=[add_one_tool],
     configuration=AgentConfiguration(
         system_prompt="You are ABI, a helpful assistant.",
     ),

@@ -9,8 +9,8 @@ A Process Regulation that permits some Process.
 Not defined.
 
 ### Aliases
-- Authorization
 - License
+- Authorization
 
 ### URI
 https://www.commoncoreontologies.org/ont00000751

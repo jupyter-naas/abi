@@ -9,8 +9,8 @@ An Electrical Power Source that consists in part of one or more Solar Panels, a 
 Not defined.
 
 ### Aliases
-- Photovoltaic System
 - Solar Array
+- Photovoltaic System
 
 ### URI
 https://www.commoncoreontologies.org/ont00001222

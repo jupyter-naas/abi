@@ -7,6 +7,7 @@ from rich.box import ROUNDED
 from PIL import Image
 import os
 import platform
+import subprocess
 
 console = Console()
 
@@ -174,7 +175,7 @@ def print_image(image_path: str):
                 pass  # Silently fail if we can't display the image
         elif platform.system() == "Windows":
             try:
-                os.startfile(image_path)  # Windows-specific file opening
+                subprocess.run(['start', '', image_path], shell=True)  # Windows-specific file opening
             except Exception:
                 pass
 
