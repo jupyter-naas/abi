@@ -61,7 +61,7 @@ ftest: deps
 	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
-	@ uvx ruff format && uvx ruff check --fix
+	@ uvx ruff format
 
 #########################
 # Linting, Static Analysis, Security
