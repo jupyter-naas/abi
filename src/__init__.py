@@ -20,8 +20,6 @@ import asyncio
 logger.debug("Loading environment variables")
 load_dotenv()
 
-logger.debug(os.environ)
-
 
 @atexit.register
 def shutdown_services():
