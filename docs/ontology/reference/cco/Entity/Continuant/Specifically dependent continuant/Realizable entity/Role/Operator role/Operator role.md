@@ -6,9 +6,9 @@
 A Role that inheres in an Agent by virtue of that Agent's responsibilities to operate or control some Artifact.
 
 ### Examples
-- the role of flying an airplane
 - the role of operating a crane
 - the role of driving a car
+- the role of flying an airplane
 
 ### Aliases
 Not defined.

@@ -1,8 +1,9 @@
 from typing import TypeVar, Generic, Type
 from langchain_core.tools import StructuredTool
 from abi.utils.SPARQL import results_to_list
+from pydantic import BaseModel
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 class GenericWorkflow(Generic[T]):
@@ -23,7 +24,7 @@ class GenericWorkflow(Generic[T]):
         from jinja2 import Template
 
         template = Template(self.sparql_template)
-        sparql_query = template.render(parameters.dict())
+        sparql_query = template.render(parameters.model_dump())
         # print(sparql_query)
         from src import services
 
