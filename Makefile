@@ -51,11 +51,11 @@ lock: deps
 
 path=tests/
 test:  deps
-	@ uv run python -m pytest .
+	@ uv run python -m pytest -n 4 .
 
 q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
@@ -81,7 +81,7 @@ check-core: deps
 	@echo "• Checking lib.abi..."
 	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
 	@echo "\n⚠️ Skipping src.core type checking (disabled)"
-	@#.venv/bin/mypy -p src.core --follow-untyped-imports
+	@#.venv/bin/mypy  -p src.core --follow-untyped-imports
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check lib src tests
@@ -247,6 +247,7 @@ pull-request-description: deps
 default: deps help
 .DEFAULT_GOAL := default
 
+agent=SupervisorAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
