@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from abi.services.agent.Agent import (
     Agent,
@@ -19,7 +18,6 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
 )
 from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
 from src.core.modules.common.models.default import default_chat_model
 
 NAME = "support_agent"

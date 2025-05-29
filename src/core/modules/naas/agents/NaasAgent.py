@@ -12,9 +12,7 @@ from src.core.modules.naas.integrations.NaasIntegration import (
 )
 from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
-from langchain_openai import ChatOpenAI
-import os
+
 from src.core.modules.common.models.default import default_chat_model
 
 NAME = "naas_agent"

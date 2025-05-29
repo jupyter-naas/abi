@@ -1,6 +1,5 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
-from src import secret
 from pydantic import SecretStr
 import os
 
