@@ -20,7 +20,7 @@ def create_agent():
             .decode("utf-8")
             .strip()
         )
-        diff = subprocess.check_output(["git", "diff", "origin/main"]).decode("utf-8")
+        diff = subprocess.check_output(["git", "diff", "origin/main", "--", ".", ":!uv.lock"]).decode("utf-8")
         return f"Branch name: {branch_name}\n\n{diff}"
 
     @tool
