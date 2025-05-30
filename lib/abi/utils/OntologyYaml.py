@@ -560,7 +560,10 @@ class Translator:
         for individual in self.onto_individuals:
             # Init variables
             uri = individual.get("__id")  # Get URI
-            label = individual.get("label")[0]  # Get label
+            if len(individual.get("label", [])) > 0:
+                label = individual.get("label")[0]  # Get label
+            else:
+                label = uri.split("/")[-1]
             class_uri = [
                 i for i in individual.get("type", []) if "NamedIndividual" not in i
             ][0]  # Get class

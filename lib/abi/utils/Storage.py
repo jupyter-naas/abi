@@ -117,7 +117,7 @@ def save_json(data: dict, dir_path: str, file_name: str, copy: bool = True, sort
         content=content
     )
     if copy:
-        __make_copy(dir_path, file_name, json.dumps(data, indent=4, ensure_ascii=False).encode("utf-8"))
+        __make_copy(dir_path, file_name, content)
     return dir_path, file_name
 
 def get_triples(dir_path: str, file_name: str, format: str = "turtle") -> Graph:
