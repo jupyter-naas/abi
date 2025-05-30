@@ -7,10 +7,10 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix cco: <https://www.commoncoreontologies.org/> .
-@prefix abi: <http://ontology.naas.ai/abi/ .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix linkedin: <http://ontology.naas.ai/abi/linkedin#> .
 
-<http://ontology.naas.ai/abi/LinkedInOntology.ttl> rdf:type owl:Ontology ;
+<http://ontology.naas.ai/abi/linkedin.ttl> rdf:type owl:Ontology ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Application ontology for LinkedIn."@en ;
     dc:title "LinkedIn Application Ontology" .
@@ -220,26 +220,28 @@ linkedin:isSocialPageOf a owl:ObjectProperty ;
                               cco:ont00001262
                             )
                ] ;
-    owl:inverseOf linkedin:hasSocialPage ;
     rdfs:label "is social page of"@en ;
     skos:definition "Relates a social media page to the person or organization it represents."@en ;
-    skos:example "A social media page that represents John Doe's online presence."@en .
+    skos:example "A social media page that represents John Doe's online presence."@en ;
+    owl:inverseOf linkedin:hasSocialPage .
 
 linkedin:hasProfile a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProfilePage ;
     rdfs:range linkedin:LinkedInProfile ;
     rdfs:label "has profile"@en ;
     skos:definition "Relates a LinkedIn profile page to its profile."@en ;
-    skos:example "John Doe's LinkedIn profile page has a profile with a first name, last name, etc."@en .
+    skos:example "John Doe's LinkedIn profile page has a profile with a first name, last name, etc."@en ;
+    owl:inverseOf linkedin:isProfileOf .
 
-abi:isProfileOf a owl:ObjectProperty ;
+linkedin:isProfileOf a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProfile ;
     rdfs:range linkedin:LinkedInProfilePage ;
     rdfs:label "is profile of"@en ;
     skos:definition "Relates a LinkedIn profile to the LinkedIn profile page it belongs to."@en ;
-    skos:example "John Doe's profile is the profile of his LinkedIn profile page."@en .
+    skos:example "John Doe's profile is the profile of his LinkedIn profile page."@en ;
+    owl:inverseOf linkedin:hasProfile .
 
-abi:hasPatent a owl:ObjectProperty ;
+linkedin:hasPatent a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProfile ;
     rdfs:range linkedin:LinkedInProperty ;
     rdfs:label "has patent"@en ;
@@ -247,7 +249,7 @@ abi:hasPatent a owl:ObjectProperty ;
     skos:example "John Doe's profile has patents listed on LinkedIn."@en ;
     owl:inverseOf linkedin:isPatentOf .
 
-abi:isPatentOf a owl:ObjectProperty ;
+linkedin:isPatentOf a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProperty ;
     rdfs:range linkedin:LinkedInProfile ;
     rdfs:label "is patent of"@en ;
@@ -255,7 +257,7 @@ abi:isPatentOf a owl:ObjectProperty ;
     skos:example "A patent is listed on John Doe's LinkedIn profile."@en ;
     owl:inverseOf linkedin:hasPatent .
 
-abi:hasHonor a owl:ObjectProperty ;
+linkedin:hasHonor a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProfile ;
     rdfs:range linkedin:LinkedInProperty ;
     rdfs:label "has honor"@en ;
@@ -263,7 +265,7 @@ abi:hasHonor a owl:ObjectProperty ;
     skos:example "John Doe's profile has honors and awards listed on LinkedIn."@en ;
     owl:inverseOf linkedin:isHonorOf .
 
-abi:isHonorOf a owl:ObjectProperty ;
+linkedin:isHonorOf a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProperty ;
     rdfs:range linkedin:LinkedInProfile ;
     rdfs:label "is honor of"@en ;
@@ -271,7 +273,7 @@ abi:isHonorOf a owl:ObjectProperty ;
     skos:example "An honor is listed on John Doe's LinkedIn profile."@en ;
     owl:inverseOf linkedin:hasHonor .
 
-abi:hasEducation a owl:ObjectProperty ;
+linkedin:hasEducation a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProfile ;
     rdfs:range linkedin:LinkedInProperty ;
     rdfs:label "has education"@en ;
@@ -279,7 +281,7 @@ abi:hasEducation a owl:ObjectProperty ;
     skos:example "John Doe's profile has education details listed on LinkedIn."@en ;
     owl:inverseOf linkedin:isEducationOf .
 
-abi:isEducationOf a owl:ObjectProperty ;
+linkedin:isEducationOf a owl:ObjectProperty ;
     rdfs:domain linkedin:LinkedInProperty ;
     rdfs:range linkedin:LinkedInProfile ;
     rdfs:label "is education of"@en ;
@@ -517,6 +519,13 @@ linkedin:linkedin_public_url a owl:DatatypeProperty ;
     rdfs:label "LinkedIn Public URL"@en ;
     skos:definition "The public URL of the LinkedIn page. It uses the LinkedIn Public ID as identifier."@en ;
     skos:example "The public URL of John Doe's LinkedIn profile page is 'https://www.linkedin.com/in/johndoe'."@en .
+
+abi:logo a owl:DatatypeProperty ;
+    rdfs:domain linkedin:LinkedInPage ;
+    rdfs:range xsd:string ;
+    rdfs:label "logo"@en ;
+    skos:definition "The logo of the LinkedIn page."@en ;
+    skos:example "The logo of John Doe's LinkedIn profile page is 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/1024px-LinkedIn_icon.svg.png'."@en .
 
 linkedin:entityUrn a owl:DatatypeProperty ;
     rdfs:domain linkedin:LinkedInPage ;

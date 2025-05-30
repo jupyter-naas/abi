@@ -48,6 +48,7 @@ linkedin_id = entity_urn.split(":")[-1]
 linkedin_url = f"https://www.linkedin.com/in/{linkedin_id}"
 linkedin_public_id = None
 linkedin_public_url = None
+linkedin_logo = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/1024px-LinkedIn_icon.svg.png"
 if linkedin_id.startswith("ACo"):
     linkedin_public_id = profile_id
     linkedin_public_url = linkedin_url
@@ -69,10 +70,13 @@ if len(list(graph_linkedin_page.triples((linkedin_page_uri, LINKEDIN.linkedin_id
     graph_linkedin_page.add((linkedin_page_uri, LINKEDIN.linkedin_id, Literal(linkedin_id)))
 if len(list(graph_linkedin_page.triples((linkedin_page_uri, LINKEDIN.linkedin_url, Literal(linkedin_url))))) == 0:
     graph_linkedin_page.add((linkedin_page_uri, LINKEDIN.linkedin_url, Literal(linkedin_url)))
+
 if len(list(graph_linkedin_page.triples((linkedin_page_uri, LINKEDIN.linkedin_public_id, Literal(linkedin_public_id))))) == 0:
     graph_linkedin_page.add((linkedin_page_uri, LINKEDIN.linkedin_public_id, Literal(linkedin_public_id)))
 if len(list(graph_linkedin_page.triples((linkedin_page_uri, LINKEDIN.linkedin_public_url, Literal(linkedin_public_url))))) == 0:
     graph_linkedin_page.add((linkedin_page_uri, LINKEDIN.linkedin_public_url, Literal(linkedin_public_url)))
+if len(list(graph_linkedin_page.triples((linkedin_page_uri, ABI.logo, Literal(linkedin_logo))))) == 0:
+    graph_linkedin_page.add((linkedin_page_uri, ABI.logo, Literal(linkedin_logo)))
 
 ### Add LinkedIn Profile
 profile_urn = data.get("*profile")
@@ -114,140 +118,145 @@ def create_class_and_relations_from_key(key: str) -> Tuple[URIRef, URIRef, URIRe
     relation_label_inverse = "is" + class_label + "Of"
 
     # Add class
-    try:
-        services.triple_store_service.get_subject_graph(LINKEDIN[class_label])
-    except Exception:
-        graph.add((LINKEDIN[class_label], RDF.type, OWL.Class))
-        graph.add((LINKEDIN[class_label], RDFS.label, Literal(class_label)))
-    try:
-        services.triple_store_service.get_subject_graph(LINKEDIN[relation_label])
-    except Exception:
-        graph.add((LINKEDIN[relation_label], RDF.type, OWL.ObjectProperty))
-        graph.add((LINKEDIN[relation_label], RDFS.label, Literal(relation_label)))
-    try:
-        services.triple_store_service.get_subject_graph(LINKEDIN[relation_label_inverse])
-    except Exception:
-        graph.add((LINKEDIN[relation_label_inverse], RDF.type, OWL.ObjectProperty))
-        graph.add((LINKEDIN[relation_label_inverse], RDFS.label, Literal(relation_label_inverse)))
+    graph.add((LINKEDIN[class_label], RDF.type, OWL.Class))
+    graph.add((LINKEDIN[class_label], RDFS.label, Literal(class_label)))
 
-    # Save graphs
-    save_triples(
-        graph,
-        output_dir,
-        file_name,
-        copy=True
-    )
+    # Add relation
+    graph.add((LINKEDIN[relation_label], RDF.type, OWL.ObjectProperty))
+    graph.add((LINKEDIN[relation_label], RDFS.label, Literal(relation_label)))
+    graph.add((LINKEDIN[relation_label_inverse], RDF.type, OWL.ObjectProperty))
+    graph.add((LINKEDIN[relation_label_inverse], RDFS.label, Literal(relation_label_inverse)))
+
+    # # Save graphs
+    # save_triples(
+    #     graph,
+    #     output_dir,
+    #     file_name,
+    #     copy=True
+    # )
+    graph.serialize(destination=os.path.join(output_dir, file_name), format="turtle")
     return URIRef(LINKEDIN[class_label]), URIRef(LINKEDIN[relation_label]), URIRef(LINKEDIN[relation_label_inverse])
 
 def add_properties(graph: Graph, uri: URIRef, data: dict) -> Graph:
-    """Add data properties to an RDF graph.
+    """Add data properties to an RDF graph recursively.
     
     Args:
         graph (Graph): The RDF graph to add properties to
         uri (URIRef): The URI of the subject
         data (dict): Dictionary containing data properties
     """
-    for k, v in data.items():
-        # Clean key
-        clean_k = k.replace("*", "").replace("$", "")
+    def add_property_value(graph: Graph, uri: URIRef, key: str, value: any) -> Graph:
+        """Recursively add any property value to graph"""
+        clean_k = key.replace("*", "").replace("$", "")
+        if clean_k in ["paging", "logo", "backgroundImage", "picture"]:
+            return graph
 
-        # Add RDFS label
-        if clean_k in ["title", "name", "degreeName"] and len(list(graph.triples((uri, RDFS.label, Literal(v))))) == 0:
-            graph.add((uri, RDFS.label, Literal(v)))
-            continue
+        # Handle string values
+        if isinstance(value, str) and value is not None:
+            if clean_k in ["title", "name", "degreeName"] and len(list(graph.triples((uri, RDFS.label, Literal(value))))) == 0:
+                graph.add((uri, RDFS.label, Literal(value)))
+            elif len(list(graph.triples((uri, LINKEDIN[clean_k], Literal(value))))) == 0 and not value.startswith("urn:"):
+                graph.add((uri, LINKEDIN[clean_k], Literal(value)))
+            # elif clean_k.endswith("Urn") and value.startswith("urn:") and not value.startswith("urn:li:fsd_profile"):
+            #     print(f"🔍 - Value is a urn: {value}")
+            #     element_data = pydash.filter_(included, lambda x: x.get("entityUrn") == value)
+            #     if len(element_data) > 0:
+            #         graph = add_properties(graph, uri, element_data[0])
+            return graph
 
-        # Add value = str as data properties
-        check_triples = graph.triples((uri, LINKEDIN[clean_k], Literal(v)))
-        if isinstance(v, str) and v is not None and len(list(check_triples)) == 0:
-            graph.add((uri, LINKEDIN[clean_k], Literal(v)))
-            continue
+        # Handle list values
+        if isinstance(value, list):
+            if all(isinstance(x, str) for x in value):
+                for item in value:
+                    class_label = (clean_k[0].upper() + clean_k[1:]).rstrip('s')
+                    class_uri, relation_label_uri, relation_label_inverse_uri = create_class_and_relations_from_key(class_label)
+                    item_uri = LINKEDIN[str(string_to_uuid(item))]
+                    graph_item = Graph()
+                    try:
+                        graph_item = services.triple_store_service.get_subject_graph(item_uri)
+                    except Exception:
+                        graph_item.add((item_uri, RDF.type, OWL.NamedIndividual))
+                        graph_item.add((item_uri, RDF.type, class_uri))
 
-        # Add List[str] as object properties: List
-        if isinstance(v, list) and all(isinstance(x, str) for x in v):
-            for item in v:
+                    if len(list(graph.triples((uri, relation_label_uri, item_uri)))) == 0:
+                        graph.add((uri, relation_label_uri, item_uri))
+                    if len(list(graph.triples((item_uri, relation_label_inverse_uri, uri)))) == 0:
+                        graph.add((item_uri, relation_label_inverse_uri, uri))
+                    graph += graph_item
+            else:
+                for item in value:
+                    graph = add_property_value(graph, uri, clean_k, item)
+            return graph
+
+        # Handle dict values
+        if isinstance(value, dict):
+            if key == "timePeriod":
+                start_date = get_date(value.get("startDate", {}), "start")
+                end_date = get_date(value.get("endDate", {}), "end")
+                if start_date is not None:
+                    date_epoch = int(datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S.%fZ").timestamp() * 1000)
+                    date_uri = ABI[str(date_epoch)]
+                    graph_date = Graph()
+                    try:
+                        graph_date = services.triple_store_service.get_subject_graph(date_uri)
+                        print(f"🔍 - Date already exists: {start_date} ({date_uri})")
+                    except Exception:
+                        graph_date.add((date_uri, RDF.type, OWL.NamedIndividual))
+                        graph_date.add((date_uri, RDF.type, URIRef(ABI.ISO8601UTCDateTime)))
+                        graph_date.add((date_uri, RDFS.label, Literal(start_date, datatype=XSD.dateTime)))
+                    
+                    if len(list(graph.triples((uri, BFO.BFO_0000222, date_uri)))) == 0:
+                        graph.add((uri, BFO.BFO_0000222, date_uri))
+                    graph += graph_date
+                if end_date is not None:
+                    date_epoch = int(datetime.strptime(end_date, "%Y-%m-%dT%H:%M:%S.%fZ").timestamp() * 1000)
+                    date_uri = ABI[str(date_epoch)]
+                    graph_date = Graph()
+                    try:
+                        graph_date = services.triple_store_service.get_subject_graph(date_uri)
+                        print(f"🔍 - Date already exists: {end_date} ({date_uri})")
+                    except Exception:
+                        graph_date.add((date_uri, RDF.type, OWL.NamedIndividual))
+                        graph_date.add((date_uri, RDF.type, URIRef(ABI.ISO8601UTCDateTime)))
+                        graph_date.add((date_uri, RDFS.label, Literal(end_date, datatype=XSD.dateTime)))
+                    if len(list(graph.triples((date_uri, BFO.BFO_0000222, uri)))) == 0:
+                        graph_date.add((date_uri, BFO.BFO_0000224, uri))
+                    graph += graph_date
+                return graph
+
+            if '$type' in value:
                 class_label = (clean_k[0].upper() + clean_k[1:]).rstrip('s')
                 class_uri, relation_label_uri, relation_label_inverse_uri = create_class_and_relations_from_key(class_label)
-                item_uri = LINKEDIN[str(string_to_uuid(item))]
-                graph_item = Graph()
+                dict_uri = LINKEDIN[str(uuid.uuid4())]
+                graph_dict = Graph()
                 try:
-                    graph_item = services.triple_store_service.get_subject_graph(item_uri)
+                    graph_dict = services.triple_store_service.get_subject_graph(dict_uri)
                 except Exception:
-                    graph_item.add((item_uri, RDF.type, OWL.NamedIndividual))
-                    graph_item.add((item_uri, RDF.type, class_uri))
+                    graph_dict.add((dict_uri, RDF.type, OWL.NamedIndividual))
+                    graph_dict.add((dict_uri, RDF.type, class_uri))
+                    graph_dict.add((dict_uri, RDFS.label, Literal(clean_k)))
 
-                check_relation = graph.triples((uri, relation_label_uri, item_uri))
-                if len(list(check_relation)) == 0:
-                    graph.add((uri, relation_label_uri, item_uri))
-                check_relation_inverse = graph.triples((item_uri, relation_label_inverse_uri, uri))
-                if len(list(check_relation_inverse)) == 0:
-                    graph.add((item_uri, relation_label_inverse_uri, uri))
-                graph += graph_item
-            continue
+                if len(list(graph.triples((uri, relation_label_uri, dict_uri)))) == 0:
+                    graph.add((uri, relation_label_uri, dict_uri))
+                if len(list(graph.triples((dict_uri, relation_label_inverse_uri, uri)))) == 0:
+                    graph.add((dict_uri, relation_label_inverse_uri, uri))
 
-        # Add Dict[str, str] as object properties: Dict
-        if isinstance(v, dict) and all(isinstance(x, (str, int)) for x in v.values()) and '$type' in v.keys():
-            class_label = (clean_k[0].upper() + clean_k[1:]).rstrip('s')
-            class_uri, relation_label_uri, relation_label_inverse_uri = create_class_and_relations_from_key(class_label)
-            dict_uri = LINKEDIN[str(uuid.uuid4())]
-            graph_dict = Graph()
-            try:
-                graph_dict = services.triple_store_service.get_subject_graph(dict_uri)
-            except Exception:
-                graph_dict.add((dict_uri, RDF.type, OWL.NamedIndividual))
-                graph_dict.add((dict_uri, RDF.type, class_uri))
-                graph_dict.add((dict_uri, RDFS.label, Literal(clean_k)))
+                for k_dict, v_dict in value.items():
+                    if k_dict != "$type":
+                        graph = add_property_value(graph, dict_uri, k_dict, v_dict)
+                graph += graph_dict
 
-            check_relation = graph.triples((uri, relation_label_uri, dict_uri))
-            if len(list(check_relation)) == 0:
-                graph.add((uri, relation_label_uri, dict_uri))
-            check_relation_inverse = graph.triples((dict_uri, relation_label_inverse_uri, uri))
-            if len(list(check_relation_inverse)) == 0:
-                graph.add((dict_uri, relation_label_inverse_uri, uri))
+            if key == "company":
+                print(f"🔍 - Company: {value}")
+            else:
+                for k_dict, v_dict in value.items():
+                    graph = add_property_value(graph, uri, k_dict, v_dict)
+            return graph
 
-            for k_dict, v_dict in v.items():
-                if k_dict != "$type":
-                    check_triples = graph.triples((dict_uri, LINKEDIN[k_dict], Literal(v_dict)))
-                    if len(list(check_triples)) == 0:
-                        graph.add((dict_uri, LINKEDIN[k_dict], Literal(v_dict)))
-            graph += graph_dict
-            continue
+        return graph
 
-        # Add TimePeriod as object properties: TimePeriod
-        if k == "timePeriod" and isinstance(v, dict):
-            start_date = get_date(v.get("startDate", {}), "start")
-            end_date = get_date(v.get("endDate", {}), "end")
-            if start_date is not None:
-                date_epoch = int(datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S.%fZ").timestamp() * 1000)
-                date_uri = ABI[str(date_epoch)]
-                graph_date = Graph()
-                try:
-                    graph_date = services.triple_store_service.get_subject_graph(date_uri)
-                    print(f"🔍 - Date already exists: {start_date} ({date_uri})")
-                except Exception:
-                    graph_date.add((date_uri, RDF.type, OWL.NamedIndividual))
-                    graph_date.add((date_uri, RDF.type, URIRef(ABI.ISO8601UTCDateTime)))
-                    graph_date.add((date_uri, RDFS.label, Literal(start_date, datatype=XSD.dateTime)))
-                
-                check_relation = graph.triples((uri, BFO.BFO_0000222, date_uri))
-                if len(list(check_relation)) == 0:
-                    graph.add((uri, BFO.BFO_0000222, date_uri))
-                graph += graph_date
-            if end_date is not None:
-                date_epoch = int(datetime.strptime(end_date, "%Y-%m-%dT%H:%M:%S.%fZ").timestamp() * 1000)
-                date_uri = ABI[str(date_epoch)]
-                graph_date = Graph()
-                try:
-                    graph_date = services.triple_store_service.get_subject_graph(date_uri)
-                    print(f"🔍 - Date already exists: {end_date} ({date_uri})")
-                except Exception:
-                    graph_date.add((date_uri, RDF.type, OWL.NamedIndividual))
-                    graph_date.add((date_uri, RDF.type, URIRef(ABI.ISO8601UTCDateTime)))
-                    graph_date.add((date_uri, RDFS.label, Literal(end_date, datatype=XSD.dateTime)))
-                check_relation_inverse = graph.triples((date_uri, BFO.BFO_0000222, uri))
-                if len(list(check_relation_inverse)) == 0:
-                    graph_date.add((date_uri, BFO.BFO_0000224, uri))
-                graph += graph_date
-            continue
+    for k, v in data.items():
+        graph = add_property_value(graph, uri, k, v)
     return graph
 
 graph_profile_data = add_properties(graph_profile_data, profile_uri, profile_data)
@@ -262,6 +271,7 @@ for k, v in data.items():
         view_data = pydash.filter_(included, lambda x: x.get("entityUrn") == v)[0]
         view_data_elements = view_data.get("*elements", [])
         for view_data_element in view_data_elements:
+            print(f"🔍 - View data element: {view_data_element}")
             view_id = str(string_to_uuid(view_data_element))
             view_uri = LINKEDIN[view_id]
             graph_view_data = Graph()
