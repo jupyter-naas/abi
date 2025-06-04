@@ -433,33 +433,43 @@ class Agent(Expose):
         ):
             _, payload = chunk
             if isinstance(payload, dict):
-                last_message = list(payload.values())[0]["messages"][-1]
+                last_messages = []
 
-                if isinstance(last_message, AIMessage):
-                    if pd.get(last_message, "additional_kwargs.tool_calls"):
-                        # This is a tool call.
-                        self.__notify_tool_usage(last_message)
-                    else:
-                        # This is a message.
-                        # print("\n\nIntermediate AI Message:")
-                        # print(last_message.content)
-                        # print(last_message)
-                        # print('\n\n')
-                        pass
-                elif isinstance(last_message, ToolMessage):
-                    if last_message.id not in notified:
-                        self.__notify_tool_response(last_message)
-                        notified[last_message.id] = True
+                v = list(payload.values())[0]
+                
+                if isinstance(v, dict):
+                    last_messages = [v["messages"][-1]]
                 else:
-                    if "tool_call_id" in last_message:
-                        if last_message["tool_call_id"] not in notified:
+                    last_messages = [e["messages"][-1] for e in v]
+
+
+                for last_message in last_messages:
+
+                    if isinstance(last_message, AIMessage):
+                        if pd.get(last_message, "additional_kwargs.tool_calls"):
+                            # This is a tool call.
+                            self.__notify_tool_usage(last_message)
+                        else:
+                            # This is a message.
+                            # print("\n\nIntermediate AI Message:")
+                            # print(last_message.content)
+                            # print(last_message)
+                            # print('\n\n')
+                            pass
+                    elif isinstance(last_message, ToolMessage):
+                        if last_message.id not in notified:
                             self.__notify_tool_response(last_message)
-                            notified[last_message["tool_call_id"]] = True
+                            notified[last_message.id] = True
                     else:
-                        print("\n\n Unknown message type:")
-                        print(type(last_message))
-                        print(last_message)
-                        print("\n\n")
+                        if "tool_call_id" in last_message:
+                            if last_message["tool_call_id"] not in notified:
+                                self.__notify_tool_response(last_message)
+                                notified[last_message["tool_call_id"]] = True
+                        else:
+                            print("\n\n Unknown message type:")
+                            print(type(last_message))
+                            print(last_message)
+                            print("\n\n")
 
             yield chunk
 
