@@ -5,8 +5,6 @@ from abi.services.agent.Agent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from src import secret
 from src.core.modules.ontology.agents.OntologyAgent import (
     create_agent as create_ontology_agent,
 )
@@ -18,7 +16,7 @@ from src.core.modules.support.agents.SupportAgent import (
 )
 from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
+from src.core.modules.common.models.default import default_chat_model
 
 NAME = "supervisor_agent"
 MODEL = "o3-mini"
@@ -108,11 +106,12 @@ def create_agent(
     agents: list = []
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    model = default_chat_model()
+    # model = ChatOpenAI(
+    #     model=MODEL, 
+    #     temperature=TEMPERATURE, 
+    #     api_key=SecretStr(os.environ.get("OPENAI_API_KEY") or '')
+    # )
 
     # Set configuration
     if agent_configuration is None:
@@ -122,6 +121,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
+    # if secret.get("OPENAI_API_KEY") is not None:
     # Add support agents
     agents = [
         create_support_agent(),
