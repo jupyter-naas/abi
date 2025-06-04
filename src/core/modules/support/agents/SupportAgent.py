@@ -20,6 +20,7 @@ from src.core.modules.support.workflows.GitHubSupportWorkflows import (
 from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
+from abi import logger
 
 NAME = "support_agent"
 MODEL = "gpt-4o"
@@ -89,7 +90,8 @@ def create_agent(
             )
         )
         tools += get_issues_workflow.as_tools()
-
+    else:
+        logger.warning("No Github access token found, skipping Github integration")
     # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
