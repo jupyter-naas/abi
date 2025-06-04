@@ -69,6 +69,8 @@ dev-dependencies = [
     "mypy>=1.15.0",
     "pyrefly>=0.16.1",
     "pytest-xdist>=3.7.0",
+    "dagster>=1.5.13",
+    "dagster-webserver>=1.5.13",
 ]
 
 
@@ -78,3 +80,6 @@ abi = { path = "./lib", editable = true }
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.dagster]
+module_name = "dg"
