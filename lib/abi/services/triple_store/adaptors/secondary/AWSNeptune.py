@@ -80,9 +80,13 @@ import tempfile
 import socket
 
 from rdflib.plugins.sparql.results.xmlresults import XMLResultParser
+from rdflib.plugins.sparql.results.rdfresults import RDFResultParser
+from rdflib.query import ResultParser
 from rdflib.query import ResultRow
 from rdflib.term import Identifier
 from rdflib.namespace import _NAMESPACE_PREFIXES_RDFLIB, _NAMESPACE_PREFIXES_CORE
+
+from SPARQLWrapper import SPARQLWrapper
 
 from enum import Enum
 
@@ -558,8 +562,23 @@ class AWSNeptune(ITripleStorePort):
             ... ''', QueryMode.UPDATE)
         """
         response = self.submit_query({query_mode.value: query})
+        
+        # Detect if SELECT, ASK or CONSTRUCT, DESCRIBE
+        sparql = SPARQLWrapper(self.neptune_sparql_url)
+        sparql.setQuery(query)
+    
+        
+        parser : ResultParser | None = None
+        
+        if sparql.queryType in ["SELECT", "ASK"]:
+            parser = XMLResultParser()
+        elif sparql.queryType in ["CONSTRUCT", "DESCRIBE"]:
+            parser = RDFResultParser()
+        else:
+            raise ValueError(f"Unsupported query type: {sparql.queryType}")
+        
         try:
-            result = XMLResultParser().parse(StringIO(response.text))
+            result = parser.parse(StringIO(response.text))
             return result
         except Exception as e:
             print(response.text)
