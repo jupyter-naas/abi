@@ -5,7 +5,7 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import get_subject_graph
-from typing import Annotated, Optional
+from typing import Annotated
 from enum import Enum
 from abi.utils.Graph import URI_REGEX
 
@@ -22,7 +22,7 @@ class GetSubjectGraphWorkflowParameters(WorkflowParameters):
         example="http://ontology.naas.ai/abi/a25ef0cc-56cf-458a-88c0-fabccb69e9b7",
         pattern=URI_REGEX,
     )]
-    depth: Annotated[Optional[int], Field(
+    depth: Annotated[int, Field(
         2,
         description="Depth of the subject graph to get. 1 means the individual and its direct properties, 2 means the individual and its direct properties and the properties of the properties, etc.",
         example=2,
