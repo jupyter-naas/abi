@@ -49,6 +49,7 @@ dependencies = [
     "pydantic>=2.11.4",
     "watchdog>=6.0.0",
     "langchain-google-genai>=2.1.4",
+    "thefuzz>=0.22.1",
 ]
 
 [project.scripts]
