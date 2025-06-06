@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from dotenv import dotenv_values
 from abi.services.secret.Secret import Secret
 from abi.services.secret.adaptors.secondary import (
