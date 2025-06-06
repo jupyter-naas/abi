@@ -3,7 +3,7 @@ from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from pydantic import Field
-from typing import Optional, List, Annotated
+from typing import Optional, Annotated
 from rdflib import Literal, Graph, URIRef
 from abi.utils.Graph import ABI, URI_REGEX
 from fastapi import APIRouter
