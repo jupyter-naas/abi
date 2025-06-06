@@ -47,11 +47,11 @@ class ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters):
         ...,
         description="The ID of the ontology"
     )] = None
-    label: Annotated[Optional[str], Field(
+    label: Annotated[str, Field(
         ...,
         description="The label of the ontology"
     )] = "New Ontology"
-    description: Annotated[Optional[str], Field(
+    description: Annotated[str, Field(
         ...,
         description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'",
     )] = "New Ontology Description"
@@ -59,15 +59,15 @@ class ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters):
         ...,
         description="The logo URL of the ontology"
     )] = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
-    level: Annotated[Optional[str], Field(
+    level: Annotated[str, Field(
         ...,
         description="The level of the ontology"
     )] = "USE_CASE"
-    display_relations_names: Annotated[Optional[bool], Field(
+    display_relations_names: Annotated[bool, Field(
         ...,
         description="Whether to display relation names in the visualization"
     )] = True
-    class_colors_mapping: Annotated[Optional[Dict[str, str]], Field(
+    class_colors_mapping: Annotated[Dict, Field(
         ...,
         description="The mapping of class colors"
     )] = COLORS_NODES

@@ -6,7 +6,6 @@ from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow impo
     ConvertOntologyGraphToYamlWorkflowConfiguration,
     ConvertOntologyGraphToYamlWorkflowParameters,
 )
-from src import services
 from dataclasses import dataclass
 from pydantic import Field
 from fastapi import APIRouter
