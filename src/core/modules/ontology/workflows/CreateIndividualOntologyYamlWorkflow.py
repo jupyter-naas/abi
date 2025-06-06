@@ -3,10 +3,9 @@ from abi.workflow.workflow import WorkflowParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflow,
-    ConvertOntologyGraphToYamlConfiguration,
-    ConvertOntologyGraphToYamlParameters,
+    ConvertOntologyGraphToYamlWorkflowConfiguration,
+    ConvertOntologyGraphToYamlWorkflowParameters,
 )
-from src import services
 from dataclasses import dataclass
 from pydantic import Field
 from fastapi import APIRouter
@@ -15,15 +14,13 @@ from typing import Any, Union
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from rdflib import Graph, URIRef, RDFS, Literal
 from abi.utils.SPARQL import get_class_uri_from_individual_uri
-from abi.utils.Storage import save_triples
-import os
 from typing import Annotated
 from enum import Enum
-
-URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+from abi.utils.SPARQL import get_subject_graph
+from abi.utils.Graph import URI_REGEX
 
 @dataclass
-class CreateIndividualOntologyYamlConfiguration(WorkflowConfiguration):
+class CreateIndividualOntologyYamlWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for CreateOntologyYAML workflow.
 
     Attributes:
@@ -31,11 +28,9 @@ class CreateIndividualOntologyYamlConfiguration(WorkflowConfiguration):
     """
 
     triple_store: ITripleStoreService
-    convert_ontology_graph_config: ConvertOntologyGraphToYamlConfiguration
-    data_store_path: str = "datastore/ontology"
+    convert_ontology_graph_config: ConvertOntologyGraphToYamlWorkflowConfiguration
 
-
-class CreateIndividualOntologyYamlParameters(WorkflowParameters):
+class CreateIndividualOntologyYamlWorkflowParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
 
     Attributes:
@@ -46,24 +41,23 @@ class CreateIndividualOntologyYamlParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-
     individual_uri: Annotated[str, Field(
         ..., 
         description="The URI of the individual to convert to YAML",
         pattern=URI_REGEX
     )]
-    distance: Annotated[int, Field(
+    depth: Annotated[int, Field(
         default=2,
-        description="The distance to the individual to convert to YAML"
+        description="The depth of the subject graph to get. 1 means the individual and its direct properties, 2 means the individual and its direct properties and the properties of the properties, etc."
     )]
 
 
 class CreateIndividualOntologyYamlWorkflow(Workflow):
     """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
 
-    __configuration: CreateIndividualOntologyYamlConfiguration
+    __configuration: CreateIndividualOntologyYamlWorkflowConfiguration
 
-    def __init__(self, configuration: CreateIndividualOntologyYamlConfiguration):
+    def __init__(self, configuration: CreateIndividualOntologyYamlWorkflowConfiguration):
         self.__configuration = configuration
         self.__convert_ontology_graph_workflow = ConvertOntologyGraphToYamlWorkflow(
             self.__configuration.convert_ontology_graph_config
@@ -81,53 +75,12 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
             "https://www.commoncoreontologies.org/ont00000443",  # Commercial Organization
         ]
         if class_uri in class_uri_triggers:
-            return self.graph_to_yaml(CreateIndividualOntologyYamlParameters(individual_uri=s, distance=2))
+            return self.graph_to_yaml(CreateIndividualOntologyYamlWorkflowParameters(individual_uri=s, depth=2))
         return None
-    
-    def __add_object_graphs(self, graph: Graph, distance: int) -> Graph:
-        """Add all related object graphs up to specified distance"""
-        visited = set()
-        to_visit = []
-        
-        # Get initial objects to visit from main graph
-        for s, p, o in graph:
-            if isinstance(o, URIRef) and str(o).startswith('http://ontology.naas.ai/abi/'):
-                to_visit.append((str(o), 1))
-                
-        # Process objects level by level up to max distance
-        while to_visit:
-            uri, current_distance = to_visit.pop(0)
-            
-            if uri in visited or current_distance > distance:
-                continue
-                
-            visited.add(uri)
-            object_graph = self.__configuration.triple_store.get_subject_graph(uri)
-            
-            # Add all triples from this object's graph
-            for s, p, o in object_graph:
-                graph.add((s, p, o))
-                # Queue new objects for next level if within distance
-                if isinstance(o, URIRef) and str(o).startswith('http://ontology.naas.ai/abi/'):
-                    to_visit.append((str(o), current_distance + 1))
-        return graph
-    
-    def get_individual_graph(self, parameters: CreateIndividualOntologyYamlParameters) -> Graph:
-        # Initialize graph
-        graph = services.triple_store_service.get_subject_graph(parameters.individual_uri)
 
-        # Add all related object graphs
-        graph = self.__add_object_graphs(graph, parameters.distance)
-        return graph
-    
-    def get_individual_graph_serialized(self, parameters: CreateIndividualOntologyYamlParameters) -> Union[str, None]:
-        """Get the individual graph serialized as turtle format."""
-        graph = self.get_individual_graph(parameters)
-        return graph.serialize(format="turtle")
-
-    def graph_to_yaml(self, parameters: CreateIndividualOntologyYamlParameters) -> Union[str, None]:
+    def graph_to_yaml(self, parameters: CreateIndividualOntologyYamlWorkflowParameters) -> Union[str, None]:
         # Create individual graph
-        graph = self.get_individual_graph(parameters)
+        graph = get_subject_graph(parameters.individual_uri, parameters.depth)
 
         # Get label from individual URI
         ontology_id = None
@@ -136,24 +89,17 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
         ontology_logo_url = ""
         new_ontology = True
         for s, p, o in graph:
-            if p == RDFS.label and s == URIRef(parameters.individual_uri):
+            if s == URIRef(parameters.individual_uri) and p == RDFS.label:
                 ontology_label = str(o)
                 ontology_description = f"{ontology_label} Ontology"
-            if str(p) == "http://ontology.naas.ai/abi/logo":
+            if s == URIRef(parameters.individual_uri) and str(p) == "http://ontology.naas.ai/abi/logo":
                 ontology_logo_url = str(o)
-            if str(p) == "http://ontology.naas.ai/abi/naas_ontology_id":
+            if s == URIRef(parameters.individual_uri) and str(p) == "http://ontology.naas.ai/abi/naas_ontology_id":
                 ontology_id = str(o)
                 new_ontology = False
 
-        # Save graph in turtle format
-        save_triples(
-            graph, 
-            os.path.join(self.__configuration.data_store_path, "individual", f"{ontology_label}_{parameters.individual_uri.split('/')[-1]}"), 
-            f"{ontology_label}_{parameters.individual_uri.split('/')[-1]}.ttl"
-        )
-
         # Convert graph to YAML & push to Naas workspace
-        ontology_id = self.__convert_ontology_graph_workflow.graph_to_yaml(ConvertOntologyGraphToYamlParameters(
+        ontology_id = self.__convert_ontology_graph_workflow.graph_to_yaml(ConvertOntologyGraphToYamlWorkflowParameters(
             graph=graph.serialize(format="turtle"),
             ontology_id=ontology_id,
             label=ontology_label,
@@ -170,20 +116,12 @@ class CreateIndividualOntologyYamlWorkflow(Workflow):
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
-                name="get_individual_ontology",
-                description="Get the ontology graph from an individual/instance in triple store.",
-                func=lambda **kwargs: self.get_individual_graph_serialized(
-                    CreateIndividualOntologyYamlParameters(**kwargs)
-                ),
-                args_schema=CreateIndividualOntologyYamlParameters,
-            ),
-            StructuredTool(
                 name="create_individual_ontology_yaml",
                 description="Create or Update a YAML ontology from an individual/instance in triple store and push it to Naas workspace.",
                 func=lambda **kwargs: self.graph_to_yaml(
-                    CreateIndividualOntologyYamlParameters(**kwargs)
+                    CreateIndividualOntologyYamlWorkflowParameters(**kwargs)
                 ),
-                args_schema=CreateIndividualOntologyYamlParameters,
+                args_schema=CreateIndividualOntologyYamlWorkflowParameters,
             )
         ]
 

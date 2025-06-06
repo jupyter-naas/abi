@@ -13,24 +13,22 @@ from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.OntologyYaml import OntologyYaml
 import yaml
 from yaml import Dumper
-from typing import Dict, Annotated
+from typing import Dict, Annotated, Optional
 from enum import Enum
 import pydash as _
 from rdflib import Graph
 from src.core.modules.ontology.mappings import COLORS_NODES
 
 @dataclass
-class ConvertOntologyGraphToYamlConfiguration(WorkflowConfiguration):
+class ConvertOntologyGraphToYamlWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for ConvertOntologyGraphToYaml workflow.
 
     Attributes:
         naas_integration_config (NaasIntegrationConfiguration): Configuration for the Naas integration
     """
-
     naas_integration_config: NaasIntegrationConfiguration
 
-
-class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
+class ConvertOntologyGraphToYamlWorkflowParameters(WorkflowParameters):
     """Parameters for ConvertOntologyGraphToYaml workflow execution.
 
     Attributes:
@@ -41,43 +39,51 @@ class ConvertOntologyGraphToYamlParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-
     graph: Annotated[str, Field(
         ...,
         description="The graph serialized as turtle format"
     )]
-    ontology_id: Annotated[str | None, Field(
+    ontology_id: Annotated[Optional[str], Field(
         ...,
         description="The ID of the ontology"
     )] = None
     label: Annotated[str, Field(
         ...,
         description="The label of the ontology"
-    )]
+    )] = "New Ontology"
     description: Annotated[str, Field(
         ...,
         description="The description of the ontology. Example: 'Represents ABI Ontology with agents, workflows, ontologies, pipelines and integrations.'",
-    )]
-    logo_url: str = (
-        "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
-    )
-    level: str = "USE_CASE"
-    display_relations_names: bool = True
-    class_colors_mapping: Dict[str, str] = COLORS_NODES
-
+    )] = "New Ontology Description"
+    logo_url: Annotated[Optional[str], Field(
+        ...,
+        description="The logo URL of the ontology"
+    )] = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ULO.png"
+    level: Annotated[str, Field(
+        ...,
+        description="The level of the ontology"
+    )] = "USE_CASE"
+    display_relations_names: Annotated[bool, Field(
+        ...,
+        description="Whether to display relation names in the visualization"
+    )] = True
+    class_colors_mapping: Annotated[Dict, Field(
+        ...,
+        description="The mapping of class colors"
+    )] = COLORS_NODES
 
 class ConvertOntologyGraphToYamlWorkflow(Workflow):
     """Workflow for converting ontology graph to YAML."""
 
-    __configuration: ConvertOntologyGraphToYamlConfiguration
+    __configuration: ConvertOntologyGraphToYamlWorkflowConfiguration
 
-    def __init__(self, configuration: ConvertOntologyGraphToYamlConfiguration):
+    def __init__(self, configuration: ConvertOntologyGraphToYamlWorkflowConfiguration):
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(
             self.__configuration.naas_integration_config
         )
 
-    def graph_to_yaml(self, parameters: ConvertOntologyGraphToYamlParameters) -> str:
+    def graph_to_yaml(self, parameters: ConvertOntologyGraphToYamlWorkflowParameters) -> str:
         # Initialize parameters
         logger.debug(f"==> Converting ontology graph to YAML: {parameters.label}")
         yaml_data = None
@@ -171,12 +177,12 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
         """Returns a list of LangChain tools for this workflow."""
         return [
             StructuredTool(
-                name="ontology_convert_graph_to_yaml",
+                name="convert_graph_to_yaml",
                 description="Convert an ontology graph to YAML.",
                 func=lambda **kwargs: self.graph_to_yaml(
-                    ConvertOntologyGraphToYamlParameters(**kwargs)
+                    ConvertOntologyGraphToYamlWorkflowParameters(**kwargs)
                 ),
-                args_schema=ConvertOntologyGraphToYamlParameters,
+                args_schema=ConvertOntologyGraphToYamlWorkflowParameters,
             )
         ]
 
