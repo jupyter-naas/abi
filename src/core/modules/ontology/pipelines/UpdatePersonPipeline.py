@@ -4,7 +4,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from fastapi import APIRouter
 from pydantic import Field
-from typing import Optional, List, Annotated
+from typing import Optional, Annotated
 from rdflib import URIRef, Literal, Graph, XSD
 from abi.utils.Graph import ABI, URI_REGEX
 from enum import Enum   

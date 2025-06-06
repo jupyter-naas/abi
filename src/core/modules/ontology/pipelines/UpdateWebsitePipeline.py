@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 from pydantic import Field
 from rdflib import Graph, URIRef
 from abi.utils.Graph import ABI, URI_REGEX

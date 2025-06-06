@@ -10,7 +10,6 @@ from typing import Annotated, Optional
 from rdflib import query
 from enum import Enum
 from abi.utils.String import normalize
-from abi.utils.Graph import URI_REGEX
 
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
