@@ -28,12 +28,12 @@ class UpdateSkillPipelineParameters(PipelineParameters):
     description: Annotated[Optional[str], Field(
         None, 
         description="Description of the skill"
-    )]
-    person_uris: Annotated[Optional[List[str]], Field(
+    )] = None
+    person_uri: Annotated[Optional[str], Field(
         None,
-        description="List of person URIs from class: https://www.commoncoreontologies.org/ont00001262. URIs must start with 'http://ontology.naas.ai/abi/'.",
+        description="Person URI from class: https://www.commoncoreontologies.org/ont00001262.",
         pattern=URI_REGEX
-    )]
+    )] = None
 
 
 class UpdateSkillPipeline(Pipeline):
@@ -61,11 +61,10 @@ class UpdateSkillPipeline(Pipeline):
             check_description = list(graph.triples((individual_uri, ABI.hasDescription, Literal(parameters.description))))
             if len(check_description) == 0:
                 graph_insert.add((individual_uri, ABI.hasDescription, Literal(parameters.description)))
-        if parameters.person_uris:
-            for person_uri in parameters.person_uris:
-                check_person_uris = list(graph.triples((individual_uri, ABI.isSkillOf, URIRef(person_uri))))
-                if len(check_person_uris) == 0:
-                    graph_insert.add((individual_uri, ABI.isSkillOf, URIRef(person_uri)))
+        if parameters.person_uri:
+            check_person_uri = list(graph.triples((individual_uri, ABI.isSkillOf, URIRef(parameters.person_uri))))
+            if len(check_person_uri) == 0:
+                graph_insert.add((individual_uri, ABI.isSkillOf, URIRef(parameters.person_uri)))
 
         # Save the graph
         self.__configuration.triple_store.insert(graph_insert)

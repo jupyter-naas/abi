@@ -27,7 +27,6 @@ class SearchIndividualWorkflowParameters(WorkflowParameters):
     class_uri: Optional[Annotated[str, Field(
         ...,
         description="Class URI to use to search for individuals.",
-        pattern=URI_REGEX,
         example="https://www.commoncoreontologies.org/ont00000443",
     )]] = None
     limit: Optional[Annotated[int, Field(
@@ -139,9 +138,9 @@ class SearchIndividualWorkflow(Workflow):
             StructuredTool(
                 name="search_individual",
                 description="Search an ontology individual based on its label. It will return the most relevant individual using matching with rdfs:label",
-                func=lambda class_uri, search_label: self.search_individual(
+                func=lambda **kwargs: self.search_individual(
                     SearchIndividualWorkflowParameters(
-                        class_uri=class_uri, search_label=search_label
+                        **kwargs
                     )
                 ),
                 args_schema=SearchIndividualWorkflowParameters,

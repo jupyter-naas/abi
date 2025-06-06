@@ -49,8 +49,7 @@ class AddIndividualPipelineParameters(PipelineParameters):
         example="Naas.ai"
     )]
     class_uri: Annotated[str, Field(
-        pattern=r'https?:\/\/.*',
-        description="Class URI to add the individual to. Use tool `ontology_search_class` to search for a class URI in the ontology.",
+        description="Class URI to add the individual to. Use tool `search_class` to search for a class URI in the ontology.",
         example="https://www.commoncoreontologies.org/ont00000443"
     )]
     threshold: Annotated[Optional[int], Field(
@@ -59,7 +58,6 @@ class AddIndividualPipelineParameters(PipelineParameters):
         ge=0,
         le=100
     )] = 80
-
 
 class AddIndividualPipeline(Pipeline):
     """Pipeline for adding a named individual."""
