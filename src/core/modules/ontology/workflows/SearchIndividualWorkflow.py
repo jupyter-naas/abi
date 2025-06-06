@@ -6,18 +6,16 @@ from abi.workflow.workflow import WorkflowParameters
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from thefuzz import fuzz  # type: ignore
-import unicodedata
-import re
 from typing import Annotated, Optional
 from rdflib import query
 from enum import Enum
+from abi.utils.String import normalize
+from abi.utils.Graph import URI_REGEX
 
 @dataclass
 class SearchIndividualWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for SearchIndividual workflow."""
-
     triple_store: ITripleStoreService
-
 
 class SearchIndividualWorkflowParameters(WorkflowParameters):
     """Parameters for SearchIndividual workflow."""
@@ -29,7 +27,7 @@ class SearchIndividualWorkflowParameters(WorkflowParameters):
     class_uri: Optional[Annotated[str, Field(
         ...,
         description="Class URI to use to search for individuals.",
-        pattern="https?:\/\/.*",
+        pattern=URI_REGEX,
         example="https://www.commoncoreontologies.org/ont00000443",
     )]] = None
     limit: Optional[Annotated[int, Field(
@@ -43,7 +41,6 @@ class SearchIndividualWorkflowParameters(WorkflowParameters):
         description="Custom SPARQL query to use to search for individuals.",
     )]] = None
 
-
 class SearchIndividualWorkflow(Workflow):
     """Workflow for searching ontology individuals."""
 
@@ -53,17 +50,9 @@ class SearchIndividualWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def normalize(self, text: str) -> str:
-        """Normalize text by removing accents, punctuation, and converting to lowercase."""
-        text = text.lower()
-        text = unicodedata.normalize('NFKD', text)
-        text = re.sub(r'[^\w\s]', '', text)
-        text = ''.join(c for c in text if not unicodedata.combining(c))
-        return text
-
     def search_individual(self, parameters: SearchIndividualWorkflowParameters) -> dict | list[dict]:
         class_uri_filter = f"?individual_uri a <{parameters.class_uri}> ;" if parameters.class_uri else ""
-        search_label_norm = self.normalize(parameters.search_label)
+        search_label_norm = normalize(parameters.search_label)
         sparql_query = f"""
         SELECT DISTINCT ?individual_uri ?label
         WHERE {{
@@ -129,7 +118,7 @@ class SearchIndividualWorkflow(Workflow):
             for key in row.labels:
                 data_dict[key] = str(row[key]) if row[key] else None
                 if key == "label" and row[key]:
-                    score = fuzz.token_set_ratio(search_label_norm, self.normalize(str(row[key])))
+                    score = fuzz.token_set_ratio(search_label_norm, normalize(str(row[key])))
                     data_dict["score"] = score
             data.append(data_dict)
 
