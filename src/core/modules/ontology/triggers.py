@@ -19,12 +19,23 @@
 #     ((None, URIRef(ex + "hasOpenData"), None), OntologyEvent.INSERT, handle_new_dataset),
 # ]
 
+import os
 from src import services, secret
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from abi import logger
 
 
+def is_production_mode():
+    """Check if the application is running in production mode"""
+    return os.environ.get("ENV") != "dev"
+
+
 def create_class_ontology_yaml():
+    """Create class ontology YAML trigger - only active in production"""
+    if not is_production_mode():
+        logger.debug("Skipping class ontology YAML trigger - not in production mode")
+        return None
+        
     from src.core.modules.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
@@ -56,10 +67,16 @@ def create_class_ontology_yaml():
     )
 
     # Subscribe to the trigger
+    logger.info("Activating class ontology YAML trigger in production mode")
     return ((None, None, None), OntologyEvent.INSERT, workflow.trigger, True)
 
 
 def create_individual_ontology_yaml():
+    """Create individual ontology YAML trigger - only active in production"""
+    if not is_production_mode():
+        logger.debug("Skipping individual ontology YAML trigger - not in production mode")
+        return None
+        
     from src.core.modules.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
@@ -91,10 +108,12 @@ def create_individual_ontology_yaml():
     )
 
     # Subscribe to the trigger
+    logger.info("Activating individual ontology YAML trigger in production mode")
     return ((None, None, None), OntologyEvent.INSERT, workflow.trigger, True)
 
 
-triggers = [
+# Filter out None values from triggers (when not in production mode)
+triggers = [trigger for trigger in [
     create_class_ontology_yaml(),
     create_individual_ontology_yaml(),
-]
+] if trigger is not None]
