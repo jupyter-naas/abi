@@ -43,7 +43,7 @@ def create_hash_from_string(input_string: str) -> str:
     hex_hash = hash_object.hexdigest()
     return hex_hash
 
-def normalize(self, text: str) -> str:
+def normalize(text: str) -> str:
     """Normalize text by removing accents, punctuation, and converting to lowercase."""
     text = text.lower()
     text = unicodedata.normalize('NFKD', text)
