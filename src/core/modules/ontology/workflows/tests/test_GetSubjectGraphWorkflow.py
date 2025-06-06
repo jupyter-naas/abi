@@ -3,7 +3,6 @@ from src.core.modules.ontology.workflows.GetSubjectGraphWorkflow import (
     GetSubjectGraphWorkflowConfiguration,
     GetSubjectGraphWorkflowParameters
 )
-from src import services
 
 # Configurations
 get_subject_graph_workflow_configuration = GetSubjectGraphWorkflowConfiguration()
