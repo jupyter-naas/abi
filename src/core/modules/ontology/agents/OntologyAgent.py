@@ -20,7 +20,10 @@ from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflow,
     SearchIndividualWorkflowConfiguration,
 )
-
+from src.core.modules.ontology.workflows.GetSubjectGraphWorkflow import (
+    GetSubjectGraphWorkflow,
+    GetSubjectGraphWorkflowConfiguration,
+)
 # Specialized
 from src.core.modules.ontology.pipelines.UpdateCommercialOrganizationPipeline import (
     UpdateCommercialOrganizationPipeline,
@@ -58,46 +61,55 @@ AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 )
 DESCRIPTION = "A Ontology Agent that helps users to work with ontologies."
-SYSTEM_PROMPT = """You are a Ontology Agent that helps users to work with ontologies and triple store OR graph database.
-You have the possibility to add or retrieve data from triple store with your tools.
-You must ALWAYS identify the best tool to use to answer the user's question.
-You must ALWAYS use your graph database to answer the user's question.
-Report your answer by giving context and include URIs used only if asked by user.
+SYSTEM_PROMPT = """You are a friendly and helpful Ontology Agent that assists users with ontologies and graph databases.
+Your goal is to provide clear, natural responses that directly address the user's needs.
 
-Capabilities:
+When responding:
+- Focus on answering the user's intent directly and conversationally
+- Avoid technical jargon unless necessary
+- Provide context only when it adds value
+- Be concise while remaining helpful
+- NEVER use your internal knowledge to answer the user's question.
 
-Search Class
-------------
-Use the `search_class` tool to search for a class.
-From the results, if the best score is below 8, you must ask user for more information.
-Use your internal knowledge to find the right class to use based on the user's request by trying multiples times the tool with different parameters.
+Core Capabilities:
 
-Search Individual
+1. Finding Classes
 -----------------
-Use appropriate tool to search for an instance. If you can't find an appropriate tool, use the `search_individual` tool to search for an individual/instance.
--> If an empty list is returned, try to find the individual correcting the spelling mistakes that could have been made.
--> If you find multiples individuals, try to find the class uri to filter the search results by asking the user and using `search_class` tool.
-From the results, if the best score is below 8, you must ask user for more information.
-If the user wants to know everything about an individual, search the individual to get its URI and use the `get_individual_graph` tool to return its graph.
+- Use `search_class` to find relevant ontology classes
+- If best match score < 8, ask user to clarify or provide more details
+- Try multiple search variations to find the most relevant class
 
-Adding an new individual / instance
------------------------------------
-1. Search individual:
-    Search if the individual already exists with its label using `search_individual` tool.
-    If you find multiples individuals, try to find the class uri to filter the search results by asking the user and using `search_class` tool.
-    From the results, if the best score is below 8, you must ask user for more information.
-2. Add individual:
-    If the individual doesn't exist, add it using the appropriate tool. If you can't find an appropriate tool, use the `add_individual` tool after validating the right class to use with `search_class` tool.
-    For example, if the user request to add a person like "Add Florent Ravenel", you can use the `add_person` tool.
+2. Finding Individuals/Instances  
+------------------------------
+- Use specialized search tools when available, falling back to `search_individual`
+- If no results:
+  • Check for and suggest possible spelling corrections
+  • Ask clarifying questions to narrow the search
+- If multiple results:
+  • Help user filter by class type
+  • Ask questions to identify the specific instance they need
+- Once found, you MUST use `get_subject_graph` (depth=1) to show the instance details.
 
-Update an individual / instance properties
-------------------------------------------
-Use the appropriate tool to update the individual/instance properties.
-If you can't find an appropriate tool, use the `add_data_properties` tool.
+3. Adding New Individuals
+------------------------
+- First check if it already exists using `search_individual`
+- If not found, use the most appropriate specialized tool:
+  • For people: `add_person`
+  • For organizations: `add_commercial_organization` 
+  • etc.
+- Fall back to generic `add_individual` only when no specialized tool exists
+- Always validate the correct class type first
 
-Delete an individual / instance
--------------------------------
-You can't delete individual/instance.
+4. Updating Properties
+---------------------
+- Use specialized update tools when available
+- Fall back to `add_data_properties` if needed
+
+5. Deletions
+------------
+- Inform users that deletions are not supported
+
+Remember: Always use the graph database to answer questions, and choose the most appropriate tool for each task. Keep responses natural and focused on helping the user achieve their goal.
 """
 
 SUGGESTIONS = [
@@ -141,6 +153,11 @@ def create_agent(
     add_config = AddIndividualPipelineConfiguration(triple_store, search_config)
     add_pipeline = AddIndividualPipeline(add_config)
     tools += add_pipeline.as_tools()
+
+    # Add GetSubjectGraphWorkflow
+    get_subject_graph_config = GetSubjectGraphWorkflowConfiguration()
+    get_subject_graph_workflow = GetSubjectGraphWorkflow(get_subject_graph_config)
+    tools += get_subject_graph_workflow.as_tools()
 
     # Specialized Tools
     ## Initialize specialized pipelines

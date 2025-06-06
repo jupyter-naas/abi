@@ -6,7 +6,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from abi import logger
 from pydantic import Field
-from typing import Annotated
+from typing import Annotated, Optional
 from rdflib import (
     Graph,
     URIRef,
@@ -49,10 +49,15 @@ class AddIndividualPipelineParameters(PipelineParameters):
         example="Naas.ai"
     )]
     class_uri: Annotated[str, Field(
-        pattern=r'https?:\/\/.*',
-        description="Class URI to add the individual to. Use tool `ontology_search_class` to search for a class URI in the ontology.",
+        description="Class URI to add the individual to. Use tool `search_class` to search for a class URI in the ontology.",
         example="https://www.commoncoreontologies.org/ont00000443"
     )]
+    threshold: Annotated[Optional[int], Field(
+        description="Threshold to use for the search individual workflow.",
+        default=90,
+        ge=0,
+        le=100
+    )] = 80
 
 class AddIndividualPipeline(Pipeline):
     """Pipeline for adding a named individual."""
@@ -73,17 +78,20 @@ class AddIndividualPipeline(Pipeline):
         # Search for individual
         search_individual_result = self.__search_individual_workflow.search_individual(
             SearchIndividualWorkflowParameters(
-                class_uri=parameters.class_uri, search_label=parameters.individual_label
+                class_uri=parameters.class_uri, 
+                search_label=parameters.individual_label,
             )
         )
-        if search_individual_result:
-            score = int(search_individual_result[0]["score"])
-            if score > 8:
-                individual_uri = search_individual_result[0]["individual_uri"]
-                logger.debug(
-                    f"🔍 Found individual '{parameters.individual_label}' in the ontology: {individual_uri} from class: {parameters.class_uri}"
-                )
-                return self.__configuration.triple_store.get_subject_graph(individual_uri)
+        filtered_results = [
+            result for result in search_individual_result 
+            if parameters.threshold is not None and int(result["score"]) >= parameters.threshold
+        ]
+        if len(filtered_results) > 0:
+            individual_uri = filtered_results[0]["individual_uri"]
+            logger.debug(
+                f"🔍 Found individual '{parameters.individual_label}' in the ontology: {individual_uri} from class: {parameters.class_uri}"
+            )
+            return self.__configuration.triple_store.get_subject_graph(individual_uri)
 
         # Init graph
         graph = Graph()
