@@ -1,6 +1,6 @@
 from src import services
 from abi import logger
-from rdflib import URIRef, query, Graph, Literal
+from rdflib import URIRef, query, Graph
 from typing import List, Dict, Optional
 
 def results_to_list(
