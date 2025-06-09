@@ -47,7 +47,7 @@ class UpdateCommercialOrganizationPipelineParameters(PipelineParameters):
     logo_url: Annotated[Optional[str], Field(
         default=None,
         description="Logo URL of the commercial organization.",
-        pattern="https?:\/\/.*"
+        pattern=r"https?://.*"
     )]
 
 class UpdateCommercialOrganizationPipeline(Pipeline):
