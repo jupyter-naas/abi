@@ -163,6 +163,10 @@ docs-ontology: deps
 	@ echo "Generating ontology documentation..."
 	@ uv run python scripts/generate_docs.py
 
+publish-remote-agents: deps
+	@ echo "Publishing remote agents..."
+	@ uv run python scripts/publish_remote_agents.py
+
 clean:
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
