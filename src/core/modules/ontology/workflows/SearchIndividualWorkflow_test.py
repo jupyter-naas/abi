@@ -26,15 +26,15 @@ def search_individual_workflow() -> SearchIndividualWorkflow:
 
 def test_search_individual_workflow(search_individual_workflow: SearchIndividualWorkflow):
     from rdflib import Graph, URIRef, RDFS, Literal, OWL
-    from abi.utils.Graph import ABI
+    from abi.utils.Graph import TEST
     from uuid import uuid4
     from src import services
     
     graph = Graph()
     node_id = str(uuid4())
-    graph.add((ABI[node_id], URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), URIRef("https://www.commoncoreontologies.org/ont00000443")))
-    graph.add((ABI[node_id], URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), OWL.NamedIndividual))
-    graph.add((ABI[node_id], RDFS.label, Literal(node_id)))
+    graph.add((TEST[node_id], URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), URIRef("https://www.commoncoreontologies.org/ont00000443")))
+    graph.add((TEST[node_id], URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), OWL.NamedIndividual))
+    graph.add((TEST[node_id], RDFS.label, Literal(node_id)))
     
     services.triple_store_service.insert(graph)
     
