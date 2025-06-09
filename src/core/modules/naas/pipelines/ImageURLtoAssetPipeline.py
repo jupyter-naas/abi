@@ -14,8 +14,8 @@ from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from rdflib import URIRef
 from enum import Enum
+from abi.utils.SPARQL import get_subject_graph
 
 @dataclass
 class ImageURLtoAssetPipelineConfiguration(PipelineConfiguration):
@@ -38,7 +38,7 @@ class ImageURLtoAssetPipelineParameters(PipelineParameters):
     """
     image_url: Annotated[str, Field(
         description="URL of the image to be added", 
-        pattern=r"^(?!https:\/\/api\.naas\.ai\/)https?:\/\/\S+$"
+        pattern=r"https?:\/\S+"
     )]
     subject_uri: Annotated[str, Field(
         description="URI of the subject to add the image asset to",
@@ -56,45 +56,63 @@ class ImageURLtoAssetPipeline(Pipeline):
         self.__configuration = configuration
         self.__naas_integration = NaasIntegration(configuration.naas_integration_config)
 
-    def trigger(self, event: OntologyEvent, ontology_name: str, triple: tuple[Any, Any, Any]) -> Optional[Graph]:
+    def trigger(self, event: OntologyEvent, ontology_name: str, triple: tuple[Any, Any, Any]) -> Graph:
         s, p, o = triple
         if str(event) == str(OntologyEvent.INSERT) and not str(o).startswith("https://api.naas.ai/"):
             return self.run(ImageURLtoAssetPipelineParameters(image_url=o, subject_uri=s, predicate_uri=p))
-        return None
+        return Graph()
     
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, ImageURLtoAssetPipelineParameters):
             raise ValueError("Parameters must be of type ImageURLtoAssetPipelineParameters")
         
-        # Check if image URL is already in Storage
-        graph = self.__configuration.triple_store.get_subject_graph(parameters.subject_uri)
-        for s, p, o in graph:
-            if str(p) == str(parameters.predicate_uri) and str(o).startswith("https://api.naas.ai/"):
-                logger.debug(f"🛑 Image URL exists in Storage: {parameters.image_url}")
-                # Return a graph with the existing asset URL
-                result_graph = Graph()
-                result_graph.add((URIRef(parameters.subject_uri), URIRef(parameters.predicate_uri), Literal(str(o))))
-                return result_graph
-            
+        # Create subject URI and predicate URI references once
+        subject = URIRef(parameters.subject_uri)
+        predicate = URIRef(parameters.predicate_uri)
+
+        # Check existing objects for this subject/predicate
+        graph = get_subject_graph(parameters.subject_uri)
+        objects = set(o for _, _, o in graph.triples((subject, predicate, None)))
+
+        # Return if URL already exists
+        if parameters.image_url in objects:
+            logger.info(f"Nothing to do, image URL already in Storage: {parameters.image_url}")
+            return graph
+
+        # Handle existing Naas asset URLs
+        if parameters.image_url.startswith("https://api.naas.ai/"):
+            logger.info(f"🛑 Image URL is already an asset: {parameters.image_url}")
+            graph_insert = Graph()
+            graph_insert.add((subject, predicate, Literal(parameters.image_url)))
+            self.__configuration.triple_store.insert(graph_insert)
+            return graph_insert
+
+        # Process new image URL
+        logger.info(f"Image URL is not an asset: {parameters.image_url}")
         try:
+            # Upload image and get asset URL
             file_name = self._generate_file_name(parameters.image_url)
             image_data = self._download_image(parameters.image_url)
             asset_url = self._upload_to_storage(image_data, file_name)
+            if not asset_url:
+                raise ValueError("Failed to get asset URL")
             logger.debug(f"✅ Image uploaded to Storage: {asset_url}")
+
+            # Update triple store in single transaction
+            graph_insert = Graph()
+            graph_insert.add((subject, predicate, Literal(asset_url)))
+            
+            # Remove old URL and insert new asset URL
+            graph_remove = Graph()
+            graph_remove.add((subject, predicate, Literal(parameters.image_url)))
+            self.__configuration.triple_store.remove(graph_remove)
+            self.__configuration.triple_store.insert(graph_insert)
+            
+            return graph_insert
+
         except Exception as e:
             logger.error(f"Error uploading image from URL '{parameters.image_url}' to Storage: {e}")
             return Graph()
-        
-        # Remove old image URL from triple store
-        graph_remove = Graph()
-        graph_remove.add((URIRef(parameters.subject_uri), URIRef(parameters.predicate_uri), Literal(parameters.image_url)))
-        self.__configuration.triple_store.remove(graph_remove)
-
-        # Replace image URL in triple store with asset URL
-        graph_insert = Graph()
-        graph_insert.add((URIRef(parameters.subject_uri), URIRef(parameters.predicate_uri), Literal(asset_url)))
-        self.__configuration.triple_store.insert(graph_insert)
-        return graph_insert
 
     def _generate_file_name(self, url: str) -> str:
         """Generate a unique file name from the URL."""
@@ -106,7 +124,7 @@ class ImageURLtoAssetPipeline(Pipeline):
         response.raise_for_status()  # Raise exception for bad status codes
         return response.content
 
-    def _upload_to_storage(self, image_data: bytes, file_name: str) -> str:
+    def _upload_to_storage(self, image_data: bytes, file_name: str) -> Optional[str]:
         """Upload image to Storage and return the asset URL."""
         asset = self.__naas_integration.upload_asset(
             data=image_data,
@@ -116,7 +134,10 @@ class ImageURLtoAssetPipeline(Pipeline):
             object_name=str(file_name),
             visibility="public"
         )
-        asset_url = asset.get("asset").get("url")
+        asset_url = asset.get("asset", {}).get("url")
+        if not asset_url:
+            logger.error(f"Error uploading image to Storage: {asset}")
+            return None
         if asset_url.endswith("/"):
             asset_url = asset_url[:-1]
         return asset_url
