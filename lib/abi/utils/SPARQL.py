@@ -1,7 +1,8 @@
 from src import services
 from abi import logger
-from rdflib import URIRef, query, Graph
+from rdflib import URIRef, query, Graph, RDFS, RDF, OWL, XSD, DCTERMS
 from typing import List, Dict, Optional
+from abi.utils.Graph import BFO, ABI, TEST, CCO
 
 def results_to_list(
     results: query.Result
@@ -169,7 +170,15 @@ def get_subject_graph(
     
     results = services.triple_store_service.query(sparql_query)
     graph = Graph()
-    graph.bind
+    graph.bind("rdfs", RDFS)
+    graph.bind("rdf", RDF)
+    graph.bind("owl", OWL)
+    graph.bind("xsd", XSD)
+    graph.bind("dcterms", DCTERMS)
+    graph.bind("abi", ABI)
+    graph.bind("bfo", BFO)
+    graph.bind("cco", CCO)
+    graph.bind("test", TEST)
     for triple in results:
         # CONSTRUCT queries return triples directly, no need for ResultRow handling
         graph.add(triple)
