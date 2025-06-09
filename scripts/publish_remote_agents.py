@@ -1,0 +1,118 @@
+from src.__modules__ import get_modules
+import inspect
+from abi import logger
+from src.core.modules.naas.integrations.NaasIntegration import (
+    NaasIntegration,
+    NaasIntegrationConfiguration,
+)
+from src.core.modules.support.integrations.GithubIntegration import (
+    GithubIntegration,
+    GithubIntegrationConfiguration,
+)
+
+def publish_remote_agent(
+    naas_api_key: str, 
+    api_base_url: str, 
+    abi_api_key: str,
+    workspace_id: str,
+    github_access_token: str,
+    github_repository: str,
+    ):
+    # Init Naas Integration
+    naas_integration = NaasIntegration(NaasIntegrationConfiguration(api_key=naas_api_key))
+    existing_plugins = naas_integration.get_plugins(workspace_id).get("workspace_plugins", [])
+
+    # Init Github Integration
+    github_integration = GithubIntegration(GithubIntegrationConfiguration(access_token=github_access_token))
+    github_integration.create_or_update_repository_secret(
+        repo_name=github_repository,
+        secret_name="ABI_API_KEY",
+        value=abi_api_key
+    )
+
+    # Get all agents from the modules
+    modules = get_modules()
+    for module in modules:
+        for agent in module.agents:
+            logger.info(f"==> Publishing agent {agent}")
+            # Get SUGGESTIONS and AVATAR_URL from the module
+            module_name = agent.__class__.__module__
+            module_obj = __import__(module_name, fromlist=['SUGGESTIONS', 'AVATAR_URL'])
+            suggestions = getattr(module_obj, 'SUGGESTIONS', [])
+            avatar = getattr(module_obj, 'AVATAR_URL', 'https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png')
+
+            # Get name, description, chat_model from the agent
+            name = getattr(agent, "name", "")
+            if "supervisor" in name.lower():
+                default = True
+            else:
+                default = False
+            description = getattr(agent, "description", "")
+            model = "gpt-4o"
+            temperature = 0
+            agent_configuration = getattr(agent, "configuration", "")
+            if agent_configuration is not None:
+                prompt = agent_configuration.system_prompt
+            else:
+                prompt = ""
+            as_api = getattr(agent, "as_api", None)
+            route_name = None
+            if as_api is not None:
+                # Get the index of 'route_name' in co_varnames tuple
+                try:
+                    # Get route_name from function signature
+                    signature = inspect.signature(as_api)
+                    route_name = signature.parameters.get('route_name').default
+                except ValueError:
+                    route_name = name
+            if route_name is None:
+                raise ValueError(f"Route name not found for agent {name}")
+
+            plugin_data = {
+                "id": name.lower().replace(" ", "_"),
+                "name": " ".join(word.capitalize() for word in name.split("_")) + " (Remote)",
+                "slug": name.lower().replace(" ", "-").replace("_", "-"),
+                "default": default,
+                "avatar": avatar,
+                "description": description,
+                "prompt": prompt,
+                "prompt_type": "system",
+                "model": model,
+                "temperature": temperature,
+                "type": "CUSTOM",
+                "remote": {
+                    "url": f"{api_base_url}/agents/{route_name}/stream-completion?token={abi_api_key}"
+                },
+                "suggestions": suggestions,
+            }
+            logger.info(f"==> plugin_data: {plugin_data}")
+
+             # Check if plugin already exists
+            existing_plugin_id = naas_integration.search_plugin(
+                key="id", value=plugin_data["id"], plugins=existing_plugins
+            )
+            if existing_plugin_id:
+                naas_integration.update_plugin(
+                    workspace_id=config.workspace_id,
+                    plugin_id=existing_plugin_id,
+                    data=plugin_data,
+                )
+                message = f"Plugin '{plugin_data['name']}' updated in workspace '{config.workspace_id}'"
+            else:
+                naas_integration.create_plugin(
+                    workspace_id=config.workspace_id, data=plugin_data
+                )
+                message = f"Plugin '{plugin_data['name']}' created in workspace '{config.workspace_id}'"
+            logger.info(message)
+
+if __name__ == "__main__":
+    from src import secret, config
+    naas_api_key = secret.get("NAAS_API_KEY")
+    api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
+    abi_api_key = secret.get("ABI_API_KEY")
+    workspace_id = config.workspace_id
+    github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
+    github_repository = config.github_project_repository
+    if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None or github_access_token is None or github_repository is None:
+        raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID, GITHUB_ACCESS_TOKEN, and GITHUB_REPOSITORY must be set")
+    publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository)
