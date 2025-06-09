@@ -51,14 +51,14 @@ lock: deps
 
 path=tests/
 test:  deps
-	@ uv run python -m pytest -n 4 .
+	@ uv run python -m pytest .
 
 test-abi: deps
-	@ uv run python -m pytest -n 4 lib
+	@ uv run python -m pytest lib
 
 q=''
 ftest: deps
-	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
