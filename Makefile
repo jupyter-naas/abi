@@ -159,6 +159,10 @@ triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
 
+docs-ontology: deps
+	@ echo "Generating ontology documentation..."
+	@ uv run python scripts/generate_docs.py
+
 clean:
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
