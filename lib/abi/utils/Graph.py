@@ -7,11 +7,12 @@ from abi import logger
 
 BFO = Namespace("http://purl.obolibrary.org/obo/")
 ABI = Namespace("http://ontology.naas.ai/abi/")
+TEST = Namespace("http://ontology.naas.ai/test/")
 TIME = Namespace("http://www.w3.org/2006/time#")
 XSD = Namespace("http://www.w3.org/2001/XMLSchema#")
 CCO = Namespace("https://www.commoncoreontologies.org/")
 DCTERMS = Namespace("http://purl.org/dc/terms/")
-URI_REGEX = r"http:\/\/ontology\.naas\.ai\/abi\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+URI_REGEX = r"http:\/\/ontology\.naas\.ai\/.+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 class ABIGraph(rdfgraph):
     def __init__(self, **kwargs):
