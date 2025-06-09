@@ -18,7 +18,7 @@ def supervisor_agent() -> str:
         try:
             # Get route_name from function signature
             signature = inspect.signature(as_api)
-            route_name = signature.parameters.get('route_name').default
+            route_name = signature.parameters.get('route_name')
         except ValueError:
             raise ValueError(f"Route name not found for agent {agent}")
     url = f"https://{config.space_name}-api.default.space.naas.ai/agents/{route_name}/stream-completion?token={secret.get('ABI_API_KEY')}"
