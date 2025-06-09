@@ -26,7 +26,7 @@ class ImageURLtoAssetPipelineConfiguration(PipelineConfiguration):
     """
     triple_store: ITripleStoreService
     naas_integration_config: NaasIntegrationConfiguration
-    data_store_path: str = "datastore/images"
+    data_store_path: str = "datastore/naas/assets"
 
 class ImageURLtoAssetPipelineParameters(PipelineParameters):
     """Parameters for ImageURLtoAssetPipeline.
