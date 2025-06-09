@@ -201,6 +201,8 @@ help:
 	@echo "  triplestore-prod-remove  Remove the production triplestore data"
 	@echo "  triplestore-prod-override Override the production triplestore with local data"
 	@echo "  triplestore-prod-pull    Pull triplestore data from production"
+	@echo "  docs-ontology            Generate ontology documentation"
+	@echo "  publish-remote-agents    Publish remote agents"
 	@echo ""
 	@echo "BUILDING:"
 	@echo "  build                    Build the Docker image (alias for build.linux.x86_64)"
