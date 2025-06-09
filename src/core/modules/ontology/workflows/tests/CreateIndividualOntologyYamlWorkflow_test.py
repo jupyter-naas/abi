@@ -1,5 +1,3 @@
-import pytest
-
 from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
