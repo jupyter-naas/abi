@@ -51,14 +51,14 @@ lock: deps
 
 path=tests/
 test:  deps
-	@ uv run python -m pytest -n 4 .
+	@ uv run python -m pytest .
 
 test-abi: deps
-	@ uv run python -m pytest -n 4 lib
+	@ uv run python -m pytest lib
 
 q=''
 ftest: deps
-	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
@@ -158,6 +158,14 @@ triplestore-prod-override: deps
 triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
+
+docs-ontology: deps
+	@ echo "Generating ontology documentation..."
+	@ uv run python scripts/generate_docs.py
+
+publish-remote-agents: deps
+	@ echo "Publishing remote agents..."
+	@ uv run python scripts/publish_remote_agents.py
 
 clean:
 	@echo "Cleaning up build artifacts..."

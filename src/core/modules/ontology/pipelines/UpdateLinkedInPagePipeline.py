@@ -39,7 +39,7 @@ class UpdateLinkedInPagePipelineParameters(PipelineParameters):
     linkedin_public_url: Annotated[Optional[str], Field(
         None,
         description="LinkedIn Public URL of the individual with the LinkedIn Public ID as identifier.",
-        pattern="https?:\/\/.+\.linkedin\.com\/(in|company|school|showcase)\/[^?]+"
+        pattern=r"https?://.+\.linkedin\.com/(in|company|school|showcase)/[^?]+"
     )]
     owner_uri: Annotated[Optional[str], Field(
         None,
