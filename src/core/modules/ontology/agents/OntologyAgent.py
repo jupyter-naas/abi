@@ -65,7 +65,7 @@ NAME = "ontology_agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+    "https://workspace-dev-ugc-public-access.s3.us-west-2.amazonaws.com/5d4797db-0ac2-418b-9b81-5b1c6e6cfc3a/images/f18cb2a850da49b0b0dc4d9dd0124218"
 )
 DESCRIPTION = "A Ontology Agent that helps users to work with ontologies."
 SYSTEM_PROMPT = """# ROLE

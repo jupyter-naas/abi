@@ -58,7 +58,7 @@ NAME = "graph_builder_agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
 )
 DESCRIPTION = "A Graph Builder Agent that assembles entities and relationships into RDF triples for knowledge graph construction."
 SYSTEM_PROMPT = """# ROLE
