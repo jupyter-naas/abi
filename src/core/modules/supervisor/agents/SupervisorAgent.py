@@ -7,18 +7,10 @@ from abi.services.agent.Agent import (
 from fastapi import APIRouter
 from langchain_openai import ChatOpenAI
 from src import secret
-from src.core.modules.ontology.agents.OntologyAgent import (
-    create_agent as create_ontology_agent,
-)
-from src.core.modules.naas.agents.NaasAgent import (
-    create_agent as create_naas_agent,
-)
-from src.core.modules.support.agents.SupportAgent import (
-    create_agent as create_support_agent,
-)
 from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
+import importlib
 
 NAME = "supervisor_agent"
 MODEL = "o3-mini"
@@ -156,11 +148,17 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=0)
 
     # Add support agents
-    agents = [
-        create_support_agent(),
-        create_ontology_agent(),
-        create_naas_agent(),
+    modules = [
+        "src.core.modules.support.agents.SupportAgent",
+        "src.core.modules.ontology.agents.OntologyAgent",
+        "src.core.modules.naas.agents.NaasAgent",
     ]
+    for m in modules:
+        try:
+            module = importlib.import_module(m)
+            agents.append(module.create_agent())
+        except ImportError:
+            pass
 
     return SupervisorAgent(
         name=NAME,
