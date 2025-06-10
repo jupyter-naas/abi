@@ -49,6 +49,9 @@ dependencies = [
     "pydantic>=2.11.4",
     "watchdog>=6.0.0",
     "langchain-google-genai>=2.1.4",
+    "feedparser>=6.0.11",
+    "owlready2>=0.48",
+    "ttl2py",
 ]
 
 [project.scripts]
@@ -76,10 +79,11 @@ dev-dependencies = [
 
 [tool.uv.sources]
 abi = { path = "./lib", editable = true }
+ttl2py = { path = "./ttl2py", editable = true }
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.dagster]
-module_name = "dg"
+module_name = "dagster_definitions"
