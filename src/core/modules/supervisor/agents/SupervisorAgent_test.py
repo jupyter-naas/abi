@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.supervisor.agents.SupervisorAgent import (
+from ..agents.SupervisorAgent import (
     create_agent as create_supervisor_agent,
 )
 from src import secret, config

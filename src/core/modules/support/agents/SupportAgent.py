@@ -7,13 +7,13 @@ from abi.services.agent.Agent import (
     MemorySaver,
 )
 from src import secret
-from src.core.modules.support.integrations.GithubGraphqlIntegration import (
+from ..integrations.GithubGraphqlIntegration import (
     GithubGraphqlIntegrationConfiguration,
 )
-from src.core.modules.support.integrations.GithubIntegration import (
+from ..integrations.GithubIntegration import (
     GithubIntegrationConfiguration,
 )
-from src.core.modules.support.workflows.GitHubSupportWorkflows import (
+from ..workflows.GitHubSupportWorkflows import (
     GitHubSupportWorkflows,
     GitHubSupportWorkflowsConfiguration,
 )

@@ -1,10 +1,10 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.modules.support.integrations.GithubIntegration import (
+from ..integrations.GithubIntegration import (
     GithubIntegration,
     GithubIntegrationConfiguration,
 )
-from src.core.modules.support.integrations.GithubGraphqlIntegration import (
+from ..integrations.GithubGraphqlIntegration import (
     GithubGraphqlIntegration,
     GithubGraphqlIntegrationConfiguration,
 )
