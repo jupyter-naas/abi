@@ -1,0 +1,16 @@
+[project]
+name = "ttl2py"
+version = "0.1.0"
+description = "Convert TTL to Python classes"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.11.5",
+    "rdflib>=7.1.4",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.4.0",
+    "requests>=2.32.4",
+]
