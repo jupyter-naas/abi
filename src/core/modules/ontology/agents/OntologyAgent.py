@@ -53,13 +53,13 @@ from src.core.modules.ontology.pipelines.UpdateTickerPipeline import (
     UpdateTickerPipeline,
     UpdateTickerPipelineConfiguration,
 )
-from src.core.modules.ontology.workflows.ExportGraphInstancesToExcelWorkflow import (
-    ExportGraphInstancesToExcelWorkflow,
-    ExportGraphInstancesToExcelWorkflowConfiguration,
-)
-from src.core.modules.naas.integrations.NaasIntegration import (
-    NaasIntegrationConfiguration,
-)
+# from src.core.modules.ontology.workflows.ExportGraphInstancesToExcelWorkflow import (
+#     ExportGraphInstancesToExcelWorkflow,
+#     ExportGraphInstancesToExcelWorkflowConfiguration,
+# )
+# from src.core.modules.naas.integrations.NaasIntegration import (
+#     NaasIntegrationConfiguration,
+# )
 
 NAME = "ontology_agent"
 MODEL = "o3-mini"
@@ -181,10 +181,10 @@ def create_agent(
     get_subject_graph_workflow = GetSubjectGraphWorkflow(get_subject_graph_config)
     tools += get_subject_graph_workflow.as_tools()
 
-    # Add ExportGraphInstancesToExcel
-    export_graph_instances_to_excel_config = ExportGraphInstancesToExcelWorkflowConfiguration(triple_store, NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY")))
-    export_graph_instances_to_excel = ExportGraphInstancesToExcelWorkflow(export_graph_instances_to_excel_config)
-    tools += export_graph_instances_to_excel.as_tools()
+    # # Add ExportGraphInstancesToExcel
+    # export_graph_instances_to_excel_config = ExportGraphInstancesToExcelWorkflowConfiguration(triple_store, NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY")))
+    # export_graph_instances_to_excel = ExportGraphInstancesToExcelWorkflow(export_graph_instances_to_excel_config)
+    # tools += export_graph_instances_to_excel.as_tools()
 
     # Specialized Tools
     ## Initialize specialized pipelines
