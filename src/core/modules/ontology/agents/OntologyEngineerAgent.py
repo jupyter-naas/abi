@@ -15,7 +15,7 @@ NAME = "ontology_engineer_agent"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+    "https://triplydb.com/imgs/avatars/d/6000a72bcbf91b03347f4a93.png?v=1"
 )
 DESCRIPTION = "An Ontology Engineering Agent that helps align terms and concepts to BFO-conformant ontology classes."
 SYSTEM_PROMPT = """# ROLE
