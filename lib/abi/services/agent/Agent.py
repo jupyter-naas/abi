@@ -43,7 +43,6 @@ from sse_starlette.sse import EventSourceResponse
 from queue import Queue, Empty
 import pydash as pd
 
-
 class AgentSharedState:
     __thread_id: int
 
@@ -268,13 +267,14 @@ class Agent(Expose):
         graph.add_edge(START, "call_model")
 
         graph.add_node(self.call_tools)
+        # This is not needed because the call_tools is generating the proper Command to go to the right node after each tool call.
         # graph.add_edge("call_tools", "call_model")
 
         for agent in self.__agents:
             logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
-            # WARNING: This is not needed because the handoff is done as a tool, and therefore, after a handoff, the model will be called thanks to: graph.add_edge("call_tools", "call_model")
-            # graph.add_edge(agent.name, "call_model")
+            # This makes sure that after calling an agent in a graph, we call the main model of the graph.
+            graph.add_edge(agent.name, "call_model")
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -286,7 +286,7 @@ class Agent(Expose):
     def call_model(
         self, state: MessagesState
     ) -> Command[Literal["call_tools", "__end__"]]:
-        # logger.debug(f"call_model on: {self.name}")
+        logger.debug(f"call_model on: {self.name}")
         messages = state["messages"]
         if self.__configuration.system_prompt:
             messages = [
@@ -304,19 +304,18 @@ class Agent(Expose):
             # It's important because, as some tools are subgraphs, and that we are passing the full state, the subgraph will be able to mess with the state.
             # Therefore, if the LLM calls a tool here like the "add" method, and at the same time request the multiplication agent, the agent will mess with the state, and the result of the "add" tool will be lost.
             #### ----->  A solution would be to rebuild the state to make sure that the following message of a tool call it the response of that call. If we do that we should theroetically be able to call multiple tools at once, which would be more effective.
-            response.tool_calls = [response.tool_calls[0]]
+            # response.tool_calls = [response.tool_calls[0]]
 
             return Command(goto="call_tools", update={"messages": [response]})
 
         return Command(goto="__end__", update={"messages": [response]})
 
-    # NOTE: this is a simplified version of the prebuilt ToolNode
-    # If you want to have a tool node that has full feature parity, please refer to the source code
     def call_tools(self, state: MessagesState) -> list[Command]:
         last_message: AnyMessage = state["messages"][-1]
         if not isinstance(last_message, AIMessage) or not hasattr(
             last_message, "tool_calls"
-        ):
+        ) or len(last_message.tool_calls) == 0:
+            logger.warning(f"No tool calls found in last message but call_tools was called: {last_message}")
             return [Command(goto="__end__", update={"messages": [last_message]})]
 
         tool_calls: list[ToolCall] = last_message.tool_calls
@@ -342,22 +341,29 @@ class Agent(Expose):
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
                 args = {"state": state, "tool_call_id": tool_call["id"]}
+            try:
+                tool_response = tool_.invoke(args)
 
-            tool_response = tool_.invoke(args)
 
-            if isinstance(tool_response, ToolMessage):
-                results.append(Command(update={"messages": [tool_response]}))
+                if isinstance(tool_response, ToolMessage):
+                    results.append(Command(update={"messages": [tool_response]}))
 
-            # handle tools that return Command directly
-            elif isinstance(tool_response, Command):
-                results.append(tool_response)
-            else:
-                raise ValueError(
-                    f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
-                )
+                # handle tools that return Command directly
+                elif isinstance(tool_response, Command):
+                    results.append(tool_response)
+                else:
+                    raise ValueError(
+                        f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
+                    )
+            except Exception as e:
+                # If the tool call fails, we want the model to interpret it.
+                results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
 
         assert len(results) > 0, state
-        results.append(Command(goto="call_model"))
+
+        # If the last response is a ToolMessage, we want the model to interpret it.
+        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage):
+            results.append(Command(goto="call_model"))
 
         return results
 
@@ -426,35 +432,44 @@ class Agent(Expose):
             subgraphs=True,
         ):
             _, payload = chunk
-
             if isinstance(payload, dict):
-                last_message = list(payload.values())[0]["messages"][-1]
+                last_messages = []
 
-                if isinstance(last_message, AIMessage):
-                    if pd.get(last_message, "additional_kwargs.tool_calls"):
-                        # This is a tool call.
-                        self.__notify_tool_usage(last_message)
-                    else:
-                        # This is a message.
-                        # print("\n\nIntermediate AI Message:")
-                        # print(last_message.content)
-                        # print(last_message)
-                        # print('\n\n')
-                        pass
-                elif isinstance(last_message, ToolMessage):
-                    if last_message.id not in notified:
-                        self.__notify_tool_response(last_message)
-                        notified[last_message.id] = True
+                v = list(payload.values())[0]
+                
+                if isinstance(v, dict):
+                    last_messages = [v["messages"][-1]]
                 else:
-                    if "tool_call_id" in last_message:
-                        if last_message["tool_call_id"] not in notified:
+                    last_messages = [e["messages"][-1] for e in v]
+
+
+                for last_message in last_messages:
+
+                    if isinstance(last_message, AIMessage):
+                        if pd.get(last_message, "additional_kwargs.tool_calls"):
+                            # This is a tool call.
+                            self.__notify_tool_usage(last_message)
+                        else:
+                            # This is a message.
+                            # print("\n\nIntermediate AI Message:")
+                            # print(last_message.content)
+                            # print(last_message)
+                            # print('\n\n')
+                            pass
+                    elif isinstance(last_message, ToolMessage):
+                        if last_message.id not in notified:
                             self.__notify_tool_response(last_message)
-                            notified[last_message["tool_call_id"]] = True
+                            notified[last_message.id] = True
                     else:
-                        print("\n\n Unknown message type:")
-                        print(type(last_message))
-                        print(last_message)
-                        print("\n\n")
+                        if "tool_call_id" in last_message:
+                            if last_message["tool_call_id"] not in notified:
+                                self.__notify_tool_response(last_message)
+                                notified[last_message["tool_call_id"]] = True
+                        else:
+                            print("\n\n Unknown message type:")
+                            print(type(last_message))
+                            print(last_message)
+                            print("\n\n")
 
             yield chunk
 
@@ -733,6 +748,7 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
             # We're passing agent's FULL internal message history AND adding a tool message to make sure
             # the resulting chat history is valid. See the paragraph above for more information.
             update={"messages": state["messages"] + [tool_message]},
+            # update={"messages": state["messages"]},
         )
 
     assert isinstance(handoff_to_agent, BaseTool)
