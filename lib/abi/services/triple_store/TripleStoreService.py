@@ -205,139 +205,142 @@ class TripleStoreService(ITripleStoreService):
 
     def load_schema(self, filepath: str):
         logger.debug(f"Loading schema: {filepath}")
+        try:
 
-        query = f'''PREFIX internal: <http://triple-store.internal#>
-        SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
-        logger.debug(f"Query: {query}")
-        # Check if schema with filePath == filepath already exists and grab all triples
-        schema_triples: rdflib.query.Result = self.query(query)
+            query = f'''PREFIX internal: <http://triple-store.internal#>
+            SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
+            logger.debug(f"Query: {query}")
+            # Check if schema with filePath == filepath already exists and grab all triples
+            schema_triples: rdflib.query.Result = self.query(query)
 
-        logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
-        # If schema with filePath == filepath already exists, we check if the file has been modified.
-        schema_exists_in_store = len(list(schema_triples)) == 1
-        logger.debug(f"Schema exists in store: {schema_exists_in_store}")
-        if schema_exists_in_store:
-            result_rows = list(schema_triples)
-            assert len(result_rows) == 1
-            assert isinstance(result_rows[0], rdflib.query.ResultRow)
-            _SUBJECT_TUPLE_INDEX = 0
-            subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
+            logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
+            # If schema with filePath == filepath already exists, we check if the file has been modified.
+            schema_exists_in_store = len(list(schema_triples)) == 1
+            logger.debug(f"Schema exists in store: {schema_exists_in_store}")
+            if schema_exists_in_store:
+                result_rows = list(schema_triples)
+                assert len(result_rows) == 1
+                assert isinstance(result_rows[0], rdflib.query.ResultRow)
+                _SUBJECT_TUPLE_INDEX = 0
+                subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
 
-            # Select * from subject
-            triples: rdflib.query.Result = self.query(
-                f"""PREFIX internal: <http://triple-store.internal#>
-                SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
-            )
-
-            # Load schema into a dict
-            schema_dict = {}
-            for row in triples:
-                assert isinstance(row, rdflib.query.ResultRow)
-                p, o = row
-
-                schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
-                    o
+                # Select * from subject
+                triples: rdflib.query.Result = self.query(
+                    f"""PREFIX internal: <http://triple-store.internal#>
+                    SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
                 )
 
-            # Get file last update time
-            file_last_update_time = os.path.getmtime(filepath)
+                # Load schema into a dict
+                schema_dict = {}
+                for row in triples:
+                    assert isinstance(row, rdflib.query.ResultRow)
+                    p, o = row
 
-            # Open file and get content.
-            with open(filepath, "r") as file:
-                new_content = file.read()
+                    schema_dict[str(p).replace("http://triple-store.internal#", "")] = str(
+                        o
+                    )
 
-            new_content_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
+                # Get file last update time
+                file_last_update_time = os.path.getmtime(filepath)
 
-            # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
-            if schema_dict["hash"] == new_content_hash:
-                logger.debug("Schema is up to date, no need to update.")
+                # Open file and get content.
+                with open(filepath, "r") as file:
+                    new_content = file.read()
+
+                new_content_hash = hashlib.sha256(new_content.encode("utf-8")).hexdigest()
+
+                # If fileLastUpdateTime is the same, return. Otherwise we continue as we need to update the schema.
+                if schema_dict["hash"] == new_content_hash:
+                    logger.debug("Schema is up to date, no need to update.")
+                    return
+
+                logger.debug("Schema is not up to date, updating.")
+
+                # Decode old content
+                old_content = base64.b64decode(schema_dict["content"]).decode("utf-8")
+
+                # Parse old and new schema
+                old_schema = Graph().parse(io.StringIO(old_content), format="turtle")
+
+                new_schema = Graph().parse(io.StringIO(new_content), format="turtle")
+
+                # Compute addition and deletion triples
+                addition_triples = new_schema - old_schema
+                deletion_triples = old_schema - new_schema
+
+                # Insert addition and remove deletion triples
+                self.insert(addition_triples)
+                self.remove(deletion_triples)
+
+                # Update schema information in the triple store.
+
+                self.remove(
+                    Graph().parse(
+                        io.StringIO(f'''
+                    @prefix internal: <http://triple-store.internal#> .
+                    
+                    <{subject}> internal:hash "{schema_dict["hash"]}" ;
+                        internal:fileLastUpdateTime "{schema_dict["fileLastUpdateTime"]}" ;
+                        internal:content "{schema_dict["content"]}" .
+                '''),
+                        format="turtle",
+                    )
+                )
+
+                self.insert(
+                    Graph().parse(
+                        io.StringIO(f'''
+                    @prefix internal: <http://triple-store.internal#> .
+                    
+                    <{subject}> internal:hash "{new_content_hash}" ;
+                        internal:fileLastUpdateTime "{file_last_update_time}" ;
+                        internal:content "{base64.b64encode(new_content.encode("utf-8")).decode("utf-8")}" .
+                '''),
+                        format="turtle",
+                    )
+                )
+
+                # Return as we don't need to continue as we have already updated the schema.
                 return
+            elif not schema_exists_in_store:
+                logger.debug("Loading schema in graph as it doesn't exist in store.")
 
-            logger.debug("Schema is not up to date, updating.")
+                # Open file and get content.
+                with open(filepath, "r") as file:
+                    content = file.read()
 
-            # Decode old content
-            old_content = base64.b64decode(schema_dict["content"]).decode("utf-8")
+                # Compute base64 content
+                base64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
-            # Parse old and new schema
-            old_schema = Graph().parse(io.StringIO(old_content), format="turtle")
+                # Compute hash of content
+                content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-            new_schema = Graph().parse(io.StringIO(new_content), format="turtle")
+                # Parse schema
+                g = Graph().parse(filepath)
 
-            # Compute addition and deletion triples
-            addition_triples = new_schema - old_schema
-            deletion_triples = old_schema - new_schema
+                # Insert schema into the triple store
+                self.insert(g)
 
-            # Insert addition and remove deletion triples
-            self.insert(addition_triples)
-            self.remove(deletion_triples)
+                # Get file last update time
+                file_last_update_time = os.path.getmtime(filepath)
 
-            # Update schema information in the triple store.
-
-            self.remove(
-                Graph().parse(
-                    io.StringIO(f'''
-                @prefix internal: <http://triple-store.internal#> .
-                
-                <{subject}> internal:hash "{schema_dict["hash"]}" ;
-                    internal:fileLastUpdateTime "{schema_dict["fileLastUpdateTime"]}" ;
-                    internal:content "{schema_dict["content"]}" .
-            '''),
-                    format="turtle",
+                # Insert Schema with hash, filePath, fileLastUpdateTime and content to be able to track changes.
+                self.insert(
+                    Graph().parse(
+                        io.StringIO(f'''
+                    @prefix internal: <http://triple-store.internal#> .
+                                                    
+                    <http://triple-store.internal/{uuid.uuid4()}> a internal:Schema ;
+                        internal:hash "{content_hash}" ;
+                        internal:filePath "{filepath}" ;
+                        internal:fileLastUpdateTime "{file_last_update_time}" ;
+                        internal:content "{base64_content}" .
+                '''),
+                        format="turtle",
+                    )
                 )
-            )
-
-            self.insert(
-                Graph().parse(
-                    io.StringIO(f'''
-                @prefix internal: <http://triple-store.internal#> .
-                
-                <{subject}> internal:hash "{new_content_hash}" ;
-                    internal:fileLastUpdateTime "{file_last_update_time}" ;
-                    internal:content "{base64.b64encode(new_content.encode("utf-8")).decode("utf-8")}" .
-            '''),
-                    format="turtle",
-                )
-            )
-
-            # Return as we don't need to continue as we have already updated the schema.
-            return
-        elif not schema_exists_in_store:
-            logger.debug("Loading schema in graph as it doesn't exist in store.")
-
-            # Open file and get content.
-            with open(filepath, "r") as file:
-                content = file.read()
-
-            # Compute base64 content
-            base64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
-
-            # Compute hash of content
-            content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-            # Parse schema
-            g = Graph().parse(filepath)
-
-            # Insert schema into the triple store
-            self.insert(g)
-
-            # Get file last update time
-            file_last_update_time = os.path.getmtime(filepath)
-
-            # Insert Schema with hash, filePath, fileLastUpdateTime and content to be able to track changes.
-            self.insert(
-                Graph().parse(
-                    io.StringIO(f'''
-                @prefix internal: <http://triple-store.internal#> .
-                                                
-                <http://triple-store.internal/{uuid.uuid4()}> a internal:Schema ;
-                    internal:hash "{content_hash}" ;
-                    internal:filePath "{filepath}" ;
-                    internal:fileLastUpdateTime "{file_last_update_time}" ;
-                    internal:content "{base64_content}" .
-            '''),
-                    format="turtle",
-                )
-            )
+        except Exception as e:
+            logger.error(f"Error loading schema ({filepath}): {e}")
 
     def get_schema_graph(self) -> Graph:
         contents: rdflib.query.Result = self.query(
