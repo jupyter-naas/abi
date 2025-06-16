@@ -203,15 +203,51 @@ class TripleStoreService(ITripleStoreService):
     # Schema Management
     ############################################################
 
-    def load_schema(self, filepath: str):
+    def load_schemas(self, filepaths: List[str]):
+        # First build a cache of all schemas to speed up the process.
+        schema_cache = Graph()
+        
+        results = self.query("""
+            PREFIX internal: <http://triple-store.internal#>
+            SELECT ?schema ?filePath ?hash ?fileLastUpdateTime ?content
+            WHERE {
+                ?schema a internal:Schema ;
+                    internal:filePath ?filePath ;
+                    internal:hash ?hash ;
+                    internal:fileLastUpdateTime ?fileLastUpdateTime ;
+                    internal:content ?content .
+            }
+        """)
+        
+        for row in results:
+            assert isinstance(row, rdflib.query.ResultRow)
+            schema, filePath, hash, fileLastUpdateTime, content = row
+            schema_cache.add((schema, RDF.type, URIRef("http://triple-store.internal#Schema")))
+            schema_cache.add((schema, URIRef("http://triple-store.internal#filePath"), filePath))
+            schema_cache.add((schema, URIRef("http://triple-store.internal#hash"), hash))
+            schema_cache.add((schema, URIRef("http://triple-store.internal#fileLastUpdateTime"), fileLastUpdateTime))
+            schema_cache.add((schema, URIRef("http://triple-store.internal#content"), content))
+        
+        for filepath in filepaths:
+            self.load_schema(filepath, schema_cache)
+
+
+    def load_schema(self, filepath: str, schema_cache: Graph | None = None):
         logger.debug(f"Loading schema: {filepath}")
+        if schema_cache is not None:
+            def _read_query_func(query: str):
+                return schema_cache.query(query)
+            read_query_func = _read_query_func
+        else:
+            read_query_func = self.query
+
         try:
 
             query = f'''PREFIX internal: <http://triple-store.internal#>
             SELECT * WHERE {{ ?s internal:filePath "{filepath}" . }}'''
             logger.debug(f"Query: {query}")
-            # Check if schema with filePath == filepath already exists and grab all triples
-            schema_triples: rdflib.query.Result = self.query(query)
+            # Check if schema with filePath == filepath already exists and grab all triples.
+            schema_triples: rdflib.query.Result = read_query_func(query)
 
             logger.debug(f"len(list(schema_triples)): {len(list(schema_triples))}")
             # If schema with filePath == filepath already exists, we check if the file has been modified.
@@ -225,10 +261,10 @@ class TripleStoreService(ITripleStoreService):
                 subject = result_rows[0][_SUBJECT_TUPLE_INDEX]
 
                 # Select * from subject
-                triples: rdflib.query.Result = self.query(
-                    f"""PREFIX internal: <http://triple-store.internal#>
-                    SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
-                )
+                triples: rdflib.query.Result = read_query_func(
+                        f"""PREFIX internal: <http://triple-store.internal#>
+                        SELECT ?p ?o WHERE {{ <{subject}> ?p ?o . }}"""
+                    )
 
                 # Load schema into a dict
                 schema_dict = {}

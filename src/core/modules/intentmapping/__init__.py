@@ -3,6 +3,7 @@ from abi import logger
 
 workflows: list = []
 tools: list = []
+loaded = False
 
 
 def get_workflows():
@@ -10,13 +11,18 @@ def get_workflows():
 
 
 def get_tools(tool_names: list[str] = []):
+    global loaded
+    if not loaded:
+        load_tools()
+        loaded = True
+
     if len(tool_names) == 0:
         return tools
     else:
         return [tool for tool in tools if tool.name in tool_names]
 
 
-def on_initialized():
+def load_tools():
     logger.debug("Loading Intent Mapping workflows")
     w = load_workflows()
     workflows.extend(w)
