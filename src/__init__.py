@@ -148,25 +148,33 @@ logger.debug("Loading modules")
 modules = get_modules()
 
 
-async def load_ontologies_async():
-    """Load all ontologies asynchronously"""
-    tasks = []
-    for module in modules:
-        # Loading ontologies
-        for ontology in module.ontologies:
-            # Create async task for each load_schema call
-            task = asyncio.create_task(
-                asyncio.to_thread(services.triple_store_service.load_schema, ontology)
-            )
-            tasks.append(task)
+# async def load_ontologies_async():
+#     """Load all ontologies asynchronously"""
+#     tasks = []
+#     for module in modules:
+#         # Loading ontologies
+#         for ontology in module.ontologies:
+#             # Create async task for each load_schema call
+#             task = asyncio.create_task(
+#                 asyncio.to_thread(services.triple_store_service.load_schema, ontology)
+#             )
+#             tasks.append(task)
 
-    # Wait for all tasks to complete
-    if tasks:
-        await asyncio.gather(*tasks)
+#     # Wait for all tasks to complete
+#     if tasks:
+#         await asyncio.gather(*tasks)
 
 
-# Run the async ontology loading
-asyncio.run(load_ontologies_async())
+# # Run the async ontology loading
+# asyncio.run(load_ontologies_async())
+
+ontology_filepaths = []
+
+for module in modules:
+    for ontology in module.ontologies:
+        ontology_filepaths.append(ontology)
+        
+services.triple_store_service.load_schemas(ontology_filepaths)
 
 logger.debug("Loading triggers")
 for module in modules:
