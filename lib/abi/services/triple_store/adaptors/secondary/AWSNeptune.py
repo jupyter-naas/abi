@@ -482,6 +482,7 @@ class AWSNeptune(ITripleStorePort):
             o: Identifier | None = row.get("o")
 
             assert s is not None and p is not None and o is not None
+            
 
             graph.add((s, p, o))
 
@@ -688,6 +689,9 @@ class AWSNeptune(ITripleStorePort):
         # Build the INSERT DATA statement
         triples = []
         for s, p, o in graph:
+            # Skip if any term is a blank node
+            if isinstance(s, rdflib.BNode) or isinstance(p, rdflib.BNode) or isinstance(o, rdflib.BNode):
+                continue
             # Convert each term to N3 format
             s_str = s.n3()
             p_str = p.n3()
