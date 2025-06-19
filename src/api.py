@@ -6,6 +6,7 @@ from fastapi.security.oauth2 import OAuth2
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from abi import logger
@@ -33,6 +34,18 @@ logo_name = os.path.basename(logo_path)
 # Set favicon path
 favicon_path = config.favicon_path
 favicon_name = os.path.basename(favicon_path)
+
+origins = config.cors_origins
+
+logger.debug(f"CORS origins: {origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")

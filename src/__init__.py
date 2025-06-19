@@ -49,6 +49,7 @@ class Config:
     favicon_path: str
     pipelines: List[PipelineConfig]
     space_name: str
+    cors_origins: List[str]
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> "Config":
@@ -75,6 +76,7 @@ class Config:
                     favicon_path=config_data["favicon_path"],
                     pipelines=pipeline_configs,
                     space_name=config_data.get("space_name"),
+                    cors_origins=config_data.get("cors_origins"),
                 )
         except FileNotFoundError:
             return cls(
@@ -90,6 +92,7 @@ class Config:
                 favicon_path="",
                 pipelines=[],
                 space_name="",
+                cors_origins=[],
             )
 
 
