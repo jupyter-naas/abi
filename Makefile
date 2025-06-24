@@ -30,8 +30,9 @@ uv:
 .venv:
 	@ uv sync --all-extras
 
-.venv/lib/python3.10/site-packages/abi: deps
-	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+python_version=$(shell cat .python-version)
+.venv/lib/python$(python_version)/site-packages/abi: deps
+	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi 
 
 
 install: dep
@@ -67,7 +68,7 @@ fmt: deps
 # Linting, Static Analysis, Security
 #########################
 
-check: deps .venv/lib/python3.10/site-packages/abi check-core check-custom
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom
 
 check-core: deps
 	@echo ""
