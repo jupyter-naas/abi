@@ -51,7 +51,7 @@ graph TD
     F -->|Single RAW intent| H[END with RAW response]
     F -->|Single AGENT intent| I["Route to specific agent"]
     F -->|Multiple intents or other types| J["inject_intents_in_system_prompt()"]
-    F -->|@ mention detected| K["Direct agent routing"]
+    F -->| mention detected| K["Direct agent routing"]
     
     G --> L[END]
     J --> M["call_model() with context"]
