@@ -32,7 +32,7 @@ from .beta.IntentMapper import IntentMapper, Intent, IntentType
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from langgraph.graph.message import MessagesState
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.tools import tool
 from abi import logger
 import pydash as pd
@@ -90,6 +90,8 @@ class IntentAgent(Agent):
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
+        threshold: float = 0.85,
+        threshold_neighbor: float = 0.05,
     ):
         """Initialize the IntentAgent.
         
@@ -118,6 +120,8 @@ class IntentAgent(Agent):
         # We set class specific properties before calling the super constructor because it will call the build_graph method.
         self._intents = intents
         self._intent_mapper = IntentMapper(self._intents)
+        self._threshold = threshold
+        self._threshold_neighbor = threshold_neighbor
 
         super().__init__(
             name=name,
@@ -166,10 +170,10 @@ class IntentAgent(Agent):
                 return Command(goto=agent.name)
 
         assert isinstance(last_human_message.content, str)
-        intents = pd.filter_(self._intent_mapper.map_intent(last_human_message.content, k=10), lambda matches: matches['score'] > 0.8)
+        intents = pd.filter_(self._intent_mapper.map_intent(last_human_message.content, k=10), lambda matches: matches['score'] > self._threshold)
         if len(intents) == 0:
             _, prompted_intents = self._intent_mapper.map_prompt(last_human_message.content, k=10)
-            intents = pd.filter_(prompted_intents, lambda matches: matches['score'] > 0.8)
+            intents = pd.filter_(prompted_intents, lambda matches: matches['score'] > self._threshold)
             
             if len(intents) == 0:
                 return {
@@ -181,7 +185,7 @@ class IntentAgent(Agent):
         
         # We keep intents that are close to the best intent.
         max_score = intents[0]['score']
-        close_intents = pd.filter_(intents, lambda intent: max_score - intent['score'] < 0.05)
+        close_intents = pd.filter_(intents, lambda intent: max_score - intent['score'] < self._threshold_neighbor)
         
         assert isinstance(close_intents, list)
         
@@ -234,6 +238,9 @@ class IntentAgent(Agent):
             if no filtering is needed
         """
         if "intent_mapping" not in state or len(state["intent_mapping"]["intents"]) <= 1:
+            return
+
+        if len(state["intent_mapping"]["intents"]) == 1 and state["intent_mapping"]["intents"][0]['score'] > self._threshold:
             return
         
         logger.debug(f"filter_out_intents state: {state}")
@@ -292,16 +299,17 @@ Last user message: "{last_human_message.content}"
         response = self._chat_model.bind_tools([filter_intents]).invoke(messages)
         assert isinstance(response, AIMessage)
         
+        logger.debug(f"filter_out_intents response: {response}")
+        
         filtered_intents : list[Intent] = []
         
-        assert isinstance(response.tool_calls, list)
-        assert len(response.tool_calls) > 0
-        assert isinstance(response.tool_calls[0], ToolMessage)
-        assert isinstance(response.tool_calls[0].args, dict)
-        assert 'bool_list' in response.tool_calls[0].args
-        assert isinstance(response.tool_calls[0].args['bool_list'], list)
+        assert isinstance(response.tool_calls, list), response.tool_calls
+        assert len(response.tool_calls) > 0, response.tool_calls
+        assert isinstance(response.tool_calls[0]['args'], dict), response.tool_calls
+        assert 'bool_list' in response.tool_calls[0]['args'], response.tool_calls
+        assert isinstance(response.tool_calls[0]['args']['bool_list'], list), response.tool_calls
         
-        bool_list = response.tool_calls[0].args['bool_list']
+        bool_list = response.tool_calls[0]['args']['bool_list']
         for i in range(len(bool_list)):
             if bool_list[i]:
                 filtered_intents.append(mapped_intents[i])
@@ -371,7 +379,7 @@ Last user message: "{last_human_message.content}"
                 filtered_intents.append(intent)
                 continue
             
-            messages = [SystemMessage(content=f"""
+            messages: list[BaseMessage] = [SystemMessage(content=f"""
 You are a precise and logical assistant. You will be given:
 - An **intent** (which includes one or more named entities)
 - A list of **entities** extracted from that intent
@@ -407,7 +415,8 @@ Last user message: "{last_human_message.content}"
 """)]
             
             for message in state["messages"]:
-                if not isinstance(message, SystemMessage):
+                # if not isinstance(message, SystemMessage):
+                if isinstance(message, HumanMessage):
                     messages.append(message)
             
             response = self._chat_model.invoke(messages)
@@ -444,12 +453,27 @@ Last user message: "{last_human_message.content}"
                 return Command(goto="call_model")
             elif len(intent_mapping["intents"]) == 1:
                 intent : Intent = intent_mapping["intents"][0]['intent']
+                
+                # # Handle deserialized intent targets
+                # if isinstance(intent.intent_target, dict) and '_type' in intent.intent_target:
+                #     target_info = intent.intent_target
+                #     if target_info['_type'] == 'agent':
+                #         # Find agent by name
+                #         for agent in self._agents:
+                #             if agent.name == target_info['name']:
+                #                 intent.intent_target = agent
+                #                 break
+                #     elif target_info['_type'] == 'raw':
+                #         intent.intent_target = target_info['value']
+                
                 if intent.intent_type == IntentType.RAW:
-                    return Command(goto=END, update={"messages": [AIMessage(content=intent.intent_target)]})
+                    return Command(goto=END, update={
+                        "messages": [AIMessage(content=intent.intent_target)]
+                    })
                 # elif intent.intent_type == IntentType.TOOL:
                 #     return Command(goto="model_call_tools")
                 elif intent.intent_type == IntentType.AGENT:
-                    return Command(goto=intent.intent_target.name)
+                    return Command(goto=intent.intent_target)
                 else:
                     return Command(goto="inject_intents_in_system_prompt")
             if len(intent_mapping["intents"]) >= 1:
@@ -495,9 +519,20 @@ Last user message: "{last_human_message.content}"
 
             updated_system_prompt += "\n\nEND INTENT RULES"
             self._system_prompt = updated_system_prompt
+    
+    def should_filter(self, state: dict[str, Any]) -> str:
+        """Determine if intent mapping should be filtered.
         
-        return
-
+        Checks if the intent mapping should be filtered based on the threshold
+        and neighbor values.
+        """
+        
+        if "intent_mapping" in state:
+            if len(state["intent_mapping"]["intents"]) == 1 and state["intent_mapping"]["intents"][0]['score'] > self._threshold:
+                return "intent_mapping_router"
+        
+        return "filter_out_intents"
+        
     
     def build_graph(self, patcher: Optional[Callable] = None):
         """Build the conversation flow graph for the IntentAgent.
@@ -518,8 +553,10 @@ Last user message: "{last_human_message.content}"
         graph.add_node(self.map_intents)
         graph.add_edge(START, "map_intents")
         
+        graph.add_conditional_edges("map_intents", self.should_filter)
+        
         graph.add_node(self.filter_out_intents)
-        graph.add_edge("map_intents", "filter_out_intents")
+        # graph.add_edge("map_intents", "filter_out_intents")
         
         graph.add_node(self.entity_check)
         graph.add_edge("filter_out_intents", "entity_check")
@@ -532,8 +569,8 @@ Last user message: "{last_human_message.content}"
         graph.add_node(self.inject_intents_in_system_prompt)
         graph.add_edge("inject_intents_in_system_prompt", "call_model")
         
-        graph.add_node(self.return_raw_intent)
-        graph.add_edge("return_raw_intent", END)
+        # graph.add_node(self.return_raw_intent)
+        # graph.add_edge("return_raw_intent", END)
         
         graph.add_node(self.call_model)
         graph.add_node(self.call_tools)
@@ -542,9 +579,11 @@ Last user message: "{last_human_message.content}"
         
         
         for agent in self._agents:
-            graph.add_node(agent.graph, metadata={"name": agent.name})
+            print(f"Adding agent {agent.name} to the graph")
+            # graph.add_node(agent.graph, metadata={"name": agent.name})
+            graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
-            graph.add_edge(agent.name, "call_model")
+            # graph.add_edge(agent.name, "call_model")
         
         
         if patcher is not None:
