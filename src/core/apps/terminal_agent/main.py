@@ -104,7 +104,7 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
         finding and running the requested agent from the loaded modules. The agent
         must be properly registered in a module under src/modules for this to work.
     """
-    from src.__modules__ import get_modules
+    from src import modules
 
     if agent_class is None:
         print(
@@ -112,7 +112,7 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
         )
         return
 
-    for module in get_modules():
+    for module in modules:
         for agent in module.agents:
             print(agent.__class__.__name__)
             if agent.__class__.__name__ == agent_class:
