@@ -7,6 +7,7 @@ from typing import Tuple, Dict
 import pandas as pd
 from datetime import datetime
 from rdflib import Graph
+import os
 
 def __make_copy(dir_path: str, file_name: str, content: bytes) -> Tuple[str, str]:
     """
@@ -195,3 +196,14 @@ def save_powerpoint_presentation(presentation, dir_path: str, file_name: str, co
     except Exception as e:
         logger.info(f"Error saving PowerPoint presentation to {dir_path}: {e}")
         return dir_path, file_name
+    
+    
+# Look for a "storage" folder until we reach /
+def find_storage_folder(base_path: str, needle: str = "storage") -> str:
+    if os.path.exists(os.path.join(base_path, needle)):
+        return os.path.join(base_path, needle)
+
+    if base_path == "/":
+        raise Exception("No storage folder found")
+
+    return find_storage_folder(os.path.dirname(base_path))
