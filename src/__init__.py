@@ -18,6 +18,7 @@ from abi import logger
 from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
+from abi.utils.LazyLoader import LazyLoader
 import atexit
 import os
 import asyncio
@@ -25,7 +26,9 @@ import asyncio
 
 @atexit.register
 def shutdown_services():
-    services.triple_store_service.__del__()
+    global services
+    if services.is_loaded():
+        services.triple_store_service.__del__()
 
 
 @dataclass
@@ -122,6 +125,7 @@ if naas_api_key is not None:
                 secrets[key] = value
             else:
                 logger.debug(f"Secret {key} already set in environment variables")
+                secrets[key] = os.getenv(key)
 
     secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
 
@@ -144,65 +148,53 @@ for key, value in secrets.items():
 secret = Secret(secrets_adapters)
 config = Config.from_yaml()
 
-logger.debug("Initializing services")
-services = init_services(config, secret)
 
-logger.debug("Loading modules")
-modules = get_modules()
+modules_loaded = False
 
 
-# async def load_ontologies_async():
-#     """Load all ontologies asynchronously"""
-#     tasks = []
-#     for module in modules:
-#         # Loading ontologies
-#         for ontology in module.ontologies:
-#             # Create async task for each load_schema call
-#             task = asyncio.create_task(
-#                 asyncio.to_thread(services.triple_store_service.load_schema, ontology)
-#             )
-#             tasks.append(task)
 
-#     # Wait for all tasks to complete
-#     if tasks:
-#         await asyncio.gather(*tasks)
+def load_modules():
+    global services
+    logger.debug("Loading modules")
+    _modules = get_modules()
 
+    ontology_filepaths = []
 
-# # Run the async ontology loading
-# asyncio.run(load_ontologies_async())
+    for module in _modules:
+        for ontology in module.ontologies:
+            ontology_filepaths.append(ontology)
+            
+    services.triple_store_service.load_schemas(ontology_filepaths)
 
-ontology_filepaths = []
-
-for module in modules:
-    for ontology in module.ontologies:
-        ontology_filepaths.append(ontology)
-        
-services.triple_store_service.load_schemas(ontology_filepaths)
-
-logger.debug("Loading triggers")
-for module in modules:
-    # Loading triggers
-    for trigger in module.triggers:
-        if trigger is None:
-            logger.warning(
-                f"None trigger found for module {module.module_import_path}."
-            )
-            continue
-        if len(trigger) == 3:
-            topic, event_type, callback = trigger
-            services.triple_store_service.subscribe(topic, event_type, callback)
-        elif len(trigger) == 4:
-            topic, event_type, callback, background = trigger
-            services.triple_store_service.subscribe(
-                topic, event_type, callback, background
-            )
+    logger.debug("Loading triggers")
+    for module in _modules:
+        # Loading triggers
+        for trigger in module.triggers:
+            if trigger is None:
+                logger.warning(
+                    f"None trigger found for module {module.module_import_path}."
+                )
+                continue
+            if len(trigger) == 3:
+                topic, event_type, callback = trigger
+                services.triple_store_service.subscribe(topic, event_type, callback)
+            elif len(trigger) == 4:
+                topic, event_type, callback, background = trigger
+                services.triple_store_service.subscribe(
+                    topic, event_type, callback, background
+                )
 
 
-for module in modules:
-    module.on_initialized()
+    for module in _modules:
+        module.on_initialized()
 
-for module in modules:
-    module.load_agents()
+    for module in _modules:
+        module.load_agents()
+
+    return _modules
+
+services = LazyLoader(lambda: init_services(config, secret))
+modules = LazyLoader(load_modules)
 
 if __name__ == "__main__":
-    cli()
+    cli.main()
