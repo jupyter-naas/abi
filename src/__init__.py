@@ -18,6 +18,7 @@ from abi import logger
 from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
+from abi.utils.LazyLoader import LazyLoader
 import atexit
 import os
 import asyncio
@@ -25,10 +26,9 @@ import asyncio
 
 @atexit.register
 def shutdown_services():
-    global modules_loaded
-    global _services
-    if modules_loaded:
-        _services.triple_store_service.__del__()
+    global services
+    if services.is_loaded():
+        services.triple_store_service.__del__()
 
 
 @dataclass
@@ -151,67 +151,10 @@ config = Config.from_yaml()
 
 modules_loaded = False
 
-class _LazyServices:
-    def __getattr__(self, name):
-        global modules_loaded
-        global _services
-        if not modules_loaded:
-            load_modules()
-        return getattr(_services, name)
-    
-    def __repr__(self):
-        return str(_services) if modules_loaded else "<LazyServices: not loaded>"
 
-class _LazyModules:
-    def __getattr__(self, name):
-        global modules_loaded
-        global _modules
-        if not modules_loaded:
-            load_modules()
-        return getattr(_modules, name)
-    
-    def __iter__(self):
-        global modules_loaded
-        global _modules
-        if not modules_loaded:
-            load_modules()
-        return iter(_modules)
-    
-    def __len__(self):
-        global modules_loaded
-        global _modules
-        if not modules_loaded:
-            load_modules()
-        return len(_modules)
-    
-    def __getitem__(self, key):
-        global modules_loaded
-        global _modules
-        if not modules_loaded:
-            load_modules()
-        return _modules[key]
-    
-    def __repr__(self):
-        return str(_modules) if modules_loaded else "<LazyModules: not loaded>"
 
-# Create module-level instances that can be imported directly
-services = _LazyServices()
-modules = _LazyModules()
-
-_modules = None
-_services = None
 def load_modules():
-    global modules_loaded
-    global _services
-    global _modules
-    if modules_loaded:
-        return
-    modules_loaded = True
-    
-    
-    logger.debug("Initializing services")
-    _services = init_services(config, secret)
-
+    global services
     logger.debug("Loading modules")
     _modules = get_modules()
 
@@ -221,7 +164,7 @@ def load_modules():
         for ontology in module.ontologies:
             ontology_filepaths.append(ontology)
             
-    _services.triple_store_service.load_schemas(ontology_filepaths)
+    services.triple_store_service.load_schemas(ontology_filepaths)
 
     logger.debug("Loading triggers")
     for module in _modules:
@@ -234,10 +177,10 @@ def load_modules():
                 continue
             if len(trigger) == 3:
                 topic, event_type, callback = trigger
-                _services.triple_store_service.subscribe(topic, event_type, callback)
+                services.triple_store_service.subscribe(topic, event_type, callback)
             elif len(trigger) == 4:
                 topic, event_type, callback, background = trigger
-                _services.triple_store_service.subscribe(
+                services.triple_store_service.subscribe(
                     topic, event_type, callback, background
                 )
 
@@ -247,6 +190,11 @@ def load_modules():
 
     for module in _modules:
         module.load_agents()
+
+    return _modules
+
+services = LazyLoader(lambda: init_services(config, secret))
+modules = LazyLoader(load_modules)
 
 if __name__ == "__main__":
     cli.main()

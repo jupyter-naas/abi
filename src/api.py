@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from abi import logger
+from src import modules
 
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
@@ -189,8 +190,7 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
-
-for module in get_modules():
+for module in modules:
     for agent in module.agents:
         logger.debug(f"Loading agent: {agent.name}")
         agent.as_api(agents_router)
