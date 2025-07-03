@@ -25,7 +25,10 @@ import asyncio
 
 @atexit.register
 def shutdown_services():
-    services.triple_store_service.__del__()
+    global modules_loaded
+    global _services
+    if modules_loaded:
+        _services.triple_store_service.__del__()
 
 
 @dataclass
@@ -122,6 +125,7 @@ if naas_api_key is not None:
                 secrets[key] = value
             else:
                 logger.debug(f"Secret {key} already set in environment variables")
+                secrets[key] = os.getenv(key)
 
     secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
 
@@ -144,65 +148,105 @@ for key, value in secrets.items():
 secret = Secret(secrets_adapters)
 config = Config.from_yaml()
 
-logger.debug("Initializing services")
-services = init_services(config, secret)
 
-logger.debug("Loading modules")
-modules = get_modules()
+modules_loaded = False
+
+class _LazyServices:
+    def __getattr__(self, name):
+        global modules_loaded
+        global _services
+        if not modules_loaded:
+            load_modules()
+        return getattr(_services, name)
+    
+    def __repr__(self):
+        return str(_services) if modules_loaded else "<LazyServices: not loaded>"
+
+class _LazyModules:
+    def __getattr__(self, name):
+        global modules_loaded
+        global _modules
+        if not modules_loaded:
+            load_modules()
+        return getattr(_modules, name)
+    
+    def __iter__(self):
+        global modules_loaded
+        global _modules
+        if not modules_loaded:
+            load_modules()
+        return iter(_modules)
+    
+    def __len__(self):
+        global modules_loaded
+        global _modules
+        if not modules_loaded:
+            load_modules()
+        return len(_modules)
+    
+    def __getitem__(self, key):
+        global modules_loaded
+        global _modules
+        if not modules_loaded:
+            load_modules()
+        return _modules[key]
+    
+    def __repr__(self):
+        return str(_modules) if modules_loaded else "<LazyModules: not loaded>"
+
+# Create module-level instances that can be imported directly
+services = _LazyServices()
+modules = _LazyModules()
+
+_modules = None
+_services = None
+def load_modules():
+    global modules_loaded
+    global _services
+    global _modules
+    if modules_loaded:
+        return
+    modules_loaded = True
+    
+    
+    logger.debug("Initializing services")
+    _services = init_services(config, secret)
+
+    logger.debug("Loading modules")
+    _modules = get_modules()
+
+    ontology_filepaths = []
+
+    for module in _modules:
+        for ontology in module.ontologies:
+            ontology_filepaths.append(ontology)
+            
+    _services.triple_store_service.load_schemas(ontology_filepaths)
+
+    logger.debug("Loading triggers")
+    for module in _modules:
+        # Loading triggers
+        for trigger in module.triggers:
+            if trigger is None:
+                logger.warning(
+                    f"None trigger found for module {module.module_import_path}."
+                )
+                continue
+            if len(trigger) == 3:
+                topic, event_type, callback = trigger
+                _services.triple_store_service.subscribe(topic, event_type, callback)
+            elif len(trigger) == 4:
+                topic, event_type, callback, background = trigger
+                _services.triple_store_service.subscribe(
+                    topic, event_type, callback, background
+                )
 
 
-# async def load_ontologies_async():
-#     """Load all ontologies asynchronously"""
-#     tasks = []
-#     for module in modules:
-#         # Loading ontologies
-#         for ontology in module.ontologies:
-#             # Create async task for each load_schema call
-#             task = asyncio.create_task(
-#                 asyncio.to_thread(services.triple_store_service.load_schema, ontology)
-#             )
-#             tasks.append(task)
+    for module in _modules:
+        module.on_initialized()
 
-#     # Wait for all tasks to complete
-#     if tasks:
-#         await asyncio.gather(*tasks)
-
-
-# # Run the async ontology loading
-# asyncio.run(load_ontologies_async())
-
-ontology_filepaths = []
-
-for module in modules:
-    for ontology in module.ontologies:
-        ontology_filepaths.append(ontology)
-        
-services.triple_store_service.load_schemas(ontology_filepaths)
-
-logger.debug("Loading triggers")
-for module in modules:
-    # Loading triggers
-    for trigger in module.triggers:
-        if trigger is None:
-            logger.warning(
-                f"None trigger found for module {module.module_import_path}."
-            )
-            continue
-        if len(trigger) == 3:
-            topic, event_type, callback = trigger
-            services.triple_store_service.subscribe(topic, event_type, callback)
-        elif len(trigger) == 4:
-            topic, event_type, callback, background = trigger
-            services.triple_store_service.subscribe(
-                topic, event_type, callback, background
-            )
-
-
-for module in modules:
-    module.on_initialized()
-
-for module in modules:
-    module.load_agents()
+    for module in _modules:
+        module.load_agents()
 
 if __name__ == "__main__":
-    cli()
+    cli.main()
