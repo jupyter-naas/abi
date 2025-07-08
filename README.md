@@ -12,7 +12,7 @@ The **ABI** project aims to provide a open alternative to Palantir by offering a
 
 ## Key Features
 
-- **Agents**: Configurable AI agents (also named agents) to handle specific organizational tasks and interact with users.
+- **Agents**: Configurable AI agents (also named assistants) to handle specific organizational tasks and interact with users.
 - **Ontology Management**: Define and manage data relationships, structures, and semantic elements.
 - **Integrations**: Seamlessly connect to external data sources and APIs for unified data access.
 - **Pipelines**: Define data processing pipelines to handle and transform data efficiently into the ontological layer.
