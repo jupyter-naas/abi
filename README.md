@@ -1,7 +1,7 @@
 # ABI
 *Agent Based Intelligence*
 
-<img src="./assets/abi-flywheel.png" width="100%" height="100%">
+<img src="./assets/abi-flywheel.png">
 
 ## Overview
 
