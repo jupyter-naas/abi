@@ -4,7 +4,8 @@ import datetime
 import json
 import pickle
 import base64
-
+import inspect
+from collections import OrderedDict
 
 class ForceRefresh(Exception):
     pass
@@ -20,7 +21,7 @@ class CacheService(ICacheService):
             DataType.PICKLE: self.__get_pickle
         }
     
-    def __call__(self, key_builder: Callable, auto_cache: bool = True, cache_type: DataType | None = None, ttl: datetime.timedelta | None = None):
+    def __call__(self, key_builder: Callable, cache_type: DataType, ttl: datetime.timedelta | None = None, auto_cache: bool = True):
         """
         Decorator to cache function results.
         
@@ -70,8 +71,44 @@ class CacheService(ICacheService):
         print(f"Cache decorator called with key_builder: {key_builder}, auto_cache: {auto_cache}, cache_type: {cache_type}, ttl: {ttl}")
         def decorator(func):
             def wrapper(*args, **kwargs):
+                
+                # Step 1: Create a complete mapping of all function arguments
+                # This will contain all arguments passed to the decorated function,
+                # including positional args, keyword args, and default values
+                mapped_args = OrderedDict()
+                func_args = inspect.signature(func).parameters
+                func_args_list = list(func_args.keys())
+                
+                # Step 2: Map positional arguments to their parameter names
+                # Convert positional args like func(a, b, c) to named args like {'x': a, 'y': b, 'z': c}
+                for arg_index in range(len(args)):
+                    arg_name = func_args_list[arg_index]
+                    mapped_args[arg_name] = args[arg_index]
+                    
+                # Step 3: Add keyword arguments to the mapping
+                # Only include kwargs that are actually parameters of the decorated function
+                for arg_name, arg_value in kwargs.items():
+                    if arg_name in func_args_list:
+                        mapped_args[arg_name] = arg_value
+                         
+                # Step 4: Fill in default values for parameters that weren't provided
+                # This ensures we have a complete picture of all function arguments
+                for arg_name, arg_value in func_args.items():
+                    if arg_value.default is not arg_value.empty and arg_name not in mapped_args:
+                        mapped_args[arg_name] = arg_value.default
+                
+                # Step 5: Filter arguments to only include those needed by the key_builder
+                # The key_builder function may only need a subset of the decorated function's arguments
+                key_builder_args = inspect.signature(key_builder).parameters
+                filtered_args = OrderedDict()
+                
+                # Only pass arguments that the key_builder function expects
+                for arg_name, arg_value in mapped_args.items():
+                    if arg_name in key_builder_args:
+                        filtered_args[arg_name] = arg_value
+
                 # Build cache key using the provided key_builder function
-                cache_key = key_builder(*args, **kwargs)
+                cache_key = key_builder(**filtered_args)
                 
                 # Try to get from cache first
                 try:
@@ -89,8 +126,6 @@ class CacheService(ICacheService):
                 except (CacheNotFoundError, CacheExpiredError, ForceRefresh):
                     # If not in cache or expired, execute function
                     result = func(*args, **kwargs)
-                    
-                    print(f"Cache type: {cache_type}")
                     
                     # Cache result if auto_cache is enabled
                     if auto_cache:
