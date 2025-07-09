@@ -1,15 +1,15 @@
 config:
-  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
-  github_project_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
-  github_support_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
+  workspace_id: "63bdae75-7842-48d1-b768-540e9c2617bb" # Naas workspace ID
+  github_project_repository: "jupyter-naas/abi-healthyphases" # Github repository name (e.g. jupyter-naas/abi)
+  github_support_repository: "jupyter-naas/abi-healthyphases" # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
   triple_store_path: "storage/triplestore" # Path to the ontology store
-  api_title: "ABI API" # API title
-  api_description: "API for ABI, your Artifical Business Intelligence" # API description
+  api_title: "PHASES API" # API title
+  api_description: "API for PHASES, your Artifical Business Intelligence" # API description
   logo_path: "assets/logo.png" # Path to the logo
   favicon_path: "assets/favicon.ico" # Path to the favicon
-  storage_name: "abi" # Name of the storage
-  space_name: "abi" # Name of the space
+  storage_name: "phases" # Name of the storage
+  space_name: "phases" # Name of the space
   cors_origins:
     - "http://localhost:9879"
   
