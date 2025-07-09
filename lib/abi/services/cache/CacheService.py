@@ -28,38 +28,41 @@ class CacheService(ICacheService):
         Args:
             key_builder: Function that takes the same parameters as the decorated function
                         and returns a cache key (string or dict)
-            auto_cache: Whether to automatically cache the result (default: True)
             cache_type: Cache type to use (TEXT, JSON, BINARY, PICKLE). 
                        Required when auto_cache=True (default: None)
             ttl: Time-to-live for cached data. If specified, cached data will expire 
                  after this duration (default: None)
+            auto_cache: Whether to automatically cache the result (default: True)
         
         Example:
             >>> # Create cache service instance
             >>> cache_service = CacheService(adapter)
             >>> 
             >>> # Apply cache decorator with explicit cache type
-            >>> @cache_service.cache(lambda user_id, include_profile=False: f"user_{user_id}_profile_{include_profile}", 
-            ...                      cache_type=DataType.JSON)
+            >>> @cache_service(lambda user_id, include_profile=False: f"user_{user_id}_profile_{include_profile}", 
+            ...                 cache_type=DataType.JSON)
             ... def get_user_data(user_id: int, include_profile: bool = False):
             ...     # Expensive operation (e.g., database query, API call)
             ...     return {"id": user_id, "name": "John Doe", "profile": include_profile}
             >>> 
             >>> # Disable auto-caching (only retrieves from cache, doesn't store)
-            >>> @cache_service.cache(lambda x: f"key_{x}", auto_cache=False)
+            >>> @cache_service(lambda x: f"key_{x}", cache_type=DataType.TEXT, auto_cache=False)
             ... def get_data_no_auto_cache(x):
             ...     return f"data_{x}"
             >>> 
             >>> # Cache text data explicitly
-            >>> @cache_service.cache(lambda x: f"key_{x}", cache_type=DataType.TEXT)
+            >>> @cache_service(lambda x: f"key_{x}", cache_type=DataType.TEXT)
             ... def get_text_data(x):
             ...     return f"data_{x}"
             >>> 
             >>> # Cache with TTL (expires after 1 hour)
-            >>> @cache_service.cache(lambda x: f"key_{x}", cache_type=DataType.JSON, 
-            ...                      ttl=datetime.timedelta(hours=1))
+            >>> @cache_service(lambda x: f"key_{x}", cache_type=DataType.JSON, 
+            ...                 ttl=datetime.timedelta(hours=1))
             ... def get_data_with_ttl(x):
             ...     return {"data": x, "timestamp": datetime.datetime.now()}
+            >>> 
+            >>> # Force cache refresh with special parameter
+            >>> result = get_user_data(123, True, force_cache_refresh=True)  # Bypasses cache
             >>> 
             >>> # First call - executes function and caches result
             >>> result1 = get_user_data(123, True)  # Cache key: "user_123_profile_True"
