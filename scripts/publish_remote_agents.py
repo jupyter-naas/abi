@@ -5,7 +5,7 @@ from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from src.core.modules.support.integrations.GithubIntegration import (
+from src.custom.modules.support.integrations.GithubIntegration import (
     GithubIntegration,
     GithubIntegrationConfiguration,
 )
@@ -17,6 +17,8 @@ def publish_remote_agent(
     workspace_id: str,
     github_access_token: str,
     github_repository: str,
+    default_agent: str = "supervisor_agent",
+    agents_to_publish: list[str] = []
     ):
     # Init Naas Integration
     naas_integration = NaasIntegration(NaasIntegrationConfiguration(api_key=naas_api_key))
@@ -43,14 +45,16 @@ def publish_remote_agent(
 
             # Get name, description, chat_model from the agent
             name = getattr(agent, "name", "")
-            if "supervisor" in name.lower():
+            if name not in agents_to_publish:
+                continue
+            if name == default_agent:
                 default = True
             else:
                 default = False
             description = getattr(agent, "description", "")
             model = "gpt-4o"
             temperature = 0
-            agent_configuration = getattr(agent, "configuration", "")
+            agent_configuration = getattr(agent, "configuration")
             if agent_configuration is not None:
                 prompt = agent_configuration.system_prompt
             else:
@@ -62,15 +66,15 @@ def publish_remote_agent(
                 try:
                     # Get route_name from function signature
                     signature = inspect.signature(as_api)
-                    route_name = signature.parameters.get('route_name').default
+                    route_name = signature.parameters.get('route_name').default # type: ignore
                 except ValueError:
                     route_name = name
             if route_name is None:
                 raise ValueError(f"Route name not found for agent {name}")
-
+            
             plugin_data = {
-                "id": name.lower().replace(" ", "_"),
-                "name": " ".join(word.capitalize() for word in name.split("_")) + " (Remote)",
+                "id": name.lower(),
+                "name": name,
                 "slug": name.lower().replace(" ", "-").replace("_", "-"),
                 "default": default,
                 "avatar": avatar,
@@ -85,7 +89,7 @@ def publish_remote_agent(
                 },
                 "suggestions": suggestions,
             }
-            logger.info(f"==> plugin_data: {plugin_data}")
+            logger.debug(f"==> plugin_data: {plugin_data}")
 
              # Check if plugin already exists
             existing_plugin_id = naas_integration.search_plugin(
@@ -108,11 +112,13 @@ def publish_remote_agent(
 if __name__ == "__main__":
     from src import secret, config
     naas_api_key = secret.get("NAAS_API_KEY")
-    api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
+    api_base_url = f"https://{config.space_name}.default.space.naas.ai"
     abi_api_key = secret.get("ABI_API_KEY")
     workspace_id = config.workspace_id
     github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
     github_repository = config.github_project_repository
+    default_agent = "Bob"
+    agents_to_publish = ["Bob", "ChatGPT", "Perplexity", "Ontology", "Support"]
     if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None or github_access_token is None or github_repository is None:
         raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID, GITHUB_ACCESS_TOKEN, and GITHUB_REPOSITORY must be set")
-    publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository)
+    publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository, default_agent, agents_to_publish)
