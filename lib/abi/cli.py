@@ -26,7 +26,7 @@ def naas():
 )
 @click.option("--naas-api-url", type=str, required=True, default="https://api.naas.ai")
 @click.option("--naas-secret-name", type=str, required=True, default="abi_secrets")
-@click.option("--env-file", type=str, required=True, default=".env")
+@click.option("--env-file", type=str, required=True, default=".env.prod")
 def push_env_to_naas(naas_api_key, naas_api_url, naas_secret_name, env_file):
     from abi.services.secret.adaptors.secondary.NaasSecret import NaasSecret
     import base64
@@ -43,7 +43,7 @@ def push_env_to_naas(naas_api_key, naas_api_url, naas_secret_name, env_file):
     base64_content = base64.b64encode(envfile_content.encode("utf-8")).decode("utf-8")
     naas_secret.set(naas_secret_name, base64_content)
 
-    print(f"Pushed .env to Naas as base64 secret {naas_secret_name}")
+    print(f"Pushed {env_file} to Naas as base64 secret {naas_secret_name}")
 
 
 @naas.command("list")
