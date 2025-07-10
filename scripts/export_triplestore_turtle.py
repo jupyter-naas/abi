@@ -28,4 +28,4 @@ if __name__ == "__main__":
     # Save exported graph
     dir_path = "datastore/triplestore/export/turtle"
     save_triples(export_graph, dir_path, "graph_instances_export.ttl")
-    logger.info(f"Graph exported to {dir_path}/graph_instances_export.ttl")
+    logger.info(f"💾 Graph exported to {dir_path}/graph_instances_export.ttl")

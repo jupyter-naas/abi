@@ -19,6 +19,7 @@ from src.core.modules.naas.integrations.NaasIntegration import (
 )
 from io import BytesIO
 from datetime import datetime
+import shutil
 
 prefixes = {
     "http://www.w3.org/2000/01/rdf-schema#": "rdfs",
@@ -136,10 +137,11 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
         summary_df = pd.DataFrame(summary_data)
         summary_df = summary_df.sort_values('Label').drop_duplicates()
         summary_df = summary_df.reset_index(drop=True)
-        print(f"Found {len(summary_df)} classes")
+        logger.info(f"Found {len(summary_df)} classes with individuals.")
 
         summary_data = []
-        with pd.ExcelWriter(os.path.join(self.__configuration.data_store_path, f"{datetime.now().isoformat()}_{parameters.excel_file_name}"), engine='openpyxl') as writer:  # type: pd.ExcelWriter
+        excel_file_path = os.path.join(self.__configuration.data_store_path, f"{datetime.now().isoformat()}_{parameters.excel_file_name}")
+        with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:  # type: pd.ExcelWriter
             for _, row in summary_df.iterrows():  # type: ignore
                 class_uri = str(row.get("URI", ""))  # type: ignore
                 class_label = str(row.get("Label", ""))  # type: ignore
@@ -251,6 +253,8 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             asset_url = self._upload_to_storage(excel_data, parameters.excel_file_name)
             if asset_url is None:
                 raise ValueError("Failed to upload Excel file to storage.")
+            
+            logger.info(f"💾 Graph exported to {excel_file_path} (download URL: {asset_url})")
             return asset_url
 
     def as_tools(self) -> list[BaseTool]:
