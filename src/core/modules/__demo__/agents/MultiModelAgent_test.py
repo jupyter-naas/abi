@@ -2,7 +2,6 @@ import pytest
 
 from abi.services.agent.Agent import Agent
 from src.core.modules.__demo__.agents.MultiModelAgent import create_agent
-import re
 
 @pytest.fixture
 def agent() -> Agent:
