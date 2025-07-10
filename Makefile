@@ -140,6 +140,14 @@ sparql-terminal: deps
 dvc-login: deps
 	@ uv run run python scripts/setup_dvc.py | sh
 
+datastore-pull: deps
+	@ echo "Pulling datastore..."
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/datastore_pull.py | sh'
+
+datastore-push: deps datastore-pull
+	@ echo "Pushing datastore..."
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/datastore_push.py | sh'
+
 storage-pull: deps
 	@ echo "Pulling storage..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_pull.py | sh'
@@ -159,6 +167,14 @@ triplestore-prod-override: deps
 triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
+
+triplestore-export-excel: deps
+	@ echo "Exporting triplestore to Excel..."
+	@ uv run python scripts/export_triplestore_excel.py
+
+triplestore-export-turtle: deps
+	@ echo "Exporting triplestore to turtle..."
+	@ uv run python scripts/export_triplestore_turtle.py
 
 docs-ontology: deps
 	@ echo "Generating ontology documentation..."
