@@ -24,14 +24,13 @@ def publish_remote_agent(
     ):
     # Init Naas Integration
     naas_integration = NaasIntegration(NaasIntegrationConfiguration(api_key=naas_api_key))
-    logger.info(f"==> Getting existing plugins from workspace: {workspace_id}")
+    logger.info(f"🔍 Getting existing plugins from workspace: {workspace_id}")
     existing_plugins = naas_integration.get_plugins(workspace_id).get("workspace_plugins", [])
-    logger.info(f"==> Existing plugins: {len(existing_plugins)}")
 
     # Init Github Integration
     if github_access_token is not None and github_repository is not None:
         github_integration = GithubIntegration(GithubIntegrationConfiguration(access_token=github_access_token))
-        logger.info(f"==> Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
+        logger.info(f"🔑 Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
         github_integration.create_or_update_repository_secret(
             repo_name=github_repository,
             secret_name="ABI_API_KEY",
@@ -42,6 +41,7 @@ def publish_remote_agent(
     load_modules()
     modules = get_modules()
     for module in modules:
+        logger.info(f"=> Getting agents from module: {module.module_path}")
         for agent in module.agents:
             name = getattr(agent, "name", "")
             if name not in agents_to_publish:
@@ -114,12 +114,12 @@ def publish_remote_agent(
                     plugin_id=existing_plugin_id,
                     data=plugin_data,
                 )
-                message = f"Plugin '{plugin_data['name']}' updated in workspace '{config.workspace_id}'"
+                message = f"✅ Plugin '{plugin_data['name']}' updated in workspace '{config.workspace_id}'"
             else:
                 naas_integration.create_plugin(
                     workspace_id=config.workspace_id, data=plugin_data
                 )
-                message = f"Plugin '{plugin_data['name']}' created in workspace '{config.workspace_id}'"
+                message = f"✅ Plugin '{plugin_data['name']}' created in workspace '{config.workspace_id}'"
             logger.info(message)
 
 if __name__ == "__main__":
