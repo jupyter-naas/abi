@@ -5,10 +5,11 @@ from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from src.custom.modules.support.integrations.GithubIntegration import (
+from src.core.modules.support.integrations.GithubIntegration import (
     GithubIntegration,
     GithubIntegrationConfiguration,
 )
+from src import load_modules
 
 def publish_remote_agent(
     naas_api_key: str, 
@@ -17,15 +18,18 @@ def publish_remote_agent(
     workspace_id: str,
     github_access_token: str,
     github_repository: str,
-    default_agent: str = "supervisor_agent",
+    default_agent: str = "Supervisor",
     agents_to_publish: list[str] = []
     ):
     # Init Naas Integration
     naas_integration = NaasIntegration(NaasIntegrationConfiguration(api_key=naas_api_key))
+    logger.info(f"==> Getting existing plugins from workspace: {workspace_id}")
     existing_plugins = naas_integration.get_plugins(workspace_id).get("workspace_plugins", [])
+    logger.info(f"==> Existing plugins: {len(existing_plugins)}")
 
     # Init Github Integration
     github_integration = GithubIntegration(GithubIntegrationConfiguration(access_token=github_access_token))
+    logger.info(f"==> Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
     github_integration.create_or_update_repository_secret(
         repo_name=github_repository,
         secret_name="ABI_API_KEY",
@@ -33,10 +37,15 @@ def publish_remote_agent(
     )
 
     # Get all agents from the modules
+    load_modules()
     modules = get_modules()
     for module in modules:
         for agent in module.agents:
-            logger.info(f"==> Publishing agent {agent}")
+            name = getattr(agent, "name", "")
+            if name not in agents_to_publish:
+                continue
+            logger.info(f"==> Publishing agent: {name}")
+            
             # Get SUGGESTIONS and AVATAR_URL from the module
             module_name = agent.__class__.__module__
             module_obj = __import__(module_name, fromlist=['SUGGESTIONS', 'AVATAR_URL'])
@@ -44,9 +53,6 @@ def publish_remote_agent(
             avatar = getattr(module_obj, 'AVATAR_URL', 'https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png')
 
             # Get name, description, chat_model from the agent
-            name = getattr(agent, "name", "")
-            if name not in agents_to_publish:
-                continue
             if name == default_agent:
                 default = True
             else:
@@ -117,8 +123,8 @@ if __name__ == "__main__":
     workspace_id = config.workspace_id
     github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
     github_repository = config.github_project_repository
-    default_agent = "Bob"
-    agents_to_publish = ["Bob", "ChatGPT", "Perplexity", "Ontology", "Support"]
+    default_agent = "Supervisor"
+    agents_to_publish = ["Supervisor", "Ontology", "Naas", "Multi_Models", "Support"]
     if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None or github_access_token is None or github_repository is None:
         raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID, GITHUB_ACCESS_TOKEN, and GITHUB_REPOSITORY must be set")
     publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository, default_agent, agents_to_publish)
