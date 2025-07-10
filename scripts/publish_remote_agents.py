@@ -83,8 +83,7 @@ def publish_remote_agent(
                     route_name = name
                     
             if route_name is None:
-                route_name = name
-                #raise ValueError(f"Route name not found for agent {name}")
+                raise ValueError(f"Route name not found for agent {name}")
             
             plugin_data = {
                 "id": name.lower(),
