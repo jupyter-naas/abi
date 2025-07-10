@@ -10,6 +10,7 @@ from src.core.modules.support.integrations.GithubIntegration import (
     GithubIntegrationConfiguration,
 )
 from src import load_modules
+from fastapi import APIRouter
 
 def publish_remote_agent(
     naas_api_key: str, 
@@ -23,23 +24,24 @@ def publish_remote_agent(
     ):
     # Init Naas Integration
     naas_integration = NaasIntegration(NaasIntegrationConfiguration(api_key=naas_api_key))
-    logger.info(f"==> Getting existing plugins from workspace: {workspace_id}")
+    logger.info(f"🔍 Getting existing plugins from workspace: {workspace_id}")
     existing_plugins = naas_integration.get_plugins(workspace_id).get("workspace_plugins", [])
-    logger.info(f"==> Existing plugins: {len(existing_plugins)}")
 
     # Init Github Integration
-    github_integration = GithubIntegration(GithubIntegrationConfiguration(access_token=github_access_token))
-    logger.info(f"==> Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
-    github_integration.create_or_update_repository_secret(
-        repo_name=github_repository,
-        secret_name="ABI_API_KEY",
-        value=abi_api_key
-    )
+    if github_access_token is not None and github_repository is not None:
+        github_integration = GithubIntegration(GithubIntegrationConfiguration(access_token=github_access_token))
+        logger.info(f"🔑 Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
+        github_integration.create_or_update_repository_secret(
+            repo_name=github_repository,
+            secret_name="ABI_API_KEY",
+            value=abi_api_key
+        )
 
     # Get all agents from the modules
     load_modules()
     modules = get_modules()
     for module in modules:
+        logger.info(f"=> Getting agents from module: {module.module_path}")
         for agent in module.agents:
             name = getattr(agent, "name", "")
             if name not in agents_to_publish:
@@ -70,11 +72,16 @@ def publish_remote_agent(
             if as_api is not None:
                 # Get the index of 'route_name' in co_varnames tuple
                 try:
-                    # Get route_name from function signature
-                    signature = inspect.signature(as_api)
-                    route_name = signature.parameters.get('route_name').default # type: ignore
-                except ValueError:
+                    router = APIRouter()
+                    as_api(router)
+                    
+                    for route in router.routes:
+                        if route.path.endswith("/stream-completion"):
+                            route_name = route.path.replace("/stream-completion", "")
+                            break
+                except (ValueError, AttributeError):
                     route_name = name
+                    
             if route_name is None:
                 raise ValueError(f"Route name not found for agent {name}")
             
@@ -91,7 +98,7 @@ def publish_remote_agent(
                 "temperature": temperature,
                 "type": "CUSTOM",
                 "remote": {
-                    "url": f"{api_base_url}/agents/{route_name}/stream-completion?token={abi_api_key}"
+                    "url": f"{api_base_url}/agents/{route_name}/stream-completion?token={abi_api_key}".replace("//", "/")
                 },
                 "suggestions": suggestions,
             }
@@ -107,12 +114,12 @@ def publish_remote_agent(
                     plugin_id=existing_plugin_id,
                     data=plugin_data,
                 )
-                message = f"Plugin '{plugin_data['name']}' updated in workspace '{config.workspace_id}'"
+                message = f"✅ Plugin '{plugin_data['name']}' updated in workspace '{config.workspace_id}'"
             else:
                 naas_integration.create_plugin(
                     workspace_id=config.workspace_id, data=plugin_data
                 )
-                message = f"Plugin '{plugin_data['name']}' created in workspace '{config.workspace_id}'"
+                message = f"✅ Plugin '{plugin_data['name']}' created in workspace '{config.workspace_id}'"
             logger.info(message)
 
 if __name__ == "__main__":
@@ -125,6 +132,6 @@ if __name__ == "__main__":
     github_repository = config.github_project_repository
     default_agent = "Supervisor"
     agents_to_publish = ["Supervisor", "Ontology", "Naas", "Multi_Models", "Support"]
-    if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None or github_access_token is None or github_repository is None:
-        raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID, GITHUB_ACCESS_TOKEN, and GITHUB_REPOSITORY must be set")
+    if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None:
+        raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID must be set")
     publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository, default_agent, agents_to_publish)
