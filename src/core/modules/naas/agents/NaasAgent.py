@@ -15,7 +15,7 @@ from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
 
-NAME = "naas_agent"
+NAME = "Naas"
 MODEL = "gpt-4o"
 TEMPERATURE = 0
 DESCRIPTION = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."

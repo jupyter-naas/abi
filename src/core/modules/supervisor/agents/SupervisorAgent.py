@@ -12,7 +12,7 @@ from enum import Enum
 from pydantic import SecretStr
 import importlib
 
-NAME = "supervisor_agent"
+NAME = "Supervisor"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
