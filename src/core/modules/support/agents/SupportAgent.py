@@ -22,7 +22,7 @@ from enum import Enum
 from pydantic import SecretStr
 from abi import logger
 
-NAME = "support_agent"
+NAME = "Support"
 MODEL = "gpt-4o"
 TEMPERATURE = 0
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
