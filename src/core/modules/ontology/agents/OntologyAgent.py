@@ -61,7 +61,7 @@ from src.core.modules.ontology.pipelines.UpdateTickerPipeline import (
 #     NaasIntegrationConfiguration,
 # )
 
-NAME = "ontology_agent"
+NAME = "Ontology"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
