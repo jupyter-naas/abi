@@ -1,13 +1,46 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool, Tool
-
-# from langchain_anthropic import ChatAnthropic
-# from langchain_ollama import ChatOllama
 from typing import Any, Optional
 from pydantic import SecretStr
+from fastapi import APIRouter
+from enum import Enum
+from langchain_core.tools import tool, StructuredTool
+# from langchain_anthropic import ChatAnthropic
+# from langchain_ollama import ChatOllama
 
+NAME = "Multi_Models"
+MODEL = "o3-mini"
+TEMPERATURE = None
+AVATAR_URL = "https://freepnglogo.com/images/all_img/chat-gpt-logo-vector-black-3ded.png"
+DESCRIPTION = "A multi-model agent that can use different models to answer questions."
+SYSTEM_PROMPT = """You have multiple agents, using different models. 
+To answer a users questions, you need to call every model agents and present the different answers:
+- Agent o3-mini
+- Agent gpt-4o-mini
+- Agent gpt-4.1
+Once every Model agents have been called you must call the "Comparison Agent" to compare the answers and present best and cons of each answer.
+On your final outputs display all answers you received from the different Agents.
+If the user asks for python code execution, you must call the "Python Code Execution Agent" to execute the code. 
+
+Constraints:
+- Must presents the results by agent as follow "> o3-mini Agent" + 2 blank lines in the response.
+"""
+
+SUGGESTIONS = [
+    {
+        "label": "Compare AI Models Analysis",
+        "value": "Analyze the impact of AI on healthcare across different models and compare their perspectives"
+    },
+    {
+        "label": "Python Code Execution",
+        "value": "Write and execute a Python function that calculates the Fibonacci sequence"
+    },
+    {
+        "label": "Multi-Model Comparison",
+        "value": "What are the key differences between renewable and non-renewable energy sources? Compare answers across models."
+    }
+]
 
 @tool
 def execute_python_code(code: str) -> Any:
@@ -43,29 +76,40 @@ def execute_python_code(code: str) -> Any:
     except Exception as e:
         return f"Error: {e}"
 
-# Convert the function to a Tool instance
-execute_python_code_tool = Tool.from_function(
-    func=execute_python_code,
-    name="execute_python_code",
-    description="Execute python code."
-)
-
-
 def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
+    agent_shared_state: AgentSharedState | None = None, 
+    agent_configuration: AgentConfiguration | None = None
 ) -> Agent:
-    class MultiModelAgent(Agent):
-        pass
+    
+    # Set model
+    model = ChatOpenAI(
+        model="o3-mini",
+        temperature=1, 
+        api_key=SecretStr(secret.get('OPENAI_API_KEY'))
+    )
 
-    # shared_state = AgentSharedState()
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+
+    # Set tools
+    execute_python_code_tool = StructuredTool(
+        name="execute_python_code", 
+        description="Execute python code.",
+        func=execute_python_code,
+        args_schema=None
+    )
 
     return MultiModelAgent(
-        name="multi_model_agent",
-        description="A multi-model agent that can use different models to answer questions.",
-        chat_model=ChatOpenAI(
-            model="o3-mini", temperature=1, api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-        ),
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model,
+        state=agent_shared_state,
+        configuration=agent_configuration,
         tools=[
             Agent(
                 name="o3-mini_agent",
@@ -129,15 +173,20 @@ def create_agent(
                 ),
             ),
         ],
-        configuration=AgentConfiguration(
-            system_prompt="""You have multiple agents, using different models. To answer a users questions, you need to call every model agents and present the different answers:
-- Agent o3-mini
-- Agent gpt-4o-mini
-- Agent gpt-4.1
-
-Once every Model agents have been called you must call the "Comparison Agent" to compare the answers and present best and cons of each answer.
-On your final outputs display all answers you received from the different Agents.
-If the user asks for python code execution, you must call the "Python Code Execution Agent" to execute the code.
-"""
-        ),
     )
+
+class MultiModelAgent(Agent):
+    def as_api(
+        self, 
+        router: APIRouter, 
+        route_name: str = NAME,
+        name: str = NAME.capitalize().replace("_", " "),
+        description: str = "API endpoints to call the Multi Model Agent completion.", 
+        description_stream: str = "API endpoints to call the Multi Model Agent stream completion.",
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return super().as_api(
+            router, route_name, name, description, description_stream, tags
+        )
