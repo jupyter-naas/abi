@@ -29,7 +29,7 @@ def test_cache_service():
     
     salt = "good"
     
-    @cache_service.cache(lambda x: f"key_{x}", cache_type=DataType.TEXT, ttl=datetime.timedelta(seconds=1))
+    @cache_service(lambda x: f"key_{x}", cache_type=DataType.TEXT, ttl=datetime.timedelta(seconds=1))
     def get_text_data(x: str) -> str:
         """Get text data"""
         return f"data_{x}_{salt}"
@@ -47,3 +47,23 @@ def test_cache_service():
     time.sleep(1)
     
     assert get_text_data("test") == "data_test_bad"
+    
+def test_non_matching_arguments():
+    cache_service = CacheService(CacheMemoryAdapter())
+    
+    @cache_service(lambda x, z: f"key_{x}_{z}", cache_type=DataType.TEXT, ttl=datetime.timedelta(seconds=1))
+    def get_text_data(x: str, y: str, z: str = "toto") -> str:
+        """Get text data"""
+        return f"{x}_{y}_{z}"
+    
+    assert get_text_data("test", "test", "tati") == "test_test_tati"
+    assert get_text_data(x="test", y="tata", z="tutu") == "test_tata_tutu"
+    assert get_text_data(x="test", y="toto") == "test_toto_toto"
+    
+    # There is cache
+    assert get_text_data(x="test", y="yolo") == "test_toto_toto"
+    
+    # Same but for cache refresh
+    assert get_text_data(x="test", y="yolo", force_cache_refresh=True) == "test_yolo_toto"
+    
+    
