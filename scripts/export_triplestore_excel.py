@@ -16,4 +16,3 @@ if __name__ == "__main__":
     )
     workflow = ExportGraphInstancesToExcelWorkflow(configuration)
     workflow.export_to_excel(ExportGraphInstancesToExcelWorkflowParameters())
-    logger.info(f"Graph exported to {data_store_path}/graph_instances_export.xlsx")
