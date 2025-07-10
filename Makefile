@@ -275,7 +275,11 @@ pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
-.DEFAULT_GOAL := default
+
+console: deps
+	@ uv run python -m src.cli
+
+.DEFAULT_GOAL := console
 
 agent=SupervisorAgent
 chat: deps
