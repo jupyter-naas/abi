@@ -1,11 +1,11 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from src import secret
 from langchain_openai import ChatOpenAI
-from typing import Any, Optional
+from typing import Optional
 from pydantic import SecretStr
 from fastapi import APIRouter
 from enum import Enum
-from langchain_core.tools import tool, StructuredTool
+from src.core.modules.__demo__.workflows.ExecutePythonCodeWorkflow import ExecutePythonCodeWorkflow, ExecutePythonCodeWorkflowConfiguration
 # from langchain_anthropic import ChatAnthropic
 # from langchain_ollama import ChatOllama
 
@@ -18,7 +18,7 @@ SYSTEM_PROMPT = """You have multiple agents, using different models.
 To answer a users questions, you need to call every model agents and present the different answers:
 - Agent o3-mini
 - Agent gpt-4o-mini
-- Agent gpt-4.1
+- Agent gpt-4-1
 Once every Model agents have been called you must call the "Comparison Agent" to compare the answers and present best and cons of each answer.
 On your final outputs display all answers you received from the different Agents.
 If the user asks for python code execution, you must call the "Python Code Execution Agent" to execute the code. 
@@ -42,40 +42,6 @@ SUGGESTIONS = [
     }
 ]
 
-@tool
-def execute_python_code(code: str) -> Any:
-    """Execute python code."""
-    try:
-        import subprocess
-        import tempfile
-        import os
-
-        # Create a temporary file to store the code
-        with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as temp_file:
-            temp_file.write(code.encode())
-            temp_file_path = temp_file.name
-
-        try:
-            # Run the code in a separate process and capture output
-            result = subprocess.run(
-                ["python", temp_file_path],
-                capture_output=True,
-                text=True,
-                timeout=10,  # Set a timeout to prevent infinite execution
-            )
-
-            # Return stdout or stderr if there was an error
-            if result.returncode == 0:
-                return result.stdout
-            else:
-                return f"Error: {result.stderr}"
-        finally:
-            # Clean up the temporary file
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-    except Exception as e:
-        return f"Error: {e}"
-
 def create_agent(
     agent_shared_state: AgentSharedState | None = None, 
     agent_configuration: AgentConfiguration | None = None
@@ -97,12 +63,9 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=0)
 
     # Set tools
-    execute_python_code_tool = StructuredTool(
-        name="execute_python_code", 
-        description="Execute python code.",
-        func=execute_python_code,
-        args_schema=None
-    )
+    python_code_execution_tools: list = []
+    execute_python_code_workflow = ExecutePythonCodeWorkflow(ExecutePythonCodeWorkflowConfiguration())
+    python_code_execution_tools += execute_python_code_workflow.as_tools()
 
     return MultiModelAgent(
         name=NAME,
@@ -167,7 +130,7 @@ def create_agent(
                     temperature=1,
                     api_key=SecretStr(secret.get("OPENAI_API_KEY")),
                 ),
-                tools=[execute_python_code_tool],
+                tools=python_code_execution_tools,
                 configuration=AgentConfiguration(
                     system_prompt="You are a python code execution agent. You can execute python code and return the result. ONLY EXECUTE SAFE CODE THAT WON'T HARM THE SYSTEM. The PYTHON CODE MUST PRINT THE RESULT AND NOT RETURN IT FOR YOU TO GRAB THE RESULT."
                 ),
