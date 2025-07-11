@@ -21,16 +21,8 @@ def result_df_to_dict(result):
 
 # Get sector info
 sector_key = sector.key
-print("sector_key:", sector_key)
-save_json(sector_key, data_store_path, f"{sector_key}_key.json")
-
 sector_name = sector.name
-print("sector_name:", sector_name)
-save_json(sector_name, data_store_path, f"{sector_key}_name.json")
-
 sector_symbol = sector.symbol
-print("sector_symbol:", sector_symbol)
-save_json(sector_symbol, data_store_path, f"{sector_key}_symbol.json")
 
 sector_ticker = sector.ticker.info
 print("sector_ticker:", sector_ticker)

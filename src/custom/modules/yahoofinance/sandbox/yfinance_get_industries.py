@@ -21,12 +21,7 @@ def result_df_to_dict(result):
 
 # Get industry info
 industry_sector_key = industry.sector_key
-print("industry_sector_key", industry_sector_key)
-save_json(industry_sector_key, data_store_path, f"{industry_key}_sector_key.json")
-
 industry_sector_name = industry.sector_name
-print("industry_sector_name", industry_sector_name)
-save_json(industry_sector_name, data_store_path, f"{industry_key}_sector_name.json")
 
 industry_top_performing_companies = result_df_to_dict(industry.top_performing_companies)
 print("industry_top_performing_companies", industry_top_performing_companies)

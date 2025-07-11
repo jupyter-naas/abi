@@ -36,7 +36,7 @@ for index in indices:
     index_file_name = f"{index}_{stocks_file_name}"
     stocks_by_index = get_json(dir_path, index_file_name)
     if len(stocks_by_index) == 0:
-        stocks_by_index = list(stock_data.get_stocks_by_index(index))
+        stocks_by_index = list(stock_data.get_stocks_by_index(index)) # type: ignore
         save_json(stocks_by_index, dir_path, index_file_name)
     total_stocks += len(stocks_by_index)
     print(f"Stocks found for index {index}: {len(stocks_by_index)}")
