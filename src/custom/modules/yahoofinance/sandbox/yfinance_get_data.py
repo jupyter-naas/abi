@@ -1,4 +1,4 @@
-import yfinance as yf # type: ignore
+import src.custom.modules.yahoofinance.sandbox.yfinance_get_data as yf # type: ignore
 from src.utils.Storage import save_json
 
 # https://pypi.org/project/yfinance/ & https://ranaroussi.github.io/yfinance/
