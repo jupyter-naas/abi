@@ -49,7 +49,10 @@ dependencies = [
     "pydantic>=2.11.4",
     "watchdog>=6.0.0",
     "langchain-google-genai>=2.1.4",
-    "thefuzz>=0.22.1"
+    "thefuzz>=0.22.1",
+    "fitz>=0.0.1.dev2",
+    "pymupdf>=1.26.3",
+    "pytickersymbols>=1.1.15",
 ]
 
 [project.scripts]
