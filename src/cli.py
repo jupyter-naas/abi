@@ -178,10 +178,42 @@ def define_abi_api_key():
     
     console.print("✅ ABI API key generated and saved!", style="bright_green")
 
+def ensure_ollama_running():
+    dv = dotenv_values()
+    if dv["AI_MODE"] != "local":
+        return
+    
+    # Detect os because on WSL the port will be different, we need to find the ip address of the machine.
+    if os.name == "nt":
+        ip_address = "172.17.0.1"
+    else:
+        ip_address = "localhost"
+        
+    ollama_running = False
+    
+    while not ollama_running:
+        try:
+            r = requests.get(f"http://{ip_address}:11434/api/version")
+            
+            if r.status_code == 200:
+                #console.print("🟢 Ollama is running!", style="bright_green")
+                ollama_running = True
+                break
+        except Exception as e:
+            console.print("🔴 Ollama is not running. Please start it and try again.", style="bright_red")
+            console.print("💡 Tip: Run `ollama run deepseek-r1:8b` to start it.", style="dim")
+
+            # Show how to install it
+            console.print("💡 Tip: If it's not installed go to https://ollama.com/download to install it and run it.", style="dim")
+        
+        time.sleep(5)
+    
+
 checks = [
     define_abi_api_key,
     define_ai_mode,
-    define_naas_api_key
+    define_naas_api_key,
+    ensure_ollama_running
 ]
 
 def welcome_message():
