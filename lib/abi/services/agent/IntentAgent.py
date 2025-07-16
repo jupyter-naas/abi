@@ -223,7 +223,7 @@ class IntentAgent(Agent):
         intent : Intent = state["intent_mapping"]["intents"][0]['intent']
         return Command(goto=END, update={"messages": [AIMessage(content=intent.intent_target)]})
     
-    def filter_out_intents(self, state: dict[str, Any]):
+    def filter_out_intents(self, state: IntentState):
         """Filter out logically irrelevant intents using LLM analysis.
         
         Uses the chat model to analyze mapped intents and filter out those that
@@ -244,7 +244,7 @@ class IntentAgent(Agent):
             return
         
         logger.debug(f"filter_out_intents state: {state}")
-        last_human_message : HumanMessage | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        last_human_message : Any = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
         assert last_human_message is not None
         
         mapped_intents = state["intent_mapping"]["intents"]
@@ -291,7 +291,7 @@ Last user message: "{last_human_message.content}"
         """
         
         # messages = [SystemMessage(content=system_prompt), last_human_message]
-        messages = [SystemMessage(content=system_prompt)]
+        messages: list = [SystemMessage(content=system_prompt)]
         for message in state["messages"]:
             if not isinstance(message, SystemMessage):
                 messages.append(message)
@@ -332,7 +332,7 @@ Last user message: "{last_human_message.content}"
         doc = nlp(text)
         return [ent.text.lower() for ent in doc.ents]
     
-    def entity_check(self, state: dict[str, Any]):
+    def entity_check(self, state: IntentState):
         """Validate entity consistency between user message and intents.
         
         Performs entity checking to ensure that intents containing named entities
@@ -433,7 +433,7 @@ Last user message: "{last_human_message.content}"
         
         return Command(update={"intent_mapping": {"intents": filtered_intents}})
 
-    def intent_mapping_router(self, state: dict[str, Any]) -> Command:
+    def intent_mapping_router(self, state: IntentState) -> Command:
         """Route conversation flow based on intent mapping results.
         
         Analyzes the current intent mapping state and determines the next step
@@ -481,7 +481,7 @@ Last user message: "{last_human_message.content}"
         
         return Command(goto="call_model")
     
-    def inject_intents_in_system_prompt(self, state: dict[str, Any]):
+    def inject_intents_in_system_prompt(self, state: IntentState):
         """Inject mapped intents into the system prompt.
         
         Updates the agent's system prompt to include information about
