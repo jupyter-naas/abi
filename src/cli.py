@@ -202,12 +202,35 @@ def ensure_ollama_running():
                 break
         except Exception as e:
             console.print("🔴 Ollama is not running. Please start it and try again.", style="bright_red")
-            console.print("💡 Tip: Run `ollama run deepseek-r1:8b` to start it.", style="dim")
+            console.print("💡 Tip: Run `ollama run qwen3:8b` to start it.", style="dim")
 
             # Show how to install it
             console.print("💡 Tip: If it's not installed go to https://ollama.com/download to install it and run it.", style="dim")
         
         time.sleep(5)
+    
+    # Pulling qwen3:8b
+    console.print("🔄 Pulling qwen3:8b...", style="bright_yellow")
+    # Equivalent to: curl "http://localhost:11434/api/pull" -d '{"model": "qwen3:8b"}'
+    with requests.post(
+        "http://localhost:11434/api/pull",
+        data='{"model": "qwen3:8b"}',
+        headers={"Content-Type": "application/json"},
+        stream=True
+    ) as response:
+        response.raise_for_status()
+        from rich.progress import Progress
+        with Progress() as progress:
+            task = progress.add_task("Pulling qwen3:8b", total=100)
+            
+            for line in response.iter_lines(decode_unicode=True):
+                if line:
+                    import json
+                    data = json.loads(line)
+                    if 'completed' in data and 'total' in data:
+                        progress.update(task, completed=data['completed'], total=data['total'])
+
+    response.raise_for_status()
     
     console.print("⚠️ Deepseek-r1:8b is not compatible with tool calling. You will have a degraded experience.", style="bright_red")
     
