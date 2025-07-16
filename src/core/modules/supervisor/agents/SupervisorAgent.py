@@ -163,10 +163,7 @@ def create_agent(
         )
     elif os.getenv("AI_MODE") == "local":
         from langchain_ollama import ChatOllama
-        model = ChatOllama(model="deepseek-r1:8b", temperature=0.7)
-        # We reset tools and agents as deepseek-r1:8b is not compatible with tool calling
-        agents = []
-        tools = []
+        model = ChatOllama(model="qwen3:8b", temperature=0.7)
     else:
         raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
