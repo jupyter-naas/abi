@@ -277,7 +277,7 @@ pull-request-description: deps
 default: deps help
 
 console: deps
-	@ uv run python -m src.cli
+	@ LOG_LEVEL=ERROR uv run python -m src.cli
 
 .DEFAULT_GOAL := console
 

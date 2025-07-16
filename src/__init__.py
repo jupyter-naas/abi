@@ -9,7 +9,7 @@ from abi.services.secret.adaptors.secondary import (
 )
 from abi.services.secret.SecretPorts import ISecretAdapter
 from src.services import init_services
-from src import cli
+
 from src.__modules__ import get_modules
 import yaml
 from dataclasses import dataclass
@@ -196,5 +196,4 @@ def load_modules():
 services = LazyLoader(lambda: init_services(config, secret))
 modules = LazyLoader(load_modules)
 
-if __name__ == "__main__":
-    cli.main()
+
