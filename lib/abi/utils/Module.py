@@ -54,7 +54,7 @@ class IModule(ABC):
         agents_path = os.path.join(self.module_path, "agents")
         if os.path.exists(agents_path):
             for file in os.listdir(agents_path):
-                if file.endswith(".py"):
+                if file.endswith(".py") and not file.endswith("_test.py"):
                     agent_path = self.module_import_path + ".agents." + file[:-3]
                     module = importlib.import_module(agent_path)
                     if hasattr(module, "create_agent"):
