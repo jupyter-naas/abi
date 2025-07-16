@@ -191,6 +191,7 @@ def ensure_ollama_running():
         
     ollama_running = False
     
+    
     while not ollama_running:
         try:
             r = requests.get(f"http://{ip_address}:11434/api/version")
@@ -207,6 +208,8 @@ def ensure_ollama_running():
             console.print("💡 Tip: If it's not installed go to https://ollama.com/download to install it and run it.", style="dim")
         
         time.sleep(5)
+    
+    console.print("⚠️ Deepseek-r1:8b is not compatible with tool calling. You will have a degraded experience.", style="bright_red")
     
 
 checks = [

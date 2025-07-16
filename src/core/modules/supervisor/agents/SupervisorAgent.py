@@ -11,6 +11,7 @@ from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
 import importlib
+import os
 
 NAME = "Supervisor"
 MODEL = "o3-mini"
@@ -132,13 +133,6 @@ def create_agent(
     tools: list = []
     agents: list = []
 
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
-
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -159,6 +153,22 @@ def create_agent(
             agents.append(module.create_agent())
         except ImportError:
             pass
+
+        # Set model
+    if os.getenv("AI_MODE") == "cloud":
+        model = ChatOpenAI(
+            model=MODEL, 
+            temperature=TEMPERATURE, 
+            api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+        )
+    elif os.getenv("AI_MODE") == "local":
+        from langchain_ollama import ChatOllama
+        model = ChatOllama(model="deepseek-r1:8b", temperature=0.7)
+        # We reset tools and agents as deepseek-r1:8b is not compatible with tool calling
+        agents = []
+        tools = []
+    else:
+        raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
     return SupervisorAgent(
         name=NAME,
