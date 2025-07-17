@@ -226,7 +226,7 @@ def create_agent(
             Intent(
                 intent_value="what is your name",
                 intent_type=IntentType.RAW,
-                intent_target=f"My name is ABI",
+                intent_target="My name is ABI",
             ),
         ],
         state=agent_shared_state,
