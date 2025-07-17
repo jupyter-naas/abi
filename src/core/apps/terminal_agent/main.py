@@ -110,13 +110,9 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
 
 
 def run_agent(agent: Agent):
-    # Show greeting when truly ready for input - with streaming effect
+    # Show greeting when truly ready for input - instant like responses
     print()  # New line
-    import time
-    greeting = "Hello you!"
-    for char in greeting:
-        print(char, end='', flush=True)
-        time.sleep(0.05)  # Slightly slower for greeting
+    print("Hello you!")
     print()  # New line after greeting
     
     # Just start chatting naturally - like the screenshot

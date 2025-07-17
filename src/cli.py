@@ -276,74 +276,79 @@ def main():
     
     console = Console()
     
-    # Combined rich spinner + Matrix-style dots animation
+    # Matrix-style startup animation - SAME as "Responding"
     loading = True
-    dot_cycle = ["", ".", "..", "..."]
-    dot_index = 0
     
-    # Use rich spinner with cycling dots
-    with console.status("", spinner="dots") as status:
-        # Do ALL setup work while both spinner and dots animation run
-        setup_done = False
-        supervisor_agent = None
-        
+    def startup_loader():
+        i = 0
         while loading:
-            # Update status with current dot pattern
-            current_dots = dot_cycle[dot_index % len(dot_cycle)]
-            status.update(f"[bright_green]Starting ABI{current_dots}")
-            
-            # Do setup work in chunks during animation
-            if not setup_done:
-                # Setup work
-                dv = dotenv_values()
-                
-                # Only do essential setup silently if needed
-                if "AI_MODE" not in dv:
-                    with open(".env", "a") as f:
-                        f.write("\nAI_MODE=local\n")
-                
-                if "ABI_API_KEY" not in dv:
-                    import secrets
-                    api_key = secrets.token_urlsafe(32)
-                    with open(".env", "a") as f:
-                        f.write(f"\nABI_API_KEY={api_key}\n")
-                
-                # Suppress all logging
-                import logging
-                logging.getLogger().setLevel(logging.CRITICAL)
-                try:
-                    from loguru import logger
-                    logger.remove()
-                    logger.add(lambda x: None)
-                except:
-                    pass
-                
-                # Load modules and find the agent while animation runs
-                from src import modules
-                from src.core.apps.terminal_agent.main import run_agent, print_tool_usage, on_tool_response
-                
-                # Find SupervisorAgent during animation
-                for module in modules:
-                    for agent in module.agents:
-                        if agent.__class__.__name__ == "SupervisorAgent":
-                            agent.on_tool_usage(lambda message: print_tool_usage(message))
-                            agent.on_tool_response(on_tool_response)
-                            supervisor_agent = agent
-                            break
-                    if supervisor_agent:
-                        break
-                
-                setup_done = True
-            
-            # Cycle through dots every 0.5 seconds
+            dots_count = i % 4  # 0, 1, 2, 3, then repeat
+            if dots_count == 0:
+                dots = "   "  # No dots, just spaces
+            else:
+                dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
+            print(f"\r\033[92mWaking up{dots}\033[0m", end="", flush=True)
             time.sleep(0.5)
-            dot_index += 1
-            
-            # Stop after enough cycles for a premium feel
-            if dot_index >= 12:  # 3 full cycles through the 4 dot states
-                loading = False
+            i += 1
     
-    # Start the agent immediately after animation ends - no more delays!
+    # Start the animation in a separate thread - SAME as "Responding"
+    loader_thread = threading.Thread(target=startup_loader)
+    loader_thread.start()
+    
+    # Do ALL setup work while animation runs
+    time.sleep(1.0)  # Initial visibility - premium feel
+    
+    # Setup work
+    dv = dotenv_values()
+    
+    # Only do essential setup silently if needed
+    if "AI_MODE" not in dv:
+        with open(".env", "a") as f:
+            f.write("\nAI_MODE=local\n")
+    
+    if "ABI_API_KEY" not in dv:
+        import secrets
+        api_key = secrets.token_urlsafe(32)
+        with open(".env", "a") as f:
+            f.write(f"\nABI_API_KEY={api_key}\n")
+    
+    # Suppress all logging
+    import logging
+    logging.getLogger().setLevel(logging.CRITICAL)
+    try:
+        from loguru import logger
+        logger.remove()
+        logger.add(lambda x: None)
+    except:
+        pass
+    
+    # Load modules and find the agent while animation runs
+    from src import modules
+    from src.core.apps.terminal_agent.main import run_agent, print_tool_usage, on_tool_response
+    
+    # Find SupervisorAgent during animation
+    supervisor_agent = None
+    for module in modules:
+        for agent in module.agents:
+            if agent.__class__.__name__ == "SupervisorAgent":
+                agent.on_tool_usage(lambda message: print_tool_usage(message))
+                agent.on_tool_response(on_tool_response)
+                supervisor_agent = agent
+                break
+        if supervisor_agent:
+            break
+    
+    # Let animation run for minimum premium duration
+    time.sleep(2.0)
+    
+    # Stop the animation - SAME as "Responding"
+    loading = False
+    loader_thread.join()
+    
+    # Clear the loading line properly - SAME as "Responding"  
+    print("\r" + " " * 15 + "\r", end="", flush=True)
+    
+    # Start the agent immediately after animation ends
     if supervisor_agent:
         run_agent(supervisor_agent)
     else:
