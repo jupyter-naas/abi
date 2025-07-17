@@ -48,6 +48,9 @@ class IModule(ABC):
             self.__load_agents()
         except Exception as e:
             print(f"❌ Error loading agents for module {self.module_import_path}: {e}")
+            if os.environ.get("LOG_LEVEL") == "DEBUG":
+                import traceback
+                print(traceback.format_exc())
 
     def __load_agents(self):
         # Load agents
