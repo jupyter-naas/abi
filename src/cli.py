@@ -151,11 +151,31 @@ def define_abi_api_key():
     
     append_to_dotenv("ABI_API_KEY", api_key)
 
+def define_cloud_api_keys():
+    if "AI_MODE" not in dv or dv["AI_MODE"] == "local":
+        return
+    
+    # Openai
+    if "OPENAI_API_KEY" not in dv:
+        openai_key = Prompt.ask("What is your OpenAI API key? (press enter to skip)", default="")
+        append_to_dotenv("OPENAI_API_KEY", openai_key)
+    
+    # Anthropic
+    if "ANTHROPIC_API_KEY" not in dv:
+        anthropic_key = Prompt.ask("What is your Anthropic API key? (press enter to skip)", default="")
+        append_to_dotenv("ANTHROPIC_API_KEY", anthropic_key)
+        
+    if "GOOGLE_API_KEY" not in dv:
+        google_key = Prompt.ask("What is your Google API key? (press enter to skip)", default="")
+        append_to_dotenv("GOOGLE_API_KEY", google_key)
+    
+
 checks = [
     personnal_information,
     define_ai_mode,
     define_naas_api_key,
     define_abi_api_key,
+    define_cloud_api_keys,
 ]
     
 

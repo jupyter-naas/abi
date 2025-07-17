@@ -432,10 +432,6 @@ Last user message: "{last_human_message.content}"
             if response.content == "true":
                 filtered_intents.append(intent)
         
-        rich.print(f"Last human message: {last_human_message.content}")
-        rich.print(f"Length of entity checked filtered intents: {len(filtered_intents)}")
-        rich.print(filtered_intents)
-        
         return Command(update={"intent_mapping": {"intents": filtered_intents}})
 
     def intent_mapping_router(self, state: IntentState) -> Command:
