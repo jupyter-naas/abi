@@ -71,6 +71,9 @@ class ToolUsageEvent(Event):
 class ToolResponseEvent(Event):
     pass
 
+@dataclass
+class AIMessageEvent(Event):
+    agent_name: str
 
 @dataclass
 class FinalStateEvent(Event):
@@ -84,6 +87,9 @@ class AgentConfiguration:
     )
     on_tool_response: Callable[[AnyMessage], None] = field(
         default_factory=lambda: lambda _: None
+    )
+    on_ai_message: Callable[[AnyMessage, str], None] = field(
+        default_factory=lambda: lambda _, __: None
     )
     system_prompt: str = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
@@ -146,6 +152,7 @@ class Agent(Expose):
 
     _on_tool_usage: Callable[[AnyMessage], None]
     _on_tool_response: Callable[[AnyMessage], None]
+    _on_ai_message: Callable[[AnyMessage, str], None]
 
     # Avent queue used to stream tool usage and responses.
     _event_queue: Queue
@@ -214,6 +221,7 @@ class Agent(Expose):
 
         self._on_tool_usage = configuration.on_tool_usage
         self._on_tool_response = configuration.on_tool_response
+        self._on_ai_message = configuration.on_ai_message
 
         # Initialize the event queue.
         if event_queue is None:
@@ -275,7 +283,7 @@ class Agent(Expose):
             logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
-            graph.add_edge(agent.name, "call_model")
+            #graph.add_edge(agent.name, "call_model")
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -308,6 +316,8 @@ class Agent(Expose):
             # response.tool_calls = [response.tool_calls[0]]
 
             return Command(goto="call_tools", update={"messages": [response]})
+        # else:
+        #     self._configuration._noti((self._name, response))
 
         return Command(goto="__end__", update={"messages": [response]})
 
@@ -364,6 +374,7 @@ class Agent(Expose):
 
         # If the last response is a ToolMessage, we want the model to interpret it.
         if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage):
+            logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
             results.append(Command(goto="call_model"))
 
         return results
@@ -379,6 +390,10 @@ class Agent(Expose):
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
         self._on_tool_response(message)
+    
+    def _notify_ai_message(self, message: AnyMessage, agent_name: str):
+        self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
+        self._on_ai_message(message, agent_name)
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -403,6 +418,11 @@ class Agent(Expose):
                 containing the tool response
         """
         self._on_tool_response = callback
+        
+    def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
+        """Register a callback to be called when an AI message is received.
+        """
+        self._on_ai_message = callback
 
     @property
     def app(self):
@@ -432,11 +452,18 @@ class Agent(Expose):
             config={"configurable": {"thread_id": self._state.thread_id}},
             subgraphs=True,
         ):
-            _, payload = chunk
+            source, payload = chunk
+            agent_name = self._name if len(source) == 0 else source[0].split(':')[0]
             if isinstance(payload, dict):
                 last_messages = []
 
                 logger.debug(f"payload: {payload}")
+                # print(f"{left} {self} payload: {payload}")
+                
+                # agent_name = self._name
+                # if 'call_model' not in payload:
+                #     agent_name = list(payload.keys())[0]
+                
                 v = list(payload.values())[0]
                 
                 if v is None:
@@ -459,6 +486,8 @@ class Agent(Expose):
                             # This is a tool call.
                             self._notify_tool_usage(last_message)
                         else:
+                            if 'call_model' in payload or 'intent_mapping_router' in payload:
+                                self._notify_ai_message(last_message, agent_name)
                             # This is a message.
                             # print("\n\nIntermediate AI Message:")
                             # print(last_message.content)
@@ -643,6 +672,11 @@ class Agent(Expose):
                         "event": "tool_response",
                         "data": str(message.payload.content),
                     }
+                elif isinstance(message, AIMessageEvent):
+                    yield {
+                        "event": "ai_message",
+                        "data": str(message.payload.content),
+                    }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload
                     break
@@ -725,6 +759,9 @@ class Agent(Expose):
             AgentConfiguration: The agent's configuration
         """
         return self._configuration
+
+    def hello(self) -> str:
+        return "Hello"
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:

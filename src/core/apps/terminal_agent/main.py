@@ -1,18 +1,75 @@
 from src.core.apps.terminal_agent.terminal_style import (
-    clear_screen,
-    print_welcome_message,
-    print_divider,
-    get_user_input,
     print_tool_usage,
-    print_agent_response,
     print_tool_response,
     print_image,
+    console,  # Add console import
 )
 from abi.services.agent.Agent import Agent
 from langgraph.types import Command
 from langchain_core.messages import ToolMessage
 from typing import Union, Optional, Any
+import sys
+import tty
+import termios
+import re
+import time
+import threading
 # import json
+
+def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? for help)"):
+    """Get user input with a placeholder that disappears when typing starts"""
+    print(f"\n{prompt}", end="", flush=True)
+    
+    # Show placeholder in grey
+    print(f"\033[90m{placeholder}\033[0m", end="", flush=True)
+    
+    # Move cursor back to start of placeholder
+    print(f"\033[{len(placeholder)}D", end="", flush=True)
+    
+    user_input = ""
+    placeholder_cleared = False
+    
+    # Get original terminal settings
+    old_settings = termios.tcgetattr(sys.stdin)
+    
+    try:
+        tty.setraw(sys.stdin.fileno())
+        
+        while True:
+            char = sys.stdin.read(1)
+            
+            # Handle Enter key
+            if ord(char) == 13:  # Enter
+                print()  # New line
+                break
+                
+            # Handle Backspace
+            elif ord(char) == 127:  # Backspace
+                if user_input:
+                    user_input = user_input[:-1]
+                    print("\b \b", end="", flush=True)
+                    
+            # Handle Ctrl+C
+            elif ord(char) == 3:  # Ctrl+C
+                print("^C")
+                raise KeyboardInterrupt
+                
+            # Handle printable characters
+            elif ord(char) >= 32 and ord(char) <= 126:
+                # Clear placeholder on first character
+                if not placeholder_cleared:
+                    # Clear the placeholder text
+                    print(f"\033[2K\r{prompt}", end="", flush=True)
+                    placeholder_cleared = True
+                    
+                user_input += char
+                print(char, end="", flush=True)
+                
+    finally:
+        # Restore terminal settings
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    
+    return user_input
 
 
 def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) -> None:
@@ -53,34 +110,165 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
         print(e)
 
 
+def on_ai_message(message: Any, agent_name) -> None:
+    if len(message.content) == 0:
+        return
+    
+    print("\r" + " " * 15 + "\r", end="", flush=True)
+    
+    console.print(f'@{agent_name}:')
+    
+    from rich.markdown import Markdown
+    
+    # Filter out think tags and their content
+    think_content = re.findall(r'<think>.*?</think>', message.content, flags=re.DOTALL)
+    
+    if len(think_content) > 0:
+        console.print('Thoughts:', style="grey66")
+        for think in think_content:
+            console.print(think.replace('<think>', '').replace('</think>', ''), style="grey66")
+    
+    content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
+
+    
+    md = Markdown(content)
+    console.print(md, style="bright_white")
+    
 def run_agent(agent: Agent):
-    agent_label = " ".join(
-        word.capitalize() for word in agent.name.replace("_", " ").split()
-    )
-    clear_screen()
-    print_welcome_message(agent)
-    print_divider()
-
+    # Show greeting when truly ready for input - instant like responses
+    print()  # New line
+    print(agent.hello())
+    print()  # New line after greeting
+    
+    # Just start chatting naturally - like the screenshot
     while True:
-        user_input = get_user_input(agent_label)
-
-        if user_input == "exit":
+        user_input = get_input_with_placeholder()
+        
+        # Clean the input and check for exit commands
+        clean_input = user_input.strip().lower()
+        
+        if clean_input in ["exit", "/exit", "/bye", "quit", "/quit"]:
+            print("\n👋 See you later!")
             return
-        elif user_input == "help":
-            print_welcome_message(agent)
-            continue
-        elif user_input == "reset":
+        elif clean_input in ["reset", "/reset"]:
             agent.reset()
-            clear_screen()
+            print("🔄 Starting fresh...")
+            continue
+        elif clean_input == "/?":
+            print("Available commands:")
+            print("  /? - Show this help")
+            print("  /reset - Start fresh conversation")
+            print("  /bye or /exit - End conversation")
             continue
 
-        print_divider()
-        response = agent.invoke(user_input)
-        # Convert list response to string if necessary
-        if isinstance(response, list):
-            response = "\n".join(str(item) for item in response)
-        print_agent_response(response, agent_label)
-        print_divider()
+        # Matrix-style animated loading indicator
+        import threading
+        import time
+        
+        # Animation control
+        loading = True
+        
+        def matrix_loader():
+            i = 0
+            while loading:
+                dots_count = i % 4  # 0, 1, 2, 3, then repeat
+                if dots_count == 0:
+                    dots = "   "  # No dots, just spaces
+                else:
+                    dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
+                print(f"\r\033[92mResponding{dots}\033[0m", end="", flush=True)
+                time.sleep(0.5)
+                i += 1
+        
+        # Start the animation in a separate thread
+        loader_thread = threading.Thread(target=matrix_loader)
+        loader_thread.start()
+        
+        # Get the response while animation runs
+        agent.invoke(user_input)
+        
+        # Stop the animation
+        loading = False
+        loader_thread.join()
+        
+        # Clear the loading line properly
+        print("\r" + " " * 15 + "\r", end="", flush=True)
+        
+        # # Convert list response to string if necessary
+        # if isinstance(response, list):
+        #     response = "\n".join(str(item) for item in response)
+        
+        # # Filter out think tags and their content
+        # response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+        # response = response.strip()
+        
+        # # Render markdown properly with rich instead of raw typewriter effect
+        # from rich.markdown import Markdown
+        # md = Markdown(response)
+        # console.print(md)
+
+
+def load_agent(agent_class: str) -> Agent | None:
+    from src import modules
+
+    if agent_class is None:
+        print(
+            "No agent class provided. Please set the AGENT_CLASS environment variable."
+        )
+        return
+
+    for module in modules:
+        for agent in module.agents:
+            if agent.__class__.__name__ == agent_class:
+                agent.on_tool_usage(lambda message: print_tool_usage(message))
+                agent.on_tool_response(on_tool_response)
+                agent.on_ai_message(on_ai_message)
+                
+            
+                return agent
+    
+    return None
+
+
+class ConsoleLoader:
+
+    
+    def stop(self):
+        self.loading = False
+        self.loader_thread.join()
+        
+        # Clear the loading line
+        print("\r" + " " * 20 + "\r", end="", flush=True)
+    
+    def start(self, message: str):
+        # Matrix-style startup animation
+        self.loading = True
+        
+        def startup_loader():
+            i = 0
+            while self.loading:
+                dots_count = i % 4  # 0, 1, 2, 3, then repeat
+                if dots_count == 0:
+                    dots = "   "  # No dots, just spaces
+                else:
+                    dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
+                print(f"\r\033[92m{message}{dots}\033[0m", end="", flush=True)
+                time.sleep(0.5)
+                i += 1
+        
+        # Start the animation
+        self.loader_thread = threading.Thread(target=startup_loader)
+        self.loader_thread.start()
+        
+        # Suppress all logging during module loading
+        import logging
+        logging.getLogger().setLevel(logging.CRITICAL)
+        try:
+            from loguru import logger
+            logger.remove()
+            logger.add(lambda x: None)
+        except: # noqa: E722
+            pass
 
 
 def generic_run_agent(agent_class: Optional[str] = None) -> None:
@@ -104,24 +292,21 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
         finding and running the requested agent from the loaded modules. The agent
         must be properly registered in a module under src/modules for this to work.
     """
-    from src import modules
-
-    if agent_class is None:
-        print(
-            "No agent class provided. Please set the AGENT_CLASS environment variable."
-        )
+    
+    console_loader = ConsoleLoader()
+    console_loader.start("Loading agent")
+    
+    assert agent_class is not None, "Agent class is required"
+    
+    agent = load_agent(agent_class)
+    
+    console_loader.stop()
+    
+    if agent is None:
+        print(f"Agent {agent_class} not found")
         return
-
-    for module in modules:
-        for agent in module.agents:
-            print(agent.__class__.__name__)
-            if agent.__class__.__name__ == agent_class:
-                agent.on_tool_usage(lambda message: print_tool_usage(message))
-                agent.on_tool_response(on_tool_response)
-                run_agent(agent)
-                return
-
-    print(f"Agent {agent_class} not found")
+    
+    run_agent(agent)
 
 
 if __name__ == "__main__":

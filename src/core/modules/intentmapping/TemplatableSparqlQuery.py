@@ -71,7 +71,6 @@ def templatable_queries():
         argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/argumentDescription"), description))
         argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/validationPattern"), validationPattern))
         argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/validationFormat"), validationFormat))
-        print(f"Argument: {argument}, Name: {name}, Description: {description}, Validation Pattern: {validationPattern}, Validation Format: {validationFormat}")
     
 
     arguments = {}
