@@ -124,15 +124,15 @@ def on_ai_message(message: Any, agent_name) -> None:
     think_content = re.findall(r'<think>.*?</think>', message.content, flags=re.DOTALL)
     
     if len(think_content) > 0:
-        console.print('Thoughts:', style="white")
+        console.print('Thoughts:', style="grey66")
         for think in think_content:
-            console.print(think.replace('<think>', '').replace('</think>', ''), style="white")
+            console.print(think.replace('<think>', '').replace('</think>', ''), style="grey66")
     
     content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
 
     
     md = Markdown(content)
-    console.print(md)
+    console.print(md, style="bright_white")
     
 def run_agent(agent: Agent):
     # Show greeting when truly ready for input - instant like responses
@@ -208,7 +208,7 @@ def run_agent(agent: Agent):
         # console.print(md)
 
 
-def load_agent(agent_class: str) -> Agent:
+def load_agent(agent_class: str) -> Agent | None:
     from src import modules
 
     if agent_class is None:
@@ -298,6 +298,8 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
     
     console_loader = ConsoleLoader()
     console_loader.start("Loading agent")
+    
+    assert agent_class is not None, "Agent class is required"
     
     agent = load_agent(agent_class)
     
