@@ -44,7 +44,7 @@ def create_class_ontology_yaml():
     )
     from src.core.modules.ontology.workflows.CreateClassOntologyYamlWorkflow import (
         CreateClassOntologyYamlWorkflow,
-        CreateClassOntologyYamlConfiguration,
+        CreateClassOntologyYamlWorkflowConfiguration,
     )
 
     # Get secrets
@@ -61,7 +61,7 @@ def create_class_ontology_yaml():
         naas_integration_config
     )
     workflow = CreateClassOntologyYamlWorkflow(
-        CreateClassOntologyYamlConfiguration(
+        CreateClassOntologyYamlWorkflowConfiguration(
             services.triple_store_service, convert_ontology_graph_config
         )
     )
