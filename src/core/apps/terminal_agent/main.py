@@ -181,7 +181,7 @@ def run_agent(agent: Agent):
         loader_thread.start()
         
         # Get the response while animation runs
-        response = agent.invoke(user_input)
+        agent.invoke(user_input)
         
         # Stop the animation
         loading = False
