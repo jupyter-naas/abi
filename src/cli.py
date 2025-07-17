@@ -339,7 +339,7 @@ def main():
                 dots = "   "  # No dots, just spaces
             else:
                 dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
-            print(f"\r\033[92mWaking up{dots}\033[0m", end="", flush=True)
+            print(f"\r\033[92mLoading{dots}\033[0m", end="", flush=True)
             time.sleep(0.5)
             i += 1
     
@@ -357,14 +357,19 @@ def main():
     except:
         pass
     
-    time.sleep(2.0)
+    # Brief pause for module loading
+    time.sleep(0.5)
     
     # Stop the animation
     loading = False
     loader_thread.join()
     
     # Clear the loading line
-    print("\r" + " " * 15 + "\r", end="", flush=True)
+    print("\r" + " " * 20 + "\r", end="", flush=True)
+    
+    # Simple, conversational greeting for returning users
+    first_name = os.getenv("USER_FIRST_NAME", "there")
+    print(f"Hi {first_name}!\n")
 
     from src.core.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("SupervisorAgent")
