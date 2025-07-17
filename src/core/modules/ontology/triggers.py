@@ -81,11 +81,10 @@ def create_individual_ontology_yaml():
         NaasIntegrationConfiguration,
     )
     from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow import (
-        ConvertOntologyGraphToYamlConfiguration,
+        ConvertOntologyGraphToYamlWorkflowConfiguration,
     )
     from src.core.modules.ontology.workflows.CreateIndividualOntologyYamlWorkflow import (
         CreateIndividualOntologyYamlWorkflow,
-        CreateIndividualOntologyYamlConfiguration,
     )
 
     # Get secrets
@@ -98,11 +97,11 @@ def create_individual_ontology_yaml():
     naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
 
     # Configure ConvertOntologyGraphToYaml workflow
-    convert_ontology_graph_config = ConvertOntologyGraphToYamlConfiguration(
+    convert_ontology_graph_config = ConvertOntologyGraphToYamlWorkflowConfiguration(
         naas_integration_config
     )
     workflow = CreateIndividualOntologyYamlWorkflow(
-        CreateIndividualOntologyYamlConfiguration(
+        ConvertOntologyGraphToYamlWorkflowConfiguration(
             services.triple_store_service, convert_ontology_graph_config
         )
     )
