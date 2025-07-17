@@ -110,12 +110,7 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
 
 
 def run_agent(agent: Agent):
-    # Show greeting when truly ready for input - instant like responses
-    print()  # New line
-    print("Hello you!")
-    print()  # New line after greeting
-    
-    # Just start chatting naturally - like the screenshot
+    # Ready for conversation - no extra greetings needed
     while True:
         user_input = get_input_with_placeholder()
         
