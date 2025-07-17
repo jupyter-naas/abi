@@ -221,7 +221,12 @@ class IntentAgent(Agent):
         """
         logger.debug(f"return_raw_intent state: {state}")
         intent : Intent = state["intent_mapping"]["intents"][0]['intent']
-        return Command(goto=END, update={"messages": [AIMessage(content=intent.intent_target)]})
+        
+        ai_message = AIMessage(content=intent.intent_target)
+        
+        self._notify_ai_message(ai_message, self.name)
+        
+        return Command(goto=END, update={"messages": [ai_message]})
     
     def filter_out_intents(self, state: IntentState):
         """Filter out logically irrelevant intents using LLM analysis.
