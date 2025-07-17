@@ -419,7 +419,7 @@ class Agent(Expose):
         """
         self._on_tool_response = callback
         
-    def on_ai_message(self, callback: Callable[[AnyMessage], None]):
+    def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
         """Register a callback to be called when an AI message is received.
         """
         self._on_ai_message = callback
@@ -759,6 +759,9 @@ class Agent(Expose):
             AgentConfiguration: The agent's configuration
         """
         return self._configuration
+
+    def hello(self) -> str:
+        return "Hello"
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
