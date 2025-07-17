@@ -18,6 +18,17 @@ import threading
 
 def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
+    
+    # Check if input is piped (not interactive terminal)
+    if not sys.stdin.isatty():
+        # For piped input, use simple input() without fancy terminal handling
+        print(f"\n{prompt}", end="", flush=True)
+        try:
+            return input()
+        except: # noqa: E722
+            return "/bye"
+    
+    # Interactive terminal - use fancy placeholder logic
     print(f"\n{prompt}", end="", flush=True)
     
     # Show placeholder in grey
@@ -29,8 +40,8 @@ def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? fo
     user_input = ""
     placeholder_cleared = False
     
-    # Get original terminal settings
     old_settings = termios.tcgetattr(sys.stdin)
+
     
     try:
         tty.setraw(sys.stdin.fileno())
