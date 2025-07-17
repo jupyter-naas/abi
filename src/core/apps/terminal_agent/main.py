@@ -114,6 +114,8 @@ def on_ai_message(message: Any, agent_name) -> None:
     
     print("\r" + " " * 15 + "\r", end="", flush=True)
     
+    console.print(f'@{agent_name}:')
+    
     from rich.markdown import Markdown
     
     # Filter out think tags and their content
@@ -127,13 +129,13 @@ def on_ai_message(message: Any, agent_name) -> None:
     content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
 
     
-    md = Markdown('@' + agent_name + ': ' + content)
+    md = Markdown(content)
     console.print(md)
     
 def run_agent(agent: Agent):
     # Show greeting when truly ready for input - instant like responses
     print()  # New line
-    print("Hello you!")
+    print(agent.hello())
     print()  # New line after greeting
     
     # Just start chatting naturally - like the screenshot
@@ -239,6 +241,7 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
                 agent.on_tool_usage(lambda message: print_tool_usage(message))
                 agent.on_tool_response(on_tool_response)
                 agent.on_ai_message(on_ai_message)
+                
                 run_agent(agent)
                 return
 
