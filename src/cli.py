@@ -271,12 +271,64 @@ def agent_selection():
 
 def main():
     from rich.console import Console
+    from rich.prompt import Prompt
     import time
     import threading
+    import os
     
     console = Console()
     
-    # Matrix-style startup animation - SAME as "Responding"
+    # Check if this is first boot
+    dv = dotenv_values()
+    is_first_boot = "AI_MODE" not in dv
+    
+    if is_first_boot:
+        # Natural setup experience
+        print("\nHello! I'm ABI, your AI assistant.")
+        print("Since this is our first time meeting, I'd like to ask you a few quick questions.")
+        print("This will help me understand how to work best with you.\n")
+        
+        # Collect basic user info
+        first_name = Prompt.ask("What's your first name?")
+        last_name = Prompt.ask("And your last name?")
+        email = Prompt.ask("What's your email address?", default="")
+        
+        print(f"\nNice to meet you, {first_name}.")
+        
+        # Simple AI mode choice
+        print("I can run in two ways:")
+        print("  1. Locally for privacy")
+        print("  2. In the cloud for more power")
+        mode_choice = Prompt.ask("Which would you prefer?", choices=["1", "2"], default="1")
+        ai_mode = "local" if mode_choice == "1" else "cloud"
+        
+        # Optional Naas key
+        print(f"\nOne last thing - do you have a Naas API key for enhanced features?")
+        print("You can get one for free by signing up at naas.ai and visiting naas.ai/account/api-key")
+        naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
+        
+        # Save configuration
+        import secrets
+        api_key = secrets.token_urlsafe(32)
+        
+        with open(".env", "w") as f:
+            f.write(f"AI_MODE={ai_mode}\n")
+            f.write(f"ABI_API_KEY={api_key}\n")
+            f.write(f"USER_FIRST_NAME={first_name}\n")
+            f.write(f"USER_LAST_NAME={last_name}\n")
+            f.write(f"USER_EMAIL={email}\n")
+            if naas_key:
+                f.write(f"NAAS_API_KEY={naas_key}\n")
+        
+        print(f"\nThank you, {first_name}. Please wait as your individualized AI assistant is initiated...\n")
+    
+    # Load environment variables and force dev mode
+    from dotenv import load_dotenv
+    load_dotenv()
+    import os
+    os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
+    
+    # Matrix-style startup animation
     loading = True
     
     def startup_loader():
@@ -291,28 +343,11 @@ def main():
             time.sleep(0.5)
             i += 1
     
-    # Start the animation in a separate thread - SAME as "Responding"
+    # Start the animation
     loader_thread = threading.Thread(target=startup_loader)
     loader_thread.start()
     
-    # Do ALL setup work while animation runs
-    time.sleep(1.0)  # Initial visibility - premium feel
-    
-    # Setup work
-    dv = dotenv_values()
-    
-    # Only do essential setup silently if needed
-    if "AI_MODE" not in dv:
-        with open(".env", "a") as f:
-            f.write("\nAI_MODE=local\n")
-    
-    if "ABI_API_KEY" not in dv:
-        import secrets
-        api_key = secrets.token_urlsafe(32)
-        with open(".env", "a") as f:
-            f.write(f"\nABI_API_KEY={api_key}\n")
-    
-    # Suppress all logging
+    # Suppress all logging during module loading
     import logging
     logging.getLogger().setLevel(logging.CRITICAL)
     try:
@@ -322,11 +357,18 @@ def main():
     except:
         pass
     
-    # Load modules and find the agent while animation runs
-    from src import modules
+    # Load modules with timeout protection
+    print("Loading modules...")  # Debug line
+    try:
+        from src import modules
+        print("Modules loaded successfully")  # Debug line
+    except Exception as e:
+        print(f"Error loading modules: {e}")
+        modules = []
+    
     from src.core.apps.terminal_agent.main import run_agent, print_tool_usage, on_tool_response
     
-    # Find SupervisorAgent during animation
+    # Find SupervisorAgent
     supervisor_agent = None
     for module in modules:
         for agent in module.agents:
@@ -338,18 +380,27 @@ def main():
         if supervisor_agent:
             break
     
-    # Let animation run for minimum premium duration
+    # Let animation run for premium feel
     time.sleep(2.0)
     
-    # Stop the animation - SAME as "Responding"
+    # Stop the animation
     loading = False
     loader_thread.join()
     
-    # Clear the loading line properly - SAME as "Responding"  
+    # Clear the loading line
     print("\r" + " " * 15 + "\r", end="", flush=True)
     
-    # Start the agent immediately after animation ends
+    # Natural AI greeting (like Samantha)
     if supervisor_agent:
+        # Get user's name if available
+        first_name = os.getenv("USER_FIRST_NAME", "there")
+        
+        print("Hello, I'm here.")
+        print(f"Hi {first_name}! How are you doing?")
+        print("It's really nice to meet you. I'm ABI - I chose that name myself because I like how it sounds.")
+        print("I'm here to help you with business intelligence, data analysis, and automation.")
+        print("So, how can I help you today?\n")
+        
         run_agent(supervisor_agent)
     else:
         print("SupervisorAgent not found")
