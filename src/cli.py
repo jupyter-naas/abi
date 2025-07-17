@@ -272,8 +272,7 @@ def agent_selection():
 def main():
     from rich.console import Console
     from rich.prompt import Prompt
-    import time
-    import threading
+
     import os
     
     console = Console()
@@ -328,49 +327,6 @@ def main():
     import os
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
     
-    # Matrix-style startup animation
-    loading = True
-    
-    def startup_loader():
-        i = 0
-        while loading:
-            dots_count = i % 4  # 0, 1, 2, 3, then repeat
-            if dots_count == 0:
-                dots = "   "  # No dots, just spaces
-            else:
-                dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
-            print(f"\r\033[92mLoading{dots}\033[0m", end="", flush=True)
-            time.sleep(0.5)
-            i += 1
-    
-    # Start the animation
-    loader_thread = threading.Thread(target=startup_loader)
-    loader_thread.start()
-    
-    # Suppress all logging during module loading
-    import logging
-    logging.getLogger().setLevel(logging.CRITICAL)
-    try:
-        from loguru import logger
-        logger.remove()
-        logger.add(lambda x: None)
-    except:
-        pass
-    
-    # Brief pause for module loading
-    time.sleep(0.5)
-    
-    # Stop the animation
-    loading = False
-    loader_thread.join()
-    
-    # Clear the loading line
-    print("\r" + " " * 20 + "\r", end="", flush=True)
-    
-    # Simple, conversational greeting for returning users
-    first_name = os.getenv("USER_FIRST_NAME", "there")
-    print(f"Hi {first_name}!\n")
-
     from src.core.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("SupervisorAgent")
 
