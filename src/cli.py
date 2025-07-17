@@ -339,7 +339,7 @@ def main():
                 dots = "   "  # No dots, just spaces
             else:
                 dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
-            print(f"\r\033[92mWaking up{dots}\033[0m", end="", flush=True)
+            print(f"\r\033[92mLoading{dots}\033[0m", end="", flush=True)
             time.sleep(0.5)
             i += 1
     
@@ -358,12 +358,9 @@ def main():
         pass
     
     # Load modules with timeout protection
-    print("Loading modules...")  # Debug line
     try:
         from src import modules
-        print("Modules loaded successfully")  # Debug line
     except Exception as e:
-        print(f"Error loading modules: {e}")
         modules = []
     
     from src.core.apps.terminal_agent.main import run_agent, print_tool_usage, on_tool_response
@@ -388,18 +385,15 @@ def main():
     loader_thread.join()
     
     # Clear the loading line
-    print("\r" + " " * 15 + "\r", end="", flush=True)
+    print("\r" + " " * 20 + "\r", end="", flush=True)
     
     # Natural AI greeting (like Samantha)
     if supervisor_agent:
         # Get user's name if available
         first_name = os.getenv("USER_FIRST_NAME", "there")
         
-        print("Hello, I'm here.")
-        print(f"Hi {first_name}! How are you doing?")
-        print("It's really nice to meet you. I'm ABI - I chose that name myself because I like how it sounds.")
-        print("I'm here to help you with business intelligence, data analysis, and automation.")
-        print("So, how can I help you today?\n")
+        # Simple, conversational greeting for returning users
+        print(f"Hi {first_name}!")
         
         run_agent(supervisor_agent)
     else:
