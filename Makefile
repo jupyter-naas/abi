@@ -21,11 +21,7 @@ uv:
 	@ uv python find 3.10 > /dev/null || (uv python install 3.10 && uv python pin 3.10)
 
 .env:
-	@if [ ! -f .env ]; then \
-		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
-		cp .env.example .env; \
-		echo "✅ .env file initialized with .env.example"; \
-	fi
+	@# .env will be created dynamically by CLI during first boot
 
 .venv:
 	@ uv sync --all-extras
@@ -235,7 +231,7 @@ help:
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
 	@echo "DEFAULT:"
-	@echo "  The default target is help (running 'make' with no arguments displays this help menu)"
+	@echo "  The default target is chat-supervisor-agent (running 'make' starts ABI conversation)"
 
 # Docker Build Commands
 # -------------------
@@ -263,7 +259,7 @@ chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
 chat-supervisor-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
+	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
@@ -275,7 +271,11 @@ pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
-.DEFAULT_GOAL := default
+
+console: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli
+
+.DEFAULT_GOAL := chat-supervisor-agent
 
 agent=SupervisorAgent
 chat: deps
