@@ -12,6 +12,8 @@ import sys
 import tty
 import termios
 import re
+import time
+import threading
 # import json
 
 def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? for help)"):
@@ -206,6 +208,72 @@ def run_agent(agent: Agent):
         # console.print(md)
 
 
+def load_agent(agent_class: str) -> Agent:
+    from src import modules
+
+    if agent_class is None:
+        print(
+            "No agent class provided. Please set the AGENT_CLASS environment variable."
+        )
+        return
+
+    for module in modules:
+        for agent in module.agents:
+            if agent.__class__.__name__ == agent_class:
+                agent.on_tool_usage(lambda message: print_tool_usage(message))
+                agent.on_tool_response(on_tool_response)
+                agent.on_ai_message(on_ai_message)
+                
+            
+                return agent
+    
+    return None
+
+
+class ConsoleLoader:
+
+    
+    def stop(self):
+        self.loading = False
+        self.loader_thread.join()
+        
+        # Clear the loading line
+        print("\r" + " " * 20 + "\r", end="", flush=True)
+    
+    def start(self, message: str):
+        # Matrix-style startup animation
+        self.loading = True
+        
+        def startup_loader():
+            i = 0
+            while self.loading:
+                dots_count = i % 4  # 0, 1, 2, 3, then repeat
+                if dots_count == 0:
+                    dots = "   "  # No dots, just spaces
+                else:
+                    dots = "." * dots_count + " " * (3 - dots_count)  # Pad to 3 char width
+                print(f"\r\033[92m{message}{dots}\033[0m", end="", flush=True)
+                time.sleep(0.5)
+                i += 1
+        
+        # Start the animation
+        self.loader_thread = threading.Thread(target=startup_loader)
+        self.loader_thread.start()
+        
+        # Suppress all logging during module loading
+        import logging
+        logging.getLogger().setLevel(logging.CRITICAL)
+        try:
+            from loguru import logger
+            logger.remove()
+            logger.add(lambda x: None)
+        except: # noqa: E722
+            pass
+
+        
+
+        
+
 def generic_run_agent(agent_class: Optional[str] = None) -> None:
     """Run an agent dynamically loaded from the src/modules directory.
 
@@ -227,25 +295,19 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
         finding and running the requested agent from the loaded modules. The agent
         must be properly registered in a module under src/modules for this to work.
     """
-    from src import modules
-
-    if agent_class is None:
-        print(
-            "No agent class provided. Please set the AGENT_CLASS environment variable."
-        )
+    
+    console_loader = ConsoleLoader()
+    console_loader.start("Loading agent")
+    
+    agent = load_agent(agent_class)
+    
+    console_loader.stop()
+    
+    if agent is None:
+        print(f"Agent {agent_class} not found")
         return
-
-    for module in modules:
-        for agent in module.agents:
-            if agent.__class__.__name__ == agent_class:
-                agent.on_tool_usage(lambda message: print_tool_usage(message))
-                agent.on_tool_response(on_tool_response)
-                agent.on_ai_message(on_ai_message)
-                
-                run_agent(agent)
-                return
-
-    print(f"Agent {agent_class} not found")
+    
+    run_agent(agent)
 
 
 if __name__ == "__main__":
