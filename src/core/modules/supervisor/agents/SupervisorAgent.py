@@ -1,5 +1,7 @@
-from abi.services.agent.Agent import (
-    Agent,
+from abi.services.agent.IntentAgent import (
+    IntentAgent,
+    Intent,
+    IntentType,
     AgentConfiguration,
     AgentSharedState,
     MemorySaver,
@@ -174,7 +176,7 @@ SUGGESTIONS = [
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
+) -> IntentAgent:
     # Init
     tools: list = []
     agents: list = []
@@ -220,13 +222,20 @@ def create_agent(
         chat_model=model,
         tools=tools,
         agents=agents,
+        intents=[
+            Intent(
+                intent_value="what is your name",
+                intent_type=IntentType.RAW,
+                intent_target=f"My name is ABI",
+            ),
+        ],
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=MemorySaver(),
     )
 
 
-class SupervisorAgent(Agent):
+class SupervisorAgent(IntentAgent):
     def as_api(
         self,
         router: APIRouter,

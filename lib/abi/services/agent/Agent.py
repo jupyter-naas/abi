@@ -486,7 +486,7 @@ class Agent(Expose):
                             # This is a tool call.
                             self._notify_tool_usage(last_message)
                         else:
-                            if 'call_model' in payload:
+                            if 'call_model' in payload or 'intent_mapping_router' in payload:
                                 self._notify_ai_message(last_message, agent_name)
                             # This is a message.
                             # print("\n\nIntermediate AI Message:")
