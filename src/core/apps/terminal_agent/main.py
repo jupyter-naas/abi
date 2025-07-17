@@ -270,9 +270,6 @@ class ConsoleLoader:
         except: # noqa: E722
             pass
 
-        
-
-        
 
 def generic_run_agent(agent_class: Optional[str] = None) -> None:
     """Run an agent dynamically loaded from the src/modules directory.
