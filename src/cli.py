@@ -357,28 +357,8 @@ def main():
     except:
         pass
     
-    # Load modules with timeout protection
-    try:
-        from src import modules
-    except Exception as e:
-        modules = []
-    
-    from src.core.apps.terminal_agent.main import run_agent, print_tool_usage, on_tool_response
-    
-    # Find SupervisorAgent
-    supervisor_agent = None
-    for module in modules:
-        for agent in module.agents:
-            if agent.__class__.__name__ == "SupervisorAgent":
-                agent.on_tool_usage(lambda message: print_tool_usage(message))
-                agent.on_tool_response(on_tool_response)
-                supervisor_agent = agent
-                break
-        if supervisor_agent:
-            break
-    
-    # Let animation run for premium feel
-    time.sleep(2.0)
+    # Brief pause for module loading
+    time.sleep(0.5)
     
     # Stop the animation
     loading = False
@@ -387,17 +367,12 @@ def main():
     # Clear the loading line
     print("\r" + " " * 20 + "\r", end="", flush=True)
     
-    # Natural AI greeting (like Samantha)
-    if supervisor_agent:
-        # Get user's name if available
-        first_name = os.getenv("USER_FIRST_NAME", "there")
-        
-        # Simple, conversational greeting for returning users
-        print(f"Hi {first_name}!")
-        
-        run_agent(supervisor_agent)
-    else:
-        print("SupervisorAgent not found")
+    # Simple, conversational greeting for returning users
+    first_name = os.getenv("USER_FIRST_NAME", "there")
+    print(f"Hi {first_name}!\n")
+
+    from src.core.apps.terminal_agent.main import generic_run_agent
+    generic_run_agent("SupervisorAgent")
 
 if __name__ == "__main__":
     main()
