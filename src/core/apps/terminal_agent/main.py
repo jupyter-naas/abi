@@ -14,7 +14,6 @@ import termios
 import re
 # import json
 
-
 def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
     print(f"\n{prompt}", end="", flush=True)
@@ -109,6 +108,28 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
         print(e)
 
 
+def on_ai_message(message: Any, agent_name) -> None:
+    if len(message.content) == 0:
+        return
+    
+    print("\r" + " " * 15 + "\r", end="", flush=True)
+    
+    from rich.markdown import Markdown
+    
+    # Filter out think tags and their content
+    think_content = re.findall(r'<think>.*?</think>', message.content, flags=re.DOTALL)
+    
+    if len(think_content) > 0:
+        console.print('Thoughts:', style="white")
+        for think in think_content:
+            console.print(think.replace('<think>', '').replace('</think>', ''), style="white")
+    
+    content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
+
+    
+    md = Markdown('@' + agent_name + ': ' + content)
+    console.print(md)
+    
 def run_agent(agent: Agent):
     # Ready for conversation - no extra greetings needed
     while True:
@@ -155,7 +176,7 @@ def run_agent(agent: Agent):
         loader_thread.start()
         
         # Get the response while animation runs
-        response = agent.invoke(user_input)
+        agent.invoke(user_input)
         
         # Stop the animation
         loading = False
@@ -164,18 +185,18 @@ def run_agent(agent: Agent):
         # Clear the loading line properly
         print("\r" + " " * 15 + "\r", end="", flush=True)
         
-        # Convert list response to string if necessary
-        if isinstance(response, list):
-            response = "\n".join(str(item) for item in response)
+        # # Convert list response to string if necessary
+        # if isinstance(response, list):
+        #     response = "\n".join(str(item) for item in response)
         
-        # Filter out think tags and their content
-        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        response = response.strip()
+        # # Filter out think tags and their content
+        # response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+        # response = response.strip()
         
-        # Render markdown properly with rich instead of raw typewriter effect
-        from rich.markdown import Markdown
-        md = Markdown(response)
-        console.print(md)
+        # # Render markdown properly with rich instead of raw typewriter effect
+        # from rich.markdown import Markdown
+        # md = Markdown(response)
+        # console.print(md)
 
 
 def generic_run_agent(agent_class: Optional[str] = None) -> None:
@@ -212,6 +233,7 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
             if agent.__class__.__name__ == agent_class:
                 agent.on_tool_usage(lambda message: print_tool_usage(message))
                 agent.on_tool_response(on_tool_response)
+                agent.on_ai_message(on_ai_message)
                 run_agent(agent)
                 return
 
