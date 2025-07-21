@@ -606,6 +606,11 @@ class Agent(Expose):
             description_stream (str): Optional description to add to the stream endpoints. Defaults to ""
             tags (list[str]): Optional list of tags to add to the endpoints. Defaults to None
         """
+        
+        route_name = route_name or self._name
+        name = name or self._name.capitalize().replace("_", " ")
+        description = description or self._description
+        description_stream = description_stream or self._description
 
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
