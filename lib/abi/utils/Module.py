@@ -1,6 +1,7 @@
 from abc import ABC
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from abi.services.agent.Agent import Agent
+from abi import logger
 from typing import Callable, List, Any
 import os
 import importlib
@@ -41,16 +42,17 @@ class IModule(ABC):
             self.__load_triggers()
             self.__load_ontologies()
         except Exception as e:
-            print(f"❌ Error loading module {self.module_import_path}: {e}")
+            logger.error(f"❌ Critical error loading module {self.module_import_path}: {e}")
+            raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")
 
     def load_agents(self):
         try:
             self.__load_agents()
         except Exception as e:
-            print(f"❌ Error loading agents for module {self.module_import_path}: {e}")
-            if os.environ.get("LOG_LEVEL") == "DEBUG":
-                import traceback
-                print(traceback.format_exc())
+            import traceback
+            logger.error(f"❌ Critical error loading agents for module {self.module_import_path}: {e}")
+            traceback.print_exc()
+            raise SystemExit(f"Application crashed due to agent loading failure: {self.module_import_path}")
 
     def __load_agents(self):
         # Load agents
