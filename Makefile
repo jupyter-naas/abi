@@ -53,6 +53,12 @@ test:  deps
 test-abi: deps
 	@ uv run python -m pytest lib
 
+test-api: deps
+	@ uv run python -m pytest src/api_test.py -v -s
+
+hello:
+	@echo 'hello' | make
+
 q=''
 ftest: deps
 	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
