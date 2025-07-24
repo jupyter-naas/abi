@@ -204,13 +204,14 @@ def create_agent(
 
         # Set model
     model: Union[ChatOpenAI, "ChatOllama"]
-    if os.getenv("AI_MODE") == "cloud":
+    ai_mode = os.getenv("AI_MODE", "cloud")  # Default to cloud if not set
+    if ai_mode == "cloud":
         model = ChatOpenAI(
             model=MODEL, 
             temperature=TEMPERATURE, 
             api_key=SecretStr(secret.get("OPENAI_API_KEY"))
         )
-    elif os.getenv("AI_MODE") == "local":
+    elif ai_mode == "local":
         from langchain_ollama import ChatOllama
         model = ChatOllama(model="qwen3:8b", temperature=0.7)
     else:
