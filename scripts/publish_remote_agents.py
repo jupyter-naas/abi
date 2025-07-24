@@ -85,6 +85,10 @@ def publish_remote_agent(
             if route_name is None:
                 raise ValueError(f"Route name not found for agent {name}")
             
+            # Remove double slashes in route_name
+            route_name = f"agents/{route_name}/stream-completion?token={abi_api_key}".replace("//", "/")
+            
+            # Create plugin data
             plugin_data = {
                 "id": name.lower(),
                 "name": name,
@@ -98,7 +102,7 @@ def publish_remote_agent(
                 "temperature": temperature,
                 "type": "CUSTOM",
                 "remote": {
-                    "url": f"{api_base_url}/agents/{route_name}/stream-completion?token={abi_api_key}".replace("//", "/")
+                    "url": f"{api_base_url}/{route_name}"
                 },
                 "suggestions": suggestions,
             }
