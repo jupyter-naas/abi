@@ -21,8 +21,10 @@ def get_api_key() -> str:
     """Get the API key from environment variables"""
     api_key = os.environ.get("ABI_API_KEY")
     if not api_key:
-        # Fallback to default for development
-        api_key = "FRRGzUchjPjga55tbxYc-ReAsTQmLufUkusTLZMI1I4"
+        raise ValueError(
+            "ABI_API_KEY environment variable is required. "
+            "Please set it before running the MCP server."
+        )
     return api_key
 
 def get_logger():
