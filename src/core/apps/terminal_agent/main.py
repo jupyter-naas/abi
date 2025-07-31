@@ -240,6 +240,20 @@ def load_agent(agent_class: str) -> Agent | None:
         
     return None
 
+def list_available_agents():
+    from src import modules
+    print("\nAvailable agents:\n")
+    agents = []
+    for module in modules:
+        for agent in module.agents:
+            agents.append(agent.__class__.__name__)
+    
+    # Sort the agents alphabetically
+    agents.sort()
+    
+    # Print the agents
+    for agent in agents:
+        print(f"  - {agent}")
 
 class ConsoleLoader:
 
@@ -315,6 +329,8 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
     
     if agent is None:
         print(f"Agent {agent_class} not found")
+        list_available_agents()
+        
         return
     
     run_agent(agent)
