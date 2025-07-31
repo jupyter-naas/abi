@@ -141,7 +141,6 @@ def on_ai_message(message: Any, agent_name) -> None:
     content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
 
     # Print agent name dynamically using the real intent_target
-    from rich.markdown import Markdown
     
     # Use the actual agent name from intent_target, with color coding for readability
     if "gemini" in agent_name.lower() or "google" in agent_name.lower():
