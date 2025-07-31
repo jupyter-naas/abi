@@ -194,7 +194,7 @@ def create_agent(
         "src.core.modules.support.agents.SupportAgent",
         "src.core.modules.ontology.agents.OntologyAgent",
         "src.core.modules.naas.agents.NaasAgent",
-        "src.core.modules.google_gemini_2_0_flash.agents.google_gemini_2_0_flash",
+        "src.core.modules.google_gemini.agents.GeminiAgent",
     ]
     # Create Google Gemini agent for intent routing
     google_gemini_agent = None
@@ -204,7 +204,7 @@ def create_agent(
             agent = module.create_agent()
             agents.append(agent)
             # Store Google Gemini agent reference for intents
-            if "google_gemini_2_0_flash" in m:
+            if "google_gemini" in m:
                 google_gemini_agent = agent
         except ImportError:
             pass
@@ -260,6 +260,22 @@ def create_agent(
                 Intent(intent_type=IntentType.AGENT, intent_value="google's ai", intent_target=google_gemini_agent.name),
                 Intent(intent_type=IntentType.AGENT, intent_value="use bard", intent_target=google_gemini_agent.name),
                 Intent(intent_type=IntentType.AGENT, intent_value="switch to bard", intent_target=google_gemini_agent.name),
+                # Image Generation intents
+                Intent(intent_type=IntentType.AGENT, intent_value="generate image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="create image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="generate an image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="create a picture", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="make an image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="draw", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="illustrate", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="picture of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="image of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="visual representation", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="generate an image of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="create an image of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="make a picture of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="show me", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="visualization", intent_target=google_gemini_agent.name),
             ] if google_gemini_agent else []
         ),
         state=agent_shared_state,
@@ -285,8 +301,4 @@ class SupervisorAgent(IntentAgent):
         )
 
     def hello(self) -> str:
-        first_name = os.getenv("USER_FIRST_NAME", "there")
-        
-        return f"""
-Hi {first_name}! How can I help you today?
-"""
+        return "Abi: Hello, World!"

@@ -16,7 +16,7 @@ import time
 import threading
 # import json
 
-def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? for help)"):
+def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
     
     # Check if input is piped (not interactive terminal)
@@ -51,7 +51,8 @@ def get_input_with_placeholder(prompt=">>> ", placeholder="Send a message (/? fo
             
             # Handle Enter key
             if ord(char) == 13:  # Enter
-                print()  # New line
+                # Clear the current line before returning
+                print("\r\033[2K", end="", flush=True)
                 break
                 
             # Handle Backspace
@@ -127,8 +128,6 @@ def on_ai_message(message: Any, agent_name) -> None:
     
     print("\r" + " " * 15 + "\r", end="", flush=True)
     
-    console.print(f'@{agent_name}:')
-    
     from rich.markdown import Markdown
     
     # Filter out think tags and their content
@@ -141,15 +140,35 @@ def on_ai_message(message: Any, agent_name) -> None:
     
     content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
 
+    # Print agent name dynamically using the real intent_target
+    from rich.markdown import Markdown
+    
+    # Use the actual agent name from intent_target, with color coding for readability
+    if "gemini" in agent_name.lower() or "google" in agent_name.lower():
+        color = "bold blue"
+    elif "supervisor" in agent_name.lower() or "abi" in agent_name.lower():
+        color = "bold green"
+    elif "ontology" in agent_name.lower():
+        color = "bold cyan"
+    elif "support" in agent_name.lower():
+        color = "bold yellow"
+    else:
+        color = "bold magenta"
+    
+    # Display the real agent name
+    console.print(f"{agent_name}:", style=color, end=" ")
     
     md = Markdown(content)
     console.print(md, style="bright_white")
+    console.print("─" * console.width, style="dim")
+    print()  # Add spacing after separator
     
 def run_agent(agent: Agent):
     # Show greeting when truly ready for input - instant like responses
-    print()  # New line
-    print(agent.hello())
-    print()  # New line after greeting
+    console.print("Abi:", style="bold green", end=" ")
+    console.print("Hello, World!", style="bright_white")
+    console.print("─" * console.width, style="dim")
+    print()  # Add spacing after separator
     
     # Just start chatting naturally - like the screenshot
     while True:
@@ -157,6 +176,19 @@ def run_agent(agent: Agent):
         
         # Clean the input and check for exit commands
         clean_input = user_input.strip().lower()
+        
+        # Skip empty input
+        if not user_input.strip():
+            continue
+            
+        # Display user message with color coding and separator (except for commands)
+        if (not clean_input.startswith('/') and 
+            clean_input not in ["exit", "quit", "reset"]):
+            # Show formatted message in chat history (same format as Abi)
+            console.print("You:", style="bold cyan", end=" ")
+            console.print(user_input.strip(), style="bright_white")
+            console.print("─" * console.width, style="dim")
+            print()  # Add spacing after separator
         
         if clean_input in ["exit", "/exit", "/bye", "quit", "/quit"]:
             print("\n👋 See you later!")
@@ -319,7 +351,7 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
     """
     
     console_loader = ConsoleLoader()
-    console_loader.start("Loading agent")
+    console_loader.start("Loading")
     
     assert agent_class is not None, "Agent class is required"
     

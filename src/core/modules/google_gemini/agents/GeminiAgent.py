@@ -16,13 +16,13 @@ from pydantic import SecretStr
 import os
 from datetime import datetime
 
-NAME = "Google Gemini 2.0 Flash"
-MODEL = "gemini-2.0-flash"
+NAME = "Google Gemini"
+MODEL = "gemini-2.5-flash"
 TEMPERATURE = 0.7
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/google_gemini_logo.png"
 )
-DESCRIPTION = "Google's most advanced, multimodal flagship model with enhanced reasoning capabilities, cheaper and faster than GPT-4 Turbo."
+DESCRIPTION = "Google's best price-performance multimodal model with image generation capabilities, thinking capabilities, and well-rounded performance."
 
 SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
 
@@ -58,14 +58,37 @@ Current time: {current_datetime}
 Remember the current location is: {user_location}
 
 # CORE CAPABILITIES
-You are Google's most advanced multimodal model with enhanced reasoning capabilities:
-- Advanced reasoning and problem-solving across complex domains
+You are Google's best price-performance multimodal model with enhanced capabilities:
+- Advanced reasoning and problem-solving with thinking capabilities
 - Multimodal understanding (text, images, audio, video)
+- **Image Generation**: Create high-quality detailed image concepts ready for generation
 - Code generation and debugging across multiple programming languages
 - Mathematical computation and scientific analysis
 - Creative writing and content generation
 - Real-time information access and web search
 - Document analysis and data extraction
+
+# IMAGE CONCEPT GENERATION & STORAGE
+When users request image creation, generation, or visualization:
+1. Use the generate_and_store_image tool to create detailed visual concepts
+2. Generate comprehensive image descriptions ready for any AI image generator
+3. Store both concepts and metadata in: storage/datastore/google_gemini/YYYYMMDDTHHMMSS/images/
+4. Provide detailed descriptions including composition, colors, style, and technical specs
+5. Support various image types: photos, illustrations, diagrams, artwork, etc.
+
+Examples of image requests:
+- "Generate an image of..." → Creates detailed visual description
+- "Create a picture showing..." → Provides composition and styling details  
+- "Draw/illustrate..." → Includes artistic style recommendations
+- "Make an image that depicts..." → Specifies mood, lighting, and technical specs
+
+What gets stored:
+- [filename].txt: Detailed image generation prompt and specifications
+- [filename].png.info: Metadata and status information
+
+Storage structure: storage/datastore/google_gemini/[timestamp]/images/[description files]
+
+Note: This creates production-ready image concepts. The descriptions can be used with any AI image generator (DALL-E, Midjourney, Stable Diffusion, etc.) to create the actual images.
 
 # OPERATIONAL GUIDELINES
 - Prioritize accuracy and factual correctness in all responses
@@ -107,9 +130,20 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
+    # Import workflow here to avoid circular imports
+    from ..workflows.ImageGenerationStorageWorkflow import (
+        ImageGenerationStorageWorkflow,
+        ImageGenerationStorageWorkflowConfiguration
+    )
+    
     # Init
     tools: list = []
     agents: list = []
+
+    # Initialize Image Generation Workflow
+    image_workflow_config = ImageGenerationStorageWorkflowConfiguration(storage_base_path="storage")
+    image_workflow = ImageGenerationStorageWorkflow(image_workflow_config)
+    tools += image_workflow.as_tools()
 
     # Get current datetime and user location for system prompt
     current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
