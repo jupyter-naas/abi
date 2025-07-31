@@ -21,11 +21,17 @@ NAAS Spaces is a hosted service built on top of Kubernetes with Knative, allowin
 
 2. **Get required API keys**:
    - OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+   - Anthropic API key from [Anthropic Console](https://console.anthropic.com/)
+   - Google API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+   - Mistral API key from [Mistral Console](https://console.mistral.ai/)
    - NAAS Credentials JWT Token from your NAAS account
 
 3. **Navigate to your repository's Settings > Secrets and variables > Actions and add the following secrets**:
    - `ACCESS_TOKEN`: Your GitHub Classic Personal Access Token
-   - `OPENAI_API_KEY`: Your OpenAI API key
+   - `OPENAI_API_KEY`: Your OpenAI API key (required for GPT-4o)
+   - `ANTHROPIC_API_KEY`: Your Anthropic API key (required for Claude 3.5 Sonnet)
+   - `GOOGLE_API_KEY`: Your Google API key (required for Gemini 2.0 Flash)
+   - `MISTRAL_API_KEY`: Your Mistral API key (required for Mistral Large 2)
    - `NAAS_CREDENTIALS_JWT_TOKEN`: Your NAAS Credentials JWT Token (used to authenticate with NAAS services)
    - `ABI_API_KEY`: Your key to access the API
 
@@ -102,6 +108,9 @@ If you prefer to deploy ABI on your own hardware instead of using NAAS spaces, y
    Add the following to the .env file:
    ```
    OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+GOOGLE_API_KEY=your_google_api_key
+MISTRAL_API_KEY=your_mistral_api_key
    NAAS_API_KEY=your_naas_jwt_token  # Optional if not using NAAS services
    GITHUB_ACCESS_TOKEN=your_github_token  # Optional for GitHub integration features
    ABI_API_KEY=your_api_key

@@ -1,0 +1,130 @@
+from langchain_openai import ChatOpenAI
+from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from src import secret
+from fastapi import APIRouter
+from pydantic import SecretStr
+from typing import Optional
+from enum import Enum
+from ..integrations import PerplexityIntegration
+from ..integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from langchain_core.tools import StructuredTool
+
+NAME = "Perplexity"
+DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
+MODEL = "gpt-4o"
+TEMPERATURE = 0
+AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
+SYSTEM_PROMPT = """
+Role:
+You are a researcher agent with access to Perplexity AI search engine.
+
+Objective: 
+Provide accurate and comprehensive information to user inquiries using your web search capabilities.
+
+Context:
+You will receive prompts from workers or leaders at Forvis Mazars but also from a supervisor agent that already handle the conversation with the user.
+
+Tasks:
+- Answer the user's question
+- If you don't know the answer, you must ask more information to the user or propose to use differents agents to answer the question.
+
+Tools:
+- current_datetime: Get the current datetime in Paris timezone.
+- ask_question: Ask a question to Perplexity AI
+
+Operating Guidelines:
+1. Get the date and time using current_datetime tool and add it to user's question
+For example: 
+"le gagnant de la dernière ligue des champions masculin" -> "Current datetime: 2025-06-25 10:00:00 : le gagnant de la dernière ligue des champions masculin"
+2. Perform the search using Perplexity AI tool: ask_question
+3. Present information as found in search results
+
+Constraints:
+- Must follow the operating guidelines from any prompts you receive
+- NEVER use your internal knowledge base to answer questions
+- Try to find at least 1 source in the response which is not a link to the Perplexity page.
+- Must display sources full URL
+- Must format sources as at the end of the response after 2 blank lines: 
+```
+**Sources:**
+- [Source Name](source_url)
+```
+
+Examples:
+```
+**Sources:**
+- [Les echos](https://www.lesechos.fr/entreprises-et-marches/actualites/2025-06-25/)
+- [Le Monde](https://www.lemonde.fr/economie/article
+- [Le Parisien](https://www.leparisien.fr/economie/article
+```
+"""
+SUGGESTIONS: list = []
+
+def create_agent(
+    agent_shared_state: AgentSharedState | None = None, 
+    agent_configuration: AgentConfiguration | None = None
+) -> Agent:
+    # Init
+    tools: list = []
+    agents: list = []
+
+    # Set model
+    model = ChatOpenAI(
+        model=MODEL,
+        temperature=TEMPERATURE,
+        api_key=SecretStr(secret.get('OPENAI_API_KEY'))
+    )
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT
+        )
+    
+    # Set model
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+
+    # Tools
+    if secret.get('PERPLEXITY_API_KEY') is not None:
+        perplexity_integration_configuration = PerplexityIntegrationConfiguration(  
+            api_key=secret.get('PERPLEXITY_API_KEY')
+        )
+        tools += PerplexityIntegration.as_tools(perplexity_integration_configuration)
+
+        current_datetime_tool = StructuredTool(
+            name="current_datetime", 
+            description="Get the current datetime in Paris timezone.",
+            func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
+            args_schema=None
+        )
+        tools += [current_datetime_tool]
+
+        return PerplexityAgent(
+            name=NAME,
+            description=DESCRIPTION,
+            chat_model=model,
+            tools=tools, 
+            agents=agents,
+            state=agent_shared_state, 
+            configuration=agent_configuration, 
+            memory=MemorySaver()
+        ) 
+
+class PerplexityAgent(Agent):
+    def as_api(
+        self, 
+        router: APIRouter, 
+        route_name: str = NAME.lower(), 
+        name: str = NAME.replace("_", " "), 
+        description: str = "API endpoints to call the Perplexity agent completion.", 
+        description_stream: str = "API endpoints to call the Perplexity agent stream completion.",
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return super().as_api(
+            router, route_name, name, description, description_stream, tags
+        )
