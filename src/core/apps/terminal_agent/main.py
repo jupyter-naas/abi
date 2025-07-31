@@ -237,7 +237,7 @@ def load_agent(agent_class: str) -> Agent | None:
                 
             
                 return agent
-    
+        
     return None
 
 
@@ -272,14 +272,14 @@ class ConsoleLoader:
         self.loader_thread.start()
         
         # Suppress all logging during module loading
-        import logging
-        logging.getLogger().setLevel(logging.CRITICAL)
-        try:
-            from loguru import logger
-            logger.remove()
-            logger.add(lambda x: None)
-        except: # noqa: E722
-            pass
+        # import logging
+        # logging.getLogger().setLevel(logging.CRITICAL)
+        # try:
+        #     from loguru import logger
+        #     logger.remove()
+        #     logger.add(lambda x: None)
+        # except: # noqa: E722
+        #     pass
 
 
 def generic_run_agent(agent_class: Optional[str] = None) -> None:
