@@ -294,11 +294,25 @@ orchestrator = Agent(
 ## LLM Models
 
 Agents can use various LLM models through LangChain:
-- OpenAI models (GPT-4, GPT-3.5) via langchain_openai
-- Anthropic models (Claude) via langchain_anthropic  
-- Google models (PaLM) via langchain_google_genai
+
+### Core Models (Available in `src/core/modules/`)
+- **OpenAI GPT-4o** (`openai_gpt_4o`) - via langchain_openai
+- **Anthropic Claude 3.5 Sonnet** (`anthropic_claude_3_5_sonnet`) - via langchain_anthropic
+- **Google Gemini 2.0 Flash** (`google_gemini_2_0_flash`) - via langchain_google_genai
+- **Meta Llama 3.3 70B** (`meta_llama_3_3_70b`) - via OpenAI-compatible endpoints
+- **Mistral Large 2** (`mistral_mistral_large_2`) - via langchain_mistralai
+- **Perplexity Sonar** (`perplexity_sonar`) - via Perplexity integration
+
+### Additional Options
 - Azure OpenAI models via langchain_openai
 - Hugging Face models via langchain_community
 - Local models via langchain_community (e.g. LlamaCpp)
+
+### Required API Keys
+Each model requires its corresponding API key:
+- `OPENAI_API_KEY` - For OpenAI GPT-4o and Llama 3.3 70B
+- `ANTHROPIC_API_KEY` - For Claude 3.5 Sonnet
+- `GOOGLE_API_KEY` - For Gemini 2.0 Flash
+- `MISTRAL_API_KEY` - For Mistral Large 2
 
 The choice of model depends on the specific requirements of the assistant's role and the available API keys.
