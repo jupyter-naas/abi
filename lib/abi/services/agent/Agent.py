@@ -42,6 +42,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
+import re
 
 class AgentSharedState:
     __thread_id: int
@@ -233,6 +234,14 @@ class Agent(Expose):
 
         self.build_graph()
 
+    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
+        if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
+            # Replace invalid characters with '_'
+            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', tool.name)
+            logger.warning(f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'.")
+            tool.name = valid_name
+        return tool
+
     def prepare_tools(
         self, tools: list[Union[Tool, "Agent"]], agents: list
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
@@ -250,6 +259,7 @@ class Agent(Expose):
                 logger.debug(f"Agent passed as tool: {t}")
                 _agents.append(t)
                 for tool in t.as_tools():
+                    tool = self.validate_tool_name(tool)
                     _tools.append(tool)
             else:
                 _tools.append(t)
@@ -259,6 +269,7 @@ class Agent(Expose):
             if agent not in _agents:
                 _agents.append(agent)
                 for tool in agent.as_tools():
+                    tool = self.validate_tool_name(tool)
                     _tools.append(tool)
 
         return _tools, _agents
@@ -301,6 +312,8 @@ class Agent(Expose):
             messages = [
                 SystemMessage(content=self._system_prompt),
             ] + messages
+
+        logger.info(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         if (
