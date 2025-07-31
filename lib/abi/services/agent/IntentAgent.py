@@ -580,7 +580,6 @@ Last user message: "{last_human_message.content}"
         
         
         for agent in self._agents:
-            print(f"Adding agent {agent.name} to the graph")
             # graph.add_node(agent.graph, metadata={"name": agent.name})
             graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
