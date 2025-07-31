@@ -194,11 +194,18 @@ def create_agent(
         "src.core.modules.support.agents.SupportAgent",
         "src.core.modules.ontology.agents.OntologyAgent",
         "src.core.modules.naas.agents.NaasAgent",
+        "src.core.modules.google_gemini_2_0_flash.agents.google_gemini_2_0_flash",
     ]
+    # Create Google Gemini agent for intent routing
+    google_gemini_agent = None
     for m in modules:
         try:
             module = importlib.import_module(m)
-            agents.append(module.create_agent())
+            agent = module.create_agent()
+            agents.append(agent)
+            # Store Google Gemini agent reference for intents
+            if "google_gemini_2_0_flash" in m:
+                google_gemini_agent = agent
         except ImportError:
             pass
 
@@ -229,7 +236,32 @@ def create_agent(
                 intent_type=IntentType.RAW,
                 intent_target="My name is ABI",
             ),
-        ],
+        ] + (
+            # Google Gemini 2.0 Flash Agent intents (only add if agent is available)
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="use gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gemini 2.0", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gemini flash", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use google ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to google", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="ask gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use google gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="multimodal analysis", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="analyze image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="image understanding", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="video analysis", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="audio analysis", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="let's use google", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="try google ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google's model", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google's ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use bard", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to bard", intent_target=google_gemini_agent.name),
+            ] if google_gemini_agent else []
+        ),
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=MemorySaver(),
