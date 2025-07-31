@@ -54,6 +54,7 @@ dependencies = [
     "langchain-ollama>=0.3.4",
     "langchain-anthropic>=0.3.17",
     "langchain-mistralai>=0.2.11",
+    "google-genai>=1.28.0",
 ]
 
 [project.scripts]
