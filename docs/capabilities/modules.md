@@ -1,5 +1,55 @@
 # Modules
 
+Modules are the building blocks of the ABI system, providing specific functionality and capabilities. They can include agents, integrations, pipelines, workflows, and other components.
+
+## Core Models
+
+The ABI system includes several pre-built core AI models available in `src/core/modules/`:
+
+### Available Models
+
+| Module | Provider | Model | Description | API Key Required |
+|--------|----------|-------|-------------|------------------|
+| `openai_gpt_4o` | OpenAI | GPT-4o | Advanced reasoning and general tasks | `OPENAI_API_KEY` |
+| `anthropic_claude_3_5_sonnet` | Anthropic | Claude 3.5 Sonnet | Best-in-class reasoning and analysis | `ANTHROPIC_API_KEY` |
+| `google_gemini_2_0_flash` | Google | Gemini 2.0 Flash | Fast multimodal model | `GOOGLE_API_KEY` |
+| `meta_llama_3_3_70b` | Meta | Llama 3.3 70B | Open-source instruction-following | `OPENAI_API_KEY` |
+| `mistral_mistral_large_2` | Mistral | Mistral Large 2 | Enhanced code and math capabilities | `MISTRAL_API_KEY` |
+| `perplexity_sonar` | Perplexity | Sonar | Real-time web search integration | Custom integration |
+
+### Usage
+
+Each core model provides both a model configuration and an agent implementation:
+
+```python
+# Import a model
+from src.core.modules.anthropic_claude_3_5_sonnet.models.anthropic_claude_3_5_sonnet import model
+
+# Import an agent
+from src.core.modules.anthropic_claude_3_5_sonnet.agents.anthropic_claude_3_5_sonnet import create_agent
+
+# Create and use the agent
+agent = create_agent()
+```
+
+### API Keys Setup
+
+Configure the required API keys in your `.env` file:
+
+```bash
+# Required for OpenAI GPT-4o and Meta Llama models
+OPENAI_API_KEY=your_openai_api_key
+
+# Required for Anthropic Claude models
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Required for Google Gemini models
+GOOGLE_API_KEY=your_google_api_key
+
+# Required for Mistral models
+MISTRAL_API_KEY=your_mistral_api_key
+```
+
 ## What is a Module?
 
 A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are now organized into two categories:
