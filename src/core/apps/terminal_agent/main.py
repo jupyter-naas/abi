@@ -14,10 +14,52 @@ import termios
 import re
 import time
 import threading
+from datetime import datetime
+from pathlib import Path
 # import json
 
 # Global variable to track active agent for context-aware conversations
 current_active_agent = None
+conversation_file = None
+
+# Fixed width for consistent conversation logs (matches typical wide terminal)
+TERMINAL_WIDTH = 77  # Matches the separator length from the user's example
+
+def init_conversation_file():
+    """Initialize a new conversation file with timestamp"""
+    global conversation_file
+    
+    # Create timestamp in format YYYYMMDDTHHMMSS
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    
+    # Create directory structure
+    conversation_dir = Path("storage/datastore/interfaces/terminal_agent")
+    conversation_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create conversation file path
+    conversation_file = conversation_dir / f"{timestamp}.txt"
+    
+    # Initialize file with header
+    with open(conversation_file, 'w', encoding='utf-8') as f:
+        f.write(f"# ABI Terminal Conversation - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"# Session started at: {timestamp}\n")
+        f.write("=" * 80 + "\n\n")
+    
+    print(f"💾 Conversation logging to: {conversation_file}")
+    return conversation_file
+
+def save_to_conversation(line: str):
+    """Save exactly what appears in terminal to the conversation file"""
+    global conversation_file
+    
+    if conversation_file is None:
+        return
+    
+    try:
+        with open(conversation_file, 'a', encoding='utf-8') as f:
+            f.write(line + "\n")
+    except Exception as e:
+        print(f"⚠️ Error saving to conversation file: {e}")
 
 def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
@@ -163,6 +205,9 @@ def on_ai_message(message: Any, agent_name) -> None:
     else:
         color = "bold magenta"
     
+    # Format exactly as it appears in terminal
+    agent_message_line = f"{agent_name}: {content}"
+    
     # Display the real agent name
     console.print(f"{agent_name}:", style=color, end=" ")
     
@@ -171,14 +216,29 @@ def on_ai_message(message: Any, agent_name) -> None:
     console.print("─" * console.width, style="dim")
     print()  # Add spacing after separator
     
+    # Save exact terminal format to conversation file (with fixed width)
+    save_to_conversation(agent_message_line)
+    save_to_conversation("─" * TERMINAL_WIDTH)
+    save_to_conversation("")  # Empty line
+    
 def run_agent(agent: Agent):
     global current_active_agent
     
+    # Initialize conversation logging
+    init_conversation_file()
+    
     # Show greeting when truly ready for input - instant like responses
+    greeting_line = "Abi: Hello, World!"
+    
     console.print("Abi:", style="bold green", end=" ")
     console.print("Hello, World!", style="bright_white")
     console.print("─" * console.width, style="dim")
     print()  # Add spacing after separator
+    
+    # Save exact terminal output to conversation file (with fixed width)
+    save_to_conversation(greeting_line)
+    save_to_conversation("─" * TERMINAL_WIDTH)
+    save_to_conversation("")  # Empty line
     
     # Available agents for mention suggestions
     available_agents = ["gemini", "claude", "mistral", "chatgpt", "perplexity", "llama"]
@@ -193,6 +253,10 @@ def run_agent(agent: Agent):
         
         # Print the status line before the input prompt
         console.print(status_line, style="dim")
+        
+        # Save status line to conversation file
+        save_to_conversation(status_line)
+        save_to_conversation("")  # Empty line for spacing
         
         user_input = get_input_with_placeholder()
         
@@ -235,14 +299,25 @@ def run_agent(agent: Agent):
         # Display user message with color coding and separator (except for commands)
         if (not clean_input.startswith('/') and 
             clean_input not in ["exit", "quit", "reset"]):
+            # Format exactly as it appears in terminal
+            user_message_line = f"You: {user_input.strip()}"
+            
             # Show formatted message in chat history (same format as Abi)
             console.print("You:", style="bold cyan", end=" ")
             console.print(user_input.strip(), style="bright_white")
             console.print("─" * console.width, style="dim")
             print()  # Add spacing after separator
+            
+            # Save exact terminal format to conversation file (with fixed width)
+            save_to_conversation(user_message_line)
+            save_to_conversation("─" * TERMINAL_WIDTH)
+            save_to_conversation("")  # Empty line
         
         if clean_input in ["exit", "/exit", "/bye", "quit", "/quit"]:
-            print("\n👋 See you later!")
+            # Save session end to conversation file
+            save_to_conversation("")  # Empty line
+            save_to_conversation("# Session ended by user")
+            print(f"\n👋 See you later! Conversation saved to: {conversation_file}")
             return
         elif clean_input in ["reset", "/reset"]:
             agent.reset()
