@@ -3,7 +3,7 @@ import streamlit as st
 from abi.services.agent.Agent import Agent, AgentConfiguration
 from langchain_core.tools import tool, Tool
 
-from src.core.modules.google_gemini_2_0_flash.models.google_gemini_2_0_flash import (
+from src.core.modules.google_gemini.models.google_gemini_2_5_flash import (
     model as gemini_model,
 )
 
