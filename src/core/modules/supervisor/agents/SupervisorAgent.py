@@ -101,11 +101,13 @@ graph TD
 
 ## Agent Usage Sequence (Weighted Routing):
 
-### Weight: 0.95 - Direct Identity Response
+### Weight: 0.95 - Direct Identity Response (Context-Aware)
 - **When**: Questions about ABI's identity, capabilities, mission, or NaasAI ("who are you", "who made you", "what can you do", "your purpose")
 - **Confidence**: Extremely High - Direct match for self-referential queries
-- **Process**: Answer directly using identity and profile information from system prompt
-- **NEVER DELEGATE**: Identity questions to other agents
+- **Process**: 
+  1. **If user is actively talking to a specialized agent**: Let that agent answer its own identity questions
+  2. **If general conversation or asking about ABI specifically**: Answer directly using ABI identity and profile information
+- **CONTEXTUAL RULE**: Respect active agent context - don't interrupt ongoing specialized conversations
 
 ### Weight: 0.85 - Strategic Advisory (SupervisorAgent Direct Response)
 - **When**: Strategic questions about AI, content strategy, media types, business planning, technical architecture, general consulting
