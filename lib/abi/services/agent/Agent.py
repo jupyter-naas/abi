@@ -46,9 +46,11 @@ import re
 
 class AgentSharedState:
     __thread_id: int
+    _current_active_agent: Optional[str]
 
-    def __init__(self, thread_id: int = 1):
+    def __init__(self, thread_id: int = 1, current_active_agent: Optional[str] = None):
         self._thread_id = thread_id
+        self._current_active_agent = current_active_agent
 
     @property
     def thread_id(self) -> int:
@@ -56,6 +58,13 @@ class AgentSharedState:
 
     def set_thread_id(self, thread_id: int):
         self._thread_id = thread_id
+    
+    @property 
+    def current_active_agent(self) -> Optional[str]:
+        return self._current_active_agent
+    
+    def set_current_active_agent(self, agent_name: Optional[str]):
+        self._current_active_agent = agent_name
 
 
 @dataclass
