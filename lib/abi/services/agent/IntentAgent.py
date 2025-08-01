@@ -451,6 +451,17 @@ Last user message: "{last_human_message.content}"
         if "intent_mapping" in state:
             intent_mapping = state["intent_mapping"]
             if len(intent_mapping["intents"]) == 0:
+                # Check if there's an active agent for context preservation
+                if (hasattr(self, '_state') and 
+                    hasattr(self._state, 'current_active_agent') and 
+                    self._state.current_active_agent):
+                    active_agent_name = self._state.current_active_agent
+                    # Find the active agent in our agents list
+                    active_agent = pd.find(self._agents, lambda a: a.name == active_agent_name)
+                    if active_agent is not None:
+                        # Route to the active agent for conversation continuation
+                        return Command(goto=active_agent_name)
+                
                 return Command(goto="call_model")
             elif len(intent_mapping["intents"]) == 1:
                 intent : Intent = intent_mapping["intents"][0]['intent']
