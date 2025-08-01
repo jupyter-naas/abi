@@ -62,7 +62,7 @@ class ImageGenerationStorageWorkflow(Workflow):
             # Import requests here to avoid dependency issues
             import requests
             
-            # Imagen 4.0 API endpoint
+            # Imagen 4.0 API endpoint (restore original working config)
             url = f'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-preview-06-06:predict?key={api_key}'
             
             headers = {
@@ -79,7 +79,7 @@ class ImageGenerationStorageWorkflow(Workflow):
                 'parameters': {
                     'sampleCount': 1,
                     'aspectRatio': '1:1',  # Square by default
-                    'safetyFilterLevel': 'block_some',
+                    'safetyFilterLevel': 'block_fewest',
                     'personGeneration': 'allow_adult'
                 }
             }
@@ -89,12 +89,25 @@ class ImageGenerationStorageWorkflow(Workflow):
             response = requests.post(url, json=payload, headers=headers)
             
             if response.status_code != 200:
+                # Handle specific error cases for better user experience
+                if response.status_code == 400:
+                    error_text = response.text.lower()
+                    if 'safety' in error_text or 'policy' in error_text or 'guidelines' in error_text:
+                        raise Exception("Sorry, I can't generate this type of image due to content safety guidelines. Please try a different prompt.")
+                    elif 'biden' in error_text or 'trump' in error_text or 'political' in error_text:
+                        raise Exception("Sorry, I can't generate images of political figures. Please try a different subject.")
                 raise Exception(f"API call failed with status {response.status_code}: {response.text}")
             
             result = response.json()
             
             if 'predictions' not in result or not result['predictions']:
-                raise Exception(f"No predictions returned from API: {result}")
+                # Check if it's a safety filter issue
+                if result.get('error', {}).get('code') == 400 or 'safety' in str(result).lower():
+                    raise Exception("Sorry, I can't generate this type of image due to content safety guidelines. Please try a different prompt.")
+                elif not result['predictions']:
+                    raise Exception("Sorry, I can't generate this image. It may violate content guidelines or the request was blocked for safety reasons. Please try a different prompt.")
+                else:
+                    raise Exception(f"No predictions returned from API: {result}")
             
             prediction = result['predictions'][0]
             

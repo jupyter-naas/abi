@@ -16,6 +16,9 @@ import time
 import threading
 # import json
 
+# Global variable to track active agent for context-aware conversations
+current_active_agent = None
+
 def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
     
@@ -123,8 +126,14 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
 
 
 def on_ai_message(message: Any, agent_name) -> None:
+    global current_active_agent
+    
     if len(message.content) == 0:
         return
+    
+    # Update active agent when an agent responds (except Supervisor for general responses)
+    if agent_name != "Supervisor":
+        current_active_agent = agent_name
     
     print("\r" + " " * 15 + "\r", end="", flush=True)
     
@@ -163,14 +172,28 @@ def on_ai_message(message: Any, agent_name) -> None:
     print()  # Add spacing after separator
     
 def run_agent(agent: Agent):
+    global current_active_agent
+    
     # Show greeting when truly ready for input - instant like responses
     console.print("Abi:", style="bold green", end=" ")
     console.print("Hello, World!", style="bright_white")
     console.print("─" * console.width, style="dim")
     print()  # Add spacing after separator
     
+    # Available agents for mention suggestions
+    available_agents = ["gemini", "claude", "mistral", "chatgpt", "perplexity", "llama"]
+    
     # Just start chatting naturally - like the screenshot
     while True:
+        # Create dynamic status line showing active agent
+        if current_active_agent:
+            status_line = f"Active: {current_active_agent} (@{' @'.join(available_agents)} to change)"
+        else:
+            status_line = f"No active agent | @{' @'.join(available_agents)} to select"
+        
+        # Print the status line before the input prompt
+        console.print(status_line, style="dim")
+        
         user_input = get_input_with_placeholder()
         
         # Clean the input and check for exit commands
@@ -179,6 +202,35 @@ def run_agent(agent: Agent):
         # Skip empty input
         if not user_input.strip():
             continue
+        
+        # Check for agent switching with @agent syntax
+        agent_mention_match = re.search(r'@(\w+)', user_input.lower())
+        if agent_mention_match:
+            mentioned_agent = agent_mention_match.group(1)
+            # Map agent mentions to full names
+            agent_mapping = {
+                "gemini": "Google Gemini",
+                "claude": "claude-3-5-sonnet", 
+                "mistral": "mistral-large-2",
+                "chatgpt": "ChatGPT",
+                "perplexity": "Perplexity",
+                "llama": "llama-3.3-70b-instruct"
+            }
+            
+            if mentioned_agent in agent_mapping:
+                current_active_agent = agent_mapping[mentioned_agent]
+                # Remove the @mention from the input and route to agent
+                user_input_clean = re.sub(r'@\w+\s*', '', user_input).strip()
+                if user_input_clean:
+                    # There's additional content, send it to the mentioned agent
+                    user_input = f"ask {mentioned_agent} {user_input_clean}"
+                else:
+                    # Just the mention, initiate conversation with agent
+                    user_input = f"I want to talk to {mentioned_agent}"
+            else:
+                console.print(f"Unknown agent: @{mentioned_agent}", style="red")
+                console.print(f"Available agents: {', '.join(['@' + name for name in available_agents])}", style="dim")
+                continue
             
         # Display user message with color coding and separator (except for commands)
         if (not clean_input.startswith('/') and 
