@@ -254,16 +254,13 @@ def create_agent(
     else:
         raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
-    # Filter agents to only include those that pass isinstance check for SupervisorAgent
-    from abi.services.agent.Agent import Agent as AgentClass
-    valid_agents = [agent for agent in agents if isinstance(agent, AgentClass)]
-    
+    # Use all loaded agents - the SupervisorAgent will handle validation internally
     return SupervisorAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
-        agents=valid_agents,
+        agents=agents,
         intents=[
             Intent(
                 intent_value="what is your name",
