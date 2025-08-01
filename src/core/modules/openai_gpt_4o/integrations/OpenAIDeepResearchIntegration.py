@@ -7,7 +7,7 @@ from openai import OpenAI
 from src import secrets
 from enum import Enum
 from abi.services.cache.CacheFactory import CacheFactory
-from abi.services.cache.CachePort import DataType
+from lib.abi.services.cache.CachePort import DataType
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai_deep_research")
 
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     from src import secrets
     
     configuration = OpenAIDeepResearchIntegrationConfiguration(
-        openai_api_key=secrets.get('OPENAI_API_KEY'),
+        openai_api_key=secrets.get('OPENAI_API_KEY') or '',
         model=DeepResearchModel.o3_deep_research
     )
     

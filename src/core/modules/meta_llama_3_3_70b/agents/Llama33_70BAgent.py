@@ -1,8 +1,13 @@
 from lib.abi.services.agent.Agent import Agent, AgentConfiguration
 from ..models.llama_3_3_70b import model
+from src import secret
 
 
 def create_agent():
+    # Check if OpenAI API key is available (used for Llama via OpenAI-compatible endpoint)
+    if not secret.get("OPENAI_API_KEY"):
+        return None
+        
     class Llama33_70BAgent(Agent):
         pass
 

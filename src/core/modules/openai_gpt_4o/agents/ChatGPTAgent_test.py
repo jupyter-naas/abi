@@ -1,6 +1,6 @@
 import pytest
 
-from src.custom.modules.openai.agents.ChatGPTAgent import create_agent
+from src.core.modules.openai_gpt_4o.agents.ChatGPTAgent import create_agent
 
 @pytest.fixture
 def agent():

@@ -189,23 +189,46 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Add support agents
+    # Add support agents and LLM agents
     modules = [
         "src.core.modules.support.agents.SupportAgent",
-        "src.core.modules.ontology.agents.OntologyAgent",
+        "src.core.modules.ontology.agents.OntologyAgent", 
         "src.core.modules.naas.agents.NaasAgent",
+        # LLM Agents
         "src.core.modules.google_gemini.agents.GeminiAgent",
+        "src.core.modules.openai_gpt_4o.agents.ChatGPTAgent",
+        "src.core.modules.perplexity_sonar.agents.PerplexityAgent",
+        "src.core.modules.mistral_mistral_large_2.agents.MistralLarge2Agent",
+        "src.core.modules.anthropic_claude_3_5_sonnet.agents.Claude35SonnetAgent",
+        "src.core.modules.meta_llama_3_3_70b.agents.Llama33_70BAgent",
     ]
-    # Create Google Gemini agent for intent routing
+    # Create agent references for intent routing
     google_gemini_agent = None
+    openai_agent = None
+    perplexity_agent = None
+    mistral_agent = None
+    claude_agent = None
+    llama_agent = None
     for m in modules:
         try:
             module = importlib.import_module(m)
             agent = module.create_agent()
-            agents.append(agent)
-            # Store Google Gemini agent reference for intents
-            if "google_gemini" in m:
-                google_gemini_agent = agent
+            # Only add valid agents (not None)
+            if agent is not None:
+                agents.append(agent)
+                # Store agent references for intents
+                if "google_gemini" in m:
+                    google_gemini_agent = agent
+                elif "openai_gpt_4o" in m:
+                    openai_agent = agent
+                elif "perplexity_sonar" in m:
+                    perplexity_agent = agent
+                elif "mistral_mistral_large_2" in m:
+                    mistral_agent = agent
+                elif "anthropic_claude_3_5_sonnet" in m:
+                    claude_agent = agent
+                elif "meta_llama_3_3_70b" in m:
+                    llama_agent = agent
         except ImportError:
             pass
 
@@ -277,6 +300,62 @@ def create_agent(
                 Intent(intent_type=IntentType.AGENT, intent_value="show me", intent_target=google_gemini_agent.name),
                 Intent(intent_type=IntentType.AGENT, intent_value="visualization", intent_target=google_gemini_agent.name),
             ] if google_gemini_agent else []
+        ) + (
+            # OpenAI ChatGPT Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask openai", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="ask chatgpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use openai", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use chatgpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to openai", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to chatgpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="openai gpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gpt-4o", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gpt4", intent_target=openai_agent.name),
+            ] if openai_agent else []
+        ) + (
+            # Mistral Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask mistral", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use mistral", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to mistral", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="mistral ai", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="mistral large", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="french ai", intent_target=mistral_agent.name),
+            ] if mistral_agent else []
+        ) + (
+            # Claude Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="claude 3.5", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="anthropic", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="anthropic claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="claude sonnet", intent_target=claude_agent.name),
+            ] if claude_agent else []
+        ) + (
+            # Perplexity Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask perplexity", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use perplexity", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to perplexity", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="perplexity ai", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="search web", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="web search", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="search online", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="search internet", intent_target=perplexity_agent.name),
+            ] if perplexity_agent else []
+        ) + (
+            # LLaMA Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="llama 3.3", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="meta llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="meta ai", intent_target=llama_agent.name),
+            ] if llama_agent else []
         ),
         state=agent_shared_state,
         configuration=agent_configuration,

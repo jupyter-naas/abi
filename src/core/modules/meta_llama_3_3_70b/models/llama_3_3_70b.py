@@ -23,7 +23,7 @@ model = ChatModel(
     model=ChatOpenAI(
         model=NAME,
         temperature=0,
-        max_tokens=4096,
+        max_completion_tokens=4096,
         timeout=None,
         max_retries=2,
         # Note: This assumes an OpenAI-compatible endpoint for Llama
