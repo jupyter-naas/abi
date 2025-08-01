@@ -1,8 +1,13 @@
 from lib.abi.services.agent.Agent import Agent, AgentConfiguration
 from ..models.claude_3_5_sonnet import model
+from src import secret
 
 
 def create_agent():
+    # Check if Anthropic API key is available
+    if not secret.get("ANTHROPIC_API_KEY"):
+        return None
+        
     class Claude35SonnetAgent(Agent):
         pass
 

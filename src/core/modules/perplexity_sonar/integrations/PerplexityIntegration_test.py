@@ -1,6 +1,6 @@
 import pytest
 
-from src.custom.modules.perplexity.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
+from src.core.modules.perplexity_sonar.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
 from src import secret
 
 @pytest.fixture
@@ -11,7 +11,7 @@ def perplexity_integration() -> PerplexityIntegration:
     return PerplexityIntegration(configuration)
 
 def test_ask_question(perplexity_integration: PerplexityIntegration):
-    response = perplexity_integration.ask_question(
+    response = perplexity_integration.search_web(
         question="What is the capital of France?",
     )
     assert response is not None

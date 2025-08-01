@@ -5,7 +5,7 @@ from openai import OpenAI
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from abi.services.cache.CacheFactory import CacheFactory
-from abi.services.cache.CachePort import DataType
+from lib.abi.services.cache.CachePort import DataType
 from datetime import timedelta
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai")
@@ -40,12 +40,14 @@ class OpenAIIntegration(Integration):
         
     def list_models(self) -> Dict:
         """List available models."""
-        return self.__client.models.list()
+        models_page = self.__client.models.list()
+        return {"models": [model.model_dump() for model in models_page.data]}
     
     @cache(lambda self, model_id: f"retrieve_model_{model_id}", cache_type=DataType.PICKLE, ttl=timedelta(days=1))
     def retrieve_model(self, model_id: str) -> Dict:
         """Retrieve a specific model."""
-        return self.__client.models.retrieve(model_id)
+        model = self.__client.models.retrieve(model_id)
+        return model.model_dump()
 
     def create_chat_completion(
         self,
@@ -55,7 +57,7 @@ class OpenAIIntegration(Integration):
         model: Optional[str] = "o3-mini",
         temperature: float = 0.3,
         response_format: Optional[str] = None,
-    ) -> Dict:
+    ) -> Optional[str]:
         """Create a chat completion using OpenAI's API.
         
         Args:
@@ -69,24 +71,27 @@ class OpenAIIntegration(Integration):
         Returns:
             Dict: API response containing the completion
         """
-        if messages == [] and prompt is not None and system_prompt is not None:
+        if not messages and prompt is not None and system_prompt is not None:
             messages = [
                 {"role": "developer", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
         
+        # Ensure model is not None
+        if model is None:
+            model = "o3-mini"
+            
+        # Create completion with proper error handling
         if model.startswith("o"):
             completion = self.__client.chat.completions.create(
-                messages=messages,
+                messages=messages,  # type: ignore
                 model=model,
-                response_format=response_format,
             )
         else:
             completion = self.__client.chat.completions.create(
-                messages=messages,
+                messages=messages,  # type: ignore
                 model=model,
                 temperature=temperature,
-                response_format=response_format,
             )
         return completion.choices[0].message.content
     
@@ -95,8 +100,8 @@ class OpenAIIntegration(Integration):
         prompt: str,
         system_prompt: str,
         model: str = "o3-mini",
-        response_format: BaseModel = None,
-    ) -> Dict:
+        response_format: Optional[BaseModel] = None,
+    ) -> Optional[str]:
         """Create a chat completion beta with structured output using OpenAI's API.
         
         Args:
@@ -114,9 +119,9 @@ class OpenAIIntegration(Integration):
         ]
         
         completion = self.__client.beta.chat.completions.parse(
-            messages=messages,
+            messages=messages,  # type: ignore
             model=model,
-            response_format=response_format,
+            response_format=response_format,  # type: ignore
         )
         return completion.choices[0].message.content
     
@@ -142,7 +147,7 @@ def as_tools(configuration: OpenAIIntegrationConfiguration):
         prompt: str = Field(description="The prompt to use")
         system_prompt: str = Field(description="The system prompt to use")
         model: str = Field(description="The model to use")
-        response_format: BaseModel = Field(description="The response format to use")
+        response_format: Optional[BaseModel] = Field(default=None, description="The response format to use")
 
     return [
         StructuredTool(

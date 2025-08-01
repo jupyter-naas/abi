@@ -1,6 +1,6 @@
 import pytest
 
-from src.custom.modules.perplexity.agents.PerplexityAgent import create_agent
+from src.core.modules.perplexity_sonar.agents.PerplexityAgent import create_agent
 
 @pytest.fixture
 def agent():

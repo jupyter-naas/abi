@@ -1,8 +1,13 @@
 from lib.abi.services.agent.Agent import Agent, AgentConfiguration
 from ..models.mistral_large_2 import model
+from src import secret
 
 
 def create_agent():
+    # Check if Mistral API key is available
+    if not secret.get("MISTRAL_API_KEY"):
+        return None
+        
     class MistralLarge2Agent(Agent):
         pass
 

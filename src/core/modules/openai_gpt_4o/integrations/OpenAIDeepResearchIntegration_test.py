@@ -1,6 +1,6 @@
 import pytest
 
-from src.custom.modules.openai.integrations.OpenAIDeepResearchIntegration import (
+from src.core.modules.openai_gpt_4o.integrations.OpenAIDeepResearchIntegration import (
     OpenAIDeepResearchIntegration, 
     OpenAIDeepResearchIntegrationConfiguration, 
     DeepResearchModel
@@ -11,7 +11,7 @@ def integration() -> OpenAIDeepResearchIntegration:
     from src import secrets
     
     configuration = OpenAIDeepResearchIntegrationConfiguration(
-        openai_api_key=secrets.get('OPENAI_API_KEY'),
+        openai_api_key=secrets.get('OPENAI_API_KEY') or '',
         model=DeepResearchModel.o3_deep_research
     )
     return OpenAIDeepResearchIntegration(configuration)
