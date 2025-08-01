@@ -1,5 +1,12 @@
 from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.IntentAgent import (
+    IntentAgent,
+    Intent,
+    IntentType,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from fastapi import APIRouter
 from pydantic import SecretStr
@@ -65,7 +72,7 @@ SUGGESTIONS: list = []
 def create_agent(
     agent_shared_state: AgentSharedState | None = None, 
     agent_configuration: AgentConfiguration | None = None
-) -> Agent:
+) -> IntentAgent:
     # Init
     tools: list = []
     agents: list = []
@@ -113,6 +120,18 @@ def create_agent(
             chat_model=model,
             tools=tools, 
             agents=agents,
+            intents=[
+                Intent(
+                    intent_value="what is your name",
+                    intent_type=IntentType.RAW,
+                    intent_target="I am Perplexity, an AI research assistant that provides real-time answers using web search capabilities.",
+                ),
+                Intent(
+                    intent_value="what can you do",
+                    intent_type=IntentType.RAW,
+                    intent_target="I can search the web in real-time, provide up-to-date information, research any topic, and answer questions using the latest information from the internet.",
+                ),
+            ],
             state=agent_shared_state, 
             configuration=agent_configuration, 
             memory=MemorySaver()
@@ -125,12 +144,24 @@ def create_agent(
         chat_model=model,
         tools=tools, 
         agents=agents,
+        intents=[
+            Intent(
+                intent_value="what is your name",
+                intent_type=IntentType.RAW,
+                intent_target="I am Perplexity, an AI research assistant that provides comprehensive answers to your questions.",
+            ),
+            Intent(
+                intent_value="what can you do",
+                intent_type=IntentType.RAW,
+                intent_target="I can help answer questions, provide research assistance, and offer comprehensive information on various topics.",
+            ),
+        ],
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
 
-class PerplexityAgent(Agent):
+class PerplexityAgent(IntentAgent):
     def as_api(
         self, 
         router: APIRouter, 
