@@ -213,24 +213,31 @@ def create_agent(
         try:
             module = importlib.import_module(m)
             agent = module.create_agent()
-            # Only add valid agents (not None)
+            # Only add valid agents (not None) and validate they have agent-like attributes
             if agent is not None:
-                agents.append(agent)
-                # Store agent references for intents
-                if "google_gemini" in m:
-                    google_gemini_agent = agent
-                elif "openai_gpt_4o" in m:
-                    openai_agent = agent
-                elif "perplexity_sonar" in m:
-                    perplexity_agent = agent
-                elif "mistral_mistral_large_2" in m:
-                    mistral_agent = agent
-                elif "anthropic_claude_3_5_sonnet" in m:
-                    claude_agent = agent
-                elif "meta_llama_3_3_70b" in m:
-                    llama_agent = agent
+                # Check if it has basic agent attributes instead of strict isinstance
+                if hasattr(agent, 'name') and hasattr(agent, 'description') and hasattr(agent, 'chat_model'):
+                    agents.append(agent)
+                    # Store agent references for intents
+                    if "google_gemini" in m:
+                        google_gemini_agent = agent
+                    elif "openai_gpt_4o" in m:
+                        openai_agent = agent
+                    elif "perplexity_sonar" in m:
+                        perplexity_agent = agent
+                    elif "mistral_mistral_large_2" in m:
+                        mistral_agent = agent
+                    elif "anthropic_claude_3_5_sonnet" in m:
+                        claude_agent = agent
+                    elif "meta_llama_3_3_70b" in m:
+                        llama_agent = agent
+                    print(f"✅ Agent loaded: {agent.name}")
+                else:
+                    print(f"⚠️  Agent from {m} missing required attributes: {type(agent)}")
         except ImportError:
             pass
+        except Exception as e:
+            print(f"⚠️  Error loading agent from {m}: {e}")
 
         # Set model
     model: Union[ChatOpenAI, "ChatOllama"]
@@ -247,12 +254,16 @@ def create_agent(
     else:
         raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
+    # Filter agents to only include those that pass isinstance check for SupervisorAgent
+    from abi.services.agent.Agent import Agent as AgentClass
+    valid_agents = [agent for agent in agents if isinstance(agent, AgentClass)]
+    
     return SupervisorAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
-        agents=agents,
+        agents=valid_agents,
         intents=[
             Intent(
                 intent_value="what is your name",
