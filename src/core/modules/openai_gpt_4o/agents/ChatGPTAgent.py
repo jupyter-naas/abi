@@ -141,8 +141,9 @@ def create_agent(
             memory=MemorySaver()
         )
     
-    # Return agent without tools if no API key
-    return ChatGPTAgent(
+    else:
+        # Return agent without tools if no API key
+        return ChatGPTAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,

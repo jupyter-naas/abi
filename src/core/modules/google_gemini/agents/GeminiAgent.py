@@ -140,10 +140,16 @@ def create_agent(
     tools: list = []
     agents: list = []
 
-    # Initialize Image Generation Workflow
-    image_workflow_config = ImageGenerationStorageWorkflowConfiguration(storage_base_path="storage")
-    image_workflow = ImageGenerationStorageWorkflow(image_workflow_config)
-    tools += image_workflow.as_tools()
+    # Initialize Image Generation Workflow (with error handling)
+    try:
+        image_workflow_config = ImageGenerationStorageWorkflowConfiguration(storage_base_path="storage")
+        image_workflow = ImageGenerationStorageWorkflow(image_workflow_config)
+        image_tools = image_workflow.as_tools()
+        tools += image_tools
+        print(f"✅ Gemini Image Generation: {len(image_tools)} tools loaded successfully")
+    except Exception as e:
+        print(f"⚠️ Gemini Image Generation: Failed to load - {str(e)}")
+        # Continue without image generation tools
 
     # Get current datetime and user location for system prompt
     current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
