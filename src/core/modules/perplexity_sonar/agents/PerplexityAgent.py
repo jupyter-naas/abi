@@ -94,11 +94,16 @@ def create_agent(
         )
         tools += PerplexityIntegration.as_tools(perplexity_integration_configuration)
 
+        from pydantic import BaseModel
+        
+        class EmptySchema(BaseModel):
+            pass
+            
         current_datetime_tool = StructuredTool(
             name="current_datetime", 
             description="Get the current datetime in Paris timezone.",
             func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-            args_schema=None
+            args_schema=EmptySchema
         )
         tools += [current_datetime_tool]
 
@@ -111,7 +116,19 @@ def create_agent(
             state=agent_shared_state, 
             configuration=agent_configuration, 
             memory=MemorySaver()
-        ) 
+        )
+    
+    # Return agent without tools if no API key
+    return PerplexityAgent(
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model,
+        tools=tools, 
+        agents=agents,
+        state=agent_shared_state, 
+        configuration=agent_configuration, 
+        memory=MemorySaver()
+    ) 
 
 class PerplexityAgent(Agent):
     def as_api(

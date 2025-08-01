@@ -20,11 +20,12 @@ model = ChatModel(
     image=IMAGE,
     owner=OWNER,
     model=ChatAnthropic(
-        model=NAME,
+        model_name=NAME,
         temperature=0,
-        max_tokens=4096,
+        max_tokens_to_sample=4096,
         timeout=None,
         max_retries=2,
+        stop=None,
     ),
     context_window=CONTEXT_WINDOW,
 ) 

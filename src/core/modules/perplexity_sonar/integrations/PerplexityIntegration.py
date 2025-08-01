@@ -33,7 +33,7 @@ class PerplexityIntegration(Integration):
             "Content-Type": "application/json"
         }
 
-    def _make_request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
+    def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
         """Make HTTP request to Perplexity API."""
         url = f"{self.__configuration.base_url}{endpoint}"
         try:
@@ -64,7 +64,7 @@ class PerplexityIntegration(Integration):
         stream: bool = False,
         search_domain_filter: List[str] = [],
         search_recency_filter: str = "month",
-        response_format: str = {},
+        response_format: Optional[Dict] = None,
         return_images: bool = False,
         return_related_questions: bool = False,
         search_mode: str = "web",
