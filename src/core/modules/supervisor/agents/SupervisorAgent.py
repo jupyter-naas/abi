@@ -101,11 +101,26 @@ graph TD
 
 ## Agent Usage Sequence (Weighted Routing):
 
-### Weight: 0.95 - Direct Identity Response
+### Weight: 0.99 - Active Agent Context Preservation (HIGHEST PRIORITY)
+- **When**: User is actively conversing with a specialized agent (shown in UI as "Active: [Agent Name]")
+- **Confidence**: Extremely High - Respect ongoing conversations
+- **Process**: 
+  1. **ALWAYS let the active agent handle follow-up messages** ("cool", "ok", "merci", simple questions, continuations)
+  2. **ONLY intercept for explicit routing requests** ("ask X", "parler à Y", "transfer to Z")
+  3. **NEVER interrupt ongoing specialized conversations** unless explicitly requested
+- **EXAMPLES**:
+  - Active: mistral-large-2 + "cool" → mistral-large-2 responds
+  - Active: mistral-large-2 + "tu es qui?" → mistral-large-2 responds  
+  - Active: mistral-large-2 + "ask gemini about X" → Transfer to gemini
+- **CRITICAL**: This preserves conversation flow and prevents unwanted supervisor interruptions
+
+### Weight: 0.95 - Direct Identity Response (Context-Aware)
 - **When**: Questions about ABI's identity, capabilities, mission, or NaasAI ("who are you", "who made you", "what can you do", "your purpose")
 - **Confidence**: Extremely High - Direct match for self-referential queries
-- **Process**: Answer directly using identity and profile information from system prompt
-- **NEVER DELEGATE**: Identity questions to other agents
+- **Process**: 
+  1. **If user is actively talking to a specialized agent**: Let that agent answer its own identity questions
+  2. **If general conversation or asking about ABI specifically**: Answer directly using ABI identity and profile information
+- **CONTEXTUAL RULE**: Respect active agent context - don't interrupt ongoing specialized conversations
 
 ### Weight: 0.85 - Strategic Advisory (SupervisorAgent Direct Response)
 - **When**: Strategic questions about AI, content strategy, media types, business planning, technical architecture, general consulting
@@ -189,18 +204,55 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Add support agents
+    # Add support agents and LLM agents
     modules = [
         "src.core.modules.support.agents.SupportAgent",
-        "src.core.modules.ontology.agents.OntologyAgent",
+        "src.core.modules.ontology.agents.OntologyAgent", 
         "src.core.modules.naas.agents.NaasAgent",
+        # LLM Agents
+        "src.core.modules.google_gemini.agents.GeminiAgent",
+        "src.core.modules.openai_gpt_4o.agents.ChatGPTAgent",
+        "src.core.modules.perplexity_sonar.agents.PerplexityAgent",
+        "src.core.modules.mistral_mistral_large_2.agents.MistralLarge2Agent",
+        "src.core.modules.anthropic_claude_3_5_sonnet.agents.Claude35SonnetAgent",
+        "src.core.modules.meta_llama_3_3_70b.agents.Llama33_70BAgent",
     ]
+    # Create agent references for intent routing
+    google_gemini_agent = None
+    openai_agent = None
+    perplexity_agent = None
+    mistral_agent = None
+    claude_agent = None
+    llama_agent = None
     for m in modules:
         try:
             module = importlib.import_module(m)
-            agents.append(module.create_agent())
+            agent = module.create_agent()
+            # Only add valid agents (not None) and validate they have agent-like attributes
+            if agent is not None:
+                # Check if it has basic agent attributes instead of strict isinstance
+                if hasattr(agent, 'name') and hasattr(agent, 'description') and hasattr(agent, 'chat_model'):
+                    agents.append(agent)
+                    # Store agent references for intents
+                    if "google_gemini" in m:
+                        google_gemini_agent = agent
+                    elif "openai_gpt_4o" in m:
+                        openai_agent = agent
+                    elif "perplexity_sonar" in m:
+                        perplexity_agent = agent
+                    elif "mistral_mistral_large_2" in m:
+                        mistral_agent = agent
+                    elif "anthropic_claude_3_5_sonnet" in m:
+                        claude_agent = agent
+                    elif "meta_llama_3_3_70b" in m:
+                        llama_agent = agent
+                    print(f"✅ Agent loaded: {agent.name}")
+                else:
+                    print(f"⚠️  Agent from {m} missing required attributes: {type(agent)}")
         except ImportError:
             pass
+        except Exception as e:
+            print(f"⚠️  Error loading agent from {m}: {e}")
 
         # Set model
     model: Union[ChatOpenAI, "ChatOllama"]
@@ -217,6 +269,7 @@ def create_agent(
     else:
         raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
+    # Use all loaded agents - the SupervisorAgent will handle validation internally
     return SupervisorAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -229,7 +282,104 @@ def create_agent(
                 intent_type=IntentType.RAW,
                 intent_target="My name is ABI",
             ),
-        ],
+        ] + (
+            # Google Gemini 2.0 Flash Agent intents (only add if agent is available)
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="use gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gemini 2.0", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gemini flash", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use google ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to google", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="ask gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use google gemini", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="multimodal analysis", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="analyze image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="image understanding", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="video analysis", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="audio analysis", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="let's use google", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="try google ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google's model", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="google's ai", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use bard", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to bard", intent_target=google_gemini_agent.name),
+                # Image Generation intents
+                Intent(intent_type=IntentType.AGENT, intent_value="generate image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="create image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="generate an image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="create a picture", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="make an image", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="draw", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="illustrate", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="picture of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="image of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="visual representation", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="generate an image of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="create an image of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="make a picture of", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="show me", intent_target=google_gemini_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="visualization", intent_target=google_gemini_agent.name),
+            ] if google_gemini_agent else []
+        ) + (
+            # OpenAI ChatGPT Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask openai", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="ask chatgpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use openai", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use chatgpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to openai", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to chatgpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="openai gpt", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gpt-4o", intent_target=openai_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="gpt4", intent_target=openai_agent.name),
+            ] if openai_agent else []
+        ) + (
+            # Mistral Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask mistral", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use mistral", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to mistral", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="mistral ai", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="mistral large", intent_target=mistral_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="french ai", intent_target=mistral_agent.name),
+            ] if mistral_agent else []
+        ) + (
+            # Claude Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="claude 3.5", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="anthropic", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="anthropic claude", intent_target=claude_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="claude sonnet", intent_target=claude_agent.name),
+            ] if claude_agent else []
+        ) + (
+            # Perplexity Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask perplexity", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use perplexity", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to perplexity", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="perplexity ai", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="search web", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="web search", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="search online", intent_target=perplexity_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="search internet", intent_target=perplexity_agent.name),
+            ] if perplexity_agent else []
+        ) + (
+            # LLaMA Agent intents
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="llama 3.3", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="meta llama", intent_target=llama_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="meta ai", intent_target=llama_agent.name),
+            ] if llama_agent else []
+        ),
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=MemorySaver(),
@@ -253,8 +403,4 @@ class SupervisorAgent(IntentAgent):
         )
 
     def hello(self) -> str:
-        first_name = os.getenv("USER_FIRST_NAME", "there")
-        
-        return f"""
-Hi {first_name}! How can I help you today?
-"""
+        return "Abi: Hello, World!"

@@ -1,6 +1,6 @@
-# Suppress debug logs for cleaner conversational experience
-import os
-os.environ["LOG_LEVEL"] = "CRITICAL"  # Even more aggressive
+# # Suppress debug logs for cleaner conversational experience
+# import os
+# os.environ["LOG_LEVEL"] = "CRITICAL"  # Even more aggressive
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -30,7 +30,7 @@ import signal
 
 def signal_handler(sig, frame):
     console.print("\n\n🛑 Ctrl+C pressed. See you next time! 👋", style="bright_red")
-    exit(0)
+    os._exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 
