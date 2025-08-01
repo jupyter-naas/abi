@@ -1,5 +1,12 @@
 from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState, MemorySaver
+from abi.services.agent.IntentAgent import (
+    IntentAgent,
+    Intent,
+    IntentType,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
 from src import secret
 from fastapi import APIRouter
 from pydantic import SecretStr
@@ -69,7 +76,7 @@ SUGGESTIONS: list = []
 def create_agent(
     agent_shared_state: AgentSharedState | None = None, 
     agent_configuration: AgentConfiguration | None = None
-) -> Agent:
+) -> IntentAgent:
     # Init
     tools: list = []
     agents: list = []
@@ -117,6 +124,18 @@ def create_agent(
             chat_model=model,
             tools=tools, 
             agents=agents,
+            intents=[
+                Intent(
+                    intent_value="what is your name",
+                    intent_type=IntentType.RAW,
+                    intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with real-time web search and provide comprehensive answers to your questions.",
+                ),
+                Intent(
+                    intent_value="what can you do",
+                    intent_type=IntentType.RAW,
+                    intent_target="I can help with real-time web search, answer questions using the latest information from the internet, provide research assistance, and help with various tasks using OpenAI's capabilities.",
+                ),
+            ],
             state=agent_shared_state, 
             configuration=agent_configuration, 
             memory=MemorySaver()
@@ -129,12 +148,24 @@ def create_agent(
         chat_model=model,
         tools=tools, 
         agents=agents,
+        intents=[
+            Intent(
+                intent_value="what is your name",
+                intent_type=IntentType.RAW,
+                intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with various tasks and provide comprehensive answers.",
+            ),
+            Intent(
+                intent_value="what can you do",
+                intent_type=IntentType.RAW,
+                intent_target="I can help with various tasks, answer questions, assist with writing, coding, analysis, and provide information using OpenAI's capabilities.",
+            ),
+        ],
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
     ) 
 
-class ChatGPTAgent(Agent):
+class ChatGPTAgent(IntentAgent):
     def as_api(
         self, 
         router: APIRouter, 
