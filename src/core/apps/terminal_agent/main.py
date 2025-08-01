@@ -278,6 +278,10 @@ def run_agent(agent: Agent):
         loader_thread = threading.Thread(target=matrix_loader)
         loader_thread.start()
         
+        # Update the agent's shared state with current active agent info
+        if hasattr(agent, '_state') and hasattr(agent._state, 'set_current_active_agent'):
+            agent._state.set_current_active_agent(current_active_agent)
+        
         # Get the response while animation runs
         agent.invoke(user_input)
         
