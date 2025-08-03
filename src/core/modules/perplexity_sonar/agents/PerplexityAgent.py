@@ -172,7 +172,7 @@ class PerplexityAgent(IntentAgent):
     def as_api(
         self, 
         router: APIRouter, 
-        route_name: str = NAME.lower(), 
+        route_name: str = NAME, 
         name: str = NAME.replace("_", " "), 
         description: str = "API endpoints to call the Perplexity agent completion.", 
         description_stream: str = "API endpoints to call the Perplexity agent stream completion.",
