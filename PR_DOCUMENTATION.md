@@ -2,49 +2,49 @@
 
 ## 🎯 **OVERVIEW**
 
-Cette PR transforme le système ABI en une plateforme multi-agent LLM complète avec des fonctionnalités avancées de gestion de conversation et de routage intelligent.
+This PR transforms the ABI system into a complete multi-agent LLM platform with advanced conversation management and intelligent routing capabilities.
 
-## 🤖 **AGENTS INTÉGRÉS**
+## 🤖 **INTEGRATED AGENTS**
 
-Tous les principaux fournisseurs LLM sont maintenant intégrés comme agents spécialisés :
+All major LLM providers are now integrated as specialized agents:
 
-| Agent | Provider | Spécialité | Status |
-|-------|----------|------------|--------|
-| **Google Gemini 2.5 Flash** | Google | Multimodal + Génération d'images | ✅ |
-| **OpenAI GPT-4o** | OpenAI | Recherche web en temps réel | ✅ |
-| **Claude 3.5 Sonnet** | Anthropic | Raisonnement et analyse complexe | ✅ |
-| **Mistral Large 2** | Mistral AI | Code & mathématiques | ✅ |
-| **LLaMA 3.3 70B** | Meta | Suivi d'instructions | ✅ |
-| **Perplexity Sonar** | Perplexity | Recherche web temps réel | ✅ |
+| Agent | Provider | Specialty | Status |
+|-------|----------|-----------|--------|
+| **Google Gemini 2.5 Flash** | Google | Multimodal + Image Generation | ✅ |
+| **OpenAI GPT-4o** | OpenAI | Real-time Web Search | ✅ |
+| **Claude 3.5 Sonnet** | Anthropic | Complex Reasoning & Analysis | ✅ |
+| **Mistral Large 2** | Mistral AI | Code & Mathematics | ✅ |
+| **LLaMA 3.3 70B** | Meta | Instruction Following | ✅ |
+| **Perplexity Sonar** | Perplexity | Real-time Web Search | ✅ |
 
-## ✨ **FONCTIONNALITÉS AJOUTÉES**
+## ✨ **FEATURES ADDED**
 
 ### 1. **Self-Recognition Rules**
 ```
-❌ AVANT: "Je ne peux pas vous connecter à Mistral"
-✅ APRÈS: Mistral répond directement quand on dit "ask mistral"
+❌ BEFORE: "I cannot connect you to Mistral"
+✅ AFTER: Mistral responds directly when you say "ask mistral"
 ```
 
-**Implémentation :**
-- Section `SELF-RECOGNITION RULES` ajoutée à tous les SYSTEM_PROMPTS
-- Reconnaissance automatique des phrases "ask [agent_name]", "parler à [agent_name]"
-- Réponse directe sans confusion de délégation
+**Implementation:**
+- `SELF-RECOGNITION RULES` section added to all SYSTEM_PROMPTS
+- Automatic recognition of phrases "ask [agent_name]", "talk to [agent_name]"
+- Direct response without delegation confusion
 
 ### 2. **Live Conversation Logging**
 ```
 📁 storage/datastore/interfaces/terminal_agent/
-├── 20250801T185120.txt  ← Format YYYYMMDDTHHMMSS
+├── 20250801T185120.txt  ← YYYYMMDDTHHMMSS format
 ├── 20250801T190245.txt
 └── 20250801T192130.txt
 ```
 
-**Caractéristiques :**
-- **Sauvegarde en temps réel** - zéro perte de données
-- **Format exact du terminal** - séparateurs, status lines, espacement
-- **Largeur fixe (77 chars)** pour cohérence
-- **Auto-création** de la structure de dossiers
+**Features:**
+- **Real-time saving** - zero data loss
+- **Exact terminal format** - separators, status lines, spacing
+- **Fixed width (77 chars)** for consistency
+- **Auto-creation** of folder structure
 
-**Exemple de fichier généré :**
+**Generated file example:**
 ```
 Abi: Hello, World!
 ─────────────────────────────────────────────────────────────────────────────
@@ -62,65 +62,65 @@ Active: Google Gemini (@gemini @claude @mistral @chatgpt @perplexity @llama to c
 
 ### 3. **Active Agent Context Preservation**
 
-**UI Enhancement :**
+**UI Enhancement:**
 ```
 Active: mistral-large-2 (@gemini @claude @mistral @chatgpt @perplexity @llama to change)
 
-You: cool  ← Message de suivi va automatiquement à Mistral
+You: cool  ← Follow-up message automatically goes to Mistral
 ```
 
-**Architecture :**
-- Tracking `current_active_agent` dans l'état global
-- Modification du routage dans `IntentAgent.intent_mapping_router`
-- Préservation du contexte conversationnel au niveau architectural
+**Architecture:**
+- Tracking `current_active_agent` in global state
+- Modified routing in `IntentAgent.intent_mapping_router`
+- Conversational context preservation at architectural level
 
 ### 4. **Robust Error Handling**
 
-**Gestion des clés API manquantes :**
+**Missing API key management:**
 ```python
 def create_agent() -> Optional[IntentAgent]:
     if not secret.get("API_KEY"):
-        return None  # ← Retour propre au lieu de crash
+        return None  # ← Clean return instead of crash
     return Agent(...)
 ```
 
-**API & Tests :**
+**API & Tests:**
 ```python
 for agent in module.agents:
-    if agent is not None:  # ← Vérification ajoutée
+    if agent is not None:  # ← Added verification
         agent.as_api(router)
 ```
 
-## 🔧 **AMÉLIORATIONS TECHNIQUES**
+## 🔧 **TECHNICAL IMPROVEMENTS**
 
-### **Architecture :**
-- `AgentSharedState` étendu avec `current_active_agent`
-- Routage context-aware dans `IntentAgent`
-- Typing proper avec `Optional[IntentAgent]`
-- API robuste gérant les agents `None`
+### **Architecture:**
+- `AgentSharedState` extended with `current_active_agent`
+- Context-aware routing in `IntentAgent`
+- Proper typing with `Optional[IntentAgent]`
+- Robust API handling `None` agents
 
-### **Code Quality :**
-- ✅ Tous les checks linting/mypy passent
-- ✅ Gestion d'erreur complète
-- ✅ Logging informatif
-- ✅ Couverture de tests comprehensive
+### **Code Quality:**
+- ✅ All linting/mypy checks pass
+- ✅ Complete error handling
+- ✅ Informative logging
+- ✅ Comprehensive test coverage
 
-### **User Experience :**
-- Indication claire de l'agent actif
-- Switching d'agent fluide avec @mentions
-- Continuité conversationnelle préservée
-- Logs parfaits pour debug/review
+### **User Experience:**
+- Clear active agent indication
+- Fluid agent switching with @mentions
+- Preserved conversational continuity
+- Perfect logs for debug/review
 
 ## 📁 **FILES MODIFIED**
 
-### **Core Architecture :**
+### **Core Architecture:**
 - `lib/abi/services/agent/Agent.py` - Enhanced AgentSharedState
 - `lib/abi/services/agent/IntentAgent.py` - Context-aware routing
 
-### **Terminal Interface :**
+### **Terminal Interface:**
 - `src/core/apps/terminal_agent/main.py` - Conversation logging + UI
 
-### **LLM Agents (Self-Recognition) :**
+### **LLM Agents (Self-Recognition):**
 - `src/core/modules/google_gemini/agents/GeminiAgent.py`
 - `src/core/modules/openai_gpt_4o/agents/ChatGPTAgent.py`
 - `src/core/modules/anthropic_claude_3_5_sonnet/agents/Claude35SonnetAgent.py`
@@ -128,37 +128,37 @@ for agent in module.agents:
 - `src/core/modules/meta_llama_3_3_70b/agents/Llama33_70BAgent.py`
 - `src/core/modules/perplexity_sonar/agents/PerplexityAgent.py`
 
-### **API & Testing :**
+### **API & Testing:**
 - `src/api.py` - None agent handling
 - `src/api_test.py` - Robust testing
 
-## 🎯 **RÉSULTATS**
+## 🎯 **RESULTS**
 
-| Métrique | Avant | Après | Amélioration |
+| Metric | Before | After | Improvement |
 |----------|-------|-------|--------------|
-| **Agent Identity Confusion** | Fréquent | ❌ Éliminé | 100% |
-| **Conversation Logging** | ❌ Aucun | ✅ Temps réel | Nouveau |
-| **Context Switching** | Problématique | ✅ Fluide | 100% |
-| **API Robustness** | Crash sur clés manquantes | ✅ Graceful handling | 100% |
-| **User Experience** | Confuse | ✅ Intuitive | 100% |
+| **Agent Identity Confusion** | Frequent | ❌ Eliminated | 100% |
+| **Conversation Logging** | ❌ None | ✅ Real-time | New Feature |
+| **Context Switching** | Problematic | ✅ Smooth | 100% |
+| **API Robustness** | Crashes on missing keys | ✅ Graceful handling | 100% |
+| **User Experience** | Confusing | ✅ Intuitive | 100% |
 | **CI/CD Health** | ❌ Failing | ✅ All green | 100% |
 
-## 🚀 **IMPACT BUSINESS**
+## 🚀 **BUSINESS IMPACT**
 
-### **Pour les Développeurs :**
-- **Debugging facilité** avec logs complets
-- **Tests robustes** qui ne crashent plus
-- **Architecture claire** pour extensions futures
+### **For Developers:**
+- **Easier debugging** with complete logs
+- **Robust tests** that don't crash anymore
+- **Clear architecture** for future extensions
 
-### **Pour les Utilisateurs :**
-- **Expérience fluide** sans confusion d'agent
-- **Switching intuitif** entre spécialistes
-- **Conversations naturelles** préservées
+### **For Users:**
+- **Smooth experience** without agent confusion
+- **Intuitive switching** between specialists
+- **Natural conversations** preserved
 
-### **Pour la Production :**
-- **Tolérance aux pannes** avec clés manquantes
-- **Logging complet** pour monitoring
-- **Évolutivité** pour nouveaux agents
+### **For Production:**
+- **Fault tolerance** with missing keys
+- **Complete logging** for monitoring
+- **Scalability** for new agents
 
 ---
 
@@ -172,4 +172,4 @@ for agent in module.agents:
 
 ---
 
-**Cette PR transforme ABI en une plateforme multi-agent production-ready avec une gestion de conversation de niveau entreprise et une expérience utilisateur exceptionnelle.** 🎉
+**This PR transforms ABI into a production-ready multi-agent platform with enterprise-grade conversation management and exceptional user experience.** 🎉
