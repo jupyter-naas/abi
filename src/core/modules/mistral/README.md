@@ -51,14 +51,33 @@ Mistral AI represents a new generation of AI companies, founded by world-class r
 - Scalable deployment architectures
 - Cost-effective operation at scale
 
-### Current Model: Mistral Large 2
+### **🏅 SOLID MID-TIER WITH EUROPEAN EFFICIENCY**
+*Based on [Artificial Analysis AI Leaderboards](https://artificialanalysis.ai/leaderboards/models)*
 
-- **Parameters**: 123B parameters
-- **Context Window**: 128,000 tokens
-- **Architecture**: Mixture of Experts (MoE)
-- **Specializations**: Code, mathematics, reasoning, multilingual
-- **Performance**: State-of-the-art efficiency metrics
-- **Languages**: Strong performance in French, English, and major programming languages
+**📊 Performance Reality Check**
+- **Magistral Medium**: Intelligence **56** at **$2.75/1M** *(Decent mid-tier performance)*
+- **Magistral Small**: Intelligence **55** at **$0.75/1M** *(Good value)*
+- **Mistral Medium 3**: Intelligence **49** at **$0.80/1M** *(Competitive efficiency)*
+- **Mistral Small 3.2**: Intelligence **42** at **$0.15/1M** *(Excellent value)*
+
+**⚡ Performance Metrics**
+- **Speed**: 198.3 tokens/sec (Ministral 8B) - Good performance
+- **Latency**: 0.30s first token - Fast response times
+- **Context**: 128K tokens - Standard capacity
+- **Efficiency**: Mixture of Experts architecture optimization
+
+**🇪🇺 European AI Positioning**
+- **European Sovereignty**: GDPR compliance, data localization
+- **Reasonable Pricing**: Competitive vs global alternatives
+- **Technical Focus**: Strong code generation and mathematical capabilities
+- **Efficiency Excellence**: MoE architecture for optimal resource usage
+
+### Current Models Portfolio
+
+**⚖️ Magistral Medium**: Intelligence 56, $2.75/1M - *Flagship European model*
+**🔄 Magistral Small**: Intelligence 55, $0.75/1M - *Efficient alternative*  
+**💻 Mistral Medium 3**: Intelligence 49, $0.80/1M - *Code-focused*
+**💰 Mistral Small 3.2**: Intelligence 42, $0.15/1M - *Value champion*
 
 ## Technical Architecture
 
