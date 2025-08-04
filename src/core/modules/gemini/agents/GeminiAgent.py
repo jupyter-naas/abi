@@ -16,13 +16,13 @@ from pydantic import SecretStr
 import os
 from datetime import datetime
 
-NAME = "Google Gemini"
+NAME = "Gemini"
 MODEL = "gemini-2.5-flash"
 TEMPERATURE = 0.7
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/google_gemini_logo.png"
 )
-DESCRIPTION = "Google's best price-performance multimodal model with image generation capabilities, thinking capabilities, and well-rounded performance."
+DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
 
 SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
 

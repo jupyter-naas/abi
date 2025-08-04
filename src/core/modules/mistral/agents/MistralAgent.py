@@ -14,7 +14,7 @@ from enum import Enum
 import os
 from datetime import datetime
 
-NAME = "mistral-large-2"
+NAME = "Mistral"
 AVATAR_URL = "https://docs.mistral.ai/img/logo_dark.svg"
 DESCRIPTION = "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."
 
@@ -43,7 +43,7 @@ When users say things like "ask mistral", "parler à mistral", "I want to talk t
 Always provide practical, actionable insights and prioritize accuracy in your responses."""
 
 
-class MistralLarge2Agent(IntentAgent):
+class MistralAgent(IntentAgent):
     """Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."""
     
     def as_api(
@@ -99,7 +99,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
         
-    return MistralLarge2Agent(
+    return MistralAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,

@@ -210,12 +210,12 @@ def create_agent(
         "src.core.modules.ontology.agents.OntologyAgent", 
         "src.core.modules.naas.agents.NaasAgent",
         # LLM Agents
-        "src.core.modules.google_gemini.agents.GeminiAgent",
-        "src.core.modules.openai_gpt_4o.agents.ChatGPTAgent",
+        "src.core.modules.gemini.agents.GeminiAgent",
+        "src.core.modules.chatgpt.agents.ChatGPTAgent",
         "src.core.modules.perplexity_sonar.agents.PerplexityAgent",
-        "src.core.modules.mistral_mistral_large_2.agents.MistralLarge2Agent",
-        "src.core.modules.anthropic_claude_3_5_sonnet.agents.Claude35SonnetAgent",
-        "src.core.modules.meta_llama_3_3_70b.agents.Llama33_70BAgent",
+        "src.core.modules.mistral.agents.MistralAgent",
+        "src.core.modules.claude.agents.ClaudeAgent",
+        "src.core.modules.llama.agents.LlamaAgent",
     ]
     # Create agent references for intent routing
     google_gemini_agent = None
@@ -234,17 +234,17 @@ def create_agent(
                 if hasattr(agent, 'name') and hasattr(agent, 'description') and hasattr(agent, 'chat_model'):
                     agents.append(agent)
                     # Store agent references for intents
-                    if "google_gemini" in m:
+                    if "gemini" in m:
                         google_gemini_agent = agent
-                    elif "openai_gpt_4o" in m:
+                    elif "chatgpt" in m:
                         openai_agent = agent
                     elif "perplexity_sonar" in m:
                         perplexity_agent = agent
-                    elif "mistral_mistral_large_2" in m:
+                    elif "mistral" in m:
                         mistral_agent = agent
-                    elif "anthropic_claude_3_5_sonnet" in m:
+                    elif "claude" in m:
                         claude_agent = agent
-                    elif "meta_llama_3_3_70b" in m:
+                    elif "llama" in m:
                         llama_agent = agent
                     print(f"✅ Agent loaded: {agent.name}")
                 else:

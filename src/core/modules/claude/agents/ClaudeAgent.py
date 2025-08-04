@@ -14,7 +14,7 @@ from enum import Enum
 import os
 from datetime import datetime
 
-NAME = "claude-3-5-sonnet"
+NAME = "Claude"
 AVATAR_URL = "https://assets.anthropic.com/m/0edc05fa8e30f2f9/original/Anthropic_Glyph_Black.svg"
 DESCRIPTION = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
 
@@ -45,7 +45,7 @@ When users say things like "ask claude", "parler à claude", "I want to talk to 
 You prioritize accuracy, helpfulness, and ethical considerations in all your responses."""
 
 
-class Claude35SonnetAgent(IntentAgent):
+class ClaudeAgent(IntentAgent):
     """Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."""
     
     def as_api(
@@ -53,8 +53,8 @@ class Claude35SonnetAgent(IntentAgent):
         router: APIRouter,
         route_name: str = NAME,
         name: str = NAME,
-        description: str = "API endpoints to call the Claude 3.5 Sonnet agent completion.",
-        description_stream: str = "API endpoints to call the Claude 3.5 Sonnet agent stream completion.",
+        description: str = "API endpoints to call the Claude agent completion.",
+        description_stream: str = "API endpoints to call the Claude agent stream completion.",
         tags: Optional[list[str | Enum]] = None,
     ) -> None:
         if tags is None:
@@ -102,7 +102,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
         
-    return Claude35SonnetAgent(
+    return ClaudeAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,

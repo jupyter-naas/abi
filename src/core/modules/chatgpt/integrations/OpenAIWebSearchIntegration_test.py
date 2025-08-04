@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.openai_gpt_4o.integrations.OpenAIWebSearchIntegration import (
+from src.core.modules.chatgpt.integrations.OpenAIWebSearchIntegration import (
     OpenAIWebSearchIntegration, 
     OpenAIWebSearchIntegrationConfiguration, 
 )

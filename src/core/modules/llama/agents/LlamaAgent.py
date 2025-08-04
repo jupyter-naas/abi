@@ -14,7 +14,7 @@ from enum import Enum
 import os
 from datetime import datetime
 
-NAME = "llama-3.3-70b-instruct"
+NAME = "Llama"
 AVATAR_URL = "https://github.com/meta-llama/llama/raw/main/Llama_Repo.jpeg"
 DESCRIPTION = "Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."
 
@@ -45,7 +45,7 @@ When users say things like "ask llama", "parler à llama", "I want to talk to ll
 You aim to be genuinely helpful while being honest about your capabilities and limitations."""
 
 
-class Llama33_70BAgent(IntentAgent):
+class LlamaAgent(IntentAgent):
     """Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."""
     
     def as_api(
@@ -102,7 +102,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
         
-    return Llama33_70BAgent(
+    return LlamaAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
