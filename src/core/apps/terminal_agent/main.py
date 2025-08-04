@@ -282,11 +282,11 @@ def run_agent(agent: Agent):
     
     # Just start chatting naturally - like the screenshot
     while True:
-        # Create dynamic status line showing active agent
+        # Create clean status line showing active agent
         if current_active_agent:
-            status_line = f"Active: {current_active_agent} (@{' @'.join(available_agents)} to change)"
+            status_line = f"Active: {current_active_agent}"
         else:
-            status_line = f"No active agent | @{' @'.join(available_agents)} to select"
+            status_line = "No active agent"
         
         # Print the status line before the input prompt
         console.print(status_line, style="dim")
@@ -354,10 +354,19 @@ def run_agent(agent: Agent):
             print("🔄 Starting fresh...")
             continue
         elif clean_input == "/?":
-            print("Available commands:")
+            print("\n📋 Available Commands:")
             print("  /? - Show this help")
-            print("  /reset - Start fresh conversation")
+            print("  /reset - Start fresh conversation") 
             print("  /bye or /exit - End conversation")
+            print("\n🤖 Available AI Agents:")
+            print("  Cloud Agents:")
+            cloud_agents = ["@gemini", "@claude", "@mistral", "@chatgpt", "@perplexity", "@llama"]
+            print(f"    {' '.join(cloud_agents)}")
+            print("  Local Agents (Privacy-focused):")
+            local_agents = ["@qwen", "@deepseek", "@gemma"]
+            print(f"    {' '.join(local_agents)}")
+            print("\n💡 Usage: Type @agent or 'ask agent' to switch agents")
+            print("   Example: '@qwen help me code' or 'ask deepseek solve this math problem'")
             continue
 
         # Matrix-style animated loading indicator
