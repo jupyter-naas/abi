@@ -5,8 +5,8 @@ from typing import Union
 # Grok Model Configuration using proper LangChain xAI integration
 # Based on: https://python.langchain.com/docs/integrations/chat/xai/
 
-NAME = "grok-beta"  # Using proper model name from xAI
-ID = "grok-beta"
+NAME = "grok-4-latest"  # Using latest model name from xAI  
+ID = "grok-4-latest"
 TEMPERATURE = 0.1
 MAX_TOKENS = 4096
 
