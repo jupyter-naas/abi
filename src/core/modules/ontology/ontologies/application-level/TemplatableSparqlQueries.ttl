@@ -71,6 +71,36 @@ intentMapping:classSearchLabelArg a intentMapping:QueryArgument ;
     intentMapping:validationPattern "." ;
     intentMapping:validationFormat "class_label" .
 
+intentMapping:countInstancesByClassQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "count_instances_by_class"@en ;
+    intentMapping:intentDescription "Get all classes that have owl:NamedIndividual instances and return a count of instances by class" ;
+    intentMapping:sparqlTemplate """
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+        SELECT DISTINCT ?class_uri ?class_label (COUNT(?individual) AS ?instance_count)
+        WHERE {
+            # Find all classes that have instances
+            ?individual a ?class_uri ;
+                        a owl:NamedIndividual .
+            
+            # Ensure the class is actually a class (not just any URI)
+            {
+                ?class_uri a owl:Class .
+            } UNION {
+                ?class_uri a rdfs:Class .
+            }
+            
+            # Get the class label if available
+            OPTIONAL {
+                ?class_uri rdfs:label ?class_label .
+            }
+        }
+        GROUP BY ?class_uri ?class_label
+        ORDER BY DESC(?instance_count) ?class_label
+    """ .
+
 intentMapping:getIndividualsFromClassQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "get_individuals_from_class"@en ;
     intentMapping:intentDescription "Get all individuals that are instances of a specific class" ;
@@ -91,6 +121,56 @@ intentMapping:classUriArg a intentMapping:QueryArgument ;
     intentMapping:argumentDescription "URI of the class to get all individuals from" ;
     intentMapping:validationPattern "^[^\\s<>]+$" ;
     intentMapping:validationFormat "class_uri" .
+
+intentMapping:searchIndividualsByClassQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "search_individuals_from_class"@en ;
+    intentMapping:intentDescription "Search for individuals that are instances of a specific class starting with a search string" ;
+    intentMapping:sparqlTemplate """
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+        SELECT DISTINCT ?individual_uri ?label ?universal_name
+        WHERE {
+            # Filter On Class URI and ensure individual is a NamedIndividual
+            ?individual_uri a <{{ class_uri }}> ;
+                          a owl:NamedIndividual .
+            
+            # Get label and universal name
+            {
+                ?individual_uri rdfs:label ?label .
+            } UNION {
+                ?individual_uri abi:universal_name ?label .
+            }
+            
+            OPTIONAL {
+                ?individual_uri abi:universal_name ?universal_name .
+            }
+            
+            # Optional filter for matches starting with the search string
+            {% if search_string %}
+                FILTER(STRSTARTS(LCASE(STR(?label)), LCASE("{{ search_string }}")))
+            {% endif %}
+        }
+        ORDER BY ?label
+        {% if not search_string %}
+            LIMIT 20
+        {% endif %}
+    """ ;
+    intentMapping:hasArgument intentMapping:classUriSearchArg ;
+    intentMapping:hasArgument intentMapping:searchStringClassArg .
+
+intentMapping:classUriSearchArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "class_uri" ;
+    intentMapping:argumentDescription "URI of the class to search individuals from" ;
+    intentMapping:validationPattern "^[^\\s<>]+$" ;
+    intentMapping:validationFormat "class_uri" .
+
+intentMapping:searchStringClassArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "search_string" ;
+    intentMapping:argumentDescription "Optional string to filter individuals by their starting characters" ;
+    intentMapping:validationPattern "^[A-Za-z0-9\\s]*$" ;
+    intentMapping:validationFormat "string" ;
+    intentMapping:isOptional true .
 
 intentMapping:searchPersonQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "search_person"@en ;
@@ -277,19 +357,13 @@ intentMapping:searchLinkedInPageQuery a intentMapping:TemplatableSparqlQuery ;
         
         SELECT DISTINCT ?class_uri ?individual_uri ?label (MAX(?temp_score) AS ?score)
         WHERE {
-            # Get all subclasses of LinkedInPage
-            {
-                SELECT DISTINCT ?subclass
-                WHERE {
-                    ?subclass rdfs:subClassOf+ abi:LinkedInPage .
-                }
-            }
-            
             # Filter On Class URI and ensure individual is a NamedIndividual
             ?individual_uri a ?class_uri ;
                             a owl:NamedIndividual ;
                             rdfs:label ?label .
-            VALUES ?class_uri { ?subclass }
+            
+            # Ensure the class is a subclass of LinkedInPage
+            ?class_uri rdfs:subClassOf+ abi:LinkedInPage .
             
             # Calculate scores for perfect and partial matches
             BIND(IF(LCASE(STR(?label)) = LCASE("{{ search_label }}"), 10, 0) AS ?perfect_score)
@@ -396,3 +470,4 @@ intentMapping:personNameArg a intentMapping:QueryArgument ;
     intentMapping:argumentDescription "Name of the person to search skills of" ;
     intentMapping:validationPattern "^.{3,100}$" ;
     intentMapping:validationFormat "person_name" .
+

@@ -149,7 +149,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
         logger.info(f"Found {len(object_property_labels)} object properties.")
         return object_property_labels
 
-    def export_to_excel(self, parameters: ExportGraphInstancesToExcelWorkflowParameters) -> str:
+    def export_to_excel(self, parameters: ExportGraphInstancesToExcelWorkflowParameters) -> Optional[str]:
         """Export graph instances to Excel and return asset URL to download it."""
         graph = self.__configuration.triple_store.get()
         all_triples = self.get_all_triples_by_class(graph)
@@ -345,7 +345,7 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
             writer.book.save(buffer)
             excel_data = buffer.getvalue()
             buffer.close()
-            asset_url = self.__naas_integration.upload_asset(
+            asset = self.__naas_integration.upload_asset(
                 data=excel_data,
                 workspace_id=config.workspace_id,
                 storage_name=config.storage_name,
@@ -354,8 +354,13 @@ class ExportGraphInstancesToExcelWorkflow(Workflow):
                 visibility="public",
                 return_url=True
             )
-            logger.info(f"💾 Graph exported to {excel_file_path} (download URL: {asset_url})")
-            return asset_url
+            if asset is not None:
+                asset_url = asset.get("asset_url")
+                logger.info(f"💾 Graph exported to {excel_file_path} (download URL: {asset_url})")
+                return asset_url
+            else:
+                logger.error("❌ Failed to upload asset to Naas")
+                return None
 
     def as_tools(self) -> list[BaseTool]:
         return [
