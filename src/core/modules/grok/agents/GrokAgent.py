@@ -99,7 +99,6 @@ def create_agent(
     
     try:
         # Init
-        tools: list = []
         agents: list = []
         
         # Set configuration
@@ -114,7 +113,7 @@ def create_agent(
             name=NAME,
             description=DESCRIPTION,
             chat_model=model,
-            tools=tools,
+            tools=[],
             agents=agents,
             intents=[
                 Intent(
