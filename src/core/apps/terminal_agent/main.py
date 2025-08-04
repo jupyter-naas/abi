@@ -242,6 +242,15 @@ def run_agent(agent: Agent):
     
     # Available agents for mention suggestions
     available_agents = ["gemini", "claude", "mistral", "chatgpt", "perplexity", "llama"]
+    # Map from mention names to actual agent names
+    agent_name_mapping = {
+        "gemini": "Gemini",
+        "claude": "Claude", 
+        "mistral": "Mistral",
+        "chatgpt": "ChatGPT",
+        "perplexity": "Perplexity",
+        "llama": "Llama"
+    }
     
     # Just start chatting naturally - like the screenshot
     while True:
@@ -271,15 +280,8 @@ def run_agent(agent: Agent):
         agent_mention_match = re.search(r'@(\w+)', user_input.lower())
         if agent_mention_match:
             mentioned_agent = agent_mention_match.group(1)
-            # Map agent mentions to full names
-            agent_mapping = {
-                "gemini": "Google Gemini",
-                "claude": "claude-3-5-sonnet", 
-                "mistral": "mistral-large-2",
-                "chatgpt": "ChatGPT",
-                "perplexity": "Perplexity",
-                "llama": "llama-3.3-70b-instruct"
-            }
+            # Map agent mentions to full names (use the updated agent names)
+            agent_mapping = agent_name_mapping
             
             if mentioned_agent in agent_mapping:
                 current_active_agent = agent_mapping[mentioned_agent]
