@@ -183,9 +183,8 @@ def on_ai_message(message: Any, agent_name) -> None:
     if len(message.content) == 0:
         return
     
-    # Update active agent when an agent responds (except Abi for general responses)
-    if agent_name != "Abi":
-        current_active_agent = agent_name
+    # Update active agent when an agent responds
+    current_active_agent = agent_name
     
     print("\r" + " " * 15 + "\r", end="", flush=True)
     
