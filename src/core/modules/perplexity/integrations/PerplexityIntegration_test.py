@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.perplexity_sonar.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
+from src.core.modules.perplexity.integrations.PerplexityIntegration import PerplexityIntegration, PerplexityIntegrationConfiguration
 from src import secret
 
 @pytest.fixture

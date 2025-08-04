@@ -1,14 +1,30 @@
 # Perplexity Module
 
-## Description
+## Overview
 
-The Perplexity Module provides comprehensive integration with Perplexity AI's search and question-answering capabilities. This module enables:
+The Perplexity Module provides comprehensive integration with Perplexity AI's search and question-answering capabilities, representing the cutting edge of AI-powered search and real-time information access. This module enables:
 
 - Performing web searches using Perplexity's AI-powered search engine
 - Getting accurate, trusted, and real-time answers to questions
 - Accessing external data and open data from the web
 - Using Perplexity as an AI agent with specialized search capabilities
 - Caching responses to improve performance and reduce API calls
+
+## Provider: Perplexity AI
+
+**Founded**: 2022  
+**Headquarters**: San Francisco, California  
+**Founders**: Aravind Srinivas, Andy Konwinski, Denis Yarats, Johnny Ho  
+**Focus**: AI-Powered Search and Real-Time Information Access  
+**Mission**: Making information discovery conversational and accessible through AI
+
+Perplexity AI revolutionizes search by combining large language models with real-time web search capabilities. The company focuses on creating an "answer engine" that provides direct, accurate answers with proper source attribution, transforming how users access and interact with information.
+
+### Perplexity AI's Core Philosophy
+- **Answer Engine**: Direct answers rather than just search results
+- **Source Transparency**: Clear attribution and verification of information sources
+- **Real-Time Access**: Current, up-to-date information from across the web
+- **Conversational Discovery**: Natural language interaction for information seeking
 
 ## TL;DR
 
@@ -21,12 +37,12 @@ To get started with the Perplexity module:
 
 ```bash
 # Test basic Perplexity integration
-uv run python src/custom/modules/perplexity/integrations/PerplexityIntegration.py
+uv run python src/core/modules/perplexity/integrations/PerplexityIntegration.py
 ```
 
 To chat with the Perplexity agent with search capabilities, run:
 ```bash
-make chat agent=PerplexityAgent
+@perplexity search for the latest developments in AI
 ```
 
 ## Overview
@@ -34,7 +50,7 @@ make chat agent=PerplexityAgent
 ### Structure
 
 ```
-src/custom/modules/perplexity/
+src/core/modules/perplexity/
 ├── integrations/                    # Core integration classes
 │   ├── PerplexityIntegration.py                    # Basic Perplexity API integration
 │   └── PerplexityIntegration_test.py               # Integration tests
@@ -78,7 +94,7 @@ Specialized agent that provides:
 ### Integration Configuration
 
 ```python
-from src.custom.modules.perplexity.integrations.PerplexityIntegration import (
+from src.core.modules.perplexity.integrations.PerplexityIntegration import (
     PerplexityIntegration,
     PerplexityIntegrationConfiguration
 )
@@ -127,7 +143,7 @@ response = integration.search_web(
 ### Using with LangChain Tools
 
 ```python
-from src.custom.modules.perplexity.integrations.PerplexityIntegration import as_tools
+from src.core.modules.perplexity.integrations.PerplexityIntegration import as_tools
 
 # Convert integration to LangChain tools
 tools = as_tools(config)
@@ -140,7 +156,7 @@ tools = as_tools(config)
 ### Perplexity Agent
 
 ```python
-from src.custom.modules.perplexity.agents.PerplexityAgent import create_agent
+from src.core.modules.perplexity.agents.PerplexityAgent import create_agent
 
 # Create Perplexity agent with search capabilities
 agent = create_agent()
@@ -218,17 +234,17 @@ The PerplexityAgent provides:
 
 ```bash
 # Test basic Perplexity integration
-uv run python -m pytest src/custom/modules/perplexity/integrations/PerplexityIntegration_test.py
+uv run python -m pytest src/core/modules/perplexity/integrations/PerplexityIntegration_test.py
 
 # Test Perplexity agent
-uv run python -m pytest src/custom/modules/perplexity/agents/PerplexityAgent_test.py
+uv run python -m pytest src/core/modules/perplexity/agents/PerplexityAgent_test.py
 ```
 
 ### Test Integrations Directly
 
 ```bash
 # Test web search with example query
-uv run python src/custom/modules/perplexity/integrations/PerplexityIntegration.py
+uv run python src/core/modules/perplexity/integrations/PerplexityIntegration.py
 ```
 
 ## Error Handling
