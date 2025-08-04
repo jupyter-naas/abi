@@ -7,7 +7,7 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from ..models.mistral_large_2 import model
+from src.core.modules.mistral.models.mistral_large_2 import model
 from src import secret
 from typing import Optional
 from enum import Enum
