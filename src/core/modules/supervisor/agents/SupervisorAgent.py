@@ -212,7 +212,7 @@ def create_agent(
         # LLM Agents
         "src.core.modules.gemini.agents.GeminiAgent",
         "src.core.modules.chatgpt.agents.ChatGPTAgent",
-        "src.core.modules.perplexity_sonar.agents.PerplexityAgent",
+        "src.core.modules.perplexity.agents.PerplexityAgent",
         "src.core.modules.mistral.agents.MistralAgent",
         "src.core.modules.claude.agents.ClaudeAgent",
         "src.core.modules.llama.agents.LlamaAgent",
@@ -238,7 +238,7 @@ def create_agent(
                         google_gemini_agent = agent
                     elif "chatgpt" in m:
                         openai_agent = agent
-                    elif "perplexity_sonar" in m:
+                    elif "perplexity" in m:
                         perplexity_agent = agent
                     elif "mistral" in m:
                         mistral_agent = agent
