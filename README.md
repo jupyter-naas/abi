@@ -47,7 +47,7 @@ cp .env.example .env
 
 **Step 3: Run the project**
 
-To run ABI with the supervisor agent, which intelligently routes requests across all available AI models:
+To run ABI with the Abi agent, which intelligently routes requests across all available AI models:
 
 ```bash
 make
@@ -59,10 +59,10 @@ To run a specific agent:
 make chat-[name]-agent
 ```
 
-For example, to run the supervisor agent or specific AI model agents:
+For example, to run the Abi agent or specific AI model agents:
 
 ```bash
-make chat-supervisor-agent  # Smart routing across all AI models
+make chat-abi-agent  # Smart routing across all AI models
 make chat-chatgpt-agent     # GPT-4o
 make chat-claude-agent      # Claude 3.5 Sonnet
 make chat-grok-agent        # Grok-4 Latest

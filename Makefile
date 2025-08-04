@@ -229,7 +229,7 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-supervisor-agent    Start the Supervisor agent in terminal mode (default target)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (default target)"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
 	@echo ""
@@ -237,7 +237,7 @@ help:
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
 	@echo "DEFAULT:"
-	@echo "  The default target is chat-supervisor-agent (running 'make' starts ABI conversation)"
+	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
 
 # Docker Build Commands
 # -------------------
@@ -264,7 +264,7 @@ build.linux.x86_64: deps
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: deps
+chat-abi-agent: deps
 	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps
@@ -281,11 +281,11 @@ default: deps help
 console: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli
 
-.DEFAULT_GOAL := chat-supervisor-agent
+.DEFAULT_GOAL := chat-abi-agent
 
-agent=SupervisorAgent
+agent=AbiAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+.PHONY: test chat-abi-agent chat-support-agent api sh lock add abi-add help uv

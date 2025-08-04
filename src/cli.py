@@ -190,7 +190,7 @@ def main():
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
     
     from src.core.apps.terminal_agent.main import generic_run_agent
-    generic_run_agent("SupervisorAgent")
+    generic_run_agent("AbiAgent")
 
 if __name__ == "__main__":
     main()
