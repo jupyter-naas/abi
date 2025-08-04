@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
@@ -7,9 +6,9 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
     MemorySaver,
 )
-from src import secret
 from fastapi import APIRouter
-from pydantic import SecretStr
+from ..models.gpt_4o import model
+from src import secret
 from typing import Optional
 from enum import Enum
 from ..integrations import OpenAIWebSearchIntegration
@@ -20,8 +19,6 @@ from langchain_core.tools import StructuredTool
 
 NAME = "ChatGPT"
 DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
-MODEL = "gpt-4o"
-TEMPERATURE = 0
 AVATAR_URL = "https://i.pinimg.com/736x/2a/62/c3/2a62c34e0d217a7aa14645ce114d84b3.jpg"
 SYSTEM_PROMPT = """
 Role: 
@@ -81,91 +78,63 @@ Examples:
 SUGGESTIONS: list = []
 
 def create_agent(
-    agent_shared_state: AgentSharedState | None = None, 
-    agent_configuration: AgentConfiguration | None = None
-) -> IntentAgent:
+    agent_shared_state: Optional[AgentSharedState] = None, 
+    agent_configuration: Optional[AgentConfiguration] = None
+) -> Optional[IntentAgent]:
+    # Check if OpenAI API key is available
+    if not secret.get("OPENAI_API_KEY"):
+        return None
+    
     # Init
     tools: list = []
     agents: list = []
-
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get('OPENAI_API_KEY'))
-    )
 
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
             system_prompt=SYSTEM_PROMPT
         )
-    
-    # Set model
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Tools
-    if secret.get('OPENAI_API_KEY') is not None:
-        openai_web_search_integration_configuration = OpenAIWebSearchIntegrationConfiguration(  
-            api_key=secret.get('OPENAI_API_KEY')
-        )
-        tools += OpenAIWebSearchIntegration.as_tools(openai_web_search_integration_configuration)
+    # Tools (we already verified API key exists)
+    openai_web_search_integration_configuration = OpenAIWebSearchIntegrationConfiguration(  
+        api_key=secret.get('OPENAI_API_KEY')
+    )
+    tools += OpenAIWebSearchIntegration.as_tools(openai_web_search_integration_configuration)
 
-        from pydantic import BaseModel
-        
-        class EmptySchema(BaseModel):
-            pass
-            
-        current_datetime_tool = StructuredTool(
-            name="current_datetime", 
-            description="Get the current datetime in Paris timezone.",
-            func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-            args_schema=EmptySchema
-        )
-        tools += [current_datetime_tool]
-
-        return ChatGPTAgent(
-            name=NAME,
-            description=DESCRIPTION,
-            chat_model=model,
-            tools=tools, 
-            agents=agents,
-            intents=[
-                Intent(
-                    intent_value="what is your name",
-                    intent_type=IntentType.RAW,
-                    intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with real-time web search and provide comprehensive answers to your questions.",
-                ),
-                Intent(
-                    intent_value="what can you do",
-                    intent_type=IntentType.RAW,
-                    intent_target="I can help with real-time web search, answer questions using the latest information from the internet, provide research assistance, and help with various tasks using OpenAI's capabilities.",
-                ),
-            ],
-            state=agent_shared_state, 
-            configuration=agent_configuration, 
-            memory=MemorySaver()
-        )
+    from pydantic import BaseModel
     
-    else:
-        # Return agent without tools if no API key
-        return ChatGPTAgent(
+    class EmptySchema(BaseModel):
+        pass
+        
+    current_datetime_tool = StructuredTool(
+        name="current_datetime", 
+        description="Get the current datetime in Paris timezone.",
+        func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
+        args_schema=EmptySchema
+    )
+    tools += [current_datetime_tool]
+
+    if not model:
+        raise ValueError("ChatGPT model not available - missing OpenAI API key")
+        
+    return ChatGPTAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=model.model,
         tools=tools, 
         agents=agents,
         intents=[
             Intent(
                 intent_value="what is your name",
                 intent_type=IntentType.RAW,
-                intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with various tasks and provide comprehensive answers.",
+                intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with real-time web search and provide comprehensive answers to your questions.",
             ),
             Intent(
                 intent_value="what can you do",
                 intent_type=IntentType.RAW,
-                intent_target="I can help with various tasks, answer questions, assist with writing, coding, analysis, and provide information using OpenAI's capabilities.",
+                intent_target="I can help with real-time web search, answer questions using the latest information from the internet, provide research assistance, and help with various tasks using OpenAI's capabilities.",
             ),
         ],
         state=agent_shared_state, 
