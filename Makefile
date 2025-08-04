@@ -144,11 +144,11 @@ dvc-login: deps
 
 datastore-pull: deps
 	@ echo "Pulling datastore..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/datastore_pull.py | sh'
+	@ uv run --no-dev python scripts/datastore_pull.py | sh
 
 datastore-push: deps datastore-pull
 	@ echo "Pushing datastore..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/datastore_push.py | sh'
+	@ uv run --no-dev python scripts/datastore_push.py | sh
 
 storage-pull: deps
 	@ echo "Pulling storage..."
@@ -156,7 +156,7 @@ storage-pull: deps
 
 storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_push.py | sh'
 
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
