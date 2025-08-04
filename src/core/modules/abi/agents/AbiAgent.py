@@ -231,7 +231,7 @@ def create_agent(
         "src.core.modules.support.agents.SupportAgent",
         "src.core.modules.ontology.agents.OntologyAgent", 
         "src.core.modules.naas.agents.NaasAgent",
-        # LLM Agents
+        # Cloud LLM Agents
         "src.core.modules.grok.agents.GrokAgent",
         "src.core.modules.gemini.agents.GeminiAgent",
         "src.core.modules.chatgpt.agents.ChatGPTAgent",
@@ -239,6 +239,10 @@ def create_agent(
         "src.core.modules.mistral.agents.MistralAgent",
         "src.core.modules.claude.agents.ClaudeAgent",
         "src.core.modules.llama.agents.LlamaAgent",
+        # Local Ollama Agents (privacy-focused)
+        "src.core.modules.qwen.agents.QwenAgent",
+        "src.core.modules.deepseek.agents.DeepSeekAgent", 
+        "src.core.modules.gemma.agents.GemmaAgent",
     ]
     # Create agent references for intent routing
     grok_agent = None
@@ -248,6 +252,10 @@ def create_agent(
     mistral_agent = None
     claude_agent = None
     llama_agent = None
+    # Local agent references
+    qwen_agent = None
+    deepseek_agent = None
+    gemma_agent = None
     for m in modules:
         try:
             module = importlib.import_module(m)
@@ -260,7 +268,7 @@ def create_agent(
                     # Store agent references for intents
                     if "grok" in m:
                         grok_agent = agent
-                    elif "gemini" in m:
+                    elif "gemini" in m and "gemma" not in m:  # Distinguish cloud Gemini from local Gemma
                         google_gemini_agent = agent
                     elif "chatgpt" in m:
                         openai_agent = agent
@@ -272,6 +280,13 @@ def create_agent(
                         claude_agent = agent
                     elif "llama" in m:
                         llama_agent = agent
+                    # Local agents
+                    elif "qwen" in m:
+                        qwen_agent = agent
+                    elif "deepseek" in m:
+                        deepseek_agent = agent
+                    elif "gemma" in m:  # Local Gemma
+                        gemma_agent = agent
                     print(f"✅ Agent loaded: {agent.name}")
                 else:
                     print(f"⚠️  Agent from {m} missing required attributes: {type(agent)}")
@@ -436,6 +451,42 @@ def create_agent(
                 Intent(intent_type=IntentType.AGENT, intent_value="meta llama", intent_target=llama_agent.name),
                 Intent(intent_type=IntentType.AGENT, intent_value="meta ai", intent_target=llama_agent.name),
             ] if llama_agent else []
+        ) + (
+            # Local Qwen Agent intents (privacy-focused)
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask qwen", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use qwen", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to qwen", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="private ai", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="local ai", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="offline ai", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="qwen code", intent_target=qwen_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="private code", intent_target=qwen_agent.name),
+            ] if qwen_agent else []
+        ) + (
+            # Local DeepSeek Agent intents (reasoning)
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask deepseek", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use deepseek", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to deepseek", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="complex reasoning", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="mathematical proof", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="step by step", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="logical analysis", intent_target=deepseek_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="private reasoning", intent_target=deepseek_agent.name),
+            ] if deepseek_agent else []
+        ) + (
+            # Local Gemma Agent intents (lightweight)
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="ask gemma", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use gemma", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to gemma", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="quick question", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="fast response", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="lightweight ai", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="local gemini", intent_target=gemma_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="private chat", intent_target=gemma_agent.name),
+            ] if gemma_agent else []
         ),
         state=agent_shared_state,
         configuration=agent_configuration,

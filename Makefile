@@ -233,6 +233,11 @@ help:
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
 	@echo ""
+	@echo "LOCAL AGENTS (Ollama):"
+	@echo "  chat-qwen-agent          Start Qwen3 8B agent (local, multilingual, coding)"
+	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (local, reasoning, math)"
+	@echo "  chat-gemma-agent         Start Gemma3 4B agent (local, lightweight, fast)"
+	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
@@ -273,6 +278,16 @@ chat-ontology-agent: deps
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
+# Local Ollama-based agents for privacy-focused interactions
+chat-qwen-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent QwenAgent
+
+chat-deepseek-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent DeepSeekAgent
+
+chat-gemma-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
+
 pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
@@ -288,4 +303,4 @@ chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-abi-agent chat-support-agent api sh lock add abi-add help uv
+.PHONY: test chat-abi-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv
