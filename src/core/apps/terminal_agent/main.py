@@ -290,6 +290,9 @@ def run_agent(agent: Agent):
     save_to_conversation("─" * TERMINAL_WIDTH)
     save_to_conversation("")  # Empty line
     
+    # Set Abi as active agent after greeting
+    current_active_agent = "Abi"
+    
     # Available agents for mention suggestions (cloud + local)
     available_agents = [
         # Cloud agents
