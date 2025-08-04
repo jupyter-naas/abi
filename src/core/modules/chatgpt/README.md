@@ -537,6 +537,63 @@ Refer to [OpenAI Pricing](https://openai.com/pricing) for current rates:
 - **Research**: [OpenAI Research Papers](https://openai.com/research/)
 - **Status**: [OpenAI Status Page](https://status.openai.com/)
 
+## **🧠 Ontology**
+
+### **BFO Classification Using 7 Buckets Framework**
+
+**Material Entity (WHAT/WHO):**
+- **Core Entity**: GPT-4o by OpenAI
+- **Provider**: OpenAI (San Francisco, 2015, led by Sam Altman & Greg Brockman)
+- **Infrastructure**: OpenAI API endpoint (`https://api.openai.com/v1/`)
+
+**Qualities (HOW-IT-IS):**
+- **Intelligence**: 71/100 (2nd globally with o3-pro, frontier performance)
+- **Speed**: 125.9 tokens/sec (Solid performance)
+- **Cost**: $3.50/1M tokens (Competitive frontier pricing)
+- **Unique Quality**: Integrated real-time web search with advanced reasoning
+
+**Realizable Entities (WHY-POTENTIAL):**
+- **Real-Time Search**: Advanced web integration for current information
+- **General Intelligence**: Broad capability across multiple domains
+- **Research Excellence**: Comprehensive analysis and synthesis capabilities
+- **Ecosystem Maturity**: Established tooling and integration platform
+
+**Processes (HOW-IT-HAPPENS):**
+- **Primary Processes**: Market analysis, research synthesis, strategic planning, general reasoning
+- **Secondary Processes**: Creative writing, technical analysis, web search
+- **Process Role**: Primary for general intelligence tasks, secondary for specialized domains
+
+**Temporal Aspects (WHEN):**
+- **Availability**: 24/7 enterprise-grade access
+- **Response Speed**: 0.45s first token (fast response times)
+- **Real-Time**: Live web search for current events and information
+
+**Spatial Aspects (WHERE):**
+- **Deployment**: Global infrastructure with worldwide access
+- **Data Sovereignty**: US jurisdiction under OpenAI
+- **Regional Access**: Comprehensive global availability
+
+**Information Entities (HOW-WE-KNOW):**
+- **Performance Metrics**: Intelligence 71, search accuracy, response quality
+- **Documentation**: OpenAI API docs, research papers, community resources
+- **Output Quality**: High-quality responses with source attribution and verification
+
+### **Process-Centric Role**
+
+**When GPT-4o is Optimal:**
+- **Market Analysis** → Primary choice (Real-time data + high intelligence)
+- **Research Synthesis** → Primary choice (Web search + reasoning capabilities)
+- **Strategic Planning** → Primary choice (Broad intelligence + current information)
+- **General Purpose Tasks** → Primary choice (Balanced capabilities across domains)
+
+**Process Collaboration:**
+- **With Grok**: GPT-4o for general analysis → Grok for truth-seeking verification
+- **With Claude**: GPT-4o for research → Claude for ethical review
+- **With Gemini**: GPT-4o for analysis → Gemini for visualization
+
+**Ontological Position:**
+*GPT-4o occupies the "General Intelligence + Real-Time Information" niche in the AI ecosystem. When processes require frontier-level reasoning combined with current information access, GPT-4o is optimal. Its combination of high intelligence (71), real-time search capabilities, and mature ecosystem makes it the go-to choice for research-intensive and information-driven applications.*
+
 ---
 
 *ChatGPT with web search integration represents the convergence of advanced reasoning and real-time information access, making it the ideal choice for research-intensive and information-driven applications.*

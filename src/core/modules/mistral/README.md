@@ -522,6 +522,63 @@ Mistral AI maintains a strong commitment to open source:
 - **Community**: Active engagement with developer community
 - **Innovation**: Contributions to open AI research and standards
 
+## **🧠 Ontology**
+
+### **BFO Classification Using 7 Buckets Framework**
+
+**Material Entity (WHAT/WHO):**
+- **Core Entity**: Mistral Large 2 by Mistral AI
+- **Provider**: Mistral AI (Paris, France, 2023, founded by ex-Meta/Google researchers)
+- **Infrastructure**: Mistral AI API endpoint (`https://api.mistral.ai/`)
+
+**Qualities (HOW-IT-IS):**
+- **Intelligence**: 56/100 (Mid-tier performance, solid capabilities)
+- **Speed**: 198.3 tokens/sec (Good performance)
+- **Cost**: $2.75/1M tokens (Competitive European pricing)
+- **Unique Quality**: European AI sovereignty with MoE architecture efficiency
+
+**Realizable Entities (WHY-POTENTIAL):**
+- **Code Generation**: Multi-language programming excellence
+- **Mathematical Reasoning**: Advanced computation and algorithmic problem-solving
+- **European Compliance**: GDPR and AI Act compliance by design
+- **Efficient Architecture**: Mixture of Experts for optimal resource utilization
+
+**Processes (HOW-IT-HAPPENS):**
+- **Primary Processes**: Code generation, mathematical computation, system design, debugging
+- **Secondary Processes**: Technical documentation, algorithm development, data analysis
+- **Process Role**: Primary for technical tasks, secondary for European data sovereignty needs
+
+**Temporal Aspects (WHEN):**
+- **Availability**: 24/7 European and global access
+- **Response Speed**: 0.30s first token (fast for technical tasks)
+- **Optimization**: Peak performance during European business hours
+
+**Spatial Aspects (WHERE):**
+- **Deployment**: EU-based with global reach (Paris headquarters)
+- **Data Sovereignty**: European jurisdiction with GDPR compliance
+- **Regional Access**: Strong European presence with global availability
+
+**Information Entities (HOW-WE-KNOW):**
+- **Performance Metrics**: Intelligence 56, code generation benchmarks, European compliance ratings
+- **Documentation**: Mistral AI research papers, technical specifications
+- **Output Quality**: High-quality code with European privacy standards
+
+### **Process-Centric Role**
+
+**When Mistral is Optimal:**
+- **Code Generation** → Primary choice (Multi-language programming excellence)
+- **Mathematical Computation** → Primary choice (Advanced algorithmic capabilities)
+- **European Compliance** → Primary choice (GDPR/AI Act compliance by design)
+- **Technical Documentation** → Primary choice (Engineering precision and clarity)
+
+**Process Collaboration:**
+- **With Gemini**: Mistral for code → Gemini for visualization/documentation
+- **With Claude**: Mistral for implementation → Claude for ethical review
+- **With Grok**: Mistral for technical precision → Grok for innovative approaches
+
+**Ontological Position:**
+*Mistral occupies the "European Technical Excellence + Code Specialist" niche in the AI ecosystem. When processes require code generation, mathematical computation, or European data sovereignty, Mistral is the optimal choice. Its combination of technical precision, reasonable pricing, and European compliance makes it indispensable for technical teams prioritizing both capability and regulatory compliance.*
+
 ---
 
 *Mistral represents the perfect blend of European AI excellence, technical precision, and practical efficiency - making it the ideal choice for code generation, mathematical reasoning, and technical applications.*

@@ -566,6 +566,63 @@ def process_instruction(user_input):
 - Best practices for safe implementation
 - Community standards and expectations
 
+## **🧠 Ontology**
+
+### **BFO Classification Using 7 Buckets Framework**
+
+**Material Entity (WHAT/WHO):**
+- **Core Entity**: Llama 4 Scout by Meta AI
+- **Provider**: Meta (Menlo Park, California, founded 2004, AI division FAIR)
+- **Infrastructure**: Meta AI API endpoints and open-source deployment options
+
+**Qualities (HOW-IT-IS):**
+- **Intelligence**: 43/100 (Value-focused performance tier)
+- **Speed**: 175.3 tokens/sec (Good performance)
+- **Cost**: $0.23/1M tokens (BEST VALUE GLOBALLY - 130x cheaper than Claude)
+- **Unique Quality**: Largest context window globally (10M tokens) + open source freedom
+
+**Realizable Entities (WHY-POTENTIAL):**
+- **Instruction Following**: Optimized for task completion and adaptive assistance
+- **Democratic Access**: Open source enabling global AI democratization
+- **Massive Context**: 10M token processing for entire books/databases
+- **Local Deployment**: Complete data sovereignty and customization freedom
+
+**Processes (HOW-IT-HAPPENS):**
+- **Primary Processes**: Instruction following, conversation management, document analysis (long context)
+- **Secondary Processes**: Creative writing, task completion, adaptive assistance
+- **Process Role**: Primary for value-conscious and context-heavy applications
+
+**Temporal Aspects (WHEN):**
+- **Availability**: 24/7 with both hosted and local deployment options
+- **Response Speed**: 0.32s first token (fast for value tier)
+- **Use Cases**: High-volume production where cost efficiency is critical
+
+**Spatial Aspects (WHERE):**
+- **Deployment**: Global Meta infrastructure + local deployment anywhere
+- **Data Sovereignty**: Complete control with local deployment options
+- **Regional Access**: Truly global with open source distribution
+
+**Information Entities (HOW-WE-KNOW):**
+- **Performance Metrics**: Intelligence 43, value leadership, context benchmarks
+- **Documentation**: Meta AI research, Llama recipes, community contributions
+- **Output Quality**: Instruction-optimized responses with consistency focus
+
+### **Process-Centric Role**
+
+**When Llama is Optimal:**
+- **Document Analysis** → Primary choice (10M context window advantage)
+- **Instruction Following** → Primary choice (Specialized training optimization)
+- **Budget-Conscious Applications** → Primary choice (130x cost savings vs premium)
+- **Privacy-Critical Use Cases** → Primary choice (Local deployment capability)
+
+**Process Collaboration:**
+- **With Grok**: Llama for document processing → Grok for high-intelligence analysis
+- **With Gemini**: Llama for massive context → Gemini for speed when needed
+- **With Mistral**: Llama for task management → Mistral for technical implementation
+
+**Ontological Position:**
+*Llama occupies the "Democratic Access + Value Champion + Context Leader" niche in the AI ecosystem. When processes require massive context processing, cost efficiency, or data sovereignty, Llama is unmatched. Its 10M context window enables entirely new use cases, while its $0.23/1M pricing democratizes AI access globally. Perfect for high-volume production, research, and privacy-conscious applications.*
+
 ---
 
 *Llama represents the democratization of advanced AI, providing world-class instruction-following capabilities through Meta's commitment to open research and community-driven innovation.*
