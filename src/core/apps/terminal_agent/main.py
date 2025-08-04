@@ -173,8 +173,8 @@ def on_ai_message(message: Any, agent_name) -> None:
     if len(message.content) == 0:
         return
     
-    # Update active agent when an agent responds (except Supervisor for general responses)
-    if agent_name != "Supervisor":
+    # Update active agent when an agent responds (except Abi for general responses)
+    if agent_name != "Abi":
         current_active_agent = agent_name
     
     print("\r" + " " * 15 + "\r", end="", flush=True)
@@ -473,7 +473,7 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
             class name in the modules.
 
     Example:
-        >>> generic_run_agent("SupervisorAssistant")  # Runs the SupervisorAssistant agent
+        >>> generic_run_agent("AbiAgent")  # Runs the AbiAgent agent
         >>> generic_run_agent("ContentAssistant")     # Runs the ContentAssistant agent
 
     Note:

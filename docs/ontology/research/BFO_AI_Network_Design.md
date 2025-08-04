@@ -16,7 +16,7 @@ Using the mnemonic: **"What and who are the materials, how-they-are their qualit
 **Physical/Digital Continuants:**
 - **AI Models**: Grok, GPT-4o, Gemini, Claude, Mistral, Llama, Perplexity
 - **Infrastructure**: API endpoints, servers, compute resources
-- **Agents**: IntentAgent instances, SupervisorAgent router
+- **Agents**: IntentAgent instances, AbiAgent router
 - **Users**: Human actors requesting cognitive processes
 
 ### **2. Qualities (HOW-IT-IS)**
@@ -170,7 +170,7 @@ def route_process(process_type, context, constraints):
 3. Create process-capability matrix
 
 ### **Phase 2: Dynamic Routing**
-1. Implement process-aware SupervisorAgent
+1. Implement process-aware AbiAgent
 2. Add capability-based model selection
 3. Create fallback and error handling
 

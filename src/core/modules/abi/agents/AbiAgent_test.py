@@ -1,10 +1,10 @@
 import pytest
 
-from src.core.modules.supervisor.agents.SupervisorAgent import create_agent as create_supervisor_agent
+from src.core.modules.abi.agents.AbiAgent import create_agent as create_abi_agent
 
 @pytest.fixture
 def agent():
-    return create_supervisor_agent()
+    return create_abi_agent()
 
 def test_raw_intent_name(agent):
     """Test RAW intent mapping for name question"""
