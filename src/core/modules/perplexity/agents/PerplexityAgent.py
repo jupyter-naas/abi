@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
@@ -7,9 +6,9 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
     MemorySaver,
 )
-from src import secret
 from fastapi import APIRouter
-from pydantic import SecretStr
+from ..models.perplexity_gpt_4o import model
+from src import secret
 from typing import Optional
 from enum import Enum
 from ..integrations import PerplexityIntegration
@@ -20,8 +19,6 @@ from langchain_core.tools import StructuredTool
 
 NAME = "Perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
-MODEL = "gpt-4o"
-TEMPERATURE = 0
 AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
 SYSTEM_PROMPT = """
 Role:
@@ -77,90 +74,64 @@ Examples:
 SUGGESTIONS: list = []
 
 def create_agent(
-    agent_shared_state: AgentSharedState | None = None, 
-    agent_configuration: AgentConfiguration | None = None
-) -> IntentAgent:
+    agent_shared_state: Optional[AgentSharedState] = None, 
+    agent_configuration: Optional[AgentConfiguration] = None
+) -> Optional[IntentAgent]:
+    # Check if OpenAI API key is available
+    if not secret.get("OPENAI_API_KEY"):
+        return None
+    
     # Init
     tools: list = []
     agents: list = []
-
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get('OPENAI_API_KEY'))
-    )
 
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
             system_prompt=SYSTEM_PROMPT
         )
-    
-    # Set model
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Tools
+    # Tools (we already verified OpenAI API key exists)
     if secret.get('PERPLEXITY_API_KEY') is not None:
         perplexity_integration_configuration = PerplexityIntegrationConfiguration(  
             api_key=secret.get('PERPLEXITY_API_KEY')
         )
         tools += PerplexityIntegration.as_tools(perplexity_integration_configuration)
 
-        from pydantic import BaseModel
-        
-        class EmptySchema(BaseModel):
-            pass
-            
-        current_datetime_tool = StructuredTool(
-            name="current_datetime", 
-            description="Get the current datetime in Paris timezone.",
-            func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-            args_schema=EmptySchema
-        )
-        tools += [current_datetime_tool]
-
-        return PerplexityAgent(
-            name=NAME,
-            description=DESCRIPTION,
-            chat_model=model,
-            tools=tools, 
-            agents=agents,
-            intents=[
-                Intent(
-                    intent_value="what is your name",
-                    intent_type=IntentType.RAW,
-                    intent_target="I am Perplexity, an AI research assistant that provides real-time answers using web search capabilities.",
-                ),
-                Intent(
-                    intent_value="what can you do",
-                    intent_type=IntentType.RAW,
-                    intent_target="I can search the web in real-time, provide up-to-date information, research any topic, and answer questions using the latest information from the internet.",
-                ),
-            ],
-            state=agent_shared_state, 
-            configuration=agent_configuration, 
-            memory=MemorySaver()
-        )
+    from pydantic import BaseModel
     
-    # Return agent without tools if no API key
+    class EmptySchema(BaseModel):
+        pass
+        
+    current_datetime_tool = StructuredTool(
+        name="current_datetime", 
+        description="Get the current datetime in Paris timezone.",
+        func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
+        args_schema=EmptySchema
+    )
+    tools += [current_datetime_tool]
+
+    if not model:
+        raise ValueError("Perplexity model not available - missing OpenAI API key")
+        
     return PerplexityAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=model.model,
         tools=tools, 
         agents=agents,
         intents=[
             Intent(
                 intent_value="what is your name",
                 intent_type=IntentType.RAW,
-                intent_target="I am Perplexity, an AI research assistant that provides comprehensive answers to your questions.",
+                intent_target="I am Perplexity, an AI research assistant that provides real-time answers using web search capabilities.",
             ),
             Intent(
                 intent_value="what can you do",
                 intent_type=IntentType.RAW,
-                intent_target="I can help answer questions, provide research assistance, and offer comprehensive information on various topics.",
+                intent_target="I can search the web in real-time, provide up-to-date information, research any topic, and answer questions using the latest information from the internet.",
             ),
         ],
         state=agent_shared_state, 

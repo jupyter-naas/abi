@@ -101,3 +101,115 @@ def test_web_search_intent(agent):
     assert result is not None, result
     # The agent should route to Perplexity for internet search
     assert "perplexity" in result.lower() or "search" in result.lower() or "internet" in result.lower(), result
+
+# =============================================================================
+# REAL-WORLD CONVERSATION PATTERNS (from terminal logs)
+# =============================================================================
+
+def test_french_greeting_and_typos(agent):
+    """Test French greetings and typo tolerance (real patterns from logs)"""
+    # French greeting
+    result = agent.invoke("salut")
+    assert result is not None, result
+    
+    # Typo in agent name "gemiini" instead of "gemini"
+    result_typo = agent.invoke("parle a gemiini")
+    assert result_typo is not None, result_typo
+
+def test_agent_switching_mid_conversation(agent):
+    """Test changing agent preference mid-conversation (real pattern from logs)"""
+    # First ask for one agent
+    result1 = agent.invoke("I want to talk to gemini")
+    assert result1 is not None, result1
+    
+    # Then change mind
+    result2 = agent.invoke("no sorry ChatGPT")
+    assert result2 is not None, result2
+
+def test_social_media_searches(agent):
+    """Test real social media search patterns from logs"""
+    # Trump tweet search (real query from logs)
+    result1 = agent.invoke("what's the latest tweet from Trump?")
+    assert result1 is not None, result1
+    
+    # Obama tweet search in French (real query from logs)
+    result2 = agent.invoke("je veux chercher des infos sur X, le dernier tweet de Obama")
+    assert result2 is not None, result2
+
+def test_ai_news_request_french(agent):
+    """Test AI news request in French (real pattern from logs)"""
+    result = agent.invoke("tu peux nous donner les dernies news AI?")
+    assert result is not None, result
+
+def test_agent_chaining_pattern(agent):
+    """Test asking one agent then another for interpretation (real pattern from logs)"""
+    # Ask Perplexity for info
+    result1 = agent.invoke("ask perplexity for latest AI news")
+    assert result1 is not None, result1
+    
+    # Then ask Claude to interpret
+    result2 = agent.invoke("ask claude tu interprete comment les resultats?")
+    assert result2 is not None, result2
+
+def test_casual_greetings(agent):
+    """Test casual greetings found in real conversations"""
+    casual_greetings = ["yo", "coucou", "salut toi"]
+    
+    for greeting in casual_greetings:
+        result = agent.invoke(greeting)
+        assert result is not None, f"Failed for greeting: {greeting}"
+
+def test_meta_conversation_about_system(agent):
+    """Test conversation about the multi-agent system itself (real pattern from logs)"""
+    result = agent.invoke("je suis en train de monter un multi agent system la")
+    assert result is not None, result
+    
+    # Follow up about agents in the system
+    result2 = agent.invoke("y a mistral dans la boucle avec claude et llama")
+    assert result2 is not None, result2
+
+def test_specific_agent_requests_french(agent):
+    """Test asking for specific agents in French (real pattern from logs)"""
+    result = agent.invoke("on peut parler a mistral?")
+    assert result is not None, result
+
+def test_grok_for_truth_seeking(agent):
+    """Test Grok for current events and truth-seeking (real usage pattern)"""
+    result = agent.invoke("can we talk to grok")
+    assert result is not None, result
+
+def test_persistent_information_requests(agent):
+    """Test persistent requests for specific information (real pattern from logs)"""
+    # User keeps asking for the same thing in different ways
+    requests = [
+        "give the link",
+        "I want the link from the post", 
+        "i want the link of the tweet"
+    ]
+    
+    for request in requests:
+        result = agent.invoke(request)
+        assert result is not None, f"Failed for request: {request}"
+
+def test_mixed_language_patterns(agent):
+    """Test mixed language usage (real pattern from logs)"""
+    # English request to French context
+    result = agent.invoke("ask perplexity tu peux nous donner les dernies news AI?")
+    assert result is not None, result
+
+def test_french_agent_switching(agent):
+    """Test French agent switching patterns (real from logs)"""
+    result = agent.invoke("pardon plutot mistral")
+    assert result is not None, result
+
+def test_common_typos(agent):
+    """Test tolerance for common typos found in real conversations"""
+    typos = [
+        ("gemiini", "gemini"),
+        ("chatGTP", "chatgpt"), 
+        ("mistrl", "mistral")
+    ]
+    
+    for typo, correct in typos:
+        result = agent.invoke(f"talk to {typo}")
+        assert result is not None, f"Failed to handle typo: {typo}"

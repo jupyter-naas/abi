@@ -7,18 +7,15 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from langchain_google_genai import ChatGoogleGenerativeAI
+from ..models.google_gemini_2_5_flash import model
 from src import secret
 from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
 
 import os
 from datetime import datetime
 
 NAME = "Gemini"
-MODEL = "gemini-2.5-flash"
-TEMPERATURE = 0.7
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/google_gemini_logo.png"
 )
@@ -136,7 +133,10 @@ SUGGESTIONS = [
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
+) -> Optional[IntentAgent]:
+    # Check if Google API key is available
+    if not secret.get("GOOGLE_API_KEY"):
+        return None
     # Import workflow here to avoid circular imports
     from ..workflows.ImageGenerationStorageWorkflow import (
         ImageGenerationStorageWorkflow,
@@ -176,26 +176,13 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    # Validate Google API key availability
-    google_api_key = secret.get("GOOGLE_API_KEY")
-    if not google_api_key:
-        raise ValueError(
-            "Google Gemini 2.0 Flash model is not available. "
-            "Please set the GOOGLE_API_KEY environment variable or configure it in your secrets. "
-            "You can get an API key from: https://makersuite.google.com/app/apikey"
-        )
-    
-    # Initialize the model
-    model = ChatGoogleGenerativeAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        google_api_key=SecretStr(google_api_key)
-    )
-
+    if not model:
+        raise ValueError("Gemini model not available - missing Google API key")
+        
     return GoogleGemini2FlashAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=model.model,
         tools=tools,
         agents=agents,
         intents=[

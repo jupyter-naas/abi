@@ -99,6 +99,9 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
         
+    if not model:
+        raise ValueError("Mistral model not available - missing Mistral API key")
+        
     return MistralAgent(
         name=NAME,
         description=DESCRIPTION,

@@ -21,6 +21,9 @@ add_one_tool = Tool.from_function(
     description="Add one to the input"
 )
 
+if not gemini_model:
+    raise ValueError("Gemini model not available - missing Google API key")
+
 agent = Agent(
     name="ABI",
     description="You are ABI, a helpful assistant.",
