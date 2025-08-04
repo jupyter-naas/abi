@@ -1,7 +1,7 @@
 from lib.abi.models.Model import ChatModel
 from langchain_mistralai import ChatMistralAI
 from src import secret
-import os
+from typing import Optional
 
 ID = "mistral-large-2407"
 NAME = "mistral-large-2"
@@ -10,20 +10,19 @@ IMAGE = "https://mistral.ai/images/logo_hubc88c4ece131262e7906a8bf7ae79de9f_1864
 CONTEXT_WINDOW = 128000
 OWNER = "mistral"
 
-if "MISTRAL_API_KEY" not in os.environ:
-    os.environ["MISTRAL_API_KEY"] = secret.get("MISTRAL_API_KEY", "")
-
-model = ChatModel(
-    model_id=ID,
-    name=NAME,
-    description=DESCRIPTION,
-    image=IMAGE,
-    owner=OWNER,
-    model=ChatMistralAI(
-        model_name=ID,
-        temperature=0,
-        max_tokens=4096,
-        max_retries=2,
-    ),
-    context_window=CONTEXT_WINDOW,
-) 
+model: Optional[ChatModel] = None
+if secret.get("MISTRAL_API_KEY"):
+    model = ChatModel(
+        model_id=ID,
+        name=NAME,
+        description=DESCRIPTION,
+        image=IMAGE,
+        owner=OWNER,
+        model=ChatMistralAI(
+            model_name=ID,
+            temperature=0,
+            max_tokens=4096,
+            max_retries=2,
+        ),
+        context_window=CONTEXT_WINDOW,
+    )
