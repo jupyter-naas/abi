@@ -7,17 +7,14 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from langchain_openai import ChatOpenAI
-from src import secret
-from typing import Optional, Union
+from ..models.o3_mini import model as cloud_model
+from ..models.qwen3_8b import model as local_model
+from typing import Optional
 from enum import Enum
-from pydantic import SecretStr
 import importlib
 import os
 
 NAME = "Abi"
-MODEL = "o3-mini"
-TEMPERATURE = 1
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 )
@@ -283,18 +280,16 @@ def create_agent(
         except Exception as e:
             print(f"⚠️  Error loading agent from {m}: {e}")
 
-        # Set model
-    model: Union[ChatOpenAI, "ChatOllama"]
+    # Select model based on AI_MODE environment variable
     ai_mode = os.getenv("AI_MODE", "cloud")  # Default to cloud if not set
     if ai_mode == "cloud":
-        model = ChatOpenAI(
-            model=MODEL, 
-            temperature=TEMPERATURE, 
-            api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-        )
+        if not cloud_model:
+            raise ValueError("Cloud model (o3-mini) not available - missing OpenAI API key")
+        selected_model = cloud_model
     elif ai_mode == "local":
-        from langchain_ollama import ChatOllama
-        model = ChatOllama(model="qwen3:8b", temperature=0.7)
+        if not local_model:
+            raise ValueError("Local model (qwen3:8b) not available - Ollama not installed or configured")
+        selected_model = local_model
     else:
         raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
@@ -302,7 +297,7 @@ def create_agent(
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=selected_model.model,
         tools=tools,
         agents=agents,
         intents=[
