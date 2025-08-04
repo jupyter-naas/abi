@@ -1,5 +1,6 @@
 from src import secret
 from pydantic import SecretStr
+from typing import Union
 
 # Grok Model Configuration using proper LangChain xAI integration
 # Based on: https://python.langchain.com/docs/integrations/chat/xai/
@@ -9,9 +10,13 @@ ID = "grok-beta"
 TEMPERATURE = 0.1
 MAX_TOKENS = 4096
 
+# Initialize model variable with proper typing
+model: Union["ChatXAI", "ChatOpenAI"]
+
 # Try to use proper xAI integration with langchain_xai, fallback gracefully
 try:
     from langchain_xai import ChatXAI  # type: ignore
+    from langchain_openai import ChatOpenAI
     
     # Check if XAI_API_KEY is available
     xai_api_key = secret.get("XAI_API_KEY")
