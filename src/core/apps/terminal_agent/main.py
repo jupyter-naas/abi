@@ -258,16 +258,26 @@ def run_agent(agent: Agent):
     save_to_conversation("─" * TERMINAL_WIDTH)
     save_to_conversation("")  # Empty line
     
-    # Available agents for mention suggestions
-    available_agents = ["gemini", "claude", "mistral", "chatgpt", "perplexity", "llama"]
+    # Available agents for mention suggestions (cloud + local)
+    available_agents = [
+        # Cloud agents
+        "gemini", "claude", "mistral", "chatgpt", "perplexity", "llama",
+        # Local agents (privacy-focused)
+        "qwen", "deepseek", "gemma"
+    ]
     # Map from mention names to actual agent names
     agent_name_mapping = {
+        # Cloud agents
         "gemini": "Gemini",
         "claude": "Claude", 
         "mistral": "Mistral",
         "chatgpt": "ChatGPT",
         "perplexity": "Perplexity",
-        "llama": "Llama"
+        "llama": "Llama",
+        # Local agents
+        "qwen": "Qwen",
+        "deepseek": "DeepSeek", 
+        "gemma": "Gemma"
     }
     
     # Just start chatting naturally - like the screenshot
