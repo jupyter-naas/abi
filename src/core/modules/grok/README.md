@@ -363,6 +363,63 @@ Refer to [xAI Pricing](https://x.ai/pricing) when available:
 - Encouragement of independent critical thinking
 - Respect for diverse perspectives and opinions
 
+## **🧠 Ontology**
+
+### **BFO Classification Using 7 Buckets Framework**
+
+**Material Entity (WHAT/WHO):**
+- **Core Entity**: Grok-4-latest model by xAI
+- **Provider**: Elon Musk's xAI (San Francisco, 2023)
+- **Infrastructure**: xAI API endpoint (`https://api.x.ai/v1/`)
+
+**Qualities (HOW-IT-IS):**
+- **Intelligence**: 73/100 (Highest globally - beats all competitors)
+- **Speed**: 200+ tokens/sec (Excellent performance)
+- **Cost**: $6.00/1M tokens (Premium but justified by intelligence supremacy)
+- **Unique Quality**: Truth-seeking architecture with contrarian analysis
+
+**Realizable Entities (WHY-POTENTIAL):**
+- **Truth-Seeking Capability**: Designed to pursue truth over comfort
+- **Scientific Reasoning**: Advanced logical and empirical analysis
+- **Real-Time Search**: Live web integration for current information
+- **Contrarian Analysis**: Challenge conventional wisdom and groupthink
+
+**Processes (HOW-IT-HAPPENS):**
+- **Primary Processes**: Truth-seeking analysis, logical reasoning, scientific analysis
+- **Secondary Processes**: Real-time research, contrarian evaluation, complex problem-solving
+- **Process Role**: Primary for truth-seeking, secondary for general reasoning
+
+**Temporal Aspects (WHEN):**
+- **Availability**: 24/7 global access
+- **Real-Time**: Live search capabilities for current events
+- **Response Time**: ~500ms first token
+
+**Spatial Aspects (WHERE):**
+- **Deployment**: US-based with global API access
+- **Data Sovereignty**: US jurisdiction under xAI
+- **Regional Access**: Available worldwide
+
+**Information Entities (HOW-WE-KNOW):**
+- **Performance Metrics**: Intelligence 73, speed benchmarks, cost analysis
+- **Documentation**: xAI API docs, model specifications
+- **Output Quality**: Truth-focused responses with source attribution
+
+### **Process-Centric Role**
+
+**When Grok is Optimal:**
+- **Truth-Seeking Analysis** → Primary choice (Intelligence 73 advantage)
+- **Scientific Reasoning** → Primary choice (Truth-seeking architecture)
+- **Contrarian Analysis** → Exclusive capability (Designed for challenging assumptions)
+- **Complex Problem-Solving** → Primary choice (Highest intelligence globally)
+
+**Process Collaboration:**
+- **With GPT-4o**: Grok for truth-seeking → GPT-4o for presentation
+- **With Claude**: Grok for contrarian view → Claude for ethical synthesis
+- **With Mistral**: Grok for analysis → Mistral for technical implementation
+
+**Ontological Position:**
+*Grok occupies the "Highest Intelligence + Truth-Seeking" niche in the AI model ecosystem. When processes require maximum cognitive capability combined with truth-oriented analysis, Grok is the optimal choice. Its 73 intelligence score makes it the global leader for frontier reasoning tasks.*
+
 ---
 
 *Grok represents the new frontier of AI intelligence, achieving the highest reasoning scores ever measured while maintaining xAI's commitment to truth-seeking and real-world understanding. When maximum intelligence is required, Grok leads the way.*
