@@ -26,6 +26,21 @@ Perplexity AI revolutionizes search by combining large language models with real
 - **Real-Time Access**: Current, up-to-date information from across the web
 - **Conversational Discovery**: Natural language interaction for information seeking
 
+### **🔍 SEARCH SPECIALIST WITH DECENT INTELLIGENCE**
+*Based on [Artificial Analysis AI Leaderboards](https://artificialanalysis.ai/leaderboards/models)*
+
+**📊 Performance Assessment**
+- **R1 1776**: Intelligence **54** at **$3.50/1M** *(Mid-tier performance)*
+- **Search Integration**: Best-in-class real-time information access
+- **Source Attribution**: Industry-leading citation and verification
+- **Specialized Positioning**: Search-focused rather than general intelligence
+
+**🎯 Market Position Reality**
+- **Intelligence**: Mid-tier (54) vs leaders (70-71) but specialized for search
+- **Pricing**: Premium ($3.50/1M) vs efficient alternatives
+- **Unique Value**: Search integration expertise and real-time information
+- **Competition**: Faces challenges from Gemini + ChatGPT web search integration
+
 ## TL;DR
 
 To get started with the Perplexity module:
