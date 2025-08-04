@@ -210,6 +210,7 @@ def create_agent(
         "src.core.modules.ontology.agents.OntologyAgent", 
         "src.core.modules.naas.agents.NaasAgent",
         # LLM Agents
+        "src.core.modules.grok.agents.GrokAgent",
         "src.core.modules.gemini.agents.GeminiAgent",
         "src.core.modules.chatgpt.agents.ChatGPTAgent",
         "src.core.modules.perplexity.agents.PerplexityAgent",
@@ -218,6 +219,7 @@ def create_agent(
         "src.core.modules.llama.agents.LlamaAgent",
     ]
     # Create agent references for intent routing
+    grok_agent = None
     google_gemini_agent = None
     openai_agent = None
     perplexity_agent = None
@@ -234,7 +236,9 @@ def create_agent(
                 if hasattr(agent, 'name') and hasattr(agent, 'description') and hasattr(agent, 'chat_model'):
                     agents.append(agent)
                     # Store agent references for intents
-                    if "gemini" in m:
+                    if "grok" in m:
+                        grok_agent = agent
+                    elif "gemini" in m:
                         google_gemini_agent = agent
                     elif "chatgpt" in m:
                         openai_agent = agent
@@ -283,6 +287,22 @@ def create_agent(
                 intent_target="My name is ABI",
             ),
         ] + (
+            # xAI Grok Agent intents (only add if agent is available)
+            [
+                Intent(intent_type=IntentType.AGENT, intent_value="use grok", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to grok", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="xai", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="grok 4", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="maximum intelligence", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="highest intelligence", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="use xai", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="switch to xai", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="ask grok", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="truth seeking", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="contrarian analysis", intent_target=grok_agent.name),
+                Intent(intent_type=IntentType.AGENT, intent_value="scientific reasoning", intent_target=grok_agent.name),
+            ] if grok_agent else []
+        ) + (
             # Google Gemini 2.0 Flash Agent intents (only add if agent is available)
             [
                 Intent(intent_type=IntentType.AGENT, intent_value="use gemini", intent_target=google_gemini_agent.name),
