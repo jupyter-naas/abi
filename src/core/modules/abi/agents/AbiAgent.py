@@ -15,7 +15,7 @@ from pydantic import SecretStr
 import importlib
 import os
 
-NAME = "Supervisor"
+NAME = "Abi"
 MODEL = "o3-mini"
 TEMPERATURE = 1
 AVATAR_URL = (
@@ -298,8 +298,8 @@ def create_agent(
     else:
         raise ValueError("AI_MODE must be either 'cloud' or 'local'")
 
-    # Use all loaded agents - the SupervisorAgent will handle validation internally
-    return SupervisorAgent(
+    # Use all loaded agents - the AbiAgent will handle validation internally
+    return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -311,23 +311,23 @@ def create_agent(
                 intent_type=IntentType.RAW,
                 intent_target="My name is ABI",
             ),
-            # Supervisor Agent return intents  
-            Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="can i talk back to abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="Supervisor"),
-            Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="Supervisor"),
+            # Abi Agent return intents  
+            Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="can i talk back to abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="Abi"),
+            Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="Abi"),
         ] + (
             # xAI Grok Agent intents (only add if agent is available)
             [
@@ -448,14 +448,14 @@ def create_agent(
     )
 
 
-class SupervisorAgent(IntentAgent):
+class AbiAgent(IntentAgent):
     def as_api(
         self,
         router: APIRouter,
         route_name: str = NAME,
         name: str = NAME.capitalize(). replace("_", " "),
-        description: str = "API endpoints to call the Supervisor agent completion.",
-        description_stream: str = "API endpoints to call the Supervisor agent stream completion.",
+        description: str = "API endpoints to call the Abi agent completion.",
+        description_stream: str = "API endpoints to call the Abi agent stream completion.",
         tags: Optional[list[str | Enum]] = None,
     ) -> None:
         if tags is None:
