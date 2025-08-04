@@ -59,7 +59,14 @@ def save_to_conversation(line: str):
         with open(conversation_file, 'a', encoding='utf-8') as f:
             f.write(line + "\n")
     except Exception as e:
+        # Print error to terminal
         print(f"⚠️ Error saving to conversation file: {e}")
+        # Try to log the error itself if possible
+        try:
+            with open(conversation_file, 'a', encoding='utf-8') as f:
+                f.write(f"⚠️ LOGGING ERROR: {e}\n")
+        except Exception:
+            pass  # If we can't log the error, give up
 
 def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
@@ -164,7 +171,10 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
                 ):
                     print_image(word)
     except Exception as e:
-        print(e)
+        error_msg = f"⚠️ Tool Response Error: {e}"
+        print(error_msg)
+        # Log the error to conversation file
+        save_to_conversation(error_msg)
 
 
 def on_ai_message(message: Any, agent_name) -> None:
@@ -184,10 +194,16 @@ def on_ai_message(message: Any, agent_name) -> None:
     # Filter out think tags and their content
     think_content = re.findall(r'<think>.*?</think>', message.content, flags=re.DOTALL)
     
+    # Prepare thoughts section for both display and logging
+    thoughts_for_log = ""
     if len(think_content) > 0:
         console.print('Thoughts:', style="grey66")
+        thoughts_for_log += "Thoughts:      \n\n"
         for think in think_content:
-            console.print(think.replace('<think>', '').replace('</think>', ''), style="grey66")
+            think_text = think.replace('<think>', '').replace('</think>', '').strip()
+            console.print(think_text, style="grey66")
+            thoughts_for_log += think_text + "\n"
+        thoughts_for_log += "\n"  # Extra line after thoughts
     
     content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
 
@@ -216,7 +232,9 @@ def on_ai_message(message: Any, agent_name) -> None:
     console.print("─" * console.width, style="dim")
     print()  # Add spacing after separator
     
-    # Save exact terminal format to conversation file (with fixed width)
+    # Save exact terminal format to conversation file (with fixed width) including thoughts
+    if thoughts_for_log:
+        save_to_conversation(thoughts_for_log)
     save_to_conversation(agent_message_line)
     save_to_conversation("─" * TERMINAL_WIDTH)
     save_to_conversation("")  # Empty line
@@ -359,8 +377,30 @@ def run_agent(agent: Agent):
         if hasattr(agent, '_state') and hasattr(agent._state, 'set_current_active_agent'):
             agent._state.set_current_active_agent(current_active_agent)
         
-        # Get the response while animation runs
-        agent.invoke(user_input)
+        # Get the response while animation runs with error handling
+        try:
+            agent.invoke(user_input)
+        except Exception as e:
+            # Stop the animation first
+            loading = False
+            loader_thread.join()
+            
+            # Clear the loading line
+            print("\r" + " " * 15 + "\r", end="", flush=True)
+            
+            # Display and log the error
+            error_msg = f"❌ Agent Error: {e}"
+            console.print(error_msg, style="bold red")
+            save_to_conversation(error_msg)
+            
+            # Log the full traceback for debugging
+            import traceback
+            traceback_msg = f"Full traceback:\n{traceback.format_exc()}"
+            console.print(traceback_msg, style="dim red")
+            save_to_conversation(traceback_msg)
+            save_to_conversation("─" * TERMINAL_WIDTH)
+            save_to_conversation("")  # Empty line
+            return  # Continue conversation instead of crashing
         
         # Stop the animation
         loading = False
