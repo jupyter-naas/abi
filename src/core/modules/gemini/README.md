@@ -422,6 +422,64 @@ Google's comprehensive content policy ensures:
 - **Community**: [Google AI Community](https://developers.googleblog.com/search/label/AI)
 - **Research**: [Google AI Research](https://ai.google/research/)
 
+## **🧠 Ontology**
+
+### **BFO Classification Using 7 Buckets Framework**
+
+**Material Entity (WHAT/WHO):**
+- **Core Entity**: Gemini 2.5 Pro/Flash by Google DeepMind
+- **Provider**: Google (Alphabet Inc., Mountain View, 1998)
+- **Infrastructure**: Google Cloud AI endpoints (`generativelanguage.googleapis.com`)
+
+**Qualities (HOW-IT-IS):**
+- **Intelligence**: 70/100 (3rd globally, tied with premium models)
+- **Speed**: 646 tokens/sec (FASTEST MODEL GLOBALLY with Flash-Lite)
+- **Cost**: $3.44/1M tokens (Best price-performance ratio for frontier intelligence)
+- **Unique Quality**: Native multimodal architecture with built-in image generation
+
+**Realizable Entities (WHY-POTENTIAL):**
+- **Multimodal Processing**: Native text, image, video understanding
+- **Image Generation**: Only major LLM with built-in Imagen 4.0
+- **Real-Time Search**: Google's live information integration
+- **Massive Context**: Up to 10M tokens for extensive document processing
+
+**Processes (HOW-IT-HAPPENS):**
+- **Primary Processes**: Image generation, multimodal analysis, document processing, speed-critical tasks
+- **Secondary Processes**: General reasoning, creative writing, technical analysis
+- **Process Role**: Primary for multimodal, secondary for high-speed processing
+
+**Temporal Aspects (WHEN):**
+- **Availability**: 24/7 global access
+- **Response Speed**: 0.29s first token (ultra-fast)
+- **Real-Time**: Live search integration for current information
+- **Peak Performance**: Optimized for high-volume, speed-critical applications
+
+**Spatial Aspects (WHERE):**
+- **Deployment**: Global Google Cloud infrastructure
+- **Data Sovereignty**: Global with regional options
+- **Regional Access**: Worldwide availability with edge optimization
+
+**Information Entities (HOW-WE-KNOW):**
+- **Performance Metrics**: Intelligence 70, 646 t/s speed, $3.44/1M cost analysis
+- **Documentation**: Google AI Studio docs, API references
+- **Output Quality**: Multimodal outputs with integrated image generation
+
+### **Process-Centric Role**
+
+**When Gemini is Optimal:**
+- **Image Generation** → Exclusive capability (Only major LLM with native image creation)
+- **Document Analysis** → Primary choice (10M context window + speed)
+- **Speed-Critical Tasks** → Primary choice (646 t/s global speed leader)
+- **Cost-Conscious Applications** → Primary choice (Best price-performance for intelligence 70)
+
+**Process Collaboration:**
+- **With Mistral**: Gemini for visualization → Mistral for code implementation
+- **With Claude**: Gemini for multimodal analysis → Claude for ethical synthesis
+- **With Grok**: Gemini for speed → Grok for maximum intelligence analysis
+
+**Ontological Position:**
+*Gemini occupies the "Multimodal Speed Champion + Best Value" niche in the AI ecosystem. When processes require image generation, massive context processing, or speed optimization, Gemini is unmatched. Its unique combination of frontier intelligence (70) with ultra-fast performance (646 t/s) and excellent pricing ($3.44/1M) makes it the "Goldilocks solution" for production AI applications.*
+
 ---
 
 *Gemini represents the future of multimodal AI, combining Google's research excellence with practical business applications. Its native image generation capabilities make it uniquely positioned for creative and technical workflows.*
