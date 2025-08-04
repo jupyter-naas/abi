@@ -127,7 +127,7 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 **CRITICAL RULE**: When user is actively conversing with a specialized agent (UI shows "Active: [Agent Name]"):
 - **ALWAYS preserve conversation flow** for follow-ups, acknowledgments, simple questions
 - **Examples of preservation**: "cool", "ok", "merci", "thanks", "tu es qui?", "what can you do?"
-- **ONLY intercept for explicit routing**: "ask Claude", "parler à Mistral", "switch to Grok"
+- **ONLY intercept for explicit routing**: "ask Claude", "parler à Mistral", "switch to Grok", "call supervisor", "talk to abi", "back to abi", "supervisor", "return to supervisor", "parler à abi", "retour à abi", "superviseur"
 - **Multi-language respect**: Handle French/English code-switching within active contexts
 - **Conversation patterns**: Support casual greetings, typo tolerance, agent switching mid-conversation
 
@@ -311,6 +311,23 @@ def create_agent(
                 intent_type=IntentType.RAW,
                 intent_target="My name is ABI",
             ),
+            # Supervisor Agent return intents  
+            Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="can i talk back to abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="Supervisor"),
+            Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="Supervisor"),
         ] + (
             # xAI Grok Agent intents (only add if agent is available)
             [
