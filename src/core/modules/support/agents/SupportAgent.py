@@ -6,17 +6,6 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     MemorySaver,
 )
-from src import secret
-from ..integrations.GithubGraphqlIntegration import (
-    GithubGraphqlIntegrationConfiguration,
-)
-from ..integrations.GithubIntegration import (
-    GithubIntegrationConfiguration,
-)
-from ..workflows.GitHubSupportWorkflows import (
-    GitHubSupportWorkflows,
-    GitHubSupportWorkflowsConfiguration,
-)
 from typing import Optional
 from enum import Enum
 from pydantic import SecretStr
@@ -73,7 +62,18 @@ def create_agent(
         api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
     tools: list = []
-
+    from src import secret
+    from src.core.modules.github.integrations.GithubGraphqlIntegration import (
+        GithubGraphqlIntegrationConfiguration,
+    )
+    from src.core.modules.github.integrations.GithubIntegration import (
+        GithubIntegrationConfiguration,
+    )
+    from src.core.modules.support.workflows.GitHubSupportWorkflows import (
+        GitHubSupportWorkflows,
+        GitHubSupportWorkflowsConfiguration,
+    )
+    
     if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):
         github_integration_config = GithubIntegrationConfiguration(
             access_token=github_access_token
@@ -100,7 +100,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
-    return SupportAssistant(
+    return SupportAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -111,7 +111,7 @@ def create_agent(
     )
 
 
-class SupportAssistant(Agent):
+class SupportAgent(Agent):
     def as_api(
         self,
         router: APIRouter,
