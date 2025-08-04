@@ -21,40 +21,51 @@ Google's AI development is powered by DeepMind, the world-renowned AI research l
 
 ## Model Capabilities
 
-### Core Strengths
+### **🏆 EFFICIENCY CHAMPION & SPEED LEADER**
+*Based on [Artificial Analysis AI Leaderboards](https://artificialanalysis.ai/leaderboards/models)*
 
-**🖼️ Advanced Multimodal Processing**
-- Native image generation via Google Imagen API
-- Vision understanding and image analysis
-- Document processing and OCR capabilities
-- Multi-format content interpretation
+**🥇 Best Performance-Per-Dollar**
+- **Gemini 2.5 Pro**: Intelligence **70** at **$3.44/1M** *(70% of o3 performance at 10% of price!)*
+- **Gemini 2.5 Flash**: Intelligence **53** at **$0.85/1M** *(Excellent value)*
+- **Gemini 2.5 Flash-Lite**: Intelligence **46** at **$0.17/1M** *(Ultra-efficient)*
 
-**🎨 Image Generation (Unique Feature)**
+**⚡ GLOBAL SPEED DOMINATION**
+- **Gemini 2.5 Flash-Lite (Reasoning)**: **646 tokens/sec** *(FASTEST MODEL GLOBALLY)*
+- **Gemini 2.5 Flash-Lite**: **391 tokens/sec** *(2nd fastest globally)*
+- **Gemini 2.5 Flash (Reasoning)**: **303 tokens/sec** *(4th fastest globally)*
+- **Gemini 2.5 Flash**: **257 tokens/sec** *(Excellent speed)*
+- **Gemini 2.5 Pro**: **147 tokens/sec** *(Fast for frontier intelligence)*
+
+**📊 Performance Portfolio**
+- **Context Windows**: Up to **10M tokens** (largest available)
+- **Latency**: 0.29s first token (Flash models) - Ultra-fast response
+- **Reliability**: Google-scale infrastructure and uptime
+
+**🖼️ UNIQUE: Native Image Generation**
 - **Imagen 4.0**: State-of-the-art text-to-image generation
+- **Only major LLM** with built-in image creation capabilities
 - High-resolution output with artistic control
-- Style consistency and prompt adherence
-- Safety filtering and content guidelines
+- Advanced safety filtering and content guidelines
 - Automated storage with timestamp organization
 
-**🧠 Reasoning & Analysis**
-- Advanced reasoning capabilities with thinking steps
-- Complex problem-solving across domains
-- Mathematical computation and logic
-- Code generation and debugging
+**🧠 Multimodal Excellence**
+- Native multimodal architecture (not plugin-based)
+- Vision understanding and image analysis
+- Document processing and OCR capabilities
+- Video understanding capabilities
 
-**🌐 Real-World Integration**
-- Search-enhanced responses
-- Current events and real-time information
+**🌐 Google Integration Advantage**
+- Real-time search integration
+- Current events and live information access
 - Multi-language support (120+ languages)
-- Context-aware responses
+- Native Google services connectivity
 
-### Current Model: Gemini 2.5 Flash
+### Current Models Portfolio
 
-- **Architecture**: Multimodal transformer
-- **Context Window**: 1M+ tokens
-- **Capabilities**: Text, images, code, mathematical reasoning
-- **Speed**: Optimized for fast inference
-- **Integration**: Native Google services connectivity
+**🚀 Gemini 2.5 Pro**: Intelligence 70, $3.44/1M, 147 t/s - *Best price-performance frontier*
+**⚡ Gemini 2.5 Flash**: Intelligence 53, $0.85/1M, 257 t/s - *Production workhorse*
+**💨 Gemini 2.5 Flash-Lite**: Intelligence 46, $0.17/1M, **646 t/s** - *Speed champion*
+**🧠 Gemini 2.5 Flash (Reasoning)**: Intelligence 65, $0.85/1M, 303 t/s - *Reasoning optimization*
 
 ## Technical Architecture
 
@@ -208,44 +219,58 @@ result = workflow.run(
 
 ## Ontological Position
 
-### In the AI Ecosystem
+### **🏆 EFFICIENCY & SPEED SUPREMACY**
+*Data-driven analysis based on [Artificial Analysis AI Leaderboards](https://artificialanalysis.ai/leaderboards/models)*
 
-Gemini represents Google's vision of universal AI:
+**🥇 The Performance-Per-Dollar Champion**
+- **BEST VALUE PROPOSITION**: Intelligence 70 at $3.44/1M (vs o3's $35/1M for Intelligence 70)
+- **10x Cost Advantage**: Same frontier intelligence at 1/10th the price of premium competitors
+- **Speed Domination**: Owns top 4 speed rankings globally (646, 391, 303, 257 t/s)
+- **Infrastructure Excellence**: Google-scale reliability and global availability
 
-**🌍 Multimodal Native Design**
-- First major model designed multimodal from the ground up
-- No separate vision or image models - unified architecture
-- Native understanding across all modalities
+**🌍 Unique Multimodal Integration**
+- **ONLY major LLM** with native image generation (Imagen 4.0)
+- True multimodal architecture vs. plugin-based competitors
+- Real-time search integration with Google's index
+- Largest context windows available (up to 10M tokens)
 
-**🔬 Research Excellence**
-- Built on decades of Google/DeepMind research
-- Integration of latest breakthroughs in attention, reasoning, and generation
-- Continuous improvement through Google's research pipeline
+**🔬 Google's AI Ecosystem Advantage**
+- Built on decades of DeepMind research excellence
+- Integration with Google's vast data and services
+- Continuous model updates and improvements
+- Real-time information synthesis capabilities
 
-**🌐 Ecosystem Integration**
-- Deep integration with Google's services and data
-- Real-time information access
-- Potential for future Google Workspace integration
+### **Brutal Competitive Reality**
 
-### Distinctive Characteristics
+**vs. OpenAI (Intelligence 70-71, $3.50-$35/1M):**
+- **Gemini Advantage**: Better price-performance, 4x faster speed, larger context
+- **OpenAI Advantage**: Slightly higher intelligence in o3-series, web search integration
+- **Verdict**: Gemini wins efficiency, OpenAI wins premium performance
 
-**Compared to GPT-4:**
-- Native multimodality vs. plugin-based approach
-- Image generation built-in vs. external DALL-E integration
-- Google's search integration advantage
-- Faster inference optimizations
+**vs. Claude (Intelligence 64, $30/1M):**
+- **Gemini Advantage**: Higher intelligence (70 vs 64), 9x better pricing, 4x faster
+- **Claude Advantage**: Safety focus, ethical reasoning reputation
+- **Verdict**: Gemini dominates on all performance metrics
 
-**Compared to Claude:**
-- Stronger multimodal capabilities
-- Image generation abilities
-- Real-time data access
-- More experimental features
+**vs. Mistral (Intelligence 56, $2.75/1M):**
+- **Gemini Advantage**: 14-point intelligence gap (70 vs 56), comparable pricing, much faster
+- **Mistral Advantage**: European sovereignty, code specialization
+- **Verdict**: Gemini clear performance leader
 
-**Unique Position:**
-- Only major model with native image generation
-- Google's vast data and infrastructure advantage
-- Cutting-edge multimodal research integration
-- Real-time information synthesis
+**vs. Llama (Intelligence 43, $0.23/1M):**
+- **Gemini Advantage**: 27-point intelligence gap (70 vs 43), much faster, image generation
+- **Llama Advantage**: Ultra-low pricing, open source, 10M context
+- **Verdict**: Different segments - Gemini production, Llama experiments
+
+**vs. Perplexity (Intelligence 54):**
+- **Gemini Advantage**: 16-point intelligence gap (70 vs 54), broader capabilities
+- **Perplexity Advantage**: Specialized search focus
+- **Verdict**: Gemini general superiority, both have search capabilities
+
+**🎯 Strategic Position: The Goldilocks Solution**
+- **Too expensive?** Llama at $0.23/1M (but 27-point intelligence gap)
+- **Too cheap?** OpenAI o3 at $35/1M (but only marginal intelligence gain)
+- **Just right:** Gemini 2.5 Pro at $3.44/1M with Intelligence 70 + **646 t/s speed**
 
 ## Business Applications
 
@@ -279,12 +304,39 @@ Gemini represents Google's vision of universal AI:
 
 ## Performance Metrics
 
-- **Multimodal Understanding**: Best-in-class
-- **Image Generation Quality**: State-of-the-art (Imagen 4.0)
-- **Speed**: Optimized for fast inference (Flash variant)
-- **Context Window**: 1M+ tokens
-- **Language Support**: 120+ languages
-- **Integration Capability**: Excellent (Google ecosystem)
+*Based on [Artificial Analysis AI Leaderboards](https://artificialanalysis.ai/leaderboards/models) - Live data from 100+ models*
+
+**🏆 Intelligence Portfolio:**
+- **Gemini 2.5 Pro**: **70** (3rd globally, tied with o3/o4-mini) - Frontier performance
+- **Gemini 2.5 Flash (Reasoning)**: **65** (11th globally) - Excellent reasoning
+- **Gemini 2.5 Flash**: **53** (mid-tier) - Production workhorse
+- **Gemini 2.5 Flash-Lite**: **46** (efficient tier) - Ultra-fast deployment
+
+**⚡ GLOBAL SPEED DOMINATION:**
+- **Flash-Lite (Reasoning)**: **646 tokens/sec** - **#1 FASTEST MODEL GLOBALLY**
+- **Flash-Lite**: **391 tokens/sec** - **#2 FASTEST MODEL GLOBALLY**  
+- **Flash (Reasoning)**: **303 tokens/sec** - **#4 FASTEST MODEL GLOBALLY**
+- **Flash**: **257 tokens/sec** - Excellent production speed
+- **2.5 Pro**: **147 tokens/sec** - Fast for frontier intelligence
+
+**💰 Price-Performance Champions:**
+- **2.5 Pro**: $3.44/1M for Intelligence 70 - **Best frontier value globally**
+- **Flash**: $0.85/1M for Intelligence 53 - Excellent production value
+- **Flash-Lite**: $0.17/1M for Intelligence 46 - Ultra-efficient
+
+**📊 Technical Excellence:**
+- **Context Windows**: Up to 10M tokens (largest available)
+- **Latency**: 0.29s first token (Flash models) - Ultra-responsive
+- **Multimodal**: Native architecture (not plugin-based)
+- **Image Generation**: Only major LLM with built-in Imagen 4.0
+- **Languages**: 120+ languages supported
+
+**🎯 Competitive Advantages:**
+- **vs. Intelligence Leaders (o3-series)**: 10x better pricing for same performance
+- **vs. Speed Competitors**: Owns top 4 speed rankings globally
+- **vs. Value Options (Llama)**: 27-point intelligence advantage
+- **vs. Premium (Claude)**: Higher intelligence at 9x better pricing
+- **Unique Capabilities**: Only native image generation + 646 t/s speed
 
 ## Advanced Features
 
