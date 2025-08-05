@@ -11,6 +11,9 @@ TEMPERATURE = 0.1
 MAX_TOKENS = 4096
 SEARCH_MODE = "auto"
 MAX_SEARCH_RESULTS = 5
+OWNER = "xai"
+IMAGE = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWPa2BvxKTq-9ygcQ4mhRA&s"
+DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
 
 model: Optional[ChatModel] = None
 
@@ -19,6 +22,9 @@ if xai_api_key:
     model = ChatModel(
         model_id=ID,
         name=NAME,
+        description=DESCRIPTION,
+        image=IMAGE,
+        owner=OWNER,
         model=ChatXAI(
             model=ID,
             temperature=TEMPERATURE,
