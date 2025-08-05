@@ -96,7 +96,7 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=0)
 
     # Tools (we already verified API key exists)
-    from src.core.modules.chatgpt.integrations.OpenAIWebSearchIntegration import OpenAIWebSearchIntegration
+    from src.core.modules.chatgpt.integrations import OpenAIWebSearchIntegration
     from src.core.modules.chatgpt.integrations.OpenAIWebSearchIntegration import OpenAIWebSearchIntegrationConfiguration
 
     openai_web_search_integration_configuration = OpenAIWebSearchIntegrationConfiguration(  

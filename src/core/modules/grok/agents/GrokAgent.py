@@ -91,7 +91,7 @@ def create_agent(
     return GrokAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=model.model,
         tools=tools,
         agents=agents,
         intents=intents,
