@@ -1,7 +1,6 @@
 from abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
 from typing import Optional
-from pydantic import SecretStr
 from abi import logger
 
 ID = "deepseek-r1:8b"
