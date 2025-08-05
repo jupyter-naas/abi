@@ -5,10 +5,10 @@ from typing import Optional
 from pydantic import SecretStr
 from abi import logger
 
-ID = "gpt-4o"
-NAME = "gpt-4o"
-DESCRIPTION = "OpenAI's most advanced model with superior performance across text, code, and reasoning tasks."
-IMAGE = "https://i.pinimg.com/736x/2a/62/c3/2a62c34e0d217a7aa14645ce114d84b3.jpg"
+ID = "o3-mini"
+NAME = "o3-mini"
+DESCRIPTION = "OpenAI's fastest reasoning model, optimized for performance and efficiency in multi-agent orchestration."
+IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 CONTEXT_WINDOW = 128000
 OWNER = "openai"
 
@@ -23,7 +23,8 @@ if openai_api_key:
         owner=OWNER,
         model=ChatOpenAI(
             model=ID,
-            temperature=0,
+            temperature=1,  # AbiAgent uses temperature=1 for creative orchestration
+            max_retries=2,
             api_key=SecretStr(openai_api_key),
         ),
         context_window=CONTEXT_WINDOW,

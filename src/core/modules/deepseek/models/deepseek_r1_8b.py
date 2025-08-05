@@ -1,15 +1,8 @@
-"""DeepSeek R1 8B model configuration for local deployment via Ollama.
-
-This module defines the DeepSeek R1 8B model, specifically optimized for:
-- Advanced reasoning and problem-solving
-- Mathematical computations and proofs
-- Complex logical analysis
-- Scientific research assistance
-- Chain-of-thought reasoning
-"""
-
-from lib.abi.models.Model import ChatModel
+from abi.models.Model import ChatModel
+from langchain_ollama import ChatOllama
 from typing import Optional
+from pydantic import SecretStr
+from abi import logger
 
 ID = "deepseek-r1:8b"
 NAME = "DeepSeek R1 8B"
@@ -21,8 +14,6 @@ OWNER = "ollama"
 model: Optional[ChatModel] = None
 
 try:
-    from langchain_ollama import ChatOllama
-    
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -36,11 +27,6 @@ try:
         ),
         context_window=CONTEXT_WINDOW,
     )
-    print("✅ DeepSeek R1 8B model loaded successfully via Ollama")
-    
-except ImportError:
-    print("⚠️  langchain_ollama not installed. DeepSeek R1 8B model will not be available.")
-    print("   Install with: pip install langchain-ollama")
 except Exception as e:
-    print(f"⚠️  Error loading DeepSeek R1 8B model: {e}")
-    print("   Make sure Ollama is running and 'deepseek-r1:8b' model is pulled.")
+    logger.error(f"⚠️  Error loading DeepSeek R1 8B model: {e}")
+    logger.error("   Make sure Ollama is running and 'deepseek-r1:8b' model is pulled.")
