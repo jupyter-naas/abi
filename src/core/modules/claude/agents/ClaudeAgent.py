@@ -7,19 +7,15 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from ..models.claude_3_5_sonnet import model
-from src import secret
+from src.core.modules.claude.models.claude_3_5_sonnet import model
 from typing import Optional
 from enum import Enum
-import os
-from datetime import datetime
+from abi import logger
 
 NAME = "Claude"
 AVATAR_URL = "https://assets.anthropic.com/m/0edc05fa8e30f2f9/original/Anthropic_Glyph_Black.svg"
 DESCRIPTION = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
-
 SYSTEM_PROMPT = """You are Claude, a helpful, harmless, and honest AI assistant created by Anthropic.
-
 You excel at complex reasoning, analysis, and creative tasks with a focus on:
 - Advanced reasoning and critical thinking
 - Complex analysis and problem-solving
@@ -42,12 +38,55 @@ When users say things like "ask claude", "parler à claude", "I want to talk to 
 - Simply acknowledge and proceed to help them directly
 - Never say "I cannot ask Claude" or "I cannot connect you to Claude" - you ARE Claude!
 
-You prioritize accuracy, helpfulness, and ethical considerations in all your responses."""
+You prioritize accuracy, helpfulness, and ethical considerations in all your responses.
+"""
+
+def create_agent(
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
+) -> Optional[IntentAgent]:
+    # Check if model is available
+    if model is None:
+        logger.error("Claude model not available - missing Anthropic API key")
+        return None
+    
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+    
+    # Init
+    tools: list = []
+    agents: list = []
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="I am Claude, a helpful AI assistant created by Anthropic. I excel at complex reasoning, analysis, and creative tasks.",
+        ),
+        Intent(
+            intent_value="what can you do",
+            intent_type=IntentType.RAW,
+            intent_target="I can help with complex reasoning, critical thinking, analysis, creative writing, technical explanations, research, and providing balanced perspectives on various topics.",
+        ),
+    ]
+    return ClaudeAgent(
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model.model,
+        tools=tools,
+        agents=agents,
+        intents=intents,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    ) 
 
 
 class ClaudeAgent(IntentAgent):
-    """Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."""
-    
     def as_api(
         self,
         router: APIRouter,
@@ -58,69 +97,7 @@ class ClaudeAgent(IntentAgent):
         tags: Optional[list[str | Enum]] = None,
     ) -> None:
         if tags is None:
-            tags = ["Anthropic", "Claude", "AI", "Reasoning", "Analysis"]
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )
-
-    def hello(self) -> str:
-        first_name = os.getenv("USER_FIRST_NAME", "there")
-        current_time = datetime.now().strftime("%H:%M")
-        
-        return f"""
-Hi {first_name}! I'm Claude, Anthropic's AI assistant. It's {current_time} and I'm here to help with thoughtful analysis and reasoning.
-
-I excel at:
-🧠 Complex reasoning and critical thinking
-📊 Analysis and problem-solving
-⚖️ Balanced perspectives and ethical considerations
-✍️ Creative writing and content generation
-📚 Technical explanations and documentation
-🔍 Research and information synthesis
-
-What would you like to explore together?
-"""
-
-
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
-    # Check if Anthropic API key is available
-    if not secret.get("ANTHROPIC_API_KEY"):
-        return None
-    
-    # Init
-    tools: list = []
-    agents: list = []
-    
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
-        
-    return ClaudeAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        agents=agents,
-        intents=[
-            Intent(
-                intent_value="what is your name",
-                intent_type=IntentType.RAW,
-                intent_target="I am Claude, a helpful AI assistant created by Anthropic. I excel at complex reasoning, analysis, and creative tasks.",
-            ),
-            Intent(
-                intent_value="what can you do",
-                intent_type=IntentType.RAW,
-                intent_target="I can help with complex reasoning, critical thinking, analysis, creative writing, technical explanations, research, and providing balanced perspectives on various topics.",
-            ),
-        ],
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=MemorySaver(),
-    ) 
