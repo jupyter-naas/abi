@@ -1,0 +1,151 @@
+{
+  "@context": {
+    "dprod": "https://ekgf.github.io/dprod/",
+    "dcat": "http://www.w3.org/ns/dcat#",
+    "foaf": "http://xmlns.com/foaf/0.1/",
+    "schema": "https://schema.org/",
+    "abi": "https://naas.ai/abi/ontology/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "@type": "dprod:DataProduct",
+  "@id": "abi:agents/qwen",
+  "dcat:title": "Qwen AI Agent",
+  "dcat:description": "Local privacy-focused AI agent powered by Qwen3 8B model via Ollama, specialized in multilingual conversations, code generation, and general problem-solving.",
+  "schema:version": "1.0.0",
+  "dprod:domain": "artificial-intelligence",
+  "dprod:dataProductOwner": {
+    "@type": "foaf:Agent",
+    "foaf:name": "ABI System",
+    "foaf:mbox": "support@naas.ai"
+  },
+  "dprod:lifecycle": "production",
+  "dprod:maturityLevel": "beta",
+  "dcat:keyword": [
+    "ai-agent",
+    "multilingual",
+    "local-deployment",
+    "privacy-focused",
+    "code-generation",
+    "ollama",
+    "qwen3"
+  ],
+  "dprod:purpose": [
+    "privacy-focused conversational AI",
+    "multilingual communication",
+    "code generation and assistance",
+    "local AI deployment"
+  ],
+  "dprod:informationSensitivityClassification": "internal",
+  "dprod:personalDataHandling": "none",
+  "dcat:distribution": [
+    {
+      "@type": "dcat:Distribution",
+      "@id": "abi:agents/qwen/api",
+      "dcat:title": "Qwen Agent API",
+      "dcat:format": "application/json",
+      "dcat:accessService": {
+        "@type": "dcat:DataService",
+        "dcat:endpointURL": "https://api.naas.ai/agents/qwen",
+        "dcat:servesDataset": "abi:agents/qwen"
+      }
+    },
+    {
+      "@type": "dcat:Distribution", 
+      "@id": "abi:agents/qwen/local",
+      "dcat:title": "Local Ollama Deployment",
+      "dcat:format": "ollama/model",
+      "dprod:deploymentMode": "local",
+      "dprod:computeRequirements": {
+        "memory": "8GB",
+        "storage": "5GB",
+        "gpu": "optional"
+      }
+    }
+  ],
+  "dprod:inputDatasets": [
+    {
+      "@type": "dprod:InputDataset",
+      "@id": "abi:conversations/qwen",
+      "dcat:title": "User Conversations",
+      "dcat:description": "Conversational inputs for processing",
+      "dprod:dataFormat": "text/plain"
+    }
+  ],
+  "dprod:outputDatasets": [
+    {
+      "@type": "dprod:OutputDataset", 
+      "@id": "abi:responses/qwen",
+      "dcat:title": "AI Agent Responses",
+      "dcat:description": "Generated responses and assistance",
+      "dprod:dataFormat": "text/plain"
+    },
+    {
+      "@type": "dprod:OutputDataset",
+      "@id": "abi:code/qwen", 
+      "dcat:title": "Generated Code",
+      "dcat:description": "Code snippets and programming assistance",
+      "dprod:dataFormat": "text/code"
+    }
+  ],
+  "dprod:qualityMetrics": [
+    {
+      "@type": "dprod:QualityMetric",
+      "dprod:metricType": "response_time",
+      "dprod:targetValue": "<2000ms",
+      "dprod:description": "Local processing response time"
+    },
+    {
+      "@type": "dprod:QualityMetric", 
+      "dprod:metricType": "accuracy",
+      "dprod:targetValue": ">85%",
+      "dprod:description": "Response accuracy for multilingual queries"
+    },
+    {
+      "@type": "dprod:QualityMetric",
+      "dprod:metricType": "privacy_compliance", 
+      "dprod:targetValue": "100%",
+      "dprod:description": "Local processing ensures complete data privacy"
+    }
+  ],
+  "dprod:serviceLevel": {
+    "@type": "dprod:ServiceLevel",
+    "dprod:availability": "99.9%",
+    "dprod:responseTime": "< 2 seconds",
+    "dprod:supportHours": "24/7 community support"
+  },
+  "dprod:dataLineage": {
+    "@type": "dprod:DataLineage",
+    "dprod:sources": [
+      {
+        "@id": "abi:models/qwen3:8b",
+        "dcat:title": "Qwen3 8B Base Model",
+        "dprod:sourceType": "foundation_model"
+      }
+    ],
+    "dprod:transformations": [
+      {
+        "@type": "dprod:Transformation",
+        "dprod:process": "intent_classification",
+        "dprod:description": "Classify user intent and route appropriately"
+      },
+      {
+        "@type": "dprod:Transformation", 
+        "dprod:process": "response_generation",
+        "dprod:description": "Generate contextual AI responses"
+      }
+    ]
+  },
+  "dprod:governance": {
+    "@type": "dprod:Governance",
+    "dprod:dataGovernanceFramework": "ISO/IEC 42001:2023",
+    "dprod:complianceRequirements": [
+      "Local data processing",
+      "No external API calls",
+      "Privacy by design"
+    ],
+    "dprod:riskAssessment": "low",
+    "dprod:approvalStatus": "approved"
+  },
+  "schema:dateCreated": "2025-01-15T00:00:00Z",
+  "schema:dateModified": "2025-01-15T00:00:00Z"
+}
