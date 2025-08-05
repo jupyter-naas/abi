@@ -8,7 +8,6 @@ from abi.services.agent.IntentAgent import (
 )
 from fastapi import APIRouter
 from src.core.modules.gemini.models.google_gemini_2_5_flash import model
-from src import secret
 from typing import Optional
 from enum import Enum
 from abi import logger
