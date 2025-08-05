@@ -14,6 +14,7 @@ MAX_SEARCH_RESULTS = 5
 OWNER = "xai"
 IMAGE = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWPa2BvxKTq-9ygcQ4mhRA&s"
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
+CONTEXT_WINDOW = 200000
 
 model: Optional[ChatModel] = None
 
@@ -25,6 +26,7 @@ if xai_api_key:
         description=DESCRIPTION,
         image=IMAGE,
         owner=OWNER,
+        context_window=CONTEXT_WINDOW,
         model=ChatXAI(
             model=ID,
             temperature=TEMPERATURE,
