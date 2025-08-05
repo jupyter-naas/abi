@@ -1,33 +1,18 @@
-"""Gemma Agent for lightweight local AI interactions via Ollama.
-
-This module provides the GemmaAgent class for local AI conversations using
-Google's open-source Gemma3 4B model through Ollama. Designed as a fast,
-lightweight, privacy-focused alternative to cloud-based Gemini.
-"""
-
-from abi.services.agent.IntentAgent import IntentAgent, Intent, IntentType, AgentConfiguration
-from ..models.gemma3_4b import model
+from abi.services.agent.IntentAgent import (
+    IntentAgent, 
+    Intent, 
+    IntentType, 
+    AgentConfiguration, 
+    AgentSharedState, 
+    MemorySaver,
+)
+from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
+from abi import logger
 
 NAME = "Gemma"
 DESCRIPTION = "Local Gemma3 4B model via Ollama - lightweight, fast alternative to cloud Gemini"
-
-def create_agent() -> Optional[IntentAgent]:
-    """Create and configure the Gemma agent.
-    
-    Returns:
-        Optional[IntentAgent]: Configured Gemma agent, or None if model unavailable
-        
-    Raises:
-        ValueError: If Gemma model is not available (Ollama not running or model not pulled)
-    """
-    # Check if model is available
-    if not model:
-        print("⚠️  Gemma model not available. Make sure Ollama is running and 'gemma3:4b' is pulled.")
-        return None
-    
-    # Agent system prompt optimized for Gemma3's general-purpose capabilities
-    SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's open-source Gemma3 4B model running locally via Ollama.
+SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's open-source Gemma3 4B model running locally via Ollama.
 
 ## Your Strengths
 - **Fast & Lightweight**: Quick responses optimized for efficient local inference
@@ -65,7 +50,26 @@ def create_agent() -> Optional[IntentAgent]:
 - Lightweight tasks that don't need heavy reasoning
 - As a privacy-focused alternative to cloud models
 
-Remember: I'm your local, private AI assistant - fast, efficient, and completely offline!"""
+Remember: I'm your local, private AI assistant - fast, efficient, and completely offline!
+"""
+
+def create_agent(
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
+) -> Optional[IntentAgent]:
+
+    # Check if model is available
+    if not model:
+        logger.error("⚠️  Gemma model not available. Make sure Ollama is running and 'gemma3:4b' is pulled.")
+        return None
+    
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
 
     # Define Gemma-specific intents
     intents = [
@@ -99,17 +103,15 @@ Remember: I'm your local, private AI assistant - fast, efficient, and completely
         Intent(intent_type=IntentType.AGENT, intent_value="general question", intent_target=NAME),
         Intent(intent_type=IntentType.AGENT, intent_value="everyday task", intent_target=NAME),
     ]
-
-    # Type safety check
-    if not model:
-        raise ValueError("Gemma model not available - Ollama not running or gemma3:4b not pulled")
-
-    return IntentAgent(
+    return GemmaAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
-        configuration=AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        ),
+        configuration=agent_configuration,
+        state=agent_shared_state,
+        memory=MemorySaver(),
     )
+
+class GemmaAgent(IntentAgent):
+    pass
