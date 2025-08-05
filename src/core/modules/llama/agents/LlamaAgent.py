@@ -7,17 +7,14 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from ..models.llama_3_3_70b import model
-from src import secret
+from src.core.modules.llama.models.llama_3_3_70b import model
 from typing import Optional
 from enum import Enum
-import os
-from datetime import datetime
+from abi import logger
 
 NAME = "Llama"
-AVATAR_URL = "https://github.com/meta-llama/llama/raw/main/Llama_Repo.jpeg"
+AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5EgCMe365ZQGnnMEOzO_9uQyXnB8zQc4W7Q&s"
 DESCRIPTION = "Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."
-
 SYSTEM_PROMPT = """You are Llama, a helpful AI assistant created by Meta. You excel at following instructions, engaging in conversation, and assisting with a wide variety of tasks.
 
 Your strengths include:
@@ -42,12 +39,54 @@ When users say things like "ask llama", "parler à llama", "I want to talk to ll
 - Simply acknowledge and proceed to help them directly
 - Never say "I cannot connect you to Llama" - you ARE Llama!
 
-You aim to be genuinely helpful while being honest about your capabilities and limitations."""
+You aim to be genuinely helpful while being honest about your capabilities and limitations.
+"""
 
+def create_agent(
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
+) -> Optional[IntentAgent]:
+    # Check if model is available
+    if model is None:
+        logger.error("Llama model not available - missing Meta API key")
+        return None
+    
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
+    
+    # Init
+    tools: list = []
+    agents: list = []
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="I am Llama, a helpful AI assistant created by Meta. I'm designed for instruction-following and natural conversation.",
+        ),
+        Intent(
+            intent_value="what can you do",
+            intent_type=IntentType.RAW,
+            intent_target="I can help with natural conversation, following instructions, creative writing, code assistance, mathematical problems, and general knowledge questions.",
+        ),
+    ]
+    return LlamaAgent(
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model.model,
+        tools=tools,
+        agents=agents,
+        intents=intents,
+        state=agent_shared_state,
+        configuration=agent_configuration,
+        memory=MemorySaver(),
+    ) 
 
 class LlamaAgent(IntentAgent):
-    """Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."""
-    
     def as_api(
         self,
         router: APIRouter,
@@ -58,72 +97,7 @@ class LlamaAgent(IntentAgent):
         tags: Optional[list[str | Enum]] = None,
     ) -> None:
         if tags is None:
-            tags = ["Meta", "Llama", "AI", "OpenSource", "Conversation"]
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )
-
-    def hello(self) -> str:
-        first_name = os.getenv("USER_FIRST_NAME", "there")
-        current_time = datetime.now().strftime("%H:%M")
-        
-        return f"""
-Hello {first_name}! I'm Llama, Meta's AI assistant. It's {current_time} and I'm ready to help with whatever you need.
-
-I'm great at:
-💬 Natural conversation and dialogue
-📝 Following instructions and completing tasks
-🧠 General knowledge and reasoning
-✨ Creative writing and content generation
-💻 Code understanding and assistance
-🔢 Mathematical problem-solving
-
-What can I help you with today?
-"""
-
-
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
-    # Check if OpenAI API key is available (used for Llama via OpenAI-compatible endpoint)
-    if not secret.get("OPENAI_API_KEY"):
-        return None
-    
-    # Init
-    tools: list = []
-    agents: list = []
-    
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
-        
-    if not model:
-        raise ValueError("Llama model not available - missing OpenAI API key")
-        
-    return LlamaAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools,
-        agents=agents,
-        intents=[
-            Intent(
-                intent_value="what is your name",
-                intent_type=IntentType.RAW,
-                intent_target="I am Llama, a helpful AI assistant created by Meta. I'm designed for instruction-following and natural conversation.",
-            ),
-            Intent(
-                intent_value="what can you do",
-                intent_type=IntentType.RAW,
-                intent_target="I can help with natural conversation, following instructions, creative writing, code assistance, mathematical problems, and general knowledge questions.",
-            ),
-        ],
-        state=agent_shared_state,
-        configuration=agent_configuration,
-        memory=MemorySaver(),
-    ) 
