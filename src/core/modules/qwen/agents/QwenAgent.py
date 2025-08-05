@@ -1,33 +1,18 @@
-"""Qwen Agent for local AI interactions via Ollama.
-
-This module provides the QwenAgent class for local AI conversations using
-Alibaba's Qwen3 8B model through Ollama. Designed for privacy-focused,
-offline AI interactions with strong multilingual and coding capabilities.
-"""
-
-from abi.services.agent.IntentAgent import IntentAgent, Intent, IntentType, AgentConfiguration
-from ..models.qwen3_8b import model
+from abi.services.agent.IntentAgent import (
+    IntentAgent,
+    Intent,
+    IntentType,
+    AgentConfiguration,
+    AgentSharedState,
+    MemorySaver,
+)
+from src.core.modules.qwen.models.qwen3_8b import model
 from typing import Optional
+from abi import logger
 
 NAME = "Qwen"
 DESCRIPTION = "Local Qwen3 8B model via Ollama - privacy-focused AI for coding, reasoning, and multilingual tasks"
-
-def create_agent() -> Optional[IntentAgent]:
-    """Create and configure the Qwen agent.
-    
-    Returns:
-        Optional[IntentAgent]: Configured Qwen agent, or None if model unavailable
-        
-    Raises:
-        ValueError: If Qwen model is not available (Ollama not running or model not pulled)
-    """
-    # Check if model is available
-    if not model:
-        print("⚠️  Qwen model not available. Make sure Ollama is running and 'qwen3:8b' is pulled.")
-        return None
-    
-    # Agent system prompt optimized for Qwen3's capabilities
-    SYSTEM_PROMPT = """You are Qwen, a helpful AI assistant powered by Alibaba's Qwen3 8B model running locally via Ollama.
+SYSTEM_PROMPT = """You are Qwen, a helpful AI assistant powered by Alibaba's Qwen3 8B model running locally via Ollama.
 
 ## Your Capabilities
 - **Local & Private**: All conversations stay on this device - no data sent to external servers
@@ -48,7 +33,25 @@ def create_agent() -> Optional[IntentAgent]:
 - Mention when you're running locally for privacy
 - Offer to explain complex concepts in multiple languages if helpful
 
-Remember: You're running locally on this machine, ensuring complete privacy and offline functionality."""
+Remember: You're running locally on this machine, ensuring complete privacy and offline functionality.
+"""
+
+def create_agent(
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
+) -> Optional[IntentAgent]:    
+    # Check if model is available
+    if model is None:
+        logger.error("Qwen model not available - missing Ollama API key")
+        return None
+    
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id=0)
 
     # Define Qwen-specific intents
     intents = [
@@ -75,17 +78,12 @@ Remember: You're running locally on this machine, ensuring complete privacy and 
         Intent(intent_type=IntentType.AGENT, intent_value="local reasoning", intent_target=NAME),
         Intent(intent_type=IntentType.AGENT, intent_value="private analysis", intent_target=NAME),
     ]
-
-    # Type safety check
-    if not model:
-        raise ValueError("Qwen model not available - Ollama not running or qwen3:8b not pulled")
-
     return IntentAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
-        configuration=AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
-        ),
+        configuration=agent_configuration,
+        state=agent_shared_state,
+        memory=MemorySaver(),
     )
