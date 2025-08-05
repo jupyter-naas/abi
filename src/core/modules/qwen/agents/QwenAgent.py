@@ -78,7 +78,7 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="local reasoning", intent_target=NAME),
         Intent(intent_type=IntentType.AGENT, intent_value="private analysis", intent_target=NAME),
     ]
-    return IntentAgent(
+    return QwenAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
@@ -87,3 +87,6 @@ def create_agent(
         state=agent_shared_state,
         memory=MemorySaver(),
     )
+
+class QwenAgent(IntentAgent):
+    pass

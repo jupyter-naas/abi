@@ -157,8 +157,6 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-
-    
     # Init
     tools: list = []
     agents: list = []

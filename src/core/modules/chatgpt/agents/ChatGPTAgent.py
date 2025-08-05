@@ -7,12 +7,10 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from ..models.gpt_4o import model
+from src.core.modules.chatgpt.models.gpt_4o import model
 from src import secret
 from typing import Optional
 from enum import Enum
-from ..integrations import OpenAIWebSearchIntegration
-from ..integrations.OpenAIWebSearchIntegration import OpenAIWebSearchIntegrationConfiguration
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from langchain_core.tools import StructuredTool
@@ -98,6 +96,9 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=0)
 
     # Tools (we already verified API key exists)
+    from src.core.modules.chatgpt.integrations.OpenAIWebSearchIntegration import OpenAIWebSearchIntegration
+    from src.core.modules.chatgpt.integrations.OpenAIWebSearchIntegration import OpenAIWebSearchIntegrationConfiguration
+
     openai_web_search_integration_configuration = OpenAIWebSearchIntegrationConfiguration(  
         api_key=secret.get('OPENAI_API_KEY')
     )

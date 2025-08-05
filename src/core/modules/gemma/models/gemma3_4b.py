@@ -1,15 +1,7 @@
-"""Gemma3 4B model configuration for local deployment via Ollama.
-
-This module defines Google's Gemma3 4B model, optimized for:
-- Local, privacy-focused deployments  
-- General-purpose conversational AI
-- Lightweight resource usage
-- Fast inference on consumer hardware
-- Open-source alternative to cloud Gemini
-"""
-
-from lib.abi.models.Model import ChatModel
+from abi.models.Model import ChatModel
+from langchain_ollama import ChatOllama
 from typing import Optional
+from abi import logger
 
 ID = "gemma3:4b"
 NAME = "Gemma3 4B"
@@ -21,8 +13,6 @@ OWNER = "ollama"
 model: Optional[ChatModel] = None
 
 try:
-    from langchain_ollama import ChatOllama
-    
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -36,11 +26,7 @@ try:
         ),
         context_window=CONTEXT_WINDOW,
     )
-    print("✅ Gemma3 4B model loaded successfully via Ollama")
-    
-except ImportError:
-    print("⚠️  langchain_ollama not installed. Gemma3 4B model will not be available.")
-    print("   Install with: pip install langchain-ollama")
+    logger.debug("✅ Gemma3 4B model loaded successfully via Ollama")
 except Exception as e:
-    print(f"⚠️  Error loading Gemma3 4B model: {e}")
-    print("   Make sure Ollama is running and 'gemma3:4b' model is pulled.")
+    logger.error(f"⚠️  Error loading Gemma3 4B model: {e}")
+    logger.error("   Make sure Ollama is running and 'gemma3:4b' model is pulled.")
