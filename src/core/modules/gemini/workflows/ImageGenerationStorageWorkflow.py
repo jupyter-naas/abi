@@ -202,5 +202,5 @@ class ImageGenerationStorageWorkflow(Workflow):
         tags: list[str | Enum] | None = None,
     ) -> None:
         if tags is None:
-            tags = ["Image Generation", "Storage", "Gemini"]
+            tags = []
         return None
