@@ -7,11 +7,11 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from ..models.google_gemini_2_5_flash import model
+from src.core.modules.gemini.models.google_gemini_2_5_flash import model
 from src import secret
 from typing import Optional
 from enum import Enum
-
+from abi import logger
 import os
 from datetime import datetime
 
@@ -134,30 +134,11 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
-    # Check if Google API key is available
-    if not secret.get("GOOGLE_API_KEY"):
+    # Check if model is available
+    if model is None:
+        logger.error("Gemini model not available - missing Google API key")
         return None
-    # Import workflow here to avoid circular imports
-    from ..workflows.ImageGenerationStorageWorkflow import (
-        ImageGenerationStorageWorkflow,
-        ImageGenerationStorageWorkflowConfiguration
-    )
     
-    # Init
-    tools: list = []
-    agents: list = []
-
-    # Initialize Image Generation Workflow (with error handling)
-    try:
-        image_workflow_config = ImageGenerationStorageWorkflowConfiguration(storage_base_path="storage")
-        image_workflow = ImageGenerationStorageWorkflow(image_workflow_config)
-        image_tools = image_workflow.as_tools()
-        tools += image_tools
-        print(f"✅ Gemini Image Generation: {len(image_tools)} tools loaded successfully")
-    except Exception as e:
-        print(f"⚠️ Gemini Image Generation: Failed to load - {str(e)}")
-        # Continue without image generation tools
-
     # Get current datetime and user location for system prompt
     current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     user_location = os.getenv("USER_LOCATION", "Unknown")
@@ -167,7 +148,7 @@ def create_agent(
         current_datetime=current_datetime,
         user_location=user_location
     )
-
+    
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -176,27 +157,41 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
 
-    if not model:
-        raise ValueError("Gemini model not available - missing Google API key")
-        
+
+    
+    # Init
+    tools: list = []
+    agents: list = []
+
+    # Import workflow here to avoid circular imports
+    from src.core.modules.gemini.workflows.ImageGenerationStorageWorkflow import (
+        ImageGenerationStorageWorkflow,
+        ImageGenerationStorageWorkflowConfiguration
+    )
+    image_workflow_config = ImageGenerationStorageWorkflowConfiguration(storage_base_path="storage")
+    image_workflow = ImageGenerationStorageWorkflow(image_workflow_config)
+    image_tools = image_workflow.as_tools()
+    tools += image_tools
+
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="I am Gemini, Google's most advanced AI assistant, powered by the Gemini 2.0 Flash model.",
+        ),
+        Intent(
+            intent_value="what can you do",
+            intent_type=IntentType.RAW,
+            intent_target="I can help with advanced reasoning, code analysis, mathematical computations, creative writing, research, and multimodal understanding of text, images, audio, and video.",
+        ),
+    ]
     return GoogleGemini2FlashAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         tools=tools,
         agents=agents,
-        intents=[
-            Intent(
-                intent_value="what is your name",
-                intent_type=IntentType.RAW,
-                intent_target="I am Gemini, Google's most advanced AI assistant, powered by the Gemini 2.0 Flash model.",
-            ),
-            Intent(
-                intent_value="what can you do",
-                intent_type=IntentType.RAW,
-                intent_target="I can help with advanced reasoning, code analysis, mathematical computations, creative writing, research, and multimodal understanding of text, images, audio, and video.",
-            ),
-        ],
+        intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=MemorySaver(),
@@ -214,26 +209,7 @@ class GoogleGemini2FlashAgent(IntentAgent):
         tags: Optional[list[str | Enum]] = None,
     ) -> None:
         if tags is None:
-            tags = ["Google", "Gemini", "AI", "Multimodal"]
+            tags = []
         return super().as_api(
             router, route_name, name, description, description_stream, tags
         )
-
-    def hello(self) -> str:
-        first_name = os.getenv("USER_FIRST_NAME", "there")
-        current_time = datetime.now().strftime("%H:%M")
-        
-        return f"""
-Hi {first_name}! I'm Gemini, Google's most advanced AI assistant. It's {current_time} and I'm ready to help you with anything you need.
-
-I can assist with:
-🧠 Advanced reasoning and problem-solving
-💻 Code analysis and development
-🔬 Mathematical and scientific computations
-🎨 Creative writing and content generation
-🔍 Research and information analysis
-📊 Data analysis and visualization
-🎯 Multimodal understanding (text, images, audio, video)
-
-What would you like to explore today?
-"""

@@ -2,6 +2,8 @@ from lib.abi.models.Model import ChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src import secret
 from typing import Optional
+from pydantic import SecretStr
+from abi import logger
 
 ID = "gemini-2.5-flash"
 NAME = "gemini-2.5-flash"
@@ -11,7 +13,8 @@ CONTEXT_WINDOW = 1048576  # 1M token context window
 OWNER = "google"
 
 model: Optional[ChatModel] = None
-if secret.get("GOOGLE_API_KEY"):
+google_api_key = secret.get("GOOGLE_API_KEY")
+if google_api_key:
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -24,7 +27,9 @@ if secret.get("GOOGLE_API_KEY"):
             max_tokens=None,
             timeout=None,
             max_retries=2,
-            google_api_key=secret.get("GOOGLE_API_KEY"),
+            api_key=SecretStr(google_api_key),
         ),
         context_window=CONTEXT_WINDOW,
     )
+else:
+    logger.error("Google API key not found")
