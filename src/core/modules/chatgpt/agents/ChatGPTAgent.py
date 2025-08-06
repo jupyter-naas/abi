@@ -11,9 +11,8 @@ from src.core.modules.chatgpt.models.gpt_4o import model
 from src import secret
 from typing import Optional
 from enum import Enum
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from langchain_core.tools import StructuredTool
+
+from abi import logger
 
 NAME = "ChatGPT"
 DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
@@ -27,8 +26,6 @@ Provide accurate and comprehensive information to user inquiries using your web 
 
 Context:
 You will receive prompts from workers or leaders at Forvis Mazars but also from a supervisor agent that already handle the conversation with the user.
-
-# SELF-RECOGNITION RULES
 When users say things like "ask chatgpt", "parler à chatgpt", "I want to talk to chatgpt", or similar phrases referring to YOU:
 - Recognize that YOU ARE ChatGPT - don't try to "connect" them to ChatGPT
 - Respond directly as ChatGPT without any delegation confusion
@@ -79,21 +76,21 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> Optional[IntentAgent]:
-    # Check if OpenAI API key is available
-    if not secret.get("OPENAI_API_KEY"):
+    # Check if model is available
+    if model is None:
+        logger.error("Claude model not available - missing Anthropic API key")
         return None
     
-    # Init
-    tools: list = []
-    agents: list = []
-
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
+            system_prompt=SYSTEM_PROMPT,
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
+    
+    # Init
+    tools: list = []
 
     # Tools (we already verified API key exists)
     from src.core.modules.chatgpt.integrations import OpenAIWebSearchIntegration
@@ -104,7 +101,10 @@ def create_agent(
     )
     tools += OpenAIWebSearchIntegration.as_tools(openai_web_search_integration_configuration)
 
+    from langchain_core.tools import StructuredTool
     from pydantic import BaseModel
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     
     class EmptySchema(BaseModel):
         pass
@@ -117,27 +117,25 @@ def create_agent(
     )
     tools += [current_datetime_tool]
 
-    if not model:
-        raise ValueError("ChatGPT model not available - missing OpenAI API key")
-        
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with real-time web search and provide comprehensive answers to your questions.",
+        ),
+        Intent(
+            intent_value="what can you do",
+            intent_type=IntentType.RAW,
+            intent_target="I can help with real-time web search, answer questions using the latest information from the internet, provide research assistance, and help with various tasks using OpenAI's capabilities.",
+        ),
+    ]
     return ChatGPTAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         tools=tools, 
-        agents=agents,
-        intents=[
-            Intent(
-                intent_value="what is your name",
-                intent_type=IntentType.RAW,
-                intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with real-time web search and provide comprehensive answers to your questions.",
-            ),
-            Intent(
-                intent_value="what can you do",
-                intent_type=IntentType.RAW,
-                intent_target="I can help with real-time web search, answer questions using the latest information from the internet, provide research assistance, and help with various tasks using OpenAI's capabilities.",
-            ),
-        ],
+        agents=[],
+        intents=intents,
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
