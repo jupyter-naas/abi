@@ -10,7 +10,18 @@ The Perplexity Module provides comprehensive integration with Perplexity AI's se
 - Using Perplexity as an AI agent with specialized search capabilities
 - Caching responses to improve performance and reduce API calls
 
-## Provider: Perplexity AI
+## TL;DR
+
+To get started with the Perplexity module:
+
+1. Obtain an API key from [Perplexity AI](https://www.perplexity.ai/)
+2. Configure your `PERPLEXITY_API_KEY` in your .env file.
+3. Start Chatting with Perplexity Agent:
+```bash
+make chat agent=PerplexityAgent
+```
+
+## Provider: About Perplexity AI
 
 **Founded**: 2022  
 **Headquarters**: San Francisco, California  
@@ -41,28 +52,7 @@ Perplexity AI revolutionizes search by combining large language models with real
 - **Unique Value**: Search integration expertise and real-time information
 - **Competition**: Faces challenges from Gemini + ChatGPT web search integration
 
-## TL;DR
-
-To get started with the Perplexity module:
-
-1. Obtain an API key from [Perplexity AI](https://www.perplexity.ai/)
-2. Configure your `PERPLEXITY_API_KEY` in your secrets configuration file
-3. Update the parameters in the example scripts below to match your use case
-4. Run the scripts to test the integration
-
-```bash
-# Test basic Perplexity integration
-uv run python src/core/modules/perplexity/integrations/PerplexityIntegration.py
-```
-
-To chat with the Perplexity agent with search capabilities, run:
-```bash
-@perplexity search for the latest developments in AI
-```
-
-## Overview
-
-### Structure
+## Structure
 
 ```
 src/core/modules/perplexity/
@@ -311,4 +301,3 @@ Please refer to your Perplexity AI subscription plan for rate limits:
 - **Market research**: Industry and market analysis
 - **Technical queries**: Programming and technical questions
 - **General knowledge**: Educational and informational queries
-

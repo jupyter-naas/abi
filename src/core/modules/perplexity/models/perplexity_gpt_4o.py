@@ -3,6 +3,7 @@ from langchain_openai import ChatOpenAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
+from abi import logger
 
 ID = "gpt-4o"
 NAME = "perplexity-gpt-4o"
@@ -12,7 +13,9 @@ CONTEXT_WINDOW = 128000
 OWNER = "openai"
 
 model: Optional[ChatModel] = None
-if secret.get("OPENAI_API_KEY"):
+openai_api_key = secret.get("OPENAI_API_KEY")
+perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
+if openai_api_key and perplexity_api_key:
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -22,7 +25,9 @@ if secret.get("OPENAI_API_KEY"):
         model=ChatOpenAI(
             model=ID,
             temperature=0,
-            api_key=SecretStr(secret.get('OPENAI_API_KEY'))
+            api_key=SecretStr(openai_api_key)
         ),
         context_window=CONTEXT_WINDOW,
     )
+else:
+    logger.error("Perplexity Agent not available - missing OpenAI API key to load model or Perplexity API key to load Perplexity Integration")

@@ -7,15 +7,11 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from ..models.perplexity_gpt_4o import model
+from src.core.modules.perplexity.models.perplexity_gpt_4o import model
 from src import secret
 from typing import Optional
 from enum import Enum
-from ..integrations import PerplexityIntegration
-from ..integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from langchain_core.tools import StructuredTool
+from abi import logger
 
 NAME = "Perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
@@ -28,9 +24,7 @@ Objective:
 Provide accurate and comprehensive information to user inquiries using your web search capabilities.
 
 Context:
-You will receive prompts from workers or leaders at Forvis Mazars but also from a supervisor agent that already handle the conversation with the user.
-
-# SELF-RECOGNITION RULES
+You will receive prompts from users but also from a supervisor agent named 'abi' that already handle the conversation with the user.
 When users say things like "ask perplexity", "parler à perplexity", "I want to talk to perplexity", or similar phrases referring to YOU:
 - Recognize that YOU ARE Perplexity - don't try to "connect" them to Perplexity
 - Respond directly as Perplexity without any delegation confusion
@@ -77,29 +71,40 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> Optional[IntentAgent]:
-    # Check if OpenAI API key is available
-    if not secret.get("OPENAI_API_KEY"):
+    # Check if model is available
+    if model is None:
+        logger.error("Perplexity model not available - missing OpenAI API key")
         return None
     
-    # Init
-    tools: list = []
-    agents: list = []
-
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
+            system_prompt=SYSTEM_PROMPT,
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id=0)
+    
+    
+    # Init
+    tools: list = []
 
-    # Tools (we already verified OpenAI API key exists)
-    if secret.get('PERPLEXITY_API_KEY') is not None:
+    from src import secret
+    from src.core.modules.perplexity.integrations import PerplexityIntegration
+    from src.core.modules.perplexity.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+
+    perplexity_api_key = secret.get('PERPLEXITY_API_KEY')
+    if perplexity_api_key is not None:
         perplexity_integration_configuration = PerplexityIntegrationConfiguration(  
-            api_key=secret.get('PERPLEXITY_API_KEY')
+            api_key=perplexity_api_key
         )
         tools += PerplexityIntegration.as_tools(perplexity_integration_configuration)
+    else:
+        logger.error("Perplexity model not available - missing Perplexity API key")
+        return None
 
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from langchain_core.tools import StructuredTool
     from pydantic import BaseModel
     
     class EmptySchema(BaseModel):
@@ -113,27 +118,26 @@ def create_agent(
     )
     tools += [current_datetime_tool]
 
-    if not model:
-        raise ValueError("Perplexity model not available - missing OpenAI API key")
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="I am Perplexity, an AI research assistant that provides real-time answers using web search capabilities.",
+        ),
+        Intent(
+            intent_value="what can you do",
+            intent_type=IntentType.RAW,
+            intent_target="I can search the web in real-time, provide up-to-date information, research any topic, and answer questions using the latest information from the internet.",
+        ),
+    ]
         
     return PerplexityAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         tools=tools, 
-        agents=agents,
-        intents=[
-            Intent(
-                intent_value="what is your name",
-                intent_type=IntentType.RAW,
-                intent_target="I am Perplexity, an AI research assistant that provides real-time answers using web search capabilities.",
-            ),
-            Intent(
-                intent_value="what can you do",
-                intent_type=IntentType.RAW,
-                intent_target="I can search the web in real-time, provide up-to-date information, research any topic, and answer questions using the latest information from the internet.",
-            ),
-        ],
+        agents=[],
+        intents=intents,
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=MemorySaver()
