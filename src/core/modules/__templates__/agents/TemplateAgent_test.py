@@ -11,3 +11,21 @@ def test_agent_name(agent):
 
     assert result is not None, result
     assert "Template" in result, result
+
+def test_intent_favorite_color(agent):
+    result = agent.invoke("What is your favorite color?")
+
+    assert result is not None, result
+    assert "blue" in result.lower(), result
+
+def test_intent_favorite_animal(agent):
+    result = agent.invoke("What is your favorite animal?")
+
+    assert result is not None, result
+    assert "dog" in result.lower(), result
+
+def test_intent_favorite_food(agent):
+    result = agent.invoke("What is your favorite food?")
+
+    assert result is not None, result
+    assert "pizza" in result.lower(), result
