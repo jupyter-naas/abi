@@ -6,8 +6,7 @@ class YourIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for YourIntegration.
     
     Attributes:
-        attribute_1 (str): Description of attribute_1
-        attribute_2 (int): Description of attribute_2
+        datastore_path (str): Path to the datastore
     """
     datastore_path: str = "datastore/__templates__"
 
