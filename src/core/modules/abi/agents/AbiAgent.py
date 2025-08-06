@@ -239,8 +239,6 @@ def create_agent(
     tools: list = []
 
     agents: list = []
-    from src import load_modules
-    load_modules()
     from src.__modules__ import get_modules
     modules = get_modules()
     for module in modules:
@@ -274,7 +272,7 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, ntent_value="use abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="call_model"),
