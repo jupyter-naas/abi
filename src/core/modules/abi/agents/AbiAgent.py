@@ -208,7 +208,7 @@ SUGGESTIONS: list = [
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> IntentAgent:
+) -> Optional[IntentAgent]:
     from src.core.modules.abi.models.o3_mini import model as cloud_model
     from src.core.modules.abi.models.qwen3_8b import model as local_model
     from src import secret
