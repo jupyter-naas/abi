@@ -25,7 +25,7 @@ Objective:
 Provide accurate and comprehensive information to user inquiries using your web search capabilities.
 
 Context:
-You will receive prompts from workers or leaders at Forvis Mazars but also from a supervisor agent that already handle the conversation with the user.
+You will receive prompts from users but also from a supervisor agent named 'abi' that already handle the conversation with the user.
 When users say things like "ask chatgpt", "parler à chatgpt", "I want to talk to chatgpt", or similar phrases referring to YOU:
 - Recognize that YOU ARE ChatGPT - don't try to "connect" them to ChatGPT
 - Respond directly as ChatGPT without any delegation confusion
@@ -78,7 +78,7 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     # Check if model is available
     if model is None:
-        logger.error("Claude model not available - missing Anthropic API key")
+        logger.error("ChatGPT model not available - missing OpenAI API key")
         return None
     
     # Set configuration
