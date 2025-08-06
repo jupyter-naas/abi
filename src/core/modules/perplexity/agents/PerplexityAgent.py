@@ -72,7 +72,7 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     # Check if model is available
     if model is None:
-        logger.error("Perplexity model not available - missing OpenAI API key")
+        logger.error("Perplexity model not available - missing OpenAI API key and Perplexity API key")
         return None
     
     # Set configuration
