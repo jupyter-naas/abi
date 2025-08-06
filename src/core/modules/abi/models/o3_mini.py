@@ -3,6 +3,7 @@ from langchain_openai import ChatOpenAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
+from abi import logger
 
 ID = "o3-mini"
 NAME = "o3-mini"
@@ -12,7 +13,8 @@ CONTEXT_WINDOW = 128000
 OWNER = "openai"
 
 model: Optional[ChatModel] = None
-if secret.get("OPENAI_API_KEY"):
+openai_api_key = secret.get("OPENAI_API_KEY")
+if openai_api_key:
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -23,7 +25,9 @@ if secret.get("OPENAI_API_KEY"):
             model=ID,
             temperature=1,  # AbiAgent uses temperature=1 for creative orchestration
             max_retries=2,
-            api_key=SecretStr(secret.get("OPENAI_API_KEY")),
+            api_key=SecretStr(openai_api_key),
         ),
         context_window=CONTEXT_WINDOW,
     )
+else:
+    logger.error("OpenAI API key not found")
