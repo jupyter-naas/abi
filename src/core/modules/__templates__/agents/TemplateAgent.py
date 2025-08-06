@@ -8,7 +8,7 @@ from abi.services.agent.IntentAgent import (
 )
 from fastapi import APIRouter
 from abi import logger
-from src.core.modules.__templates__.models.template_qwen3_8b import model
+from src.core.modules.__templates__.models.template_model import model
 from typing import Optional
 from enum import Enum
 
@@ -35,6 +35,9 @@ You operate as a simple example agent that:
 - Demonstrate proper response structures
 - Provide example interactions
 
+# TOOLS
+- search_class: Search for a class in the knowledge base
+
 # OPERATING GUIDELINES
 1. Keep responses clear and simple
 2. Focus on demonstrating basic agent functionality
@@ -54,7 +57,7 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     # Check if model is available
     if model is None:
-        logger.error("Template model not available - missing Template API key")
+        logger.error("Template model not available - missing OpenAI API key")
         return None
     
     # Set configuration
