@@ -37,15 +37,13 @@ def create_agent(
 
     from src import secret
     from langchain_openai import ChatOpenAI
-    from langchain_core.tools import tool
-    
+
     model = ChatOpenAI(
         model="gpt-4o", 
         temperature=0, 
         api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
 
-    @tool
     def git_diff() -> str:
         """
         Get the git diff and the branch name
@@ -59,7 +57,6 @@ def create_agent(
         diff = subprocess.check_output(["git", "diff", "origin/main", "--", ".", ":!uv.lock"]).decode("utf-8")
         return f"Branch name: {branch_name}\n\n{diff}"
 
-    @tool
     def store_pull_request_description(description: str) -> str:
         """
         Store the pull request description in a file `pull_request_description.md`
@@ -75,7 +72,6 @@ def create_agent(
         shutil.copy(file_path, os.path.join(os.path.dirname(file_path), datetime.now().isoformat() + "_" + os.path.basename(file_path)))
         return "Pull request description stored in `pull_request_description.md`"
 
-    @tool
     def store_pull_request_description_to_clipboard() -> str:
         """
         Store the pull request description in the clipboard.
@@ -88,19 +84,39 @@ def create_agent(
             description = f.read()
         pyperclip.copy(description)
         return "Pull request description stored in the clipboard"
-
-    class PullRequestDescriptionAgent(Agent):
+    
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
         pass
+
+    tools: list = [
+            StructuredTool(
+                name="git_diff",
+                description="Get the git diff and the branch name",
+                func=git_diff,
+                args_schema=EmptySchema,
+            ),
+            StructuredTool(
+                name="store_pull_request_description",
+                description="Store the pull request description in a file `pull_request_description.md`",
+                func=store_pull_request_description,
+                args_schema=EmptySchema,
+            ),
+            StructuredTool(
+                name="store_pull_request_description_to_clipboard",
+                description="Store the pull request description in the clipboard.",
+                func=store_pull_request_description_to_clipboard,
+                args_schema=EmptySchema,
+            ),
+        ]
 
     return PullRequestDescriptionAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
-        tools=[
-            git_diff,
-            store_pull_request_description,
-            store_pull_request_description_to_clipboard,
-        ],
+        tools=tools,
         agents=[],
         configuration=AgentConfiguration(
             system_prompt=SYSTEM_PROMPT,
