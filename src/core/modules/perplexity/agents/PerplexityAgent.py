@@ -8,7 +8,6 @@ from abi.services.agent.IntentAgent import (
 )
 from fastapi import APIRouter
 from src.core.modules.perplexity.models.perplexity_gpt_4o import model
-from src import secret
 from typing import Optional
 from enum import Enum
 from abi import logger
