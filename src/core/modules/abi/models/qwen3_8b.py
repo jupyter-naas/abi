@@ -1,5 +1,7 @@
 from lib.abi.models.Model import ChatModel
+from langchain_ollama import ChatOllama
 from typing import Optional
+from abi import logger
 
 ID = "qwen3:8b"
 NAME = "qwen3-8b"
@@ -10,7 +12,6 @@ OWNER = "alibaba"
 
 model: Optional[ChatModel] = None
 try:
-    from langchain_ollama import ChatOllama
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -23,6 +24,5 @@ try:
         ),
         context_window=CONTEXT_WINDOW,
     )
-except ImportError:
-    # ChatOllama not available - local mode not supported
-    model = None
+except Exception as e:
+    logger.error(f"Qwen3 8B model not available - {e}")
