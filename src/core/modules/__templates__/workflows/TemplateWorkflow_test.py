@@ -10,10 +10,7 @@ def workflow() -> YourWorkflow:
         YourIntegrationConfiguration
     )
 
-    integration_configuration = YourIntegrationConfiguration(
-        attribute_1="value1",
-        attribute_2=42
-    )
+    integration_configuration = YourIntegrationConfiguration()
 
     workflow_configuration = YourWorkflowConfiguration(
         integration_config=integration_configuration

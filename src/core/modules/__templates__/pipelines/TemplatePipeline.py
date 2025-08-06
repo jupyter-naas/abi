@@ -4,11 +4,14 @@ from src.core.modules.__templates__.integrations.TemplateIntegration import (
     YourIntegration,
     YourIntegrationConfiguration
 )
-from rdflib import Graph
+from rdflib import Graph, Namespace
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from enum import Enum
+import uuid
+
+ABI = Namespace("http://ontology.naas.ai/abi/")
 
 @dataclass
 class YourPipelineConfiguration(PipelineConfiguration):
@@ -21,7 +24,7 @@ class YourPipelineConfiguration(PipelineConfiguration):
     """
     integration_configuration: YourIntegrationConfiguration
     triple_store: ITripleStoreService
-    triple_store_name: str = "yourstorename"
+    datastore_path: str = "datastore/__templates__"
 
 class YourPipelineParameters(PipelineParameters):
     """Parameters for YourPipeline execution.
@@ -40,28 +43,25 @@ class YourPipeline(Pipeline):
         self.__configuration = configuration
         self.__integration = YourIntegration(configuration.integration_configuration)
 
-    def run(self, parameters: YourPipelineParameters) -> Graph:        
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, YourPipelineParameters):
+            raise ValueError("Parameters must be of type YourPipelineParameters")
+        
+        # Init graph
         graph = Graph()
         
         # Use the integration to fetch data
         raw_data = self.__integration.example_method(parameters.parameter_1)
+
+        # URI
+        uri = ABI[str(uuid.uuid4())]
         
         # Transform the raw data into semantic triples
         for item in raw_data:
-            # Example: Create a node for each item
-            subject = f"http://example.org/resource/{item['id']}"
-            
-            # Add properties to the node
-            graph.add((subject, "http://example.org/property/name", item['name']))
-            graph.add((subject, "http://example.org/property/description", item['description']))
-            
-            # Add relationships to other nodes
-            for related_item in item['related_items']:
-                related_subject = f"http://example.org/resource/{related_item['id']}"
-                graph.add((subject, "http://example.org/property/relatedTo", related_subject))
+            graph.add((uri, ABI.hasName, item['name']))
         
         # Store the graph in the ontology store
-        self.__configuration.triple_store.insert(self.__configuration.triple_store_name, graph)
+        self.__configuration.triple_store.insert(graph)
         
         return graph
     
