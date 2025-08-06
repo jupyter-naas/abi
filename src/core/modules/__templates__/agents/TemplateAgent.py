@@ -87,6 +87,21 @@ def create_agent(
             intent_type=IntentType.RAW,
             intent_target="I am Template, an example agent that demonstrates the basic structure and capabilities of agents in the system.",
         ),
+        Intent(
+            intent_value="what is your favorite color",
+            intent_type=IntentType.RAW,
+            intent_target="Blue is my favorite color",
+        ),
+        Intent(
+            intent_value="what is your favorite animal",
+            intent_type=IntentType.RAW,
+            intent_target="A dog is my favorite animal",
+        ),
+        Intent(
+            intent_value="what is your favorite food",
+            intent_type=IntentType.RAW,
+            intent_target="Pizza is my favorite food",
+        ),
     ]
     return TemplateAgent(
         name=NAME,
