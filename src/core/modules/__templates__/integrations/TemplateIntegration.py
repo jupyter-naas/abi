@@ -9,8 +9,7 @@ class YourIntegrationConfiguration(IntegrationConfiguration):
         attribute_1 (str): Description of attribute_1
         attribute_2 (int): Description of attribute_2
     """
-    attribute_1: str
-    attribute_2: int
+    datastore_path: str = "datastore/__templates__"
 
 class YourIntegration(Integration):
     """YourIntegration class for interacting with YourService.
@@ -37,7 +36,7 @@ class YourIntegration(Integration):
         self.__configuration = configuration
         
     # Add methods to interact with the external service
-    def _make_request(self, endpoint: str, method: str = "GET", params: dict = None, json: dict = None) -> dict:
+    def _make_request(self, endpoint: str, method: str = "GET", params: dict = {}, json: dict = {}) -> dict:
         """Make HTTP request to YourService's API endpoint.
         
         Args:
@@ -50,7 +49,7 @@ class YourIntegration(Integration):
             dict: Response data from the API.
         """
         # Implementation details...
-        pass
+        return {}
     
     def example_method(self, parameter: str) -> dict:
         """Example method description.

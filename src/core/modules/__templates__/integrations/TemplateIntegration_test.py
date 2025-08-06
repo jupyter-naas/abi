@@ -7,10 +7,7 @@ from src.core.modules.__templates__.integrations.TemplateIntegration import (
 
 @pytest.fixture
 def integration() -> YourIntegration:
-    return YourIntegration(YourIntegrationConfiguration(
-        attribute_1="value1",
-        attribute_2=42
-    ))
+    return YourIntegration(YourIntegrationConfiguration())
 
 def test_integration_name(integration):
     result = integration.example_method("value1")
