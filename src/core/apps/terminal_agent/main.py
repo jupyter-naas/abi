@@ -16,7 +16,7 @@ import time
 import threading
 from datetime import datetime
 from pathlib import Path
-# import json
+from abi import logger
 
 # Global variable to track active agent for context-aware conversations
 current_active_agent = None
@@ -45,7 +45,7 @@ def init_conversation_file():
         f.write(f"# Session started at: {timestamp}\n")
         f.write("=" * 80 + "\n\n")
     
-    print(f"💾 Conversation logging to: {conversation_file}")
+    logger.info(f"💾 Conversation logging to: {conversation_file}")
     return conversation_file
 
 def save_to_conversation(line: str):
