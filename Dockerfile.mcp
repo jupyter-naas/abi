@@ -1,0 +1,10 @@
+FROM abi:latest
+
+# Set environment for HTTP transport
+ENV MCP_TRANSPORT=http
+
+# Expose the MCP HTTP server port
+EXPOSE 3000
+
+# Override the default command to run the MCP server
+CMD ["python", "abi_mcp_server.py"]
