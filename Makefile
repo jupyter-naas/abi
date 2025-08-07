@@ -229,15 +229,20 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-supervisor-agent    Start the Supervisor agent in terminal mode (default target)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (default target)"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
+	@echo ""
+	@echo "LOCAL AGENTS (Ollama):"
+	@echo "  chat-qwen-agent          Start Qwen3 8B agent (local, multilingual, coding)"
+	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (local, reasoning, math)"
+	@echo "  chat-gemma-agent         Start Gemma3 4B agent (local, lightweight, fast)"
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
 	@echo "DEFAULT:"
-	@echo "  The default target is chat-supervisor-agent (running 'make' starts ABI conversation)"
+	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
 
 # Docker Build Commands
 # -------------------
@@ -264,7 +269,7 @@ build.linux.x86_64: deps
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: deps
+chat-abi-agent: deps
 	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps
@@ -272,6 +277,16 @@ chat-ontology-agent: deps
 
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
+
+# Local Ollama-based agents for privacy-focused interactions
+chat-qwen-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent QwenAgent
+
+chat-deepseek-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent DeepSeekAgent
+
+chat-gemma-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
 
 pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
@@ -281,11 +296,11 @@ default: deps help
 console: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli
 
-.DEFAULT_GOAL := chat-supervisor-agent
+.DEFAULT_GOAL := chat-abi-agent
 
-agent=SupervisorAgent
+agent=AbiAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+.PHONY: test chat-abi-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv

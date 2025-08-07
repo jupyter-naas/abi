@@ -52,6 +52,10 @@ dependencies = [
     "thefuzz>=0.22.1",
     "ollama>=0.5.1",
     "langchain-ollama>=0.3.4",
+    "langchain-anthropic>=0.3.17",
+    "langchain-mistralai>=0.2.11",
+    "langchain-xai>=0.2.5",
+    "google-genai>=1.28.0",
 ]
 
 [project.scripts]
