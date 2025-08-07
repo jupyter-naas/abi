@@ -1,6 +1,6 @@
-# Suppress debug logs for cleaner conversational experience
-import os
-os.environ["LOG_LEVEL"] = "CRITICAL"  # Even more aggressive
+# # Suppress debug logs for cleaner conversational experience
+# import os
+# os.environ["LOG_LEVEL"] = "CRITICAL"  # Even more aggressive
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -30,7 +30,7 @@ import signal
 
 def signal_handler(sig, frame):
     console.print("\n\n🛑 Ctrl+C pressed. See you next time! 👋", style="bright_red")
-    exit(0)
+    os._exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -190,7 +190,7 @@ def main():
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
     
     from src.core.apps.terminal_agent.main import generic_run_agent
-    generic_run_agent("SupervisorAgent")
+    generic_run_agent("AbiAgent")
 
 if __name__ == "__main__":
     main()
