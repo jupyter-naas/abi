@@ -39,6 +39,6 @@ if xai_api_key:
             },
         )
     )
-    logger.debug("✅ Using xAI Grok with langchain-xai integration")
+    logger.debug("✅ Grok 4 model loaded successfully via xAI")
 else:
-    logger.error("XAI_API_KEY not found")
+    logger.error("Grok 4 model not available - missing XAI API key")

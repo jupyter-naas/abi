@@ -28,5 +28,6 @@ if openai_api_key:
         ),
         context_window=CONTEXT_WINDOW,
     )
+    logger.debug("✅ GPT-4o model loaded successfully via OpenAI")
 else:
-    logger.error("OpenAI API key not found")
+    logger.error("GPT-4o model not available - missing OpenAI API key")
