@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.modules.support.integrations.GithubIntegration import GithubIntegration, GithubIntegrationConfiguration
-from src.core.modules.support.integrations.GithubGraphqlIntegration import GithubGraphqlIntegration, GithubGraphqlIntegrationConfiguration
+from src.core.modules.github.integrations.GitHubIntegration import GitHubIntegration, GitHubIntegrationConfiguration
+from src.core.modules.github.integrations.GitHubGraphqlIntegration import GitHubGraphqlIntegration, GitHubGraphqlIntegrationConfiguration
 from src import config
 from dataclasses import dataclass
 from pydantic import Field
@@ -19,8 +19,8 @@ class FeatureRequestWorkflowConfiguration(WorkflowConfiguration):
         github_integration_config: Configuration for GitHub REST API
         github_graphql_integration_config: Configuration for GitHub GraphQL API
     """
-    github_integration_config: GithubIntegrationConfiguration
-    github_graphql_integration_config: GithubGraphqlIntegrationConfiguration
+    github_integration_config: GitHubIntegrationConfiguration
+    github_graphql_integration_config: GitHubGraphqlIntegrationConfiguration
     repo_name: str = config.github_support_repository
     project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
 
@@ -40,8 +40,8 @@ class FeatureRequestWorkflow(Workflow):
     
     def __init__(self, configuration: FeatureRequestWorkflowConfiguration):
         self.__configuration = configuration
-        self.__github_integration = GithubIntegration(self.__configuration.github_integration_config)
-        self.__github_graphql_integration = GithubGraphqlIntegration(self.__configuration.github_graphql_integration_config)
+        self.__github_integration = GitHubIntegration(self.__configuration.github_integration_config)
+        self.__github_graphql_integration = GitHubGraphqlIntegration(self.__configuration.github_graphql_integration_config)
 
     def create_feature_request(self, parameters: FeatureRequestParameters) -> Dict:
         """Creates a new feature request issue and adds it to the project."""
