@@ -269,7 +269,7 @@ class Agent(Expose):
         for t in tools:
             if isinstance(t, Agent):
                 # TODO: We might want to duplicate the agent first.
-                logger.debug(f"Agent passed as tool: {t}")
+                # logger.debug(f"Agent passed as tool: {t}")
                 if t.name not in _agent_names:
                     _agents.append(t)
                     _agent_names.add(t.name)
@@ -313,7 +313,7 @@ class Agent(Expose):
         # graph.add_edge("call_tools", "call_model")
 
         for agent in self._agents:
-            logger.debug(f"Adding node {agent.name} in graph")
+            # logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
             #graph.add_edge(agent.name, "call_model")
