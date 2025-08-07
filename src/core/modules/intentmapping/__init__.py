@@ -27,6 +27,6 @@ def load_tools():
     w = load_workflows()
     workflows.extend(w)
     [tools.extend(workflow.as_tools()) for workflow in w]
-    logger.debug(f"Intent Mapping workflows loaded: {len(workflows)}")
-    for tool in tools:
-        logger.debug(f"Tool: {tool.name}")
+    logger.debug(f"Tools from intentmapping loaded: {len(tools)}")
+    tool_names = sorted([tool.name for tool in tools])
+    logger.debug(tool_names)
