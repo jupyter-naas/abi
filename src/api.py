@@ -219,19 +219,7 @@ def api():
         )
     else:
         uvicorn.run(app, host="0.0.0.0", port=9879)
-    # uvicorn.run(app, host="0.0.0.0", port=9879, reload=True)
 
 
 if __name__ == "__main__":
     api()
-
-
-# @app.post("/telegram")
-# async def telegram(req: Request):
-#     data = await req.json()
-#     chat_id = data['message']['chat']['id']
-#     text = data['message']['text']
-
-#     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
-
-#     return data

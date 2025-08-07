@@ -243,7 +243,11 @@ def create_agent(
     modules = get_modules()
     for module in modules:
         if module.module_path != "src.core.modules.abi":
-            agents.extend(module.agents)
+            for agent in module.agents:
+                if agent is not None:
+                    agents.append(agent)
+                else:
+                    logger.warning(f"Skipping None agent {agent.name} in module: {module.module_path}")
 
     # Create agent references for intent routing
     grok_agent = next((agent for agent in agents if agent.name == "Grok"), None)
@@ -253,7 +257,7 @@ def create_agent(
     mistral_agent = next((agent for agent in agents if agent.name == "Mistral"), None)
     claude_agent = next((agent for agent in agents if agent.name == "Claude"), None)
     llama_agent = next((agent for agent in agents if agent.name == "Llama"), None)
-    
+
     # Local agent references
     qwen_agent = next((agent for agent in agents if agent.name == "Qwen"), None)
     deepseek_agent = next((agent for agent in agents if agent.name == "DeepSeek"), None)

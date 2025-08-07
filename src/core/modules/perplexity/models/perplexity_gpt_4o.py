@@ -29,5 +29,6 @@ if openai_api_key and perplexity_api_key:
         ),
         context_window=CONTEXT_WINDOW,
     )
+    logger.debug("✅ Perplexity GPT-4o model loaded successfully via OpenAI")
 else:
-    logger.error("Perplexity Agent not available - missing OpenAI API key to load model or Perplexity API key to load Perplexity Integration")
+    logger.warning("Perplexity Agent not available - missing OpenAI API key to load model or Perplexity API key to load Perplexity Integration")
