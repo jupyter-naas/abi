@@ -33,6 +33,14 @@
     - [chat-supervisor-agent](#chat-supervisor-agent)
     - [chat-ontology-agent](#chat-ontology-agent)
     - [chat-support-agent](#chat-support-agent)
+  - [Docker Compose](#docker-compose)
+    - [oxigraph-up](#oxigraph-up)
+    - [oxigraph-down](#oxigraph-down)
+    - [oxigraph-status](#oxigraph-status)
+    - [dev-up](#dev-up)
+    - [dev-down](#dev-down)
+    - [container-up](#container-up)
+    - [container-down](#container-down)
   - [Cleanup](#cleanup)
     - [clean](#clean)
   - [Help](#help)
@@ -294,6 +302,78 @@ make chat-support-agent
 **What it does:** Starts the Support agent in terminal mode.
 
 **When to use it:** When you want to interact with the Support agent through the terminal.
+
+## Docker Compose
+
+### oxigraph-up
+
+```bash
+make oxigraph-up
+```
+
+**What it does:** Starts the Oxigraph triple store container.
+
+**When to use it:** When you need to start just the Oxigraph service without starting other containers.
+
+### oxigraph-down
+
+```bash
+make oxigraph-down
+```
+
+**What it does:** Stops the Oxigraph triple store container.
+
+**When to use it:** When you want to stop the Oxigraph service but keep other containers running.
+
+### oxigraph-status
+
+```bash
+make oxigraph-status
+```
+
+**What it does:** Shows the current status of the Oxigraph container.
+
+**When to use it:** When you want to check if Oxigraph is running and see its current state.
+
+### dev-up
+
+```bash
+make dev-up
+```
+
+**What it does:** Starts development services including Oxigraph and YasGUI (SPARQL web UI).
+
+**When to use it:** When you want to start the supporting services for development. Note: This does not start the ABI application itself, which is typically run with `uv` directly.
+
+### dev-down
+
+```bash
+make dev-down
+```
+
+**What it does:** Stops all development services.
+
+**When to use it:** When you want to shut down the development services.
+
+### container-up
+
+```bash
+make container-up
+```
+
+**What it does:** Starts the ABI application in container mode.
+
+**When to use it:** When you specifically need to run ABI in a Docker container instead of using `uv` directly. This is rarely needed in normal development.
+
+### container-down
+
+```bash
+make container-down
+```
+
+**What it does:** Stops the ABI container.
+
+**When to use it:** When you want to stop the ABI container that was started with `container-up`.
 
 ## Cleanup
 

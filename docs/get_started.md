@@ -47,8 +47,8 @@ Get started with ABI - Install, configure and chat with your first agent.
 
 ### Pre-requisites
 
-- **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)**
-- **Install [uv](https://docs.astral.sh/uv/getting-started/installation/)**
+- **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)** - Required for running Oxigraph and other services
+- **Install [uv](https://docs.astral.sh/uv/getting-started/installation/)** - Python package manager
 - **Create your account on [NAAS](https://naas.ai)** (Optional, only if you want to use the storage system in production)
 
 ### Installation Options
@@ -122,8 +122,14 @@ Now, the project is installed and configured, you can start chatting with the co
 make chat-supervisor-agent
 ```
 
-This command will setup the environment, install the dependencies, initalize your triple store and run the supervisor agent.
-It can take a few minutes at the first time you run it.
+This command will:
+1. Setup the environment and install dependencies
+2. Initialize your .env configuration 
+3. Start the Oxigraph triple store automatically (via Docker)
+4. Initialize your knowledge graph
+5. Run the supervisor agent
+
+It can take a few minutes the first time you run it as it needs to download and start the Oxigraph Docker container (though Oxigraph starts much faster than alternatives).
 
 ## Help & Support
 For any questions or support requests, please create an issue on this repository or reach out via [support@naas.ai](mailto:support@naas.ai).

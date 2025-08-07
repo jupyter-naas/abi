@@ -38,6 +38,48 @@ def append_to_dotenv(key, value):
     with open(".env", "a") as f:
         f.write(f"{key}={value}\n")
 
+def ensure_oxigraph_running():
+    """Ensure Oxigraph container is running for development."""
+    import subprocess
+    
+    oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
+    
+    # Check if Oxigraph is accessible
+    oxigraph_running = False
+    try:
+        r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
+        if r.status_code == 200:
+            oxigraph_running = True
+    except:
+        pass
+    
+    if not oxigraph_running:
+        console.print("Starting Oxigraph triple store...", style="bright_cyan")
+        try:
+            # Start Oxigraph using docker-compose
+            subprocess.run(
+                ["docker-compose", "--profile", "dev", "up", "-d", "oxigraph"],
+                capture_output=True,
+                check=True
+            )
+            
+            # Wait for Oxigraph to be ready
+            max_attempts = 20  # Oxigraph starts very quickly
+            for attempt in range(max_attempts):
+                try:
+                    r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
+                    if r.status_code == 200:
+                        console.print("✓ Oxigraph is ready!", style="bright_green")
+                        break
+                except:
+                    pass
+                time.sleep(1)
+                if attempt == max_attempts - 1:
+                    console.print("⚠️ Oxigraph is taking longer than expected to start", style="yellow")
+        except subprocess.CalledProcessError as e:
+            console.print("⚠️ Could not start Oxigraph. Make sure Docker is running.", style="yellow")
+            console.print("You can start it manually with: docker-compose --profile dev up -d oxigraph", style="dim")
+
 def ensure_ollama_running():
     dv = dotenv_values()
     if dv["AI_MODE"] != "local":
@@ -151,6 +193,14 @@ def define_abi_api_key():
     
     append_to_dotenv("ABI_API_KEY", api_key)
 
+def define_oxigraph_url():
+    if "OXIGRAPH_URL" in dv:
+        return
+    
+    # Default to local Oxigraph in development
+    oxigraph_url = "http://localhost:7878"
+    append_to_dotenv("OXIGRAPH_URL", oxigraph_url)
+
 def define_cloud_api_keys():
     if "AI_MODE" not in dv or dv["AI_MODE"] == "local":
         return
@@ -175,6 +225,7 @@ checks = [
     define_ai_mode,
     define_naas_api_key,
     define_abi_api_key,
+    define_oxigraph_url,
     define_cloud_api_keys,
 ]
     
@@ -188,6 +239,9 @@ def main():
         os.environ[key] = value
     
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
+    
+    # Ensure Oxigraph is running in development
+    ensure_oxigraph_running()
     
     from src.core.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("SupervisorAgent")
