@@ -8,6 +8,7 @@ from abi.services.agent.Agent import (
 )
 from typing import Optional
 from enum import Enum
+from src import secret
 from pydantic import SecretStr
 from abi import logger
 
@@ -62,12 +63,11 @@ def create_agent(
         api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
     tools: list = []
-    from src import secret
-    from src.core.modules.github.integrations.GithubGraphqlIntegration import (
-        GithubGraphqlIntegrationConfiguration,
+    from src.core.modules.github.integrations.GitHubGraphqlIntegration import (
+        GitHubGraphqlIntegrationConfiguration,
     )
-    from src.core.modules.github.integrations.GithubIntegration import (
-        GithubIntegrationConfiguration,
+    from src.core.modules.github.integrations.GitHubIntegration import (
+        GitHubIntegrationConfiguration,
     )
     from src.core.modules.support.workflows.GitHubSupportWorkflows import (
         GitHubSupportWorkflows,
@@ -75,10 +75,10 @@ def create_agent(
     )
     
     if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):
-        github_integration_config = GithubIntegrationConfiguration(
+        github_integration_config = GitHubIntegrationConfiguration(
             access_token=github_access_token
         )
-        github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(
+        github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
             access_token=github_access_token
         )
 
