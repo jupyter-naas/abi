@@ -257,29 +257,42 @@ class Agent(Expose):
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
+        
+        Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
         _agents: list["Agent"] = []
+        _tool_names: set[str] = set()
+        _agent_names: set[str] = set()
 
         # We process tools knowing that they can either be StructutedTools or Agent.
         for t in tools:
             if isinstance(t, Agent):
                 # TODO: We might want to duplicate the agent first.
                 logger.debug(f"Agent passed as tool: {t}")
-                _agents.append(t)
-                for tool in t.as_tools():
-                    tool = self.validate_tool_name(tool)
-                    _tools.append(tool)
+                if t.name not in _agent_names:
+                    _agents.append(t)
+                    _agent_names.add(t.name)
+                    for tool in t.as_tools():
+                        tool = self.validate_tool_name(tool)
+                        if tool.name not in _tool_names:
+                            _tools.append(tool)
+                            _tool_names.add(tool.name)
             else:
-                _tools.append(t)
+                if t.name not in _tool_names:
+                    _tools.append(t)
+                    _tool_names.add(t.name)
 
         # We process agents that are not provided in tools.
         for agent in agents:
-            if agent not in _agents:
+            if agent.name not in _agent_names:
                 _agents.append(agent)
+                _agent_names.add(agent.name)
                 for tool in agent.as_tools():
                     tool = self.validate_tool_name(tool)
-                    _tools.append(tool)
+                    if tool.name not in _tool_names:
+                        _tools.append(tool)
+                        _tool_names.add(tool.name)
 
         return _tools, _agents
 
