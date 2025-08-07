@@ -47,7 +47,8 @@ services:
     ports:
       - 7878:80
     volumes:
-      - ./docker/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./src/core/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./src/core/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
     depends_on:
       - oxigraph
     networks:
