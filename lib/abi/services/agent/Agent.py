@@ -42,12 +42,15 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
+import re
 
 class AgentSharedState:
     __thread_id: int
+    _current_active_agent: Optional[str]
 
-    def __init__(self, thread_id: int = 1):
+    def __init__(self, thread_id: int = 1, current_active_agent: Optional[str] = None):
         self._thread_id = thread_id
+        self._current_active_agent = current_active_agent
 
     @property
     def thread_id(self) -> int:
@@ -55,6 +58,13 @@ class AgentSharedState:
 
     def set_thread_id(self, thread_id: int):
         self._thread_id = thread_id
+    
+    @property 
+    def current_active_agent(self) -> Optional[str]:
+        return self._current_active_agent
+    
+    def set_current_active_agent(self, agent_name: Optional[str]):
+        self._current_active_agent = agent_name
 
 
 @dataclass
@@ -233,33 +243,56 @@ class Agent(Expose):
 
         self.build_graph()
 
+    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
+        if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
+            # Replace invalid characters with '_'
+            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', tool.name)
+            logger.warning(f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'.")
+            tool.name = valid_name
+        return tool
+
     def prepare_tools(
         self, tools: list[Union[Tool, "Agent"]], agents: list
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
+        
+        Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
         _agents: list["Agent"] = []
+        _tool_names: set[str] = set()
+        _agent_names: set[str] = set()
 
         # We process tools knowing that they can either be StructutedTools or Agent.
         for t in tools:
             if isinstance(t, Agent):
                 # TODO: We might want to duplicate the agent first.
-                logger.debug(f"Agent passed as tool: {t}")
-                _agents.append(t)
-                for tool in t.as_tools():
-                    _tools.append(tool)
+                # logger.debug(f"Agent passed as tool: {t}")
+                if t.name not in _agent_names:
+                    _agents.append(t)
+                    _agent_names.add(t.name)
+                    for tool in t.as_tools():
+                        tool = self.validate_tool_name(tool)
+                        if tool.name not in _tool_names:
+                            _tools.append(tool)
+                            _tool_names.add(tool.name)
             else:
-                _tools.append(t)
+                if t.name not in _tool_names:
+                    _tools.append(t)
+                    _tool_names.add(t.name)
 
         # We process agents that are not provided in tools.
         for agent in agents:
-            if agent not in _agents:
+            if agent.name not in _agent_names:
                 _agents.append(agent)
+                _agent_names.add(agent.name)
                 for tool in agent.as_tools():
-                    _tools.append(tool)
+                    tool = self.validate_tool_name(tool)
+                    if tool.name not in _tool_names:
+                        _tools.append(tool)
+                        _tool_names.add(tool.name)
 
         return _tools, _agents
 
@@ -280,7 +313,7 @@ class Agent(Expose):
         # graph.add_edge("call_tools", "call_model")
 
         for agent in self._agents:
-            logger.debug(f"Adding node {agent.name} in graph")
+            # logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
             #graph.add_edge(agent.name, "call_model")
@@ -301,6 +334,8 @@ class Agent(Expose):
             messages = [
                 SystemMessage(content=self._system_prompt),
             ] + messages
+
+        logger.info(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         if (

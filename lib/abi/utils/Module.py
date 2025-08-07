@@ -58,12 +58,20 @@ class IModule(ABC):
         # Load agents
         agents_path = os.path.join(self.module_path, "agents")
         if os.path.exists(agents_path):
+            loaded_agent_names = set()
             for file in os.listdir(agents_path):
-                if file.endswith(".py") and not file.endswith("_test.py"):
+                if file.endswith("Agent.py") and not file.endswith("Agent_test.py"):
                     agent_path = self.module_import_path + ".agents." + file[:-3]
                     module = importlib.import_module(agent_path)
                     if hasattr(module, "create_agent"):
-                        self.agents.append(module.create_agent())
+                        agent = module.create_agent()
+                        if agent is not None:
+                            agent_name = getattr(agent, "name", None)
+                            if agent_name and agent_name not in loaded_agent_names:
+                                self.agents.append(agent)
+                                loaded_agent_names.add(agent_name)
+                            else:
+                                logger.warning(f"Skipping duplicate agent: {agent_name}")
 
     def __load_triggers(self):
         if os.path.exists(os.path.join(self.module_path, "triggers.py")):
