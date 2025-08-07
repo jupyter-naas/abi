@@ -113,7 +113,11 @@ def create_individual_ontology_yaml():
 
 
 # Filter out None values from triggers (when not in production mode)
-triggers = [trigger for trigger in [
-    create_class_ontology_yaml(),
-    create_individual_ontology_yaml(),
-] if trigger is not None]
+# Skip triggers in test environment to avoid SSH tunnel initialization
+if os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TESTING") == "true":
+    triggers = []  # Skip all triggers during testing
+else:
+    triggers = [trigger for trigger in [
+        create_class_ontology_yaml(),
+        create_individual_ontology_yaml(),
+    ] if trigger is not None]
