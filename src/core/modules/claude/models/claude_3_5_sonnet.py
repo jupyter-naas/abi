@@ -3,6 +3,7 @@ from langchain_anthropic import ChatAnthropic
 from src import secret
 from pydantic import SecretStr
 from abi import logger
+from typing import Optional
 
 ID = "claude-3-5-sonnet-20241022"
 NAME = "claude-3-5-sonnet"
@@ -14,6 +15,7 @@ TEMPERATURE = 0
 MAX_TOKENS = 4096
 MAX_RETRIES = 2
 
+model: Optional[ChatModel] = None
 anthropic_api_key = secret.get("ANTHROPIC_API_KEY")
 if anthropic_api_key:
     model = ChatModel(
