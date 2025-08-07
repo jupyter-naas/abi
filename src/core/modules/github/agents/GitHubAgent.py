@@ -12,8 +12,6 @@ from abi import logger
 from typing import Optional
 from enum import Enum
 
-from src.core.modules.github.integrations import GitHubIntegration
-
 NAME = "GitHub"
 MODEL = "gpt-4o"
 TEMPERATURE = 0
