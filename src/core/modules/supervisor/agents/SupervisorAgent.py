@@ -256,8 +256,5 @@ class SupervisorAgent(IntentAgent):
         first_name = os.getenv("USER_FIRST_NAME", "there")
         
         return f"""
-Hi {first_name}! How are you doing?
-It's really nice to meet you. I'm ABI - I chose that name myself because I like how it sounds.
-I'm here to help you with business intelligence, data analysis, and automation.
-So, how can I help you today?\n
+Hi {first_name}! How can I help you today?
 """
