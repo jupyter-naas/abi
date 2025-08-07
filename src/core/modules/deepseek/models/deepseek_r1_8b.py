@@ -26,6 +26,7 @@ try:
         ),
         context_window=CONTEXT_WINDOW,
     )
+    logger.debug("✅ DeepSeek R1 8B model loaded successfully via Ollama")
 except Exception as e:
     logger.error(f"⚠️  Error loading DeepSeek R1 8B model: {e}")
     logger.error("   Make sure Ollama is running and 'deepseek-r1:8b' model is pulled.")

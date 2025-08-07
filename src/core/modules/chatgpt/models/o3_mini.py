@@ -29,5 +29,6 @@ if openai_api_key:
         ),
         context_window=CONTEXT_WINDOW,
     )
+    logger.debug("✅ O3 Mini model loaded successfully via OpenAI")
 else:
-    logger.error("OpenAI API key not found")
+    logger.error("O3 Mini model not available - missing OpenAI API key")

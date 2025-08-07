@@ -31,5 +31,6 @@ if google_api_key:
         ),
         context_window=CONTEXT_WINDOW,
     )
+    logger.debug("✅ Gemini 2.5 Flash model loaded successfully via Google")
 else:
-    logger.error("Google API key not found")
+    logger.error("Gemini 2.5 Flash model not available - missing Google API key")

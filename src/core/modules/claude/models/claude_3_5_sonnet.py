@@ -33,5 +33,6 @@ if anthropic_api_key:
         ),
         context_window=CONTEXT_WINDOW,
     ) 
+    logger.debug("✅ Claude 3.5 Sonnet model loaded successfully via Anthropic")
 else:
-    logger.error("Anthropic API key not found")
+    logger.error("Claude 3.5 Sonnet model not available - missing Anthropic API key")

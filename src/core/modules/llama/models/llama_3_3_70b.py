@@ -28,6 +28,7 @@ try:
         ),
         context_window=CONTEXT_WINDOW,
     ) 
+    logger.debug("✅ Llama 3.3 70B model loaded successfully via Ollama")
 except Exception as e:
     logger.error(f"⚠️  Error loading Llama 3.3 70B model: {e}")
     logger.error("   Make sure Ollama is running and 'meta-llama/Llama-3.3-70B-Instruct' model is pulled.")

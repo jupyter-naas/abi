@@ -3,6 +3,7 @@ from langchain_mistralai import ChatMistralAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
+from abi import logger
 
 ID = "mistral-large-2407"
 NAME = "mistral-large-2"
@@ -15,7 +16,8 @@ MAX_TOKENS = 4096
 MAX_RETRIES = 2
 
 model: Optional[ChatModel] = None
-if secret.get("MISTRAL_API_KEY"):
+mistral_api_key = secret.get("MISTRAL_API_KEY")
+if mistral_api_key:
     model = ChatModel(
         model_id=ID,
         name=NAME,
@@ -27,7 +29,10 @@ if secret.get("MISTRAL_API_KEY"):
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
             max_retries=MAX_RETRIES,
-            api_key=SecretStr(secret.get("MISTRAL_API_KEY")),
+            api_key=SecretStr(mistral_api_key),
         ),
         context_window=CONTEXT_WINDOW,
     )
+    logger.debug("✅ Mistral Large 2 model loaded successfully via Mistral")
+else:
+    logger.error("Mistral Large 2 model not available - missing Mistral API key")
