@@ -233,6 +233,15 @@ help:
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
 	@echo ""
+	@echo "DOCKER COMPOSE:"
+	@echo "  oxigraph-up              Start Oxigraph container"
+	@echo "  oxigraph-down            Stop Oxigraph container"
+	@echo "  oxigraph-status          Check Oxigraph container status"
+	@echo "  dev-up                   Start development services (Oxigraph, YasGUI)"
+	@echo "  dev-down                 Stop development services"
+	@echo "  container-up             Start ABI in container mode (if needed)"
+	@echo "  container-down           Stop ABI container"
+	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
@@ -288,4 +297,36 @@ chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+# Docker Compose Commands
+# -----------------------
+# These commands manage Docker containers for development
+
+oxigraph-up:
+	@docker-compose --profile dev up -d oxigraph
+	@echo "✓ Oxigraph started on http://localhost:7878"
+
+oxigraph-down:
+	@docker-compose --profile dev stop oxigraph
+	@echo "✓ Oxigraph stopped"
+
+oxigraph-status:
+	@echo "Oxigraph status:"
+	@docker-compose --profile dev ps oxigraph
+
+dev-up:
+	@docker-compose --profile dev up -d
+	@echo "✓ All development containers started"
+
+dev-down:
+	@docker-compose --profile dev down
+	@echo "✓ All development services stopped"
+
+container-up:
+	@docker-compose --profile container up -d
+	@echo "✓ ABI container started"
+
+container-down:
+	@docker-compose --profile container down
+	@echo "✓ ABI container stopped"
+
+.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status dev-up dev-down container-up container-down
