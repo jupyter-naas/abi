@@ -1,0 +1,37 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix template: <http://ontology.naas.ai/abi/template/> .
+
+#################################################################
+#    Classes
+#################################################################
+
+template:TemplateClass a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Template Class"@en ;
+    skos:definition "A Template Class is a class that is used to represent a template."@en ;
+    skos:example "A template class is a class that is used to represent a template."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+template:hasTemplateClass a owl:ObjectProperty ;
+    rdfs:label "has template class"@en ;
+    skos:definition "Relates a subject to its template class."@en ;
+    rdfs:domain bfo:BFO_0000001 ; # Entity
+    rdfs:range template:TemplateClass .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+template:dataProperty a owl:DatatypeProperty ;
+    rdfs:label "data property"@en ;
+    skos:definition "A data property is a property that is used to represent a data property."@en ;
+    rdfs:domain bfo:BFO_0000001 ; # Entity
+    rdfs:range xsd:string .

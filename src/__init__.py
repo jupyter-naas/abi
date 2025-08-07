@@ -21,7 +21,6 @@ from abi.services.object_storage.ObjectStorageFactory import (
 from abi.utils.LazyLoader import LazyLoader
 import atexit
 import os
-import asyncio
 
 
 @atexit.register
