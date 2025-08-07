@@ -139,6 +139,19 @@ api-dev: deps
 sparql-terminal: deps
 	@ uv run python -m src.core.apps.sparql_terminal.main	
 
+oxigraph-admin: deps
+	@ uv run python -m src.core.apps.oxigraph_admin.main
+
+oxigraph-explorer:
+	@echo "🚀 Opening Knowledge Graph Explorer..."
+	@echo "📍 Visit: http://localhost:7878/explorer/"
+	@echo "✨ Features:"
+	@echo "   • Interactive overview dashboard"
+	@echo "   • Full-featured YasGUI SPARQL editor"
+	@echo "   • Pre-built query library with explanations"
+	@command -v open >/dev/null 2>&1 && open "http://localhost:7878/explorer/" || echo "Open the URL manually in your browser"
+
+
 dvc-login: deps
 	@ uv run run python scripts/setup_dvc.py | sh
 
@@ -209,6 +222,9 @@ help:
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
+	@echo "  oxigraph-admin           Open Oxigraph administrative interface for monitoring and management"
+	@echo "  oxigraph-explorer        Open unified Knowledge Graph Explorer with iframe integration"
+	@echo ""
 	@echo ""
 	@echo "TESTING:"
 	@echo "  test                     Run all Python tests using pytest"
