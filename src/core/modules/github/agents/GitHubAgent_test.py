@@ -3,7 +3,7 @@ import pytest
 from src.core.modules.github.agents.GitHubAgent import create_agent
 
 @pytest.fixture
-def create_agent():
+def agent():
     return create_agent()
 
 def test_create_bug_report(agent):
