@@ -111,6 +111,7 @@ def test_french_greeting_and_typos(agent):
     # French greeting
     result = agent.invoke("salut")
     assert result is not None, result
+    assert "salut" in result.lower(), result
     
     # Typo in agent name "gemiini" instead of "gemini"
     result_typo = agent.invoke("parle a gemiini")
@@ -142,14 +143,24 @@ def test_ai_news_request_french(agent):
     assert result is not None, result
 
 def test_agent_chaining_pattern(agent):
+    from datetime import datetime
     """Test asking one agent then another for interpretation (real pattern from logs)"""
     # Ask Perplexity for info
     result1 = agent.invoke("ask perplexity for latest AI news")
     assert result1 is not None, result1
+    # Check for year
+    assert str(datetime.now().year) in result1, f"Year is not present in result: {result1}"
+    # Check for month in numeric and text formats
+    current_month = datetime.now().month
+    month_str = str(current_month)
+    month_name = datetime.now().strftime("%B")
+    month_abbr = datetime.now().strftime("%b")
+    assert any(m in result1 for m in [month_str, month_name, month_abbr]), f"Month not found in any format in result: {result1}"
     
     # Then ask Claude to interpret
     result2 = agent.invoke("ask claude tu interprete comment les resultats?")
     assert result2 is not None, result2
+    assert "claude" in result2.lower(), f"Claude not found in result: {result2}"
 
 def test_casual_greetings(agent):
     """Test casual greetings found in real conversations"""
