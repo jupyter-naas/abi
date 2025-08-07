@@ -1,5 +1,5 @@
 from .TemplatableSparqlQuery import load_workflows
-from abi import logger
+# from abi import logger
 
 workflows: list = []
 tools: list = []
@@ -23,7 +23,7 @@ def get_tools(tool_names: list[str] = []):
 
 
 def load_tools():
-    logger.debug("Loading Intent Mapping workflows")
+    # logger.debug("Loading Intent Mapping workflows")
     w = load_workflows()
     workflows.extend(w)
     [tools.extend(workflow.as_tools()) for workflow in w]
