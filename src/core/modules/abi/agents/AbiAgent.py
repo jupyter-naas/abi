@@ -247,7 +247,7 @@ def create_agent(
                 if agent is not None:
                     agents.append(agent)
                 else:
-                    logger.warning(f"Skipping None agent {agent.name} in module: {module.module_path}")
+                    logger.warning(f"Skipping None agent in module: {module.module_path}")
 
     # Create agent references for intent routing
     grok_agent = next((agent for agent in agents if agent.name == "Grok"), None)
