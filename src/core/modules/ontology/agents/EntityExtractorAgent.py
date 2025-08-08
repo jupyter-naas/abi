@@ -4,7 +4,7 @@ from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Callable, Optional, Union
-from langgraph.graph import StateGraph, START
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
@@ -515,32 +515,6 @@ def create_agent(
 
     tools: list = []
 
-    # from langchain_core.tools import StructuredTool
-    # from pydantic import BaseModel
-    # import uuid
-    
-    # class GenerateURI(BaseModel):
-    #     pass
-
-    # def generate_uri(): 
-    #     return "http://ontology.naas.ai/abi/" + str(uuid.uuid4())
-        
-    # generate_uuid_tool = StructuredTool(
-    #     name="generate_uri", 
-    #     description="Generate a unique identifier for the new instance",
-    #     func=lambda: generate_uri(),
-    #     args_schema=GenerateURI
-    # )
-    # tools += [generate_uuid_tool]
-
-    # from src.core.modules.ontology.workflows.GetObjectPropertiesFromClassWorkflow import (
-    #     GetObjectPropertiesFromClassWorkflow, 
-    #     GetObjectPropertiesFromClassWorkflowConfiguration
-    # )
-
-    # get_object_properties_from_class_workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration())
-    # tools += get_object_properties_from_class_workflow.as_tools()
-
     return EntityExtractorAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -568,7 +542,8 @@ class EntityExtractorAgent(Agent):
         super().__init__(name, description, chat_model, tools, agents, memory, state, configuration, event_queue)
         
     def call_model(
-        self, state: MessagesState
+        self, 
+        state: MessagesState
     ):
         messages = state["messages"]
         if self._system_prompt:
@@ -580,21 +555,39 @@ class EntityExtractorAgent(Agent):
 
         return Command(update={"messages": [response]})
     
-    def generate_uri(self, state: MessagesState) -> Command:
+    def prep_data(self, state: MessagesState) -> Command:
         from abi.utils.JSON import extract_json_from_completion
         from src.utils.Storage import save_json
         import uuid
+        from src.core.modules.ontology.workflows.GetObjectPropertiesFromClassWorkflow import (
+            GetObjectPropertiesFromClassWorkflow, 
+            GetObjectPropertiesFromClassWorkflowConfiguration,
+            GetObjectPropertiesFromClassWorkflowParameters
+        )
+        workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration())
 
         last_message_content = state["messages"][-1].content
         assert isinstance(last_message_content, str), "Last message content must be a string"
 
         # Get JSON response from model
-        data = extract_json_from_completion(last_message_content)
-        for d in data:
-            d["uri"] = "http://ontology.naas.ai/abi/" + str(uuid.uuid4())
-
-        save_json(data, "datastore/ontology/extract_entities", "entities.json")
-        return Command(goto="__end__")
+        object_properties = {}
+        entities = extract_json_from_completion(last_message_content)
+        for e in entities:
+            e["uri"] = "http://ontology.naas.ai/abi/" + str(uuid.uuid4())
+            class_uri = e.get("class_uri")
+            
+            # Only fetch object properties if we haven't seen this class/subclass before
+            if class_uri:
+                if class_uri not in object_properties:
+                    oprop = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
+                    if len(oprop.get("object_properties")) > 0:
+                        object_properties[class_uri] = oprop
+        data = {
+            "entities": entities,
+            "object_properties": list(object_properties.values())
+        }
+        save_json(data, "datastore/ontology/extract_entities", "data.json")
+        return Command(goto="__end__", update={"messages": [SystemMessage(content=str(data))]})
          
 
     def build_graph(self, patcher: Optional[Callable] = None):
@@ -603,7 +596,6 @@ class EntityExtractorAgent(Agent):
         graph.add_node(self.call_model)
         graph.add_edge(START, "call_model")
         
-        graph.add_node(self.generate_uri)
-        graph.add_edge("call_model", "generate_uri")
-
+        graph.add_node(self.prep_data)
+        graph.add_edge("call_model", "prep_data")
         self.graph = graph.compile(checkpointer=self._checkpointer)
