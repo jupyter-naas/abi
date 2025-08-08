@@ -217,6 +217,48 @@ def create_agent(
     )
     tools += remove_individuals_pipeline.as_tools()
 
+    # Add specialized pipelines
+    from src.core.modules.ontology.pipelines.UpdatePersonPipeline import (
+        UpdatePersonPipeline,
+        UpdatePersonPipelineConfiguration,
+    )
+    from src.core.modules.ontology.pipelines.UpdateSkillPipeline import (
+        UpdateSkillPipeline,
+        UpdateSkillPipelineConfiguration,
+    )
+    from src.core.modules.ontology.pipelines.UpdateCommercialOrganizationPipeline import (
+        UpdateCommercialOrganizationPipeline,
+        UpdateCommercialOrganizationPipelineConfiguration,
+    )
+    from src.core.modules.ontology.pipelines.UpdateLinkedInPagePipeline import (
+        UpdateLinkedInPagePipeline,
+        UpdateLinkedInPagePipelineConfiguration,
+    )
+    from src.core.modules.ontology.pipelines.UpdateWebsitePipeline import (
+        UpdateWebsitePipeline,
+        UpdateWebsitePipelineConfiguration,
+    )
+    from src.core.modules.ontology.pipelines.UpdateLegalNamePipeline import (
+        UpdateLegalNamePipeline,
+        UpdateLegalNamePipelineConfiguration,
+    )
+    from src.core.modules.ontology.pipelines.UpdateTickerPipeline import (
+        UpdateTickerPipeline,
+        UpdateTickerPipelineConfiguration,
+    )
+    specialized_pipelines = [
+        (UpdatePersonPipeline, UpdatePersonPipelineConfiguration),
+        (UpdateSkillPipeline, UpdateSkillPipelineConfiguration),
+        (UpdateCommercialOrganizationPipeline, UpdateCommercialOrganizationPipelineConfiguration),
+        (UpdateLinkedInPagePipeline, UpdateLinkedInPagePipelineConfiguration),
+        (UpdateWebsitePipeline, UpdateWebsitePipelineConfiguration), 
+        (UpdateLegalNamePipeline, UpdateLegalNamePipelineConfiguration),
+        (UpdateTickerPipeline, UpdateTickerPipelineConfiguration)
+    ]
+    for Pipeline, Configuration in specialized_pipelines:
+        tools += Pipeline(Configuration(services.triple_store_service)).as_tools()
+
+
     # Add search organizations tools
     from src.core.modules.intentmapping import get_tools
     ontology_tools: list = [
