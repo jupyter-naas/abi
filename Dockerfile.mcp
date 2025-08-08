@@ -1,10 +1,10 @@
 FROM abi:latest
 
-# Set environment for HTTP transport
-ENV MCP_TRANSPORT=http
+# Set environment for SSE transport (Server-Sent Events for web)
+ENV MCP_TRANSPORT=sse
 
-# Expose the MCP HTTP server port
-EXPOSE 3000
+# Expose the MCP HTTP server port (FastMCP uses 8000 by default)
+EXPOSE 8000
 
 # Override the default command to run the MCP server
 CMD ["python", "abi_mcp_server.py"]
