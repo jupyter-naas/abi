@@ -187,8 +187,8 @@ async def register_agents_dynamically():
     
     print("✅ All agents registered successfully!")
 
-async def main():
-    """Main async function to setup and run the server"""
+async def setup():
+    """Setup function to initialize the server"""
     # Quick startup - no heavy imports!
     print("🚀 Starting lightweight ABI MCP Server...")
     print(f"📡 Will connect to ABI API at: {ABI_API_BASE}")
@@ -199,18 +199,27 @@ async def main():
     
     # Dynamically discover and register agents
     await register_agents_dynamically()
+
+def run():
+    """Entry point for the script"""
+    # Run setup first
+    asyncio.run(setup())
     
     # Determine transport type from environment
     transport = os.environ.get('MCP_TRANSPORT', 'stdio')
     
-    if transport == 'http':
-        # HTTP transport for web deployment
-        print("🌐 Starting MCP server with HTTP transport on port 3000")
-        mcp.run(transport='http', port=3000)
+    if transport == 'sse':
+        # SSE transport for web deployment
+        print("🌐 Starting MCP server with SSE (Server-Sent Events) transport on port 8000")
+        mcp.run(transport='sse')
+    elif transport == 'http':
+        # HTTP transport using streamable-http
+        print("🌐 Starting MCP server with streamable HTTP transport")
+        mcp.run(transport='streamable-http')
     else:
         # STDIO transport for local Claude Desktop integration
         print("📋 Starting MCP server with STDIO transport")
         mcp.run(transport='stdio')
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    run() 
