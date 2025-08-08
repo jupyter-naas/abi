@@ -128,6 +128,18 @@ trivy-container-scan: build
 api: deps
 	uv run src/api.py
 
+mcp: deps
+	@echo "🚀 Starting MCP Server (STDIO mode for Claude Desktop)..."
+	uv run mcp-server
+
+mcp-http: deps
+	@echo "🌐 Starting MCP Server (SSE mode on port 8000)..."
+	MCP_TRANSPORT=sse uv run mcp-server
+
+mcp-test: deps
+	@echo "🔍 Running MCP Server validation tests..."
+	uv run python test_mcp_server.py
+
 api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
@@ -221,6 +233,9 @@ help:
 	@echo "DEVELOPMENT:"
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
+	@echo "  mcp                      Start MCP server in STDIO mode for Claude Desktop integration"
+	@echo "  mcp-http                 Start MCP server in HTTP mode on port 3000"
+	@echo "  mcp-test                 Run MCP server validation tests"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
 	@echo "  oxigraph-admin           Open Oxigraph administrative interface for monitoring and management"
 	@echo "  oxigraph-explorer        Open unified Knowledge Graph Explorer with iframe integration"
