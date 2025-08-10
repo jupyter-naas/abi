@@ -62,6 +62,13 @@ Each module uses its own namespace:
 - Claude: `claude: <http://ontology.naas.ai/abi/claude/>`
 - Gemini: `gemini: <http://ontology.naas.ai/abi/gemini/>`
 - Mistral: `mistral: <http://ontology.naas.ai/abi/mistral/>`
+- Grok: `grok: <http://ontology.naas.ai/abi/grok/>`
+- Llama: `llama: <http://ontology.naas.ai/abi/llama/>`
+- Perplexity: `perplexity: <http://ontology.naas.ai/abi/perplexity/>`
+- Gemma: `gemma: <http://ontology.naas.ai/abi/gemma/>`
+- Qwen: `qwen: <http://ontology.naas.ai/abi/qwen/>`
+- DeepSeek: `deepseek: <http://ontology.naas.ai/abi/deepseek/>`
+- ABI Core: `abi_core: <http://ontology.naas.ai/abi/core/>`
 
 ### 4. Required Sections
 Each module ontology should include:
@@ -146,6 +153,48 @@ Each module should demonstrate:
 - **Focus**: Technical excellence and European compliance
 - **Pattern**: Code generation with GDPR compliance
 - **Workflow**: Problem Analysis → Technical Solution → Code Generation → Compliance Validation → Documentation
+- **Instances**: 33 total (systems, agents, models, processes)
+
+### Grok Module
+- **Focus**: Truth-seeking and high intelligence
+- **Pattern**: Contrarian reasoning with real-time validation
+- **Workflow**: Truth Seeking → Contrarian Analysis → Real Time Validation → Intelligence Reasoning → Truth Delivery
+- **Instances**: 33 total (systems, agents, models, processes)
+
+### Llama Module
+- **Focus**: Open-source and cost-effectiveness
+- **Pattern**: Local deployment with resource optimization
+- **Workflow**: Local Deployment → Cost Optimization → Context Processing → Efficiency Validation → Response Delivery
+- **Instances**: 33 total (systems, agents, models, processes)
+
+### Perplexity Module
+- **Focus**: Web search and research capabilities
+- **Pattern**: Source validation with fact-checking
+- **Workflow**: Query Processing → Web Search → Research Analysis → Source Validation → Fact Checking → Response Synthesis
+- **Instances**: 35 total (systems, agents, models, processes)
+
+### Gemma Module
+- **Focus**: Lightweight and efficient processing
+- **Pattern**: Resource optimization with minimal footprint
+- **Workflow**: Input Optimization → Lightweight Processing → Efficiency Validation → Resource Optimization → Response Delivery
+- **Instances**: 33 total (systems, agents, models, processes)
+
+### Qwen Module
+- **Focus**: Enterprise and cloud integration
+- **Pattern**: Business applications with Alibaba ecosystem
+- **Workflow**: Enterprise Input → Cloud Integration → Multilingual Processing → Business Validation → Enterprise Delivery
+- **Instances**: 33 total (systems, agents, models, processes)
+
+### DeepSeek Module
+- **Focus**: Advanced reasoning and mathematical capabilities
+- **Pattern**: Logical analysis with code generation
+- **Workflow**: Problem Analysis → Reasoning → Mathematical Processing → Code Generation → Validation
+- **Instances**: 33 total (systems, agents, models, processes)
+
+### ABI Core Module
+- **Focus**: Integration and orchestration framework
+- **Pattern**: Multi-model connectivity with workflow management
+- **Workflow**: Model Discovery → Integration → Orchestration → Framework → Execution
 - **Instances**: 33 total (systems, agents, models, processes)
 
 ## Best Practices
