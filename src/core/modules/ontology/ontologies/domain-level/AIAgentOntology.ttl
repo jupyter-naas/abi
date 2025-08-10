@@ -1,0 +1,228 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/AIAgentOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AIAgentOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "BFO-aligned ontology for AI agents and artificial intelligence systems using the 7 foundational categories."@en ;
+    dc:title "AI Agent Ontology (BFO-aligned)" .
+
+#################################################################
+#    BFO 7 BUCKETS MAPPING
+#################################################################
+
+# WHAT/WHO → Material Entities (BFO_0000040)
+abi:AISystem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "AI System"@en ;
+    skos:definition "A material entity that implements artificial intelligence capabilities."@en ;
+    skos:example "ChatGPT server infrastructure, Claude API endpoints, Gemini model instances."@en .
+
+abi:AIModelInstance a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "AI Model Instance"@en ;
+    skos:definition "A specific instantiation of an AI model running on hardware."@en ;
+    skos:example "GPT-4 model running on OpenAI's servers, Claude-3-Sonnet instance."@en .
+
+# HOW-IT-IS → Qualities (BFO_0000019)
+abi:ModelAccuracy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Model Accuracy"@en ;
+    skos:definition "A quality that inheres in an AI model, representing its performance accuracy."@en .
+
+abi:ResponseLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Response Latency"@en ;
+    skos:definition "A quality that inheres in an AI system, representing response time."@en .
+
+abi:TokenCapacity a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Token Capacity"@en ;
+    skos:definition "A quality that inheres in an AI model, representing maximum token processing capacity."@en .
+
+# WHY-(POTENTIAL) → Realizable Entities (BFO_0000017)
+abi:TextGenerationCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Text Generation Capability"@en ;
+    skos:definition "A realizable entity that can be realized by text generation processes."@en .
+
+abi:ImageAnalysisCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Image Analysis Capability"@en ;
+    skos:definition "A realizable entity that can be realized by image analysis processes."@en .
+
+abi:CodeGenerationCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Code Generation Capability"@en ;
+    skos:definition "A realizable entity that can be realized by code generation processes."@en .
+
+# HOW-IT-HAPPENS → Processes (BFO_0000015)
+abi:TextGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Text Generation Process"@en ;
+    skos:definition "A process in which an AI system generates text based on input."@en .
+
+abi:ImageAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Image Analysis Process"@en ;
+    skos:definition "A process in which an AI system analyzes and interprets images."@en .
+
+abi:CodeGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Code Generation Process"@en ;
+    skos:definition "A process in which an AI system generates code based on specifications."@en .
+
+# WHEN → Temporal Regions (BFO_0000008)
+abi:ModelTrainingPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Model Training Period"@en ;
+    skos:definition "A temporal region during which an AI model was trained."@en .
+
+abi:InferenceSession a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Inference Session"@en ;
+    skos:definition "A temporal region during which an AI model performs inference."@en .
+
+# WHERE → Spatial Regions (BFO_0000006)
+abi:DataCenterLocation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ;
+    rdfs:label "Data Center Location"@en ;
+    skos:definition "A spatial region where AI systems are physically located."@en .
+
+abi:CloudRegion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ;
+    rdfs:label "Cloud Region"@en ;
+    skos:definition "A spatial region defined by cloud service provider infrastructure."@en .
+
+# HOW-WE-KNOW → Information Content Entities (BFO_0000031)
+abi:ModelSpecification a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Model Specification"@en ;
+    skos:definition "An information content entity that describes AI model parameters and capabilities."@en .
+
+abi:TrainingDataset a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Training Dataset"@en ;
+    skos:definition "An information content entity containing data used to train an AI model."@en .
+
+abi:APIResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "API Response"@en ;
+    skos:definition "An information content entity containing AI system output."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+# Material Entity Relations
+abi:hasCapability a owl:ObjectProperty ;
+    rdfs:label "has capability"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range bfo:BFO_0000017 ;
+    skos:definition "A relation between a material entity and its realizable capabilities."@en .
+
+abi:realizesCapability a owl:ObjectProperty ;
+    rdfs:label "realizes capability"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000017 ;
+    skos:definition "A relation between a process and the capability it realizes."@en .
+
+# Quality Relations
+abi:hasQuality a owl:ObjectProperty ;
+    rdfs:label "has quality"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range bfo:BFO_0000019 ;
+    skos:definition "A relation between a material entity and its qualities."@en .
+
+# Process Relations
+abi:hasParticipant a owl:ObjectProperty ;
+    rdfs:label "has participant"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000040 ;
+    skos:definition "A relation between a process and the material entities that participate in it."@en .
+
+abi:occursIn a owl:ObjectProperty ;
+    rdfs:label "occurs in"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000006 ;
+    skos:definition "A relation between a process and the spatial region where it occurs."@en .
+
+abi:hasTemporalRegion a owl:ObjectProperty ;
+    rdfs:label "has temporal region"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000008 ;
+    skos:definition "A relation between a process and its temporal region."@en .
+
+# Information Content Relations
+abi:isDocumentedBy a owl:ObjectProperty ;
+    rdfs:label "is documented by"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000031 ;
+    skos:definition "A relation between a process and the information content that documents it."@en .
+
+abi:hasSpecification a owl:ObjectProperty ;
+    rdfs:label "has specification"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range bfo:BFO_0000031 ;
+    skos:definition "A relation between a material entity and its specification."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:modelName a owl:DataProperty ;
+    rdfs:label "model name"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:string ;
+    skos:definition "The name identifier of an AI model."@en .
+
+abi:providerName a owl:DataProperty ;
+    rdfs:label "provider name"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:string ;
+    skos:definition "The name of the organization providing the AI system."@en .
+
+abi:accuracyValue a owl:DataProperty ;
+    rdfs:label "accuracy value"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The numerical value of model accuracy."@en .
+
+abi:latencyValue a owl:DataProperty ;
+    rdfs:label "latency value"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:integer ;
+    skos:definition "The numerical value of response latency in milliseconds."@en .
+
+abi:tokenLimit a owl:DataProperty ;
+    rdfs:label "token limit"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:integer ;
+    skos:definition "The maximum number of tokens the model can process."@en .
+
+abi:trainingDataCutoff a owl:DataProperty ;
+    rdfs:label "training data cutoff"@en ;
+    rdfs:domain bfo:BFO_0000008 ;
+    rdfs:range xsd:date ;
+    skos:definition "The date until which training data extends."@en .
+
+abi:locationName a owl:DataProperty ;
+    rdfs:label "location name"@en ;
+    rdfs:domain bfo:BFO_0000006 ;
+    rdfs:range xsd:string ;
+    skos:definition "The name of the spatial location."@en .
+
+abi:specificationContent a owl:DataProperty ;
+    rdfs:label "specification content"@en ;
+    rdfs:domain bfo:BFO_0000031 ;
+    rdfs:range xsd:string ;
+    skos:definition "The content of the model specification."@en .
