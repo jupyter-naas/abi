@@ -1,0 +1,282 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix perplexity: <http://ontology.naas.ai/abi/perplexity/> .
+
+<http://ontology.naas.ai/abi/perplexity/PerplexityInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Perplexity Module Instances" ;
+    dc:description "Concrete instances demonstrating Perplexity AI agents with web search and research capabilities."@en .
+
+#################################################################
+#    Perplexity AI System (Main System)
+#################################################################
+
+perplexity:PerplexitySystem a abi:AISystem ;
+    rdfs:label "Perplexity AI System"@en ;
+    abi:providerName "Perplexity AI" ;
+    abi:systemComplexity "complex" ;
+    abi:hasLoadBalancer perplexity:PerplexityLoadBalancer ;
+    abi:hasSubsystem perplexity:WebSearchSubsystem, perplexity:ResearchSubsystem, perplexity:SourceValidationSubsystem ;
+    rdfs:comment "Main Perplexity system that excels in web search, research capabilities, and source validation with real-time information gathering."@en .
+
+#################################################################
+#    Perplexity Subsystems
+#################################################################
+
+perplexity:WebSearchSubsystem a abi:AISystem ;
+    rdfs:label "Perplexity Web Search Subsystem"@en ;
+    abi:providerName "Perplexity AI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf perplexity:PerplexitySystem ;
+    abi:hasAIAgent perplexity:PerplexityWebSearchAgent, perplexity:PerplexitySearchOptimizerAgent ;
+    rdfs:comment "Subsystem dedicated to web search and information retrieval capabilities."@en .
+
+perplexity:ResearchSubsystem a abi:AISystem ;
+    rdfs:label "Perplexity Research Subsystem"@en ;
+    abi:providerName "Perplexity AI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf perplexity:PerplexitySystem ;
+    abi:hasAIAgent perplexity:PerplexityResearchAgent, perplexity:PerplexityAnalysisAgent ;
+    rdfs:comment "Subsystem specialized in research and analysis capabilities."@en .
+
+perplexity:SourceValidationSubsystem a abi:AISystem ;
+    rdfs:label "Perplexity Source Validation Subsystem"@en ;
+    abi:providerName "Perplexity AI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf perplexity:PerplexitySystem ;
+    abi:hasAIAgent perplexity:PerplexityValidatorAgent, perplexity:PerplexityFactCheckerAgent ;
+    rdfs:comment "Subsystem responsible for source validation and fact-checking."@en .
+
+#################################################################
+#    Perplexity AI Agents
+#################################################################
+
+### Web Search Agents
+perplexity:PerplexityWebSearchAgent a abi:AIAgent ;
+    rdfs:label "Perplexity Web Search Agent"@en ;
+    abi:isAIAgentOf perplexity:WebSearchSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith perplexity:PerplexityResearchAgent, perplexity:PerplexityValidatorAgent ;
+    abi:hasFallbackAgent perplexity:PerplexitySearchOptimizerAgent ;
+    rdfs:comment "Primary web search agent that excels in information retrieval and search optimization."@en .
+
+perplexity:PerplexitySearchOptimizerAgent a abi:AIAgent ;
+    rdfs:label "Perplexity Search Optimizer Agent"@en ;
+    abi:isAIAgentOf perplexity:WebSearchSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith perplexity:PerplexityWebSearchAgent, perplexity:PerplexityAnalysisAgent ;
+    rdfs:comment "Search optimization agent that improves query performance and result relevance."@en .
+
+### Research Agents
+perplexity:PerplexityResearchAgent a abi:AIAgent ;
+    rdfs:label "Perplexity Research Agent"@en ;
+    abi:isAIAgentOf perplexity:ResearchSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith perplexity:PerplexityWebSearchAgent, perplexity:PerplexityAnalysisAgent ;
+    rdfs:comment "Research agent that conducts comprehensive information gathering and analysis."@en .
+
+perplexity:PerplexityAnalysisAgent a abi:AIAgent ;
+    rdfs:label "Perplexity Analysis Agent"@en ;
+    abi:isAIAgentOf perplexity:ResearchSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith perplexity:PerplexityResearchAgent, perplexity:PerplexityFactCheckerAgent ;
+    rdfs:comment "Analysis agent that processes and synthesizes research findings."@en .
+
+### Source Validation Agents
+perplexity:PerplexityValidatorAgent a abi:AIAgent ;
+    rdfs:label "Perplexity Validator Agent"@en ;
+    abi:isAIAgentOf perplexity:SourceValidationSubsystem ;
+    abi:hasSpecializedRole abi:ValidatorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith perplexity:PerplexityWebSearchAgent, perplexity:PerplexityFactCheckerAgent ;
+    rdfs:comment "Source validation agent that verifies information credibility and reliability."@en .
+
+perplexity:PerplexityFactCheckerAgent a abi:AIAgent ;
+    rdfs:label "Perplexity Fact Checker Agent"@en ;
+    abi:isAIAgentOf perplexity:SourceValidationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith perplexity:PerplexityValidatorAgent, perplexity:PerplexityAnalysisAgent ;
+    rdfs:comment "Fact-checking agent that verifies factual accuracy and cross-references information."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+perplexity:PerplexityLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "Perplexity Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for web search and research capabilities across Perplexity agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+perplexity:PerplexityWebSearchModelInstance a abi:AIModelInstance ;
+    rdfs:label "Perplexity Web Search Model Instance"@en ;
+    abi:modelName "perplexity-online" ;
+    abi:providerName "Perplexity AI" ;
+    abi:hasQuality perplexity:PerplexityWebSearchAccuracy, perplexity:PerplexityWebSearchLatency, perplexity:PerplexityWebSearchTokenCapacity ;
+    rdfs:comment "Specific instance of Perplexity Online model optimized for web search and information retrieval."@en .
+
+perplexity:PerplexityResearchModelInstance a abi:AIModelInstance ;
+    rdfs:label "Perplexity Research Model Instance"@en ;
+    abi:modelName "perplexity-research" ;
+    abi:providerName "Perplexity AI" ;
+    abi:hasQuality perplexity:PerplexityResearchAccuracy, perplexity:PerplexityResearchLatency, perplexity:PerplexityResearchTokenCapacity ;
+    rdfs:comment "Specific instance of Perplexity Research model for comprehensive research capabilities."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### Perplexity Web Search Qualities
+perplexity:PerplexityWebSearchAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Perplexity Web Search Accuracy"@en ;
+    abi:accuracyValue "0.54"^^xsd:decimal ;
+    rdfs:comment "Perplexity web search model accuracy quality with 54% performance."@en .
+
+perplexity:PerplexityWebSearchLatency a abi:ResponseLatency ;
+    rdfs:label "Perplexity Web Search Latency"@en ;
+    abi:latencyValue "1800"^^xsd:integer ;
+    rdfs:comment "Perplexity web search response latency quality of 1800ms."@en .
+
+perplexity:PerplexityWebSearchTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Perplexity Web Search Token Capacity"@en ;
+    abi:tokenLimit "8192"^^xsd:integer ;
+    rdfs:comment "Perplexity web search token capacity quality of 8,192 tokens."@en .
+
+### Perplexity Research Qualities
+perplexity:PerplexityResearchAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Perplexity Research Accuracy"@en ;
+    abi:accuracyValue "0.54"^^xsd:decimal ;
+    rdfs:comment "Perplexity research model accuracy quality with 54% performance."@en .
+
+perplexity:PerplexityResearchLatency a abi:ResponseLatency ;
+    rdfs:label "Perplexity Research Latency"@en ;
+    abi:latencyValue "1800"^^xsd:integer ;
+    rdfs:comment "Perplexity research response latency quality of 1800ms."@en .
+
+perplexity:PerplexityResearchTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Perplexity Research Token Capacity"@en ;
+    abi:tokenLimit "8192"^^xsd:integer ;
+    rdfs:comment "Perplexity research token capacity quality of 8,192 tokens."@en .
+
+#################################################################
+#    Processes with Web Search Workflow
+#################################################################
+
+perplexity:QueryProcessingProcess a abi:TextGenerationProcess ;
+    rdfs:label "Query Processing Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant perplexity:PerplexityWebSearchModelInstance ;
+    abi:hasTemporalRegion perplexity:QueryProcessingSession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess perplexity:WebSearchProcess ;
+    rdfs:comment "Process that processes and optimizes search queries."@en .
+
+perplexity:WebSearchProcess a abi:TextGenerationProcess ;
+    rdfs:label "Web Search Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant perplexity:PerplexityWebSearchModelInstance ;
+    abi:hasTemporalRegion perplexity:WebSearchSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime perplexity:ResearchAnalysisProcess ;
+    abi:triggersProcess perplexity:ResearchAnalysisProcess ;
+    rdfs:comment "Process that performs web search and information retrieval."@en .
+
+perplexity:ResearchAnalysisProcess a abi:TextGenerationProcess ;
+    rdfs:label "Research Analysis Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant perplexity:PerplexityResearchModelInstance ;
+    abi:hasTemporalRegion perplexity:ResearchAnalysisSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime perplexity:SourceValidationProcess ;
+    abi:triggersProcess perplexity:SourceValidationProcess ;
+    rdfs:comment "Process that analyzes research findings and synthesizes information."@en .
+
+perplexity:SourceValidationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Source Validation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant perplexity:PerplexityWebSearchModelInstance ;
+    abi:hasTemporalRegion perplexity:SourceValidationSession ;
+    abi:temporalSequence "4" ;
+    abi:precedesInTime perplexity:FactCheckingProcess ;
+    abi:triggersProcess perplexity:FactCheckingProcess ;
+    rdfs:comment "Process that validates sources and verifies information credibility."@en .
+
+perplexity:FactCheckingProcess a abi:TextGenerationProcess ;
+    rdfs:label "Fact Checking Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant perplexity:PerplexityResearchModelInstance ;
+    abi:hasTemporalRegion perplexity:FactCheckingSession ;
+    abi:temporalSequence "5" ;
+    abi:precedesInTime perplexity:ResponseSynthesisProcess ;
+    abi:triggersProcess perplexity:ResponseSynthesisProcess ;
+    rdfs:comment "Process that performs fact-checking and cross-references information."@en .
+
+perplexity:ResponseSynthesisProcess a abi:TextGenerationProcess ;
+    rdfs:label "Response Synthesis Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant perplexity:PerplexityWebSearchModelInstance ;
+    abi:hasTemporalRegion perplexity:ResponseSynthesisSession ;
+    abi:temporalSequence "6" ;
+    rdfs:comment "Process that synthesizes validated information into comprehensive responses."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+perplexity:QueryProcessingSession a abi:InferenceSession ;
+    rdfs:label "Query Processing Session"@en ;
+    rdfs:comment "Temporal region during which query processing occurs."@en .
+
+perplexity:WebSearchSession a abi:InferenceSession ;
+    rdfs:label "Web Search Session"@en ;
+    rdfs:comment "Temporal region during which web search occurs."@en .
+
+perplexity:ResearchAnalysisSession a abi:InferenceSession ;
+    rdfs:label "Research Analysis Session"@en ;
+    rdfs:comment "Temporal region during which research analysis occurs."@en .
+
+perplexity:SourceValidationSession a abi:InferenceSession ;
+    rdfs:label "Source Validation Session"@en ;
+    rdfs:comment "Temporal region during which source validation occurs."@en .
+
+perplexity:FactCheckingSession a abi:InferenceSession ;
+    rdfs:label "Fact Checking Session"@en ;
+    rdfs:comment "Temporal region during which fact checking occurs."@en .
+
+perplexity:ResponseSynthesisSession a abi:InferenceSession ;
+    rdfs:label "Response Synthesis Session"@en ;
+    rdfs:comment "Temporal region during which response synthesis occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+perplexity:PerplexityWebSearchSpecification a abi:ModelSpecification ;
+    rdfs:label "Perplexity Web Search Model Specification"@en ;
+    abi:specificationContent "Perplexity Online is a web search model optimized for real-time information retrieval, source validation, and comprehensive research with 8K context window." ;
+    rdfs:comment "Information content describing Perplexity web search model parameters and capabilities."@en .
+
+perplexity:PerplexityResearchSpecification a abi:ModelSpecification ;
+    rdfs:label "Perplexity Research Model Specification"@en ;
+    abi:specificationContent "Perplexity Research is a comprehensive research model with advanced analysis capabilities, fact-checking, and source validation." ;
+    rdfs:comment "Information content describing Perplexity research model parameters and capabilities."@en .
+
+perplexity:WebSearchCapabilitiesSpecification a abi:ModelSpecification ;
+    rdfs:label "Web Search Capabilities Specification"@en ;
+    abi:specificationContent "Web search capabilities include real-time information retrieval, source validation, fact-checking, research analysis, and comprehensive response synthesis." ;
+    rdfs:comment "Information content describing Perplexity's web search capabilities and features."@en .

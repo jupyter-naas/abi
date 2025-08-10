@@ -1,0 +1,268 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix abi_core: <http://ontology.naas.ai/abi/core/> .
+
+<http://ontology.naas.ai/abi/core/ABIInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "ABI Core Module Instances" ;
+    dc:description "Concrete instances demonstrating ABI core system capabilities and integration framework."@en .
+
+#################################################################
+#    ABI Core System (Main System)
+#################################################################
+
+abi_core:ABICoreSystem a abi:AISystem ;
+    rdfs:label "ABI Core System"@en ;
+    abi:providerName "ABI Framework" ;
+    abi:systemComplexity "complex" ;
+    abi:hasLoadBalancer abi_core:ABICoreLoadBalancer ;
+    abi:hasSubsystem abi_core:IntegrationSubsystem, abi_core:OrchestrationSubsystem, abi_core:FrameworkSubsystem ;
+    rdfs:comment "Main ABI core system that excels in AI agent integration, orchestration, and framework capabilities for multi-model AI systems."@en .
+
+#################################################################
+#    ABI Core Subsystems
+#################################################################
+
+abi_core:IntegrationSubsystem a abi:AISystem ;
+    rdfs:label "ABI Integration Subsystem"@en ;
+    abi:providerName "ABI Framework" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf abi_core:ABICoreSystem ;
+    abi:hasAIAgent abi_core:ABIIntegrationAgent, abi_core:ABIConnectorAgent ;
+    rdfs:comment "Subsystem dedicated to AI agent integration and multi-model connectivity."@en .
+
+abi_core:OrchestrationSubsystem a abi:AISystem ;
+    rdfs:label "ABI Orchestration Subsystem"@en ;
+    abi:providerName "ABI Framework" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf abi_core:ABICoreSystem ;
+    abi:hasAIAgent abi_core:ABIOrchestratorAgent, abi_core:ABICoordinatorAgent ;
+    rdfs:comment "Subsystem specialized in AI agent orchestration and workflow management."@en .
+
+abi_core:FrameworkSubsystem a abi:AISystem ;
+    rdfs:label "ABI Framework Subsystem"@en ;
+    abi:providerName "ABI Framework" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf abi_core:ABICoreSystem ;
+    abi:hasAIAgent abi_core:ABIFrameworkAgent, abi_core:ABIInfrastructureAgent ;
+    rdfs:comment "Subsystem focused on framework infrastructure and core capabilities."@en .
+
+#################################################################
+#    ABI Core AI Agents
+#################################################################
+
+### Integration Agents
+abi_core:ABIIntegrationAgent a abi:AIAgent ;
+    rdfs:label "ABI Integration Agent"@en ;
+    abi:isAIAgentOf abi_core:IntegrationSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith abi_core:ABIOrchestratorAgent, abi_core:ABIFrameworkAgent ;
+    abi:hasFallbackAgent abi_core:ABIConnectorAgent ;
+    rdfs:comment "Primary integration agent that excels in connecting and managing multiple AI models and agents."@en .
+
+abi_core:ABIConnectorAgent a abi:AIAgent ;
+    rdfs:label "ABI Connector Agent"@en ;
+    abi:isAIAgentOf abi_core:IntegrationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith abi_core:ABIIntegrationAgent, abi_core:ABICoordinatorAgent ;
+    rdfs:comment "Connector agent that handles specific model connections and protocol management."@en .
+
+### Orchestration Agents
+abi_core:ABIOrchestratorAgent a abi:AIAgent ;
+    rdfs:label "ABI Orchestrator Agent"@en ;
+    abi:isAIAgentOf abi_core:OrchestrationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith abi_core:ABIIntegrationAgent, abi_core:ABICoordinatorAgent ;
+    rdfs:comment "Orchestrator agent that manages AI agent workflows and task distribution."@en .
+
+abi_core:ABICoordinatorAgent a abi:AIAgent ;
+    rdfs:label "ABI Coordinator Agent"@en ;
+    abi:isAIAgentOf abi_core:OrchestrationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith abi_core:ABIOrchestratorAgent, abi_core:ABIConnectorAgent ;
+    rdfs:comment "Coordinator agent that synchronizes AI agent activities and resource allocation."@en .
+
+### Framework Agents
+abi_core:ABIFrameworkAgent a abi:AIAgent ;
+    rdfs:label "ABI Framework Agent"@en ;
+    abi:isAIAgentOf abi_core:FrameworkSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith abi_core:ABIIntegrationAgent, abi_core:ABIInfrastructureAgent ;
+    rdfs:comment "Framework agent that provides core ABI framework capabilities and APIs."@en .
+
+abi_core:ABIInfrastructureAgent a abi:AIAgent ;
+    rdfs:label "ABI Infrastructure Agent"@en ;
+    abi:isAIAgentOf abi_core:FrameworkSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith abi_core:ABIFrameworkAgent, abi_core:ABICoordinatorAgent ;
+    rdfs:comment "Infrastructure agent that manages ABI system resources and infrastructure."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+abi_core:ABICoreLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "ABI Core Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for integration and orchestration capabilities across ABI core agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+abi_core:ABIIntegrationModelInstance a abi:AIModelInstance ;
+    rdfs:label "ABI Integration Model Instance"@en ;
+    abi:modelName "abi-integration-core" ;
+    abi:providerName "ABI Framework" ;
+    abi:hasQuality abi_core:ABIIntegrationAccuracy, abi_core:ABIIntegrationLatency, abi_core:ABIIntegrationTokenCapacity ;
+    rdfs:comment "Specific instance of ABI Integration Core model optimized for multi-model integration."@en .
+
+abi_core:ABIOrchestrationModelInstance a abi:AIModelInstance ;
+    rdfs:label "ABI Orchestration Model Instance"@en ;
+    abi:modelName "abi-orchestration-core" ;
+    abi:providerName "ABI Framework" ;
+    abi:hasQuality abi_core:ABIOrchestrationAccuracy, abi_core:ABIOrchestrationLatency, abi_core:ABIOrchestrationTokenCapacity ;
+    rdfs:comment "Specific instance of ABI Orchestration Core model for workflow management."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### ABI Integration Qualities
+abi_core:ABIIntegrationAccuracy a abi:ModelAccuracy ;
+    rdfs:label "ABI Integration Accuracy"@en ;
+    abi:accuracyValue "0.75"^^xsd:decimal ;
+    rdfs:comment "ABI integration model accuracy quality with 75% performance."@en .
+
+abi_core:ABIIntegrationLatency a abi:ResponseLatency ;
+    rdfs:label "ABI Integration Latency"@en ;
+    abi:latencyValue "800"^^xsd:integer ;
+    rdfs:comment "ABI integration response latency quality of 800ms."@en .
+
+abi_core:ABIIntegrationTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "ABI Integration Token Capacity"@en ;
+    abi:tokenLimit "65536"^^xsd:integer ;
+    rdfs:comment "ABI integration token capacity quality of 65,536 tokens."@en .
+
+### ABI Orchestration Qualities
+abi_core:ABIOrchestrationAccuracy a abi:ModelAccuracy ;
+    rdfs:label "ABI Orchestration Accuracy"@en ;
+    abi:accuracyValue "0.75"^^xsd:decimal ;
+    rdfs:comment "ABI orchestration model accuracy quality with 75% performance."@en .
+
+abi_core:ABIOrchestrationLatency a abi:ResponseLatency ;
+    rdfs:label "ABI Orchestration Latency"@en ;
+    abi:latencyValue "800"^^xsd:integer ;
+    rdfs:comment "ABI orchestration response latency quality of 800ms."@en .
+
+abi_core:ABIOrchestrationTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "ABI Orchestration Token Capacity"@en ;
+    abi:tokenLimit "65536"^^xsd:integer ;
+    rdfs:comment "ABI orchestration token capacity quality of 65,536 tokens."@en .
+
+#################################################################
+#    Processes with Integration Workflow
+#################################################################
+
+abi_core:ModelDiscoveryProcess a abi:TextGenerationProcess ;
+    rdfs:label "Model Discovery Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant abi_core:ABIIntegrationModelInstance ;
+    abi:hasTemporalRegion abi_core:ModelDiscoverySession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess abi_core:IntegrationProcess ;
+    rdfs:comment "Process that discovers and identifies available AI models and agents."@en .
+
+abi_core:IntegrationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Integration Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant abi_core:ABIIntegrationModelInstance ;
+    abi:hasTemporalRegion abi_core:IntegrationSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime abi_core:OrchestrationProcess ;
+    abi:triggersProcess abi_core:OrchestrationProcess ;
+    rdfs:comment "Process that integrates multiple AI models and establishes connections."@en .
+
+abi_core:OrchestrationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Orchestration Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant abi_core:ABIOrchestrationModelInstance ;
+    abi:hasTemporalRegion abi_core:OrchestrationSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime abi_core:FrameworkProcess ;
+    abi:triggersProcess abi_core:FrameworkProcess ;
+    rdfs:comment "Process that orchestrates AI agent workflows and task distribution."@en .
+
+abi_core:FrameworkProcess a abi:TextGenerationProcess ;
+    rdfs:label "Framework Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant abi_core:ABIIntegrationModelInstance ;
+    abi:hasTemporalRegion abi_core:FrameworkSession ;
+    abi:temporalSequence "4" ;
+    abi:precedesInTime abi_core:ExecutionProcess ;
+    abi:triggersProcess abi_core:ExecutionProcess ;
+    rdfs:comment "Process that provides framework capabilities and infrastructure support."@en .
+
+abi_core:ExecutionProcess a abi:TextGenerationProcess ;
+    rdfs:label "Execution Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant abi_core:ABIOrchestrationModelInstance ;
+    abi:hasTemporalRegion abi_core:ExecutionSession ;
+    abi:temporalSequence "5" ;
+    rdfs:comment "Process that executes integrated AI workflows and delivers results."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+abi_core:ModelDiscoverySession a abi:InferenceSession ;
+    rdfs:label "Model Discovery Session"@en ;
+    rdfs:comment "Temporal region during which model discovery occurs."@en .
+
+abi_core:IntegrationSession a abi:InferenceSession ;
+    rdfs:label "Integration Session"@en ;
+    rdfs:comment "Temporal region during which integration occurs."@en .
+
+abi_core:OrchestrationSession a abi:InferenceSession ;
+    rdfs:label "Orchestration Session"@en ;
+    rdfs:comment "Temporal region during which orchestration occurs."@en .
+
+abi_core:FrameworkSession a abi:InferenceSession ;
+    rdfs:label "Framework Session"@en ;
+    rdfs:comment "Temporal region during which framework processing occurs."@en .
+
+abi_core:ExecutionSession a abi:InferenceSession ;
+    rdfs:label "Execution Session"@en ;
+    rdfs:comment "Temporal region during which execution occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+abi_core:ABIIntegrationSpecification a abi:ModelSpecification ;
+    rdfs:label "ABI Integration Model Specification"@en ;
+    abi:specificationContent "ABI Integration Core is a framework model optimized for multi-model AI integration, agent connectivity, and system orchestration with 64K context window." ;
+    rdfs:comment "Information content describing ABI integration model parameters and capabilities."@en .
+
+abi_core:ABIOrchestrationSpecification a abi:ModelSpecification ;
+    rdfs:label "ABI Orchestration Model Specification"@en ;
+    abi:specificationContent "ABI Orchestration Core is a workflow management model with advanced orchestration capabilities, task distribution, and resource coordination." ;
+    rdfs:comment "Information content describing ABI orchestration model parameters and capabilities."@en .
+
+abi_core:IntegrationCapabilitiesSpecification a abi:ModelSpecification ;
+    rdfs:label "Integration Capabilities Specification"@en ;
+    abi:specificationContent "Integration capabilities include multi-model connectivity, agent orchestration, workflow management, framework infrastructure, and unified AI system coordination." ;
+    rdfs:comment "Information content describing ABI's integration capabilities and features."@en .

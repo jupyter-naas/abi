@@ -1,0 +1,268 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix grok: <http://ontology.naas.ai/abi/grok/> .
+
+<http://ontology.naas.ai/abi/grok/GrokInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Grok Module Instances" ;
+    dc:description "Concrete instances demonstrating Grok AI agents with truth-seeking capabilities and high intelligence."@en .
+
+#################################################################
+#    Grok AI System (Main System)
+#################################################################
+
+grok:GrokSystem a abi:AISystem ;
+    rdfs:label "Grok AI System"@en ;
+    abi:providerName "xAI" ;
+    abi:systemComplexity "complex" ;
+    abi:hasLoadBalancer grok:GrokLoadBalancer ;
+    abi:hasSubsystem grok:TruthSeekingSubsystem, grok:RealTimeInfoSubsystem, grok:HighIntelligenceSubsystem ;
+    rdfs:comment "Main Grok system that excels in truth-seeking, real-time information processing, and high intelligence reasoning with contrarian thinking."@en .
+
+#################################################################
+#    Grok Subsystems
+#################################################################
+
+grok:TruthSeekingSubsystem a abi:AISystem ;
+    rdfs:label "Grok Truth Seeking Subsystem"@en ;
+    abi:providerName "xAI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf grok:GrokSystem ;
+    abi:hasAIAgent grok:GrokTruthSeekerAgent, grok:GrokContrarianAgent ;
+    rdfs:comment "Subsystem dedicated to truth-seeking and contrarian reasoning capabilities."@en .
+
+grok:RealTimeInfoSubsystem a abi:AISystem ;
+    rdfs:label "Grok Real Time Info Subsystem"@en ;
+    abi:providerName "xAI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf grok:GrokSystem ;
+    abi:hasAIAgent grok:GrokRealTimeAgent, grok:GrokLiveDataAgent ;
+    rdfs:comment "Subsystem specialized in real-time information processing and live data analysis."@en .
+
+grok:HighIntelligenceSubsystem a abi:AISystem ;
+    rdfs:label "Grok High Intelligence Subsystem"@en ;
+    abi:providerName "xAI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf grok:GrokSystem ;
+    abi:hasAIAgent grok:GrokIntelligenceAgent, grok:GrokReasoningAgent ;
+    rdfs:comment "Subsystem focused on high intelligence reasoning and cognitive capabilities."@en .
+
+#################################################################
+#    Grok AI Agents
+#################################################################
+
+### Truth Seeking Agents
+grok:GrokTruthSeekerAgent a abi:AIAgent ;
+    rdfs:label "Grok Truth Seeker Agent"@en ;
+    abi:isAIAgentOf grok:TruthSeekingSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith grok:GrokIntelligenceAgent, grok:GrokRealTimeAgent ;
+    abi:hasFallbackAgent grok:GrokContrarianAgent ;
+    rdfs:comment "Primary truth-seeking agent that excels in finding and validating factual information."@en .
+
+grok:GrokContrarianAgent a abi:AIAgent ;
+    rdfs:label "Grok Contrarian Agent"@en ;
+    abi:isAIAgentOf grok:TruthSeekingSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith grok:GrokTruthSeekerAgent, grok:GrokReasoningAgent ;
+    rdfs:comment "Contrarian reasoning agent that challenges assumptions and explores alternative viewpoints."@en .
+
+### Real Time Info Agents
+grok:GrokRealTimeAgent a abi:AIAgent ;
+    rdfs:label "Grok Real Time Agent"@en ;
+    abi:isAIAgentOf grok:RealTimeInfoSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith grok:GrokTruthSeekerAgent, grok:GrokLiveDataAgent ;
+    rdfs:comment "Real-time information processing agent with live data analysis capabilities."@en .
+
+grok:GrokLiveDataAgent a abi:AIAgent ;
+    rdfs:label "Grok Live Data Agent"@en ;
+    abi:isAIAgentOf grok:RealTimeInfoSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith grok:GrokRealTimeAgent, grok:GrokIntelligenceAgent ;
+    rdfs:comment "Live data analysis agent that processes streaming information and current events."@en .
+
+### High Intelligence Agents
+grok:GrokIntelligenceAgent a abi:AIAgent ;
+    rdfs:label "Grok Intelligence Agent"@en ;
+    abi:isAIAgentOf grok:HighIntelligenceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith grok:GrokTruthSeekerAgent, grok:GrokReasoningAgent ;
+    rdfs:comment "High intelligence agent with advanced cognitive capabilities and reasoning."@en .
+
+grok:GrokReasoningAgent a abi:AIAgent ;
+    rdfs:label "Grok Reasoning Agent"@en ;
+    abi:isAIAgentOf grok:HighIntelligenceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith grok:GrokIntelligenceAgent, grok:GrokContrarianAgent ;
+    rdfs:comment "Advanced reasoning agent that excels in complex problem-solving and logical analysis."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+grok:GrokLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "Grok Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for truth-seeking and high intelligence capabilities across Grok agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+grok:GrokTruthSeekerModelInstance a abi:AIModelInstance ;
+    rdfs:label "Grok Truth Seeker Model Instance"@en ;
+    abi:modelName "grok-2" ;
+    abi:providerName "xAI" ;
+    abi:hasQuality grok:GrokTruthSeekerAccuracy, grok:GrokTruthSeekerLatency, grok:GrokTruthSeekerTokenCapacity ;
+    rdfs:comment "Specific instance of Grok 2 model optimized for truth-seeking and factual validation."@en .
+
+grok:GrokIntelligenceModelInstance a abi:AIModelInstance ;
+    rdfs:label "Grok Intelligence Model Instance"@en ;
+    abi:modelName "grok-2-intelligence" ;
+    abi:providerName "xAI" ;
+    abi:hasQuality grok:GrokIntelligenceAccuracy, grok:GrokIntelligenceLatency, grok:GrokIntelligenceTokenCapacity ;
+    rdfs:comment "Specific instance of Grok 2 Intelligence model for high cognitive capabilities."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### Grok Truth Seeker Qualities
+grok:GrokTruthSeekerAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Grok Truth Seeker Accuracy"@en ;
+    abi:accuracyValue "0.73"^^xsd:decimal ;
+    rdfs:comment "Grok truth seeker model accuracy quality with 73% performance."@en .
+
+grok:GrokTruthSeekerLatency a abi:ResponseLatency ;
+    rdfs:label "Grok Truth Seeker Latency"@en ;
+    abi:latencyValue "2000"^^xsd:integer ;
+    rdfs:comment "Grok truth seeker response latency quality of 2000ms."@en .
+
+grok:GrokTruthSeekerTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Grok Truth Seeker Token Capacity"@en ;
+    abi:tokenLimit "128000"^^xsd:integer ;
+    rdfs:comment "Grok truth seeker token capacity quality of 128,000 tokens."@en .
+
+### Grok Intelligence Qualities
+grok:GrokIntelligenceAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Grok Intelligence Accuracy"@en ;
+    abi:accuracyValue "0.73"^^xsd:decimal ;
+    rdfs:comment "Grok intelligence model accuracy quality with 73% performance."@en .
+
+grok:GrokIntelligenceLatency a abi:ResponseLatency ;
+    rdfs:label "Grok Intelligence Latency"@en ;
+    abi:latencyValue "2000"^^xsd:integer ;
+    rdfs:comment "Grok intelligence response latency quality of 2000ms."@en .
+
+grok:GrokIntelligenceTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Grok Intelligence Token Capacity"@en ;
+    abi:tokenLimit "128000"^^xsd:integer ;
+    rdfs:comment "Grok intelligence token capacity quality of 128,000 tokens."@en .
+
+#################################################################
+#    Processes with Truth-Seeking Workflow
+#################################################################
+
+grok:TruthSeekingProcess a abi:TextGenerationProcess ;
+    rdfs:label "Truth Seeking Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant grok:GrokTruthSeekerModelInstance ;
+    abi:hasTemporalRegion grok:TruthSeekingSession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess grok:ContrarianAnalysisProcess ;
+    rdfs:comment "Process that seeks truth and validates factual information."@en .
+
+grok:ContrarianAnalysisProcess a abi:TextGenerationProcess ;
+    rdfs:label "Contrarian Analysis Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant grok:GrokTruthSeekerModelInstance ;
+    abi:hasTemporalRegion grok:ContrarianAnalysisSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime grok:RealTimeValidationProcess ;
+    abi:triggersProcess grok:RealTimeValidationProcess ;
+    rdfs:comment "Process that performs contrarian analysis and challenges assumptions."@en .
+
+grok:RealTimeValidationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Real Time Validation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant grok:GrokIntelligenceModelInstance ;
+    abi:hasTemporalRegion grok:RealTimeValidationSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime grok:IntelligenceReasoningProcess ;
+    abi:triggersProcess grok:IntelligenceReasoningProcess ;
+    rdfs:comment "Process that validates information in real-time with live data."@en .
+
+grok:IntelligenceReasoningProcess a abi:TextGenerationProcess ;
+    rdfs:label "Intelligence Reasoning Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant grok:GrokIntelligenceModelInstance ;
+    abi:hasTemporalRegion grok:IntelligenceReasoningSession ;
+    abi:temporalSequence "4" ;
+    abi:precedesInTime grok:TruthDeliveryProcess ;
+    abi:triggersProcess grok:TruthDeliveryProcess ;
+    rdfs:comment "Process that applies high intelligence reasoning to validate conclusions."@en .
+
+grok:TruthDeliveryProcess a abi:TextGenerationProcess ;
+    rdfs:label "Truth Delivery Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant grok:GrokTruthSeekerModelInstance ;
+    abi:hasTemporalRegion grok:TruthDeliverySession ;
+    abi:temporalSequence "5" ;
+    rdfs:comment "Process that delivers validated truth with contrarian insights."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+grok:TruthSeekingSession a abi:InferenceSession ;
+    rdfs:label "Truth Seeking Session"@en ;
+    rdfs:comment "Temporal region during which truth-seeking analysis occurs."@en .
+
+grok:ContrarianAnalysisSession a abi:InferenceSession ;
+    rdfs:label "Contrarian Analysis Session"@en ;
+    rdfs:comment "Temporal region during which contrarian analysis occurs."@en .
+
+grok:RealTimeValidationSession a abi:InferenceSession ;
+    rdfs:label "Real Time Validation Session"@en ;
+    rdfs:comment "Temporal region during which real-time validation occurs."@en .
+
+grok:IntelligenceReasoningSession a abi:InferenceSession ;
+    rdfs:label "Intelligence Reasoning Session"@en ;
+    rdfs:comment "Temporal region during which intelligence reasoning occurs."@en .
+
+grok:TruthDeliverySession a abi:InferenceSession ;
+    rdfs:label "Truth Delivery Session"@en ;
+    rdfs:comment "Temporal region during which truth delivery occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+grok:GrokTruthSeekerSpecification a abi:ModelSpecification ;
+    rdfs:label "Grok Truth Seeker Model Specification"@en ;
+    abi:specificationContent "Grok 2 is a truth-seeking model optimized for factual validation, contrarian reasoning, and real-time information processing with 128K context window." ;
+    rdfs:comment "Information content describing Grok truth seeker model parameters and capabilities."@en .
+
+grok:GrokIntelligenceSpecification a abi:ModelSpecification ;
+    rdfs:label "Grok Intelligence Model Specification"@en ;
+    abi:specificationContent "Grok 2 Intelligence is a high-intelligence model with advanced reasoning capabilities, contrarian thinking, and real-time data analysis." ;
+    rdfs:comment "Information content describing Grok intelligence model parameters and capabilities."@en .
+
+grok:TruthSeekingCapabilitiesSpecification a abi:ModelSpecification ;
+    rdfs:label "Truth Seeking Capabilities Specification"@en ;
+    abi:specificationContent "Truth-seeking capabilities include factual validation, contrarian reasoning, real-time information processing, assumption challenging, and high intelligence analysis." ;
+    rdfs:comment "Information content describing Grok's truth-seeking capabilities and features."@en .
