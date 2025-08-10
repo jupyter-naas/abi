@@ -139,6 +139,19 @@ api-dev: deps
 sparql-terminal: deps
 	@ uv run python -m src.core.apps.sparql_terminal.main	
 
+oxigraph-admin: deps
+	@ uv run python -m src.core.apps.oxigraph_admin.main
+
+oxigraph-explorer:
+	@echo "🚀 Opening Knowledge Graph Explorer..."
+	@echo "📍 Visit: http://localhost:7878/explorer/"
+	@echo "✨ Features:"
+	@echo "   • Interactive overview dashboard"
+	@echo "   • Full-featured YasGUI SPARQL editor"
+	@echo "   • Pre-built query library with explanations"
+	@command -v open >/dev/null 2>&1 && open "http://localhost:7878/explorer/" || echo "Open the URL manually in your browser"
+
+
 dvc-login: deps
 	@ uv run run python scripts/setup_dvc.py | sh
 
@@ -209,6 +222,9 @@ help:
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
+	@echo "  oxigraph-admin           Open Oxigraph administrative interface for monitoring and management"
+	@echo "  oxigraph-explorer        Open unified Knowledge Graph Explorer with iframe integration"
+	@echo ""
 	@echo ""
 	@echo "TESTING:"
 	@echo "  test                     Run all Python tests using pytest"
@@ -229,15 +245,29 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-supervisor-agent    Start the Supervisor agent in terminal mode (default target)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (default target)"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
+	@echo ""
+	@echo "LOCAL AGENTS (Ollama):"
+	@echo "  chat-qwen-agent          Start Qwen3 8B agent (local, multilingual, coding)"
+	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (local, reasoning, math)"
+	@echo "  chat-gemma-agent         Start Gemma3 4B agent (local, lightweight, fast)"
+	@echo ""
+	@echo "DOCKER COMPOSE:"
+	@echo "  oxigraph-up              Start Oxigraph container"
+	@echo "  oxigraph-down            Stop Oxigraph container"
+	@echo "  oxigraph-status          Check Oxigraph container status"
+	@echo "  dev-up                   Start development services (Oxigraph, YasGUI)"
+	@echo "  dev-down                 Stop development services"
+	@echo "  container-up             Start ABI in container mode (if needed)"
+	@echo "  container-down           Stop ABI container"
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
 	@echo "DEFAULT:"
-	@echo "  The default target is chat-supervisor-agent (running 'make' starts ABI conversation)"
+	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
 
 # Docker Build Commands
 # -------------------
@@ -264,7 +294,7 @@ build.linux.x86_64: deps
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: deps
+chat-abi-agent: deps
 	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps
@@ -272,6 +302,16 @@ chat-ontology-agent: deps
 
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
+
+# Local Ollama-based agents for privacy-focused interactions
+chat-qwen-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent QwenAgent
+
+chat-deepseek-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent DeepSeekAgent
+
+chat-gemma-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
 
 pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
@@ -281,11 +321,43 @@ default: deps help
 console: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli
 
-.DEFAULT_GOAL := chat-supervisor-agent
+.DEFAULT_GOAL := chat-abi-agent
 
-agent=SupervisorAgent
+agent=AbiAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+# Docker Compose Commands
+# -----------------------
+# These commands manage Docker containers for development
+
+oxigraph-up:
+	@docker-compose --profile dev up -d oxigraph
+	@echo "✓ Oxigraph started on http://localhost:7878"
+
+oxigraph-down:
+	@docker-compose --profile dev stop oxigraph
+	@echo "✓ Oxigraph stopped"
+
+oxigraph-status:
+	@echo "Oxigraph status:"
+	@docker-compose --profile dev ps oxigraph
+
+dev-up:
+	@docker-compose --profile dev up -d
+	@echo "✓ All development containers started"
+
+dev-down:
+	@docker-compose --profile dev down
+	@echo "✓ All development services stopped"
+
+container-up:
+	@docker-compose --profile container up -d
+	@echo "✓ ABI container started"
+
+container-down:
+	@docker-compose --profile container down
+	@echo "✓ ABI container stopped"
+
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status dev-up dev-down container-up container-down
