@@ -11,6 +11,9 @@ from abi.services.object_storage.ObjectStorageFactory import (
 from abi.services.triple_store.adaptors.secondary.AWSNeptune import (
     AWSNeptuneSSHTunnel,
 )
+from abi.services.triple_store.adaptors.secondary.Oxigraph import (
+    Oxigraph,
+)
 
 import os
 
@@ -89,5 +92,27 @@ class TripleStoreFactory:
                 bastion_port=bastion_port,
                 bastion_user=bastion_user,
                 bastion_private_key=bastion_private_key,
+            )
+        )
+
+    @staticmethod
+    def TripleStoreServiceOxigraph(
+        oxigraph_url: str | None = None,
+    ) -> TripleStoreService:
+        """Creates a TripleStoreService using Oxigraph.
+
+        Args:
+            oxigraph_url (str, optional): URL of the Oxigraph instance.
+                Defaults to OXIGRAPH_URL env var or http://localhost:7878
+
+        Returns:
+            TripleStoreService: Configured triple store service using Oxigraph
+        """
+        if oxigraph_url is None:
+            oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
+        
+        return TripleStoreService(
+            Oxigraph(
+                oxigraph_url=oxigraph_url,
             )
         )

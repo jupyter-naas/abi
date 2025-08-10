@@ -23,7 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ssh = [
-    "paramiko>=3.5.1",
+    "paramiko>=3.5.1,<4.0.0",
     "sshtunnel>=0.4.0",
 ]
 
