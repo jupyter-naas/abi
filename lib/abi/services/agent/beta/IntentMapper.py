@@ -41,21 +41,23 @@ User: I need to code a project.
 You: code a project
 """
         
-        # Initialize embeddings and vector store only if API key is available
-        self._embeddings_available = bool(os.getenv("OPENAI_API_KEY"))
+        # Initialize embeddings and vector store - now works with HuggingFace by default
+        self._embeddings_available = True  # HuggingFace is always available
         
-        if self._embeddings_available:
-            try:
-                self.vector_store = VectorStore()
-                intents_values = [intent.intent_value for intent in intents]
-                self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values))
+        try:
+            # Use 384 dimensions for HuggingFace embeddings (all-MiniLM-L6-v2)
+            self.vector_store = VectorStore(dimension=384)
+            intents_values = [intent.intent_value for intent in intents]
+            self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values))
+            
+            # Initialize LLM only if OpenAI API key is available
+            if os.getenv("OPENAI_API_KEY"):
                 self.model = ChatOpenAI(model="gpt-4o-mini")
-            except Exception as e:
-                print(f"Warning: Failed to initialize embeddings/LLM components: {e}")
-                self._embeddings_available = False
-                self.vector_store = None
+            else:
                 self.model = None
-        else:
+        except Exception as e:
+            print(f"Warning: Failed to initialize embeddings/LLM components: {e}")
+            self._embeddings_available = False
             self.vector_store = None
             self.model = None
     
