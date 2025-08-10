@@ -7,7 +7,6 @@ import os
 class CacheFactory:
     @staticmethod
     def CacheFS_find_storage(subpath: str = "cache", needle: str = "storage") -> CacheService:
-        print(os.getcwd())
         if not subpath.startswith("cache"):
             subpath = os.path.join("cache", subpath)
         return CacheService(CacheFSAdapter(os.path.join(find_storage_folder(os.getcwd(), needle), subpath)))

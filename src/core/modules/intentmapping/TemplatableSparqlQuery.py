@@ -2,8 +2,6 @@ from pydantic import Field, create_model
 import asyncio
 from rdflib import Graph, URIRef, RDF
 
-from abi import logger
-
 from .GenericWorkflow import GenericWorkflow
 
 
@@ -93,7 +91,7 @@ def templatable_queries():
                 }
             """
             )
-            logger.debug(f"Query: {q}")
+            # logger.debug(f"Query: {q}")
             # results = services.triple_store_service.query(q)
             results = argument_graph.query(q)
 
