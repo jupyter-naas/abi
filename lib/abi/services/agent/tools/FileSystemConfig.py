@@ -5,9 +5,8 @@ This module provides configuration management for file system tools,
 including security settings, access control, and path restrictions.
 """
 
-import os
 from pathlib import Path
-from typing import List, Set, Optional, Dict, Any
+from typing import List, Set, Optional, Dict
 from dataclasses import dataclass, field
 from abi import logger
 

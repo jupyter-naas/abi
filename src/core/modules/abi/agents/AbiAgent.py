@@ -12,7 +12,7 @@ from enum import Enum
 from abi import logger
 
 # Import file system tools
-from abi.services.agent.tools import FileSystemTools, config_manager
+from abi.services.agent.tools import FileSystemTools
 
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
@@ -463,7 +463,7 @@ def create_agent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=selected_model.model,
-        tools=tools,
+        tools=tools,  # type: ignore[arg-type]
         agents=agents,
         intents=intents,
         state=agent_shared_state,
