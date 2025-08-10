@@ -187,33 +187,33 @@ abi:AISystem a owl:Class ;
 abi:AIModelInstance a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000040 ;
     rdfs:label "AI Model Instance"@en ;
-    skos:definition "A specific instantiation of an AI model running on hardware."@en ;
+    skos:definition "A material entity that is a specific instantiation of an AI model running on hardware."@en ;
     skos:example "GPT-4 model running on OpenAI's servers, Claude-3-Sonnet instance."@en .
 
 ###  http://ontology.naas.ai/abi/AIAgent
 abi:AIAgent a owl:Class ;
     rdfs:subClassOf cco:ont00001017 ;
     rdfs:label "AI Agent"@en ;
-    skos:definition "An artificial agent that can act, make decisions, and perform tasks autonomously."@en ;
+    skos:definition "An agent that is an artificial intelligence system capable of autonomous decision-making and task execution."@en ;
     skos:example "ChatGPT, Claude, Gemini, and other AI systems that can engage in conversations and perform various tasks."@en .
 
 ###  http://ontology.naas.ai/abi/ModelAccuracy
 abi:ModelAccuracy a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000019 ;
     rdfs:label "Model Accuracy"@en ;
-    skos:definition "A quality that inheres in an AI model, representing its performance accuracy."@en .
+    skos:definition "A quality that inheres in an AI model and represents its performance accuracy."@en .
 
 ###  http://ontology.naas.ai/abi/ResponseLatency
 abi:ResponseLatency a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000019 ;
     rdfs:label "Response Latency"@en ;
-    skos:definition "A quality that inheres in an AI system, representing response time."@en .
+    skos:definition "A quality that inheres in an AI system and represents response time."@en .
 
 ###  http://ontology.naas.ai/abi/TokenCapacity
 abi:TokenCapacity a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000019 ;
     rdfs:label "Token Capacity"@en ;
-    skos:definition "A quality that inheres in an AI model, representing maximum token processing capacity."@en .
+    skos:definition "A quality that inheres in an AI model and represents maximum token processing capacity."@en .
 
 ###  http://ontology.naas.ai/abi/TextGenerationCapability
 abi:TextGenerationCapability a owl:Class ;
@@ -285,13 +285,13 @@ abi:ModelSpecification a owl:Class ;
 abi:TrainingDataset a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000031 ;
     rdfs:label "Training Dataset"@en ;
-    skos:definition "An information content entity containing data used to train an AI model."@en .
+    skos:definition "An information content entity that contains data used to train an AI model."@en .
 
 ###  http://ontology.naas.ai/abi/APIResponse
 abi:APIResponse a owl:Class ;
     rdfs:subClassOf bfo:BFO_0000031 ;
     rdfs:label "API Response"@en ;
-    skos:definition "An information content entity containing AI system output."@en .
+    skos:definition "An information content entity that contains AI system output."@en .
 
 #################################################################
 #    General axioms
