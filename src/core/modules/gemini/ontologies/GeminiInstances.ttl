@@ -1,0 +1,254 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix gemini: <http://ontology.naas.ai/abi/gemini/> .
+
+<http://ontology.naas.ai/abi/gemini/GeminiInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Gemini Module Instances" ;
+    dc:description "Concrete instances demonstrating Gemini AI agents with multimodal capabilities and speed optimization."@en .
+
+#################################################################
+#    Gemini AI System (Main System)
+#################################################################
+
+gemini:GeminiSystem a abi:AISystem ;
+    rdfs:label "Gemini AI System"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "complex" ;
+    abi:hasLoadBalancer gemini:GeminiLoadBalancer ;
+    abi:hasSubsystem gemini:MultimodalSubsystem, gemini:SpeedOptimizationSubsystem, gemini:VisualIntelligenceSubsystem ;
+    rdfs:comment "Main Gemini system that excels in multimodal processing and speed optimization with native image and video capabilities."@en .
+
+#################################################################
+#    Gemini Subsystems
+#################################################################
+
+gemini:MultimodalSubsystem a abi:AISystem ;
+    rdfs:label "Gemini Multimodal Subsystem"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf gemini:GeminiSystem ;
+    abi:hasAIAgent gemini:GeminiMultimodalAgent, gemini:GeminiVideoAgent ;
+    rdfs:comment "Subsystem dedicated to multimodal processing with native image and video understanding capabilities."@en .
+
+gemini:SpeedOptimizationSubsystem a abi:AISystem ;
+    rdfs:label "Gemini Speed Optimization Subsystem"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf gemini:GeminiSystem ;
+    abi:hasAIAgent gemini:GeminiSpeedAgent, gemini:GeminiFlashAgent ;
+    rdfs:comment "Subsystem optimized for high-speed processing and real-time responses."@en .
+
+gemini:VisualIntelligenceSubsystem a abi:AISystem ;
+    rdfs:label "Gemini Visual Intelligence Subsystem"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf gemini:GeminiSystem ;
+    abi:hasAIAgent gemini:GeminiVisionAgent, gemini:GeminiImageAnalysisAgent ;
+    rdfs:comment "Subsystem specialized in visual intelligence and image analysis tasks."@en .
+
+#################################################################
+#    Gemini AI Agents
+#################################################################
+
+### Multimodal Agents
+gemini:GeminiMultimodalAgent a abi:AIAgent ;
+    rdfs:label "Gemini Multimodal Agent"@en ;
+    abi:isAIAgentOf gemini:MultimodalSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith gemini:GeminiVisionAgent, gemini:GeminiSpeedAgent ;
+    abi:hasFallbackAgent gemini:GeminiFlashAgent ;
+    rdfs:comment "Primary multimodal agent that handles text, image, and video inputs with native understanding."@en .
+
+gemini:GeminiVideoAgent a abi:AIAgent ;
+    rdfs:label "Gemini Video Agent"@en ;
+    abi:isAIAgentOf gemini:MultimodalSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith gemini:GeminiMultimodalAgent, gemini:GeminiVisionAgent ;
+    rdfs:comment "Specialized agent for video processing and analysis with temporal understanding."@en .
+
+### Speed Optimization Agents
+gemini:GeminiSpeedAgent a abi:AIAgent ;
+    rdfs:label "Gemini Speed Agent"@en ;
+    abi:isAIAgentOf gemini:SpeedOptimizationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith gemini:GeminiMultimodalAgent, gemini:GeminiFlashAgent ;
+    rdfs:comment "High-speed processing agent optimized for real-time responses and fast inference."@en .
+
+gemini:GeminiFlashAgent a abi:AIAgent ;
+    rdfs:label "Gemini Flash Agent"@en ;
+    abi:isAIAgentOf gemini:SpeedOptimizationSubsystem ;
+    abi:hasSpecializedRole abi:FallbackHandlerRole ;
+    abi:collaborationPriority "6" ;
+    abi:collaboratesWith gemini:GeminiSpeedAgent ;
+    rdfs:comment "Ultra-fast fallback agent for lightning-quick responses and cost-effective processing."@en .
+
+### Visual Intelligence Agents
+gemini:GeminiVisionAgent a abi:AIAgent ;
+    rdfs:label "Gemini Vision Agent"@en ;
+    abi:isAIAgentOf gemini:VisualIntelligenceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith gemini:GeminiMultimodalAgent, gemini:GeminiImageAnalysisAgent ;
+    rdfs:comment "Advanced vision agent with deep understanding of visual content and spatial relationships."@en .
+
+gemini:GeminiImageAnalysisAgent a abi:AIAgent ;
+    rdfs:label "Gemini Image Analysis Agent"@en ;
+    abi:isAIAgentOf gemini:VisualIntelligenceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith gemini:GeminiVisionAgent, gemini:GeminiMultimodalAgent ;
+    rdfs:comment "Specialized agent for detailed image analysis, object detection, and visual reasoning."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+gemini:GeminiLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "Gemini Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for speed and multimodal processing capabilities across Gemini agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+gemini:GeminiMultimodalModelInstance a abi:AIModelInstance ;
+    rdfs:label "Gemini Multimodal Model Instance"@en ;
+    abi:modelName "gemini-2.0-flash" ;
+    abi:providerName "Google" ;
+    abi:hasQuality gemini:GeminiMultimodalAccuracy, gemini:GeminiMultimodalLatency, gemini:GeminiMultimodalTokenCapacity ;
+    rdfs:comment "Specific instance of Gemini 2.0 Flash model optimized for multimodal processing."@en .
+
+gemini:GeminiSpeedModelInstance a abi:AIModelInstance ;
+    rdfs:label "Gemini Speed Model Instance"@en ;
+    abi:modelName "gemini-2.0-flash-exp" ;
+    abi:providerName "Google" ;
+    abi:hasQuality gemini:GeminiSpeedAccuracy, gemini:GeminiSpeedLatency, gemini:GeminiSpeedTokenCapacity ;
+    rdfs:comment "Specific instance of Gemini 2.0 Flash Experimental model for ultra-fast processing."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### Gemini Multimodal Qualities
+gemini:GeminiMultimodalAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Gemini Multimodal Accuracy"@en ;
+    abi:accuracyValue "0.70"^^xsd:decimal ;
+    rdfs:comment "Gemini multimodal model accuracy quality with 70% performance."@en .
+
+gemini:GeminiMultimodalLatency a abi:ResponseLatency ;
+    rdfs:label "Gemini Multimodal Latency"@en ;
+    abi:latencyValue "500"^^xsd:integer ;
+    rdfs:comment "Gemini multimodal response latency quality of 500ms."@en .
+
+gemini:GeminiMultimodalTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Gemini Multimodal Token Capacity"@en ;
+    abi:tokenLimit "1000000"^^xsd:integer ;
+    rdfs:comment "Gemini multimodal token capacity quality of 1,000,000 tokens."@en .
+
+### Gemini Speed Qualities
+gemini:GeminiSpeedAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Gemini Speed Accuracy"@en ;
+    abi:accuracyValue "0.68"^^xsd:decimal ;
+    rdfs:comment "Gemini speed model accuracy quality with 68% performance."@en .
+
+gemini:GeminiSpeedLatency a abi:ResponseLatency ;
+    rdfs:label "Gemini Speed Latency"@en ;
+    abi:latencyValue "200"^^xsd:integer ;
+    rdfs:comment "Gemini speed response latency quality of 200ms."@en .
+
+gemini:GeminiSpeedTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Gemini Speed Token Capacity"@en ;
+    abi:tokenLimit "1000000"^^xsd:integer ;
+    rdfs:comment "Gemini speed token capacity quality of 1,000,000 tokens."@en .
+
+#################################################################
+#    Processes with Speed Optimization Workflow
+#################################################################
+
+gemini:InputProcessingProcess a abi:TextGenerationProcess ;
+    rdfs:label "Input Processing Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemini:GeminiMultimodalModelInstance ;
+    abi:hasTemporalRegion gemini:InputProcessingSession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess gemini:MultimodalAnalysisProcess ;
+    rdfs:comment "Process that processes multimodal input (text, image, video) for analysis."@en .
+
+gemini:MultimodalAnalysisProcess a abi:TextGenerationProcess ;
+    rdfs:label "Multimodal Analysis Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemini:GeminiMultimodalModelInstance ;
+    abi:hasTemporalRegion gemini:MultimodalAnalysisSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime gemini:SpeedOptimizationProcess ;
+    abi:triggersProcess gemini:SpeedOptimizationProcess ;
+    rdfs:comment "Process that analyzes multimodal content with native understanding."@en .
+
+gemini:SpeedOptimizationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Speed Optimization Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemini:GeminiSpeedModelInstance ;
+    abi:hasTemporalRegion gemini:SpeedOptimizationSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime gemini:ResponseGenerationProcess ;
+    abi:triggersProcess gemini:ResponseGenerationProcess ;
+    rdfs:comment "Process that optimizes response generation for maximum speed."@en .
+
+gemini:ResponseGenerationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Response Generation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemini:GeminiMultimodalModelInstance ;
+    abi:hasTemporalRegion gemini:ResponseGenerationSession ;
+    abi:temporalSequence "4" ;
+    rdfs:comment "Process that generates the final optimized multimodal response."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+gemini:InputProcessingSession a abi:InferenceSession ;
+    rdfs:label "Input Processing Session"@en ;
+    rdfs:comment "Temporal region during which multimodal input processing occurs."@en .
+
+gemini:MultimodalAnalysisSession a abi:InferenceSession ;
+    rdfs:label "Multimodal Analysis Session"@en ;
+    rdfs:comment "Temporal region during which multimodal content analysis occurs."@en .
+
+gemini:SpeedOptimizationSession a abi:InferenceSession ;
+    rdfs:label "Speed Optimization Session"@en ;
+    rdfs:comment "Temporal region during which speed optimization occurs."@en .
+
+gemini:ResponseGenerationSession a abi:InferenceSession ;
+    rdfs:label "Response Generation Session"@en ;
+    rdfs:comment "Temporal region during which response generation occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+gemini:GeminiMultimodalSpecification a abi:ModelSpecification ;
+    rdfs:label "Gemini Multimodal Model Specification"@en ;
+    abi:specificationContent "Gemini 2.0 Flash is a multimodal model that excels at processing text, images, and videos with native understanding and high-speed inference capabilities." ;
+    rdfs:comment "Information content describing Gemini multimodal model parameters and capabilities."@en .
+
+gemini:GeminiSpeedSpecification a abi:ModelSpecification ;
+    rdfs:label "Gemini Speed Model Specification"@en ;
+    abi:specificationContent "Gemini 2.0 Flash Experimental is optimized for ultra-fast processing with 1M token context window and real-time response capabilities." ;
+    rdfs:comment "Information content describing Gemini speed model parameters and capabilities."@en .
+
+gemini:MultimodalCapabilitiesSpecification a abi:ModelSpecification ;
+    rdfs:label "Multimodal Capabilities Specification"@en ;
+    abi:specificationContent "Native multimodal capabilities include image understanding, video analysis, spatial reasoning, and cross-modal comprehension with high accuracy and speed." ;
+    rdfs:comment "Information content describing Gemini's multimodal capabilities and features."@en .

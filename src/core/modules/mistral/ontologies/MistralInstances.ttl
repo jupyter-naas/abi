@@ -1,0 +1,268 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix mistral: <http://ontology.naas.ai/abi/mistral/> .
+
+<http://ontology.naas.ai/abi/mistral/MistralInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Mistral Module Instances" ;
+    dc:description "Concrete instances demonstrating Mistral AI agents with technical excellence and European compliance."@en .
+
+#################################################################
+#    Mistral AI System (Main System)
+#################################################################
+
+mistral:MistralSystem a abi:AISystem ;
+    rdfs:label "Mistral AI System"@en ;
+    abi:providerName "Mistral AI" ;
+    abi:systemComplexity "complex" ;
+    abi:hasLoadBalancer mistral:MistralLoadBalancer ;
+    abi:hasSubsystem mistral:TechnicalExcellenceSubsystem, mistral:CodeSpecializationSubsystem, mistral:EuropeanComplianceSubsystem ;
+    rdfs:comment "Main Mistral system that excels in technical tasks, code generation, and European regulatory compliance with GDPR design."@en .
+
+#################################################################
+#    Mistral Subsystems
+#################################################################
+
+mistral:TechnicalExcellenceSubsystem a abi:AISystem ;
+    rdfs:label "Mistral Technical Excellence Subsystem"@en ;
+    abi:providerName "Mistral AI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf mistral:MistralSystem ;
+    abi:hasAIAgent mistral:MistralTechnicalAgent, mistral:MistralAnalysisAgent ;
+    rdfs:comment "Subsystem dedicated to technical excellence and advanced problem-solving capabilities."@en .
+
+mistral:CodeSpecializationSubsystem a abi:AISystem ;
+    rdfs:label "Mistral Code Specialization Subsystem"@en ;
+    abi:providerName "Mistral AI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf mistral:MistralSystem ;
+    abi:hasAIAgent mistral:MistralCodeAgent, mistral:MistralDebugAgent ;
+    rdfs:comment "Subsystem specialized in code generation, debugging, and software development tasks."@en .
+
+mistral:EuropeanComplianceSubsystem a abi:AISystem ;
+    rdfs:label "Mistral European Compliance Subsystem"@en ;
+    abi:providerName "Mistral AI" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf mistral:MistralSystem ;
+    abi:hasAIAgent mistral:MistralComplianceAgent, mistral:MistralGDPRAgent ;
+    rdfs:comment "Subsystem responsible for European regulatory compliance and GDPR adherence."@en .
+
+#################################################################
+#    Mistral AI Agents
+#################################################################
+
+### Technical Excellence Agents
+mistral:MistralTechnicalAgent a abi:AIAgent ;
+    rdfs:label "Mistral Technical Agent"@en ;
+    abi:isAIAgentOf mistral:TechnicalExcellenceSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith mistral:MistralCodeAgent, mistral:MistralComplianceAgent ;
+    abi:hasFallbackAgent mistral:MistralAnalysisAgent ;
+    rdfs:comment "Primary technical agent that excels in complex problem-solving and technical analysis."@en .
+
+mistral:MistralAnalysisAgent a abi:AIAgent ;
+    rdfs:label "Mistral Analysis Agent"@en ;
+    abi:isAIAgentOf mistral:TechnicalExcellenceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith mistral:MistralTechnicalAgent, mistral:MistralDebugAgent ;
+    rdfs:comment "Specialized agent for technical analysis and problem decomposition."@en .
+
+### Code Specialization Agents
+mistral:MistralCodeAgent a abi:AIAgent ;
+    rdfs:label "Mistral Code Agent"@en ;
+    abi:isAIAgentOf mistral:CodeSpecializationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith mistral:MistralTechnicalAgent, mistral:MistralDebugAgent ;
+    rdfs:comment "Specialized agent for code generation, optimization, and software development."@en .
+
+mistral:MistralDebugAgent a abi:AIAgent ;
+    rdfs:label "Mistral Debug Agent"@en ;
+    abi:isAIAgentOf mistral:CodeSpecializationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith mistral:MistralCodeAgent, mistral:MistralAnalysisAgent ;
+    rdfs:comment "Specialized agent for code debugging, error analysis, and bug fixing."@en .
+
+### European Compliance Agents
+mistral:MistralComplianceAgent a abi:AIAgent ;
+    rdfs:label "Mistral Compliance Agent"@en ;
+    abi:isAIAgentOf mistral:EuropeanComplianceSubsystem ;
+    abi:hasSpecializedRole abi:ValidatorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith mistral:MistralTechnicalAgent, mistral:MistralGDPRAgent ;
+    rdfs:comment "Compliance validation agent that ensures European regulatory requirements are met."@en .
+
+mistral:MistralGDPRAgent a abi:AIAgent ;
+    rdfs:label "Mistral GDPR Agent"@en ;
+    abi:isAIAgentOf mistral:EuropeanComplianceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith mistral:MistralComplianceAgent, mistral:MistralTechnicalAgent ;
+    rdfs:comment "GDPR specialist agent that ensures data protection and privacy compliance."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+mistral:MistralLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "Mistral Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for technical tasks and European compliance requirements across Mistral agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+mistral:MistralTechnicalModelInstance a abi:AIModelInstance ;
+    rdfs:label "Mistral Technical Model Instance"@en ;
+    abi:modelName "mistral-large-latest" ;
+    abi:providerName "Mistral AI" ;
+    abi:hasQuality mistral:MistralTechnicalAccuracy, mistral:MistralTechnicalLatency, mistral:MistralTechnicalTokenCapacity ;
+    rdfs:comment "Specific instance of Mistral Large model optimized for technical excellence."@en .
+
+mistral:MistralCodeModelInstance a abi:AIModelInstance ;
+    rdfs:label "Mistral Code Model Instance"@en ;
+    abi:modelName "codestral-latest" ;
+    abi:providerName "Mistral AI" ;
+    abi:hasQuality mistral:MistralCodeAccuracy, mistral:MistralCodeLatency, mistral:MistralCodeTokenCapacity ;
+    rdfs:comment "Specific instance of Codestral model optimized for code generation and software development."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### Mistral Technical Qualities
+mistral:MistralTechnicalAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Mistral Technical Accuracy"@en ;
+    abi:accuracyValue "0.56"^^xsd:decimal ;
+    rdfs:comment "Mistral technical model accuracy quality with 56% performance."@en .
+
+mistral:MistralTechnicalLatency a abi:ResponseLatency ;
+    rdfs:label "Mistral Technical Latency"@en ;
+    abi:latencyValue "1983"^^xsd:integer ;
+    rdfs:comment "Mistral technical response latency quality of 1983ms."@en .
+
+mistral:MistralTechnicalTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Mistral Technical Token Capacity"@en ;
+    abi:tokenLimit "32768"^^xsd:integer ;
+    rdfs:comment "Mistral technical token capacity quality of 32,768 tokens."@en .
+
+### Mistral Code Qualities
+mistral:MistralCodeAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Mistral Code Accuracy"@en ;
+    abi:accuracyValue "0.58"^^xsd:decimal ;
+    rdfs:comment "Mistral code model accuracy quality with 58% performance."@en .
+
+mistral:MistralCodeLatency a abi:ResponseLatency ;
+    rdfs:label "Mistral Code Latency"@en ;
+    abi:latencyValue "1500"^^xsd:integer ;
+    rdfs:comment "Mistral code response latency quality of 1500ms."@en .
+
+mistral:MistralCodeTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Mistral Code Token Capacity"@en ;
+    abi:tokenLimit "32768"^^xsd:integer ;
+    rdfs:comment "Mistral code token capacity quality of 32,768 tokens."@en .
+
+#################################################################
+#    Processes with Technical Excellence Workflow
+#################################################################
+
+mistral:ProblemAnalysisProcess a abi:TextGenerationProcess ;
+    rdfs:label "Problem Analysis Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant mistral:MistralTechnicalModelInstance ;
+    abi:hasTemporalRegion mistral:ProblemAnalysisSession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess mistral:TechnicalSolutionProcess ;
+    rdfs:comment "Process that analyzes technical problems and requirements."@en .
+
+mistral:TechnicalSolutionProcess a abi:TextGenerationProcess ;
+    rdfs:label "Technical Solution Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant mistral:MistralTechnicalModelInstance ;
+    abi:hasTemporalRegion mistral:TechnicalSolutionSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime mistral:CodeGenerationProcess ;
+    abi:triggersProcess mistral:CodeGenerationProcess ;
+    rdfs:comment "Process that develops technical solutions and architectures."@en .
+
+mistral:CodeGenerationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Code Generation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant mistral:MistralCodeModelInstance ;
+    abi:hasTemporalRegion mistral:CodeGenerationSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime mistral:ComplianceValidationProcess ;
+    abi:triggersProcess mistral:ComplianceValidationProcess ;
+    rdfs:comment "Process that generates optimized code based on technical solutions."@en .
+
+mistral:ComplianceValidationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Compliance Validation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant mistral:MistralTechnicalModelInstance ;
+    abi:hasTemporalRegion mistral:ComplianceValidationSession ;
+    abi:temporalSequence "4" ;
+    abi:precedesInTime mistral:DocumentationProcess ;
+    abi:triggersProcess mistral:DocumentationProcess ;
+    rdfs:comment "Process that validates European compliance and GDPR requirements."@en .
+
+mistral:DocumentationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Documentation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant mistral:MistralTechnicalModelInstance ;
+    abi:hasTemporalRegion mistral:DocumentationSession ;
+    abi:temporalSequence "5" ;
+    rdfs:comment "Process that generates technical documentation and compliance reports."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+mistral:ProblemAnalysisSession a abi:InferenceSession ;
+    rdfs:label "Problem Analysis Session"@en ;
+    rdfs:comment "Temporal region during which technical problem analysis occurs."@en .
+
+mistral:TechnicalSolutionSession a abi:InferenceSession ;
+    rdfs:label "Technical Solution Session"@en ;
+    rdfs:comment "Temporal region during which technical solution development occurs."@en .
+
+mistral:CodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Code Generation Session"@en ;
+    rdfs:comment "Temporal region during which code generation occurs."@en .
+
+mistral:ComplianceValidationSession a abi:InferenceSession ;
+    rdfs:label "Compliance Validation Session"@en ;
+    rdfs:comment "Temporal region during which compliance validation occurs."@en .
+
+mistral:DocumentationSession a abi:InferenceSession ;
+    rdfs:label "Documentation Session"@en ;
+    rdfs:comment "Temporal region during which documentation generation occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+mistral:MistralTechnicalSpecification a abi:ModelSpecification ;
+    rdfs:label "Mistral Technical Model Specification"@en ;
+    abi:specificationContent "Mistral Large is a technical excellence model optimized for complex problem-solving, technical analysis, and European compliance with GDPR design principles." ;
+    rdfs:comment "Information content describing Mistral technical model parameters and capabilities."@en .
+
+mistral:MistralCodeSpecification a abi:ModelSpecification ;
+    rdfs:label "Mistral Code Model Specification"@en ;
+    abi:specificationContent "Codestral is a specialized code generation model with 32K context window, optimized for software development, debugging, and technical documentation." ;
+    rdfs:comment "Information content describing Mistral code model parameters and capabilities."@en .
+
+mistral:EuropeanComplianceSpecification a abi:ModelSpecification ;
+    rdfs:label "European Compliance Specification"@en ;
+    abi:specificationContent "European compliance capabilities include GDPR adherence, data protection validation, privacy-by-design principles, and regulatory requirement checking." ;
+    rdfs:comment "Information content describing Mistral's European compliance capabilities and features."@en .
