@@ -1,0 +1,268 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix gemma: <http://ontology.naas.ai/abi/gemma/> .
+
+<http://ontology.naas.ai/abi/gemma/GemmaInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Gemma Module Instances" ;
+    dc:description "Concrete instances demonstrating Gemma AI agents with lightweight and efficient capabilities."@en .
+
+#################################################################
+#    Gemma AI System (Main System)
+#################################################################
+
+gemma:GemmaSystem a abi:AISystem ;
+    rdfs:label "Gemma AI System"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "moderate" ;
+    abi:hasLoadBalancer gemma:GemmaLoadBalancer ;
+    abi:hasSubsystem gemma:LightweightSubsystem, gemma:EfficiencySubsystem, gemma:ResourceOptimizationSubsystem ;
+    rdfs:comment "Main Gemma system that excels in lightweight processing, efficiency, and resource optimization for edge and mobile applications."@en .
+
+#################################################################
+#    Gemma Subsystems
+#################################################################
+
+gemma:LightweightSubsystem a abi:AISystem ;
+    rdfs:label "Gemma Lightweight Subsystem"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "simple" ;
+    abi:isSubsystemOf gemma:GemmaSystem ;
+    abi:hasAIAgent gemma:GemmaLightweightAgent, gemma:GemmaCompactAgent ;
+    rdfs:comment "Subsystem dedicated to lightweight processing and compact model deployment."@en .
+
+gemma:EfficiencySubsystem a abi:AISystem ;
+    rdfs:label "Gemma Efficiency Subsystem"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "simple" ;
+    abi:isSubsystemOf gemma:GemmaSystem ;
+    abi:hasAIAgent gemma:GemmaEfficiencyAgent, gemma:GemmaFastAgent ;
+    rdfs:comment "Subsystem optimized for efficiency and fast processing."@en .
+
+gemma:ResourceOptimizationSubsystem a abi:AISystem ;
+    rdfs:label "Gemma Resource Optimization Subsystem"@en ;
+    abi:providerName "Google" ;
+    abi:systemComplexity "simple" ;
+    abi:isSubsystemOf gemma:GemmaSystem ;
+    abi:hasAIAgent gemma:GemmaResourceAgent, gemma:GemmaOptimizerAgent ;
+    rdfs:comment "Subsystem specialized in resource optimization and minimal footprint."@en .
+
+#################################################################
+#    Gemma AI Agents
+#################################################################
+
+### Lightweight Agents
+gemma:GemmaLightweightAgent a abi:AIAgent ;
+    rdfs:label "Gemma Lightweight Agent"@en ;
+    abi:isAIAgentOf gemma:LightweightSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith gemma:GemmaEfficiencyAgent, gemma:GemmaResourceAgent ;
+    abi:hasFallbackAgent gemma:GemmaCompactAgent ;
+    rdfs:comment "Primary lightweight agent that excels in compact processing and minimal resource usage."@en .
+
+gemma:GemmaCompactAgent a abi:AIAgent ;
+    rdfs:label "Gemma Compact Agent"@en ;
+    abi:isAIAgentOf gemma:LightweightSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith gemma:GemmaLightweightAgent, gemma:GemmaOptimizerAgent ;
+    rdfs:comment "Compact agent that provides minimal footprint processing capabilities."@en .
+
+### Efficiency Agents
+gemma:GemmaEfficiencyAgent a abi:AIAgent ;
+    rdfs:label "Gemma Efficiency Agent"@en ;
+    abi:isAIAgentOf gemma:EfficiencySubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith gemma:GemmaLightweightAgent, gemma:GemmaFastAgent ;
+    rdfs:comment "Efficiency agent that maximizes performance per resource unit."@en .
+
+gemma:GemmaFastAgent a abi:AIAgent ;
+    rdfs:label "Gemma Fast Agent"@en ;
+    abi:isAIAgentOf gemma:EfficiencySubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith gemma:GemmaEfficiencyAgent, gemma:GemmaCompactAgent ;
+    rdfs:comment "Fast processing agent optimized for quick responses."@en .
+
+### Resource Optimization Agents
+gemma:GemmaResourceAgent a abi:AIAgent ;
+    rdfs:label "Gemma Resource Agent"@en ;
+    abi:isAIAgentOf gemma:ResourceOptimizationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith gemma:GemmaLightweightAgent, gemma:GemmaOptimizerAgent ;
+    rdfs:comment "Resource optimization agent that minimizes memory and compute usage."@en .
+
+gemma:GemmaOptimizerAgent a abi:AIAgent ;
+    rdfs:label "Gemma Optimizer Agent"@en ;
+    abi:isAIAgentOf gemma:ResourceOptimizationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith gemma:GemmaResourceAgent, gemma:GemmaFastAgent ;
+    rdfs:comment "Optimization agent that fine-tunes performance and resource usage."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+gemma:GemmaLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "Gemma Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for lightweight processing and efficiency across Gemma agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+gemma:GemmaLightweightModelInstance a abi:AIModelInstance ;
+    rdfs:label "Gemma Lightweight Model Instance"@en ;
+    abi:modelName "gemma-2b" ;
+    abi:providerName "Google" ;
+    abi:hasQuality gemma:GemmaLightweightAccuracy, gemma:GemmaLightweightLatency, gemma:GemmaLightweightTokenCapacity ;
+    rdfs:comment "Specific instance of Gemma 2B model optimized for lightweight processing."@en .
+
+gemma:GemmaEfficiencyModelInstance a abi:AIModelInstance ;
+    rdfs:label "Gemma Efficiency Model Instance"@en ;
+    abi:modelName "gemma-7b" ;
+    abi:providerName "Google" ;
+    abi:hasQuality gemma:GemmaEfficiencyAccuracy, gemma:GemmaEfficiencyLatency, gemma:GemmaEfficiencyTokenCapacity ;
+    rdfs:comment "Specific instance of Gemma 7B model for efficient processing."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### Gemma Lightweight Qualities
+gemma:GemmaLightweightAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Gemma Lightweight Accuracy"@en ;
+    abi:accuracyValue "0.45"^^xsd:decimal ;
+    rdfs:comment "Gemma lightweight model accuracy quality with 45% performance."@en .
+
+gemma:GemmaLightweightLatency a abi:ResponseLatency ;
+    rdfs:label "Gemma Lightweight Latency"@en ;
+    abi:latencyValue "500"^^xsd:integer ;
+    rdfs:comment "Gemma lightweight response latency quality of 500ms."@en .
+
+gemma:GemmaLightweightTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Gemma Lightweight Token Capacity"@en ;
+    abi:tokenLimit "8192"^^xsd:integer ;
+    rdfs:comment "Gemma lightweight token capacity quality of 8,192 tokens."@en .
+
+### Gemma Efficiency Qualities
+gemma:GemmaEfficiencyAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Gemma Efficiency Accuracy"@en ;
+    abi:accuracyValue "0.52"^^xsd:decimal ;
+    rdfs:comment "Gemma efficiency model accuracy quality with 52% performance."@en .
+
+gemma:GemmaEfficiencyLatency a abi:ResponseLatency ;
+    rdfs:label "Gemma Efficiency Latency"@en ;
+    abi:latencyValue "800"^^xsd:integer ;
+    rdfs:comment "Gemma efficiency response latency quality of 800ms."@en .
+
+gemma:GemmaEfficiencyTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Gemma Efficiency Token Capacity"@en ;
+    abi:tokenLimit "8192"^^xsd:integer ;
+    rdfs:comment "Gemma efficiency token capacity quality of 8,192 tokens."@en .
+
+#################################################################
+#    Processes with Lightweight Workflow
+#################################################################
+
+gemma:InputOptimizationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Input Optimization Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemma:GemmaLightweightModelInstance ;
+    abi:hasTemporalRegion gemma:InputOptimizationSession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess gemma:LightweightProcessingProcess ;
+    rdfs:comment "Process that optimizes input for lightweight processing."@en .
+
+gemma:LightweightProcessingProcess a abi:TextGenerationProcess ;
+    rdfs:label "Lightweight Processing Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemma:GemmaLightweightModelInstance ;
+    abi:hasTemporalRegion gemma:LightweightProcessingSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime gemma:EfficiencyValidationProcess ;
+    abi:triggersProcess gemma:EfficiencyValidationProcess ;
+    rdfs:comment "Process that performs lightweight text generation and processing."@en .
+
+gemma:EfficiencyValidationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Efficiency Validation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemma:GemmaEfficiencyModelInstance ;
+    abi:hasTemporalRegion gemma:EfficiencyValidationSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime gemma:ResourceOptimizationProcess ;
+    abi:triggersProcess gemma:ResourceOptimizationProcess ;
+    rdfs:comment "Process that validates efficiency and performance metrics."@en .
+
+gemma:ResourceOptimizationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Resource Optimization Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemma:GemmaEfficiencyModelInstance ;
+    abi:hasTemporalRegion gemma:ResourceOptimizationSession ;
+    abi:temporalSequence "4" ;
+    abi:precedesInTime gemma:ResponseDeliveryProcess ;
+    abi:triggersProcess gemma:ResponseDeliveryProcess ;
+    rdfs:comment "Process that optimizes resource usage and minimizes footprint."@en .
+
+gemma:ResponseDeliveryProcess a abi:TextGenerationProcess ;
+    rdfs:label "Response Delivery Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant gemma:GemmaLightweightModelInstance ;
+    abi:hasTemporalRegion gemma:ResponseDeliverySession ;
+    abi:temporalSequence "5" ;
+    rdfs:comment "Process that delivers optimized lightweight responses."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+gemma:InputOptimizationSession a abi:InferenceSession ;
+    rdfs:label "Input Optimization Session"@en ;
+    rdfs:comment "Temporal region during which input optimization occurs."@en .
+
+gemma:LightweightProcessingSession a abi:InferenceSession ;
+    rdfs:label "Lightweight Processing Session"@en ;
+    rdfs:comment "Temporal region during which lightweight processing occurs."@en .
+
+gemma:EfficiencyValidationSession a abi:InferenceSession ;
+    rdfs:label "Efficiency Validation Session"@en ;
+    rdfs:comment "Temporal region during which efficiency validation occurs."@en .
+
+gemma:ResourceOptimizationSession a abi:InferenceSession ;
+    rdfs:label "Resource Optimization Session"@en ;
+    rdfs:comment "Temporal region during which resource optimization occurs."@en .
+
+gemma:ResponseDeliverySession a abi:InferenceSession ;
+    rdfs:label "Response Delivery Session"@en ;
+    rdfs:comment "Temporal region during which response delivery occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+gemma:GemmaLightweightSpecification a abi:ModelSpecification ;
+    rdfs:label "Gemma Lightweight Model Specification"@en ;
+    abi:specificationContent "Gemma 2B is a lightweight model optimized for edge computing, mobile applications, and resource-constrained environments with 8K context window." ;
+    rdfs:comment "Information content describing Gemma lightweight model parameters and capabilities."@en .
+
+gemma:GemmaEfficiencySpecification a abi:ModelSpecification ;
+    rdfs:label "Gemma Efficiency Model Specification"@en ;
+    abi:specificationContent "Gemma 7B is an efficient model with balanced performance and resource usage, optimized for various deployment scenarios." ;
+    rdfs:comment "Information content describing Gemma efficiency model parameters and capabilities."@en .
+
+gemma:LightweightCapabilitiesSpecification a abi:ModelSpecification ;
+    rdfs:label "Lightweight Capabilities Specification"@en ;
+    abi:specificationContent "Lightweight capabilities include edge computing, mobile deployment, resource optimization, fast processing, and minimal footprint operations." ;
+    rdfs:comment "Information content describing Gemma's lightweight capabilities and features."@en .

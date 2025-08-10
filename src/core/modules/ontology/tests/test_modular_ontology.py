@@ -24,7 +24,14 @@ def load_ontology_files():
         "src/core/modules/chatgpt/ontologies/ChatGPTInstances.ttl",
         "src/core/modules/claude/ontologies/ClaudeInstances.ttl",
         "src/core/modules/gemini/ontologies/GeminiInstances.ttl",
-        "src/core/modules/mistral/ontologies/MistralInstances.ttl"
+        "src/core/modules/mistral/ontologies/MistralInstances.ttl",
+        "src/core/modules/grok/ontologies/GrokInstances.ttl",
+        "src/core/modules/llama/ontologies/LlamaInstances.ttl",
+        "src/core/modules/perplexity/ontologies/PerplexityInstances.ttl",
+        "src/core/modules/gemma/ontologies/GemmaInstances.ttl",
+        "src/core/modules/qwen/ontologies/QwenInstances.ttl",
+        "src/core/modules/deepseek/ontologies/DeepSeekInstances.ttl",
+        "src/core/modules/abi/ontologies/ABIInstances.ttl"
     ]
     
     for ontology_file in module_ontologies:
@@ -58,7 +65,14 @@ def test_modular_ontology_structure(g):
         "chatgpt": "http://ontology.naas.ai/abi/chatgpt/",
         "claude": "http://ontology.naas.ai/abi/claude/",
         "gemini": "http://ontology.naas.ai/abi/gemini/",
-        "mistral": "http://ontology.naas.ai/abi/mistral/"
+        "mistral": "http://ontology.naas.ai/abi/mistral/",
+        "grok": "http://ontology.naas.ai/abi/grok/",
+        "llama": "http://ontology.naas.ai/abi/llama/",
+        "perplexity": "http://ontology.naas.ai/abi/perplexity/",
+        "gemma": "http://ontology.naas.ai/abi/gemma/",
+        "qwen": "http://ontology.naas.ai/abi/qwen/",
+        "deepseek": "http://ontology.naas.ai/abi/deepseek/",
+        "abi_core": "http://ontology.naas.ai/abi/core/"
     }
     
     for module, namespace in namespaces.items():
@@ -89,6 +103,13 @@ def test_modular_ontology_structure(g):
     PREFIX claude: <http://ontology.naas.ai/abi/claude/>
     PREFIX gemini: <http://ontology.naas.ai/abi/gemini/>
     PREFIX mistral: <http://ontology.naas.ai/abi/mistral/>
+    PREFIX grok: <http://ontology.naas.ai/abi/grok/>
+    PREFIX llama: <http://ontology.naas.ai/abi/llama/>
+    PREFIX perplexity: <http://ontology.naas.ai/abi/perplexity/>
+    PREFIX gemma: <http://ontology.naas.ai/abi/gemma/>
+    PREFIX qwen: <http://ontology.naas.ai/abi/qwen/>
+    PREFIX deepseek: <http://ontology.naas.ai/abi/deepseek/>
+    PREFIX abi_core: <http://ontology.naas.ai/abi/core/>
     
     SELECT ?agent1 ?agent2 ?priority
     WHERE {
@@ -98,7 +119,7 @@ def test_modular_ontology_structure(g):
         FILTER(?agent1 != ?agent2)
     }
     ORDER BY DESC(?priority)
-    LIMIT 15
+    LIMIT 25
     """
     
     results = g.query(query)
@@ -242,6 +263,13 @@ def test_temporal_coordination(g, df):
     PREFIX claude: <http://ontology.naas.ai/abi/claude/>
     PREFIX gemini: <http://ontology.naas.ai/abi/gemini/>
     PREFIX mistral: <http://ontology.naas.ai/abi/mistral/>
+    PREFIX grok: <http://ontology.naas.ai/abi/grok/>
+    PREFIX llama: <http://ontology.naas.ai/abi/llama/>
+    PREFIX perplexity: <http://ontology.naas.ai/abi/perplexity/>
+    PREFIX gemma: <http://ontology.naas.ai/abi/gemma/>
+    PREFIX qwen: <http://ontology.naas.ai/abi/qwen/>
+    PREFIX deepseek: <http://ontology.naas.ai/abi/deepseek/>
+    PREFIX abi_core: <http://ontology.naas.ai/abi/core/>
     
     SELECT ?process1 ?process2 ?sequence1 ?sequence2
     WHERE {
@@ -348,6 +376,13 @@ def test_advanced_relationships(g, df):
     PREFIX claude: <http://ontology.naas.ai/abi/claude/>
     PREFIX gemini: <http://ontology.naas.ai/abi/gemini/>
     PREFIX mistral: <http://ontology.naas.ai/abi/mistral/>
+    PREFIX grok: <http://ontology.naas.ai/abi/grok/>
+    PREFIX llama: <http://ontology.naas.ai/abi/llama/>
+    PREFIX perplexity: <http://ontology.naas.ai/abi/perplexity/>
+    PREFIX gemma: <http://ontology.naas.ai/abi/gemma/>
+    PREFIX qwen: <http://ontology.naas.ai/abi/qwen/>
+    PREFIX deepseek: <http://ontology.naas.ai/abi/deepseek/>
+    PREFIX abi_core: <http://ontology.naas.ai/abi/core/>
     
     SELECT ?mainSystem ?subsystem ?complexity
     WHERE {

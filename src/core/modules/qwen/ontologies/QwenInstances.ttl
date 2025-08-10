@@ -1,0 +1,268 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix qwen: <http://ontology.naas.ai/abi/qwen/> .
+
+<http://ontology.naas.ai/abi/qwen/QwenInstances> rdf:type owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Qwen Module Instances" ;
+    dc:description "Concrete instances demonstrating Qwen AI agents with Alibaba's enterprise AI capabilities."@en .
+
+#################################################################
+#    Qwen AI System (Main System)
+#################################################################
+
+qwen:QwenSystem a abi:AISystem ;
+    rdfs:label "Qwen AI System"@en ;
+    abi:providerName "Alibaba" ;
+    abi:systemComplexity "complex" ;
+    abi:hasLoadBalancer qwen:QwenLoadBalancer ;
+    abi:hasSubsystem qwen:EnterpriseSubsystem, qwen:CloudIntegrationSubsystem, qwen:MultilingualSubsystem ;
+    rdfs:comment "Main Qwen system that excels in enterprise AI, cloud integration, and multilingual capabilities with Alibaba's ecosystem."@en .
+
+#################################################################
+#    Qwen Subsystems
+#################################################################
+
+qwen:EnterpriseSubsystem a abi:AISystem ;
+    rdfs:label "Qwen Enterprise Subsystem"@en ;
+    abi:providerName "Alibaba" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf qwen:QwenSystem ;
+    abi:hasAIAgent qwen:QwenEnterpriseAgent, qwen:QwenBusinessAgent ;
+    rdfs:comment "Subsystem dedicated to enterprise AI and business applications."@en .
+
+qwen:CloudIntegrationSubsystem a abi:AISystem ;
+    rdfs:label "Qwen Cloud Integration Subsystem"@en ;
+    abi:providerName "Alibaba" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf qwen:QwenSystem ;
+    abi:hasAIAgent qwen:QwenCloudAgent, qwen:QwenIntegrationAgent ;
+    rdfs:comment "Subsystem specialized in cloud integration and Alibaba Cloud services."@en .
+
+qwen:MultilingualSubsystem a abi:AISystem ;
+    rdfs:label "Qwen Multilingual Subsystem"@en ;
+    abi:providerName "Alibaba" ;
+    abi:systemComplexity "moderate" ;
+    abi:isSubsystemOf qwen:QwenSystem ;
+    abi:hasAIAgent qwen:QwenMultilingualAgent, qwen:QwenTranslationAgent ;
+    rdfs:comment "Subsystem focused on multilingual processing and translation capabilities."@en .
+
+#################################################################
+#    Qwen AI Agents
+#################################################################
+
+### Enterprise Agents
+qwen:QwenEnterpriseAgent a abi:AIAgent ;
+    rdfs:label "Qwen Enterprise Agent"@en ;
+    abi:isAIAgentOf qwen:EnterpriseSubsystem ;
+    abi:hasSpecializedRole abi:PrimaryResponderRole ;
+    abi:collaborationPriority "9" ;
+    abi:collaboratesWith qwen:QwenCloudAgent, qwen:QwenMultilingualAgent ;
+    abi:hasFallbackAgent qwen:QwenBusinessAgent ;
+    rdfs:comment "Primary enterprise agent that excels in business applications and enterprise AI."@en .
+
+qwen:QwenBusinessAgent a abi:AIAgent ;
+    rdfs:label "Qwen Business Agent"@en ;
+    abi:isAIAgentOf qwen:EnterpriseSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith qwen:QwenEnterpriseAgent, qwen:QwenIntegrationAgent ;
+    rdfs:comment "Business-focused agent that handles enterprise workflows and business logic."@en .
+
+### Cloud Integration Agents
+qwen:QwenCloudAgent a abi:AIAgent ;
+    rdfs:label "Qwen Cloud Agent"@en ;
+    abi:isAIAgentOf qwen:CloudIntegrationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith qwen:QwenEnterpriseAgent, qwen:QwenIntegrationAgent ;
+    rdfs:comment "Cloud integration agent that optimizes Alibaba Cloud services and deployment."@en .
+
+qwen:QwenIntegrationAgent a abi:AIAgent ;
+    rdfs:label "Qwen Integration Agent"@en ;
+    abi:isAIAgentOf qwen:CloudIntegrationSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith qwen:QwenCloudAgent, qwen:QwenBusinessAgent ;
+    rdfs:comment "Integration agent that connects with Alibaba's ecosystem and third-party services."@en .
+
+### Multilingual Agents
+qwen:QwenMultilingualAgent a abi:AIAgent ;
+    rdfs:label "Qwen Multilingual Agent"@en ;
+    abi:isAIAgentOf qwen:MultilingualSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith qwen:QwenEnterpriseAgent, qwen:QwenTranslationAgent ;
+    rdfs:comment "Multilingual agent that handles multiple languages and cultural contexts."@en .
+
+qwen:QwenTranslationAgent a abi:AIAgent ;
+    rdfs:label "Qwen Translation Agent"@en ;
+    abi:isAIAgentOf qwen:MultilingualSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "7" ;
+    abi:collaboratesWith qwen:QwenMultilingualAgent, qwen:QwenIntegrationAgent ;
+    rdfs:comment "Translation agent that provides high-quality language translation services."@en .
+
+#################################################################
+#    Load Balancer
+#################################################################
+
+qwen:QwenLoadBalancer a abi:LoadBalancer ;
+    rdfs:label "Qwen Load Balancer"@en ;
+    rdfs:comment "Intelligent load balancer that optimizes for enterprise AI and cloud integration across Qwen agents."@en .
+
+#################################################################
+#    AI Model Instances
+#################################################################
+
+qwen:QwenEnterpriseModelInstance a abi:AIModelInstance ;
+    rdfs:label "Qwen Enterprise Model Instance"@en ;
+    abi:modelName "qwen-max" ;
+    abi:providerName "Alibaba" ;
+    abi:hasQuality qwen:QwenEnterpriseAccuracy, qwen:QwenEnterpriseLatency, qwen:QwenEnterpriseTokenCapacity ;
+    rdfs:comment "Specific instance of Qwen Max model optimized for enterprise applications."@en .
+
+qwen:QwenMultilingualModelInstance a abi:AIModelInstance ;
+    rdfs:label "Qwen Multilingual Model Instance"@en ;
+    abi:modelName "qwen-plus" ;
+    abi:providerName "Alibaba" ;
+    abi:hasQuality qwen:QwenMultilingualAccuracy, qwen:QwenMultilingualLatency, qwen:QwenMultilingualTokenCapacity ;
+    rdfs:comment "Specific instance of Qwen Plus model for multilingual capabilities."@en .
+
+#################################################################
+#    Qualities
+#################################################################
+
+### Qwen Enterprise Qualities
+qwen:QwenEnterpriseAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Qwen Enterprise Accuracy"@en ;
+    abi:accuracyValue "0.65"^^xsd:decimal ;
+    rdfs:comment "Qwen enterprise model accuracy quality with 65% performance."@en .
+
+qwen:QwenEnterpriseLatency a abi:ResponseLatency ;
+    rdfs:label "Qwen Enterprise Latency"@en ;
+    abi:latencyValue "1500"^^xsd:integer ;
+    rdfs:comment "Qwen enterprise response latency quality of 1500ms."@en .
+
+qwen:QwenEnterpriseTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Qwen Enterprise Token Capacity"@en ;
+    abi:tokenLimit "32768"^^xsd:integer ;
+    rdfs:comment "Qwen enterprise token capacity quality of 32,768 tokens."@en .
+
+### Qwen Multilingual Qualities
+qwen:QwenMultilingualAccuracy a abi:ModelAccuracy ;
+    rdfs:label "Qwen Multilingual Accuracy"@en ;
+    abi:accuracyValue "0.62"^^xsd:decimal ;
+    rdfs:comment "Qwen multilingual model accuracy quality with 62% performance."@en .
+
+qwen:QwenMultilingualLatency a abi:ResponseLatency ;
+    rdfs:label "Qwen Multilingual Latency"@en ;
+    abi:latencyValue "1200"^^xsd:integer ;
+    rdfs:comment "Qwen multilingual response latency quality of 1200ms."@en .
+
+qwen:QwenMultilingualTokenCapacity a abi:TokenCapacity ;
+    rdfs:label "Qwen Multilingual Token Capacity"@en ;
+    abi:tokenLimit "32768"^^xsd:integer ;
+    rdfs:comment "Qwen multilingual token capacity quality of 32,768 tokens."@en .
+
+#################################################################
+#    Processes with Enterprise Workflow
+#################################################################
+
+qwen:EnterpriseInputProcess a abi:TextGenerationProcess ;
+    rdfs:label "Enterprise Input Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant qwen:QwenEnterpriseModelInstance ;
+    abi:hasTemporalRegion qwen:EnterpriseInputSession ;
+    abi:temporalSequence "1" ;
+    abi:triggersProcess qwen:CloudIntegrationProcess ;
+    rdfs:comment "Process that handles enterprise input and business requirements."@en .
+
+qwen:CloudIntegrationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Cloud Integration Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant qwen:QwenEnterpriseModelInstance ;
+    abi:hasTemporalRegion qwen:CloudIntegrationSession ;
+    abi:temporalSequence "2" ;
+    abi:precedesInTime qwen:MultilingualProcessingProcess ;
+    abi:triggersProcess qwen:MultilingualProcessingProcess ;
+    rdfs:comment "Process that integrates with Alibaba Cloud services and ecosystem."@en .
+
+qwen:MultilingualProcessingProcess a abi:TextGenerationProcess ;
+    rdfs:label "Multilingual Processing Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant qwen:QwenMultilingualModelInstance ;
+    abi:hasTemporalRegion qwen:MultilingualProcessingSession ;
+    abi:temporalSequence "3" ;
+    abi:precedesInTime qwen:BusinessValidationProcess ;
+    abi:triggersProcess qwen:BusinessValidationProcess ;
+    rdfs:comment "Process that handles multilingual processing and translation."@en .
+
+qwen:BusinessValidationProcess a abi:TextGenerationProcess ;
+    rdfs:label "Business Validation Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant qwen:QwenEnterpriseModelInstance ;
+    abi:hasTemporalRegion qwen:BusinessValidationSession ;
+    abi:temporalSequence "4" ;
+    abi:precedesInTime qwen:EnterpriseDeliveryProcess ;
+    abi:triggersProcess qwen:EnterpriseDeliveryProcess ;
+    rdfs:comment "Process that validates business logic and enterprise requirements."@en .
+
+qwen:EnterpriseDeliveryProcess a abi:TextGenerationProcess ;
+    rdfs:label "Enterprise Delivery Process"@en ;
+    abi:realizesCapability abi:TextGenerationCapability ;
+    abi:hasParticipant qwen:QwenEnterpriseModelInstance ;
+    abi:hasTemporalRegion qwen:EnterpriseDeliverySession ;
+    abi:temporalSequence "5" ;
+    rdfs:comment "Process that delivers enterprise-grade responses with cloud integration."@en .
+
+#################################################################
+#    Temporal Regions
+#################################################################
+
+qwen:EnterpriseInputSession a abi:InferenceSession ;
+    rdfs:label "Enterprise Input Session"@en ;
+    rdfs:comment "Temporal region during which enterprise input processing occurs."@en .
+
+qwen:CloudIntegrationSession a abi:InferenceSession ;
+    rdfs:label "Cloud Integration Session"@en ;
+    rdfs:comment "Temporal region during which cloud integration occurs."@en .
+
+qwen:MultilingualProcessingSession a abi:InferenceSession ;
+    rdfs:label "Multilingual Processing Session"@en ;
+    rdfs:comment "Temporal region during which multilingual processing occurs."@en .
+
+qwen:BusinessValidationSession a abi:InferenceSession ;
+    rdfs:label "Business Validation Session"@en ;
+    rdfs:comment "Temporal region during which business validation occurs."@en .
+
+qwen:EnterpriseDeliverySession a abi:InferenceSession ;
+    rdfs:label "Enterprise Delivery Session"@en ;
+    rdfs:comment "Temporal region during which enterprise delivery occurs."@en .
+
+#################################################################
+#    Information Content Entities
+#################################################################
+
+qwen:QwenEnterpriseSpecification a abi:ModelSpecification ;
+    rdfs:label "Qwen Enterprise Model Specification"@en ;
+    abi:specificationContent "Qwen Max is an enterprise AI model optimized for business applications, cloud integration, and Alibaba ecosystem with 32K context window." ;
+    rdfs:comment "Information content describing Qwen enterprise model parameters and capabilities."@en .
+
+qwen:QwenMultilingualSpecification a abi:ModelSpecification ;
+    rdfs:label "Qwen Multilingual Model Specification"@en ;
+    abi:specificationContent "Qwen Plus is a multilingual model with enterprise-grade translation capabilities and cultural context understanding." ;
+    rdfs:comment "Information content describing Qwen multilingual model parameters and capabilities."@en .
+
+qwen:EnterpriseCapabilitiesSpecification a abi:ModelSpecification ;
+    rdfs:label "Enterprise Capabilities Specification"@en ;
+    abi:specificationContent "Enterprise capabilities include business applications, cloud integration, multilingual processing, Alibaba ecosystem connectivity, and enterprise-grade security." ;
+    rdfs:comment "Information content describing Qwen's enterprise capabilities and features."@en .
