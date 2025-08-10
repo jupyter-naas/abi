@@ -299,70 +299,93 @@ abi:APIResponse a owl:Class ;
 #################################################################
 
 # Class Axioms
-abi:AIModelInstance rdfs:subClassOf abi:AISystem .
+abi:AIModelInstance rdfs:subClassOf abi:AISystem ;
+    rdfs:comment "Every AI model instance is a type of AI system."@en .
 
 abi:TextGenerationProcess rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:realizesCapability ;
-    owl:someValuesFrom abi:TextGenerationCapability
+    owl:someValuesFrom abi:TextGenerationCapability ;
+    rdfs:comment "Every text generation process must realize a text generation capability."@en
 ] .
 
 abi:ImageAnalysisProcess rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:realizesCapability ;
-    owl:someValuesFrom abi:ImageAnalysisCapability
+    owl:someValuesFrom abi:ImageAnalysisCapability ;
+    rdfs:comment "Every image analysis process must realize an image analysis capability."@en
 ] .
 
 abi:CodeGenerationProcess rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:realizesCapability ;
-    owl:someValuesFrom abi:CodeGenerationCapability
+    owl:someValuesFrom abi:CodeGenerationCapability ;
+    rdfs:comment "Every code generation process must realize a code generation capability."@en
 ] .
 
 # Property Axioms
-abi:hasAIAgent owl:inverseOf abi:isAIAgentOf .
+abi:hasAIAgent owl:inverseOf abi:isAIAgentOf ;
+    rdfs:comment "If an AI system has an AI agent, then that AI agent is an agent of that AI system."@en .
 
 abi:hasCapability owl:inverseOf [
     rdf:type owl:ObjectProperty ;
     rdfs:label "is capability of"@en ;
     rdfs:domain bfo:BFO_0000017 ;
-    rdfs:range bfo:BFO_0000040
+    rdfs:range bfo:BFO_0000040 ;
+    rdfs:comment "If a material entity has a capability, then that capability belongs to that material entity."@en
 ] .
 
 abi:realizesCapability owl:inverseOf [
     rdf:type owl:ObjectProperty ;
     rdfs:label "is realized by"@en ;
     rdfs:domain bfo:BFO_0000017 ;
-    rdfs:range bfo:BFO_0000015
+    rdfs:range bfo:BFO_0000015 ;
+    rdfs:comment "If a process realizes a capability, then that capability is realized by that process."@en
 ] .
 
 # Disjoint Classes
 [ rdf:type owl:AllDisjointClasses ;
   owl:members ( abi:TextGenerationCapability
                 abi:ImageAnalysisCapability
-                abi:CodeGenerationCapability )
+                abi:CodeGenerationCapability ) ;
+  rdfs:comment "Different types of AI capabilities are mutually exclusive - an entity cannot have multiple capability types simultaneously."@en
 ] .
 
 [ rdf:type owl:AllDisjointClasses ;
   owl:members ( abi:TextGenerationProcess
                 abi:ImageAnalysisProcess
-                abi:CodeGenerationProcess )
+                abi:CodeGenerationProcess ) ;
+  rdfs:comment "Different types of AI processes are mutually exclusive - a process cannot be multiple types simultaneously."@en
 ] .
 
 [ rdf:type owl:AllDisjointClasses ;
   owl:members ( abi:ModelAccuracy
                 abi:ResponseLatency
-                abi:TokenCapacity )
+                abi:TokenCapacity ) ;
+  rdfs:comment "Different types of AI qualities are mutually exclusive - an entity cannot have multiple quality types simultaneously."@en
 ] .
 
 # Functional Properties
-abi:modelName a owl:FunctionalProperty .
-abi:providerName a owl:FunctionalProperty .
-abi:accuracyValue a owl:FunctionalProperty .
-abi:latencyValue a owl:FunctionalProperty .
-abi:tokenLimit a owl:FunctionalProperty .
-abi:trainingDataCutoff a owl:FunctionalProperty .
-abi:locationName a owl:FunctionalProperty .
+abi:modelName a owl:FunctionalProperty ;
+    rdfs:comment "Each AI system can have only one model name."@en .
+
+abi:providerName a owl:FunctionalProperty ;
+    rdfs:comment "Each AI system can have only one provider name."@en .
+
+abi:accuracyValue a owl:FunctionalProperty ;
+    rdfs:comment "Each model accuracy quality can have only one numerical value."@en .
+
+abi:latencyValue a owl:FunctionalProperty ;
+    rdfs:comment "Each response latency quality can have only one numerical value."@en .
+
+abi:tokenLimit a owl:FunctionalProperty ;
+    rdfs:comment "Each token capacity quality can have only one numerical value."@en .
+
+abi:trainingDataCutoff a owl:FunctionalProperty ;
+    rdfs:comment "Each model training period can have only one cutoff date."@en .
+
+abi:locationName a owl:FunctionalProperty ;
+    rdfs:comment "Each spatial region can have only one location name."@en .
 
 # Data Property Axioms
 abi:accuracyValue rdfs:subPropertyOf [
@@ -370,21 +393,24 @@ abi:accuracyValue rdfs:subPropertyOf [
     rdfs:range [ rdf:type rdfs:Datatype ;
                  owl:onDatatype xsd:decimal ;
                  owl:withRestrictions ( [ xsd:minInclusive "0.0"^^xsd:decimal ;
-                                         xsd:maxInclusive "1.0"^^xsd:decimal ] ) ]
+                                         xsd:maxInclusive "1.0"^^xsd:decimal ] ) ] ;
+    rdfs:comment "Accuracy values must be between 0.0 and 1.0 (0% to 100%)."@en
 ] .
 
 abi:latencyValue rdfs:subPropertyOf [
     rdf:type owl:DatatypeProperty ;
     rdfs:range [ rdf:type rdfs:Datatype ;
                  owl:onDatatype xsd:integer ;
-                 owl:withRestrictions ( [ xsd:minInclusive "0"^^xsd:integer ] ) ]
+                 owl:withRestrictions ( [ xsd:minInclusive "0"^^xsd:integer ] ) ] ;
+    rdfs:comment "Latency values must be non-negative integers (milliseconds)."@en
 ] .
 
 abi:tokenLimit rdfs:subPropertyOf [
     rdf:type owl:DatatypeProperty ;
     rdfs:range [ rdf:type rdfs:Datatype ;
                  owl:onDatatype xsd:integer ;
-                 owl:withRestrictions ( [ xsd:minInclusive "1"^^xsd:integer ] ) ]
+                 owl:withRestrictions ( [ xsd:minInclusive "1"^^xsd:integer ] ) ] ;
+    rdfs:comment "Token limits must be positive integers (at least 1 token)."@en
 ] .
 
 ###  Generated by the OWL API (version 4.5.9.2019-02-01T07:24:44Z) https://github.com/owlcs/owlapi
