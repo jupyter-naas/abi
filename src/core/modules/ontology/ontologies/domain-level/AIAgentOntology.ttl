@@ -13,11 +13,11 @@
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AIAgentOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "BFO-aligned ontology for AI agents and artificial intelligence systems using the 7 foundational categories."@en ;
-    dc:title "AI Agent Ontology (BFO-aligned)" .
+    dc:description "BFO+CCO hybrid ontology for AI agents and artificial intelligence systems."@en ;
+    dc:title "AI Agent Ontology (BFO+CCO)" .
 
 #################################################################
-#    BFO 7 BUCKETS MAPPING
+#    BFO 7 BUCKETS + CCO DOMAIN CLASSES
 #################################################################
 
 # WHAT/WHO → Material Entities (BFO_0000040)
@@ -32,6 +32,13 @@ abi:AIModelInstance a owl:Class ;
     rdfs:label "AI Model Instance"@en ;
     skos:definition "A specific instantiation of an AI model running on hardware."@en ;
     skos:example "GPT-4 model running on OpenAI's servers, Claude-3-Sonnet instance."@en .
+
+# CCO DOMAIN CLASSES (extending BFO)
+abi:AIAgent a owl:Class ;
+    rdfs:subClassOf cco:ont00001017 ; # CCO Agent
+    rdfs:label "AI Agent"@en ;
+    skos:definition "An artificial agent that can act, make decisions, and perform tasks autonomously."@en ;
+    skos:example "ChatGPT, Claude, Gemini, and other AI systems that can engage in conversations and perform various tasks."@en .
 
 # HOW-IT-IS → Qualities (BFO_0000019)
 abi:ModelAccuracy a owl:Class ;
@@ -135,6 +142,19 @@ abi:realizesCapability a owl:ObjectProperty ;
     rdfs:domain bfo:BFO_0000015 ;
     rdfs:range bfo:BFO_0000017 ;
     skos:definition "A relation between a process and the capability it realizes."@en .
+
+# CCO Agent Relations
+abi:hasAIAgent a owl:ObjectProperty ;
+    rdfs:label "has AI agent"@en ;
+    rdfs:domain abi:AISystem ;
+    rdfs:range abi:AIAgent ;
+    skos:definition "A relation between an AI system and the AI agent it implements."@en .
+
+abi:isAIAgentOf a owl:ObjectProperty ;
+    rdfs:label "is AI agent of"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AISystem ;
+    skos:definition "A relation between an AI agent and the AI system that implements it."@en .
 
 # Quality Relations
 abi:hasQuality a owl:ObjectProperty ;
