@@ -56,7 +56,14 @@ All module ontologies import the base AI Agent Ontology:
     dc:description "Concrete instances demonstrating {ModuleName} AI agents with advanced relationships."@en .
 ```
 
-### 3. Required Sections
+### 3. Module Namespaces
+Each module uses its own namespace:
+- ChatGPT: `chatgpt: <http://ontology.naas.ai/abi/chatgpt/>`
+- Claude: `claude: <http://ontology.naas.ai/abi/claude/>`
+- Gemini: `gemini: <http://ontology.naas.ai/abi/gemini/>`
+- Mistral: `mistral: <http://ontology.naas.ai/abi/mistral/>`
+
+### 4. Required Sections
 Each module ontology should include:
 
 #### AI Systems
@@ -121,16 +128,25 @@ Each module should demonstrate:
 - **Focus**: Multimodal capabilities (text + image)
 - **Pattern**: Text generation + image generation collaboration
 - **Workflow**: Preprocessing → Generation → Validation → Delivery
+- **Instances**: 33 total (systems, agents, models, processes)
 
 ### Claude Module
 - **Focus**: Constitutional AI principles
 - **Pattern**: Safety-first approach with reasoning
 - **Workflow**: Input Analysis → Constitutional Check → Reasoning → Safety Validation → Response
+- **Instances**: 32 total (systems, agents, models, processes)
 
 ### Gemini Module
-- **Focus**: Multimodal understanding and reasoning
-- **Pattern**: Cross-modal reasoning and generation
-- **Workflow**: Multimodal Analysis → Reasoning → Generation → Validation
+- **Focus**: Speed optimization and multimodal processing
+- **Pattern**: Native image/video understanding with ultra-fast processing
+- **Workflow**: Input Processing → Multimodal Analysis → Speed Optimization → Response Generation
+- **Instances**: 31 total (systems, agents, models, processes)
+
+### Mistral Module
+- **Focus**: Technical excellence and European compliance
+- **Pattern**: Code generation with GDPR compliance
+- **Workflow**: Problem Analysis → Technical Solution → Code Generation → Compliance Validation → Documentation
+- **Instances**: 33 total (systems, agents, models, processes)
 
 ## Best Practices
 
@@ -157,5 +173,23 @@ Module ontologies integrate through:
 - Cross-module agent collaboration
 - System composition relationships
 - Temporal coordination workflows
+
+## Current Status
+
+- **Total Modules**: 4 (ChatGPT, Claude, Gemini, Mistral)
+- **Total Instances**: 129 across all modules
+- **Total Triples**: 1,189 in comprehensive test suite
+- **Cross-Module Collaborations**: 15 identified relationships
+- **Temporal Sequences**: 14 validated workflows
+- **System Compositions**: 12 hierarchical structures
+
+## Testing
+
+Run the comprehensive test suite:
+```bash
+python run_ontology_tests.py
+```
+
+This validates all modules, cross-module relationships, and demonstrates real-world AI system complexity modeling.
 
 This modular approach ensures maintainability, scalability, and clear separation of concerns while maintaining ontological rigor and consistency across the entire ABI system.
