@@ -295,6 +295,13 @@ chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
 chat-abi-agent: deps
+	@uv run python -m src.core.apps.startup_sequence.main
+	@echo ""
+	@if [ "$$AI_MODE" = "local" ]; then \
+		echo "🚀 ABI System ready to start..."; \
+	else \
+		echo "🚀 ABI System ready to start..."; \
+	fi
 	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps
@@ -351,6 +358,9 @@ dev-up:
 dev-down:
 	@docker-compose --profile dev down
 	@echo "✓ All development services stopped"
+
+startup-sequence:
+	@uv run python -m src.core.apps.startup_sequence.main
 
 container-up:
 	@docker-compose --profile container up -d
