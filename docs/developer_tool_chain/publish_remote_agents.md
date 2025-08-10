@@ -49,7 +49,7 @@ make publish-remote-agents
 This command performs the following actions:
 1. Reads configuration settings from your environment and config files
 2. Publishes a predefined set of agents:
-   - `Supervisor` (set as default)
+   - `Abi` (set as default)
    - `Ontology` 
    - `Naas`
    - `Multi_Models`
@@ -81,8 +81,8 @@ publish_remote_agent(
     workspace_id="your_workspace_id",
     github_access_token="your_github_token",
     github_repository="your_username/your_repo",
-    default_agent="Supervisor",
-    agents_to_publish=["Supervisor", "Ontology", "Naas"]
+    default_agent="Abi",
+agents_to_publish=["Abi", "Ontology", "Naas"]
 )
 ```
 
@@ -96,8 +96,8 @@ publish_remote_agent(
 | `workspace_id` | Naas workspace ID where plugins will be published | Yes | - |
 | `github_access_token` | GitHub personal access token | Yes | - |
 | `github_repository` | GitHub repository name (format: `username/repository`) | Yes | - |
-| `default_agent` | Name of the agent to set as default | No | "Supervisor" |
-| `agents_to_publish` | List of agent names to publish | No | ["Supervisor", "Ontology", "Naas", "Multi_Models", "Support"] |
+| `default_agent` | Name of the agent to set as default | No | "Abi" |
+| `agents_to_publish` | List of agent names to publish | No | ["Abi", "Ontology", "Naas", "Multi_Models", "Support"] |
 
 ## What the Script Does
 
@@ -149,8 +149,8 @@ When running the script successfully, you should see output similar to:
 ==> Getting existing plugins from workspace: your_workspace_id
 ==> Existing plugins: 5
 ==> Updating "ABI_API_KEY" secret in Github repository: your_username/your_repo
-==> Publishing agent: Supervisor
-Plugin 'Supervisor' updated in workspace 'your_workspace_id'
+==> Publishing agent: Abi
+Plugin 'Abi' updated in workspace 'your_workspace_id'
 ==> Publishing agent: Ontology
 Plugin 'Ontology' created in workspace 'your_workspace_id'
 ...
