@@ -13,7 +13,7 @@
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AIAgentOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "BFO+CCO hybrid ontology for AI agents and artificial intelligence systems."@en ;
+    dc:description "A domain ontology that extends BFO foundational categories and CCO Agent classes to model artificial intelligence systems, their capabilities, processes, and information content. This ontology enables semantic representation of AI agents, their material implementations, realizable capabilities, and the processes they perform, supporting interoperability between AI systems and knowledge graphs."@en ;
     dc:title "AI Agent Ontology (BFO+CCO)" .
 
 #################################################################
