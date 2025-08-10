@@ -482,32 +482,19 @@ abi:triggersProcess a owl:IrreflexiveProperty ;
     rdfs:comment "A process cannot trigger itself - this prevents infinite loops in workflow definitions."@en .
 
 # Disjoint Classes
-[ rdf:type owl:AllDisjointClasses ;
-  owl:members ( abi:TextGenerationCapability
-                abi:ImageAnalysisCapability
-                abi:CodeGenerationCapability )
-  rdfs:comment "Different types of AI capabilities are mutually exclusive - an entity cannot have multiple capability types simultaneously."@en
-] .
+abi:TextGenerationCapability owl:disjointWith abi:ImageAnalysisCapability .
+abi:TextGenerationCapability owl:disjointWith abi:CodeGenerationCapability .
+abi:ImageAnalysisCapability owl:disjointWith abi:CodeGenerationCapability .
 
-[ rdf:type owl:AllDisjointClasses ;
-  owl:members ( abi:TextGenerationProcess
-                abi:ImageAnalysisProcess
-                abi:CodeGenerationProcess )
-  rdfs:comment "Different types of AI processes are mutually exclusive - a process cannot be multiple types simultaneously."@en
-] .
+abi:TextGenerationProcess owl:disjointWith abi:ImageAnalysisProcess .
+abi:TextGenerationProcess owl:disjointWith abi:CodeGenerationProcess .
+abi:ImageAnalysisProcess owl:disjointWith abi:CodeGenerationProcess .
 
-[ rdf:type owl:AllDisjointClasses ;
-  owl:members ( abi:ModelAccuracy
-                abi:ResponseLatency
-                abi:TokenCapacity )
-  rdfs:comment "Different types of AI qualities are mutually exclusive - an entity cannot have multiple quality types simultaneously."@en
-] .
+abi:ModelAccuracy owl:disjointWith abi:ResponseLatency .
+abi:ModelAccuracy owl:disjointWith abi:TokenCapacity .
+abi:ResponseLatency owl:disjointWith abi:TokenCapacity .
 
-[ rdf:type owl:AllDisjointClasses ;
-  owl:members ( abi:AISystem
-                abi:LoadBalancer )
-  rdfs:comment "AI systems and load balancers are distinct types of material entities with different functions."@en
-] .
+abi:AISystem owl:disjointWith abi:LoadBalancer .
 
 # Functional Properties
 abi:modelName a owl:FunctionalProperty ;
@@ -584,21 +571,19 @@ abi:temporalSequence rdfs:subPropertyOf [
 ] .
 
 # Advanced Business Logic Axioms
-[ rdf:type owl:AllDifferent ;
-  owl:distinctMembers ( abi:PrimaryResponderRole
-                        abi:FallbackHandlerRole
-                        abi:SpecializedTaskExecutorRole
-                        abi:CoordinatorRole
-                        abi:ValidatorRole )
-  rdfs:comment "All agent roles are distinct and serve different purposes in AI system architecture."@en
-] .
+abi:PrimaryResponderRole owl:differentFrom abi:FallbackHandlerRole .
+abi:PrimaryResponderRole owl:differentFrom abi:SpecializedTaskExecutorRole .
+abi:PrimaryResponderRole owl:differentFrom abi:CoordinatorRole .
+abi:PrimaryResponderRole owl:differentFrom abi:ValidatorRole .
 
-[ rdf:type owl:AllDifferent ;
-  owl:distinctMembers ( "simple"^^xsd:string
-                        "moderate"^^xsd:string
-                        "complex"^^xsd:string )
-  rdfs:comment "System complexity levels are distinct categories for classifying AI system architectures."@en
-] .
+abi:FallbackHandlerRole owl:differentFrom abi:SpecializedTaskExecutorRole .
+abi:FallbackHandlerRole owl:differentFrom abi:CoordinatorRole .
+abi:FallbackHandlerRole owl:differentFrom abi:ValidatorRole .
+
+abi:SpecializedTaskExecutorRole owl:differentFrom abi:CoordinatorRole .
+abi:SpecializedTaskExecutorRole owl:differentFrom abi:ValidatorRole .
+
+abi:CoordinatorRole owl:differentFrom abi:ValidatorRole .
 
 #################################################################
 #    Agent Role Instances
