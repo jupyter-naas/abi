@@ -22,7 +22,9 @@ def load_ontology_files():
     # Load module-specific ontologies
     module_ontologies = [
         "src/core/modules/chatgpt/ontologies/ChatGPTInstances.ttl",
-        "src/core/modules/claude/ontologies/ClaudeInstances.ttl"
+        "src/core/modules/claude/ontologies/ClaudeInstances.ttl",
+        "src/core/modules/gemini/ontologies/GeminiInstances.ttl",
+        "src/core/modules/mistral/ontologies/MistralInstances.ttl"
     ]
     
     for ontology_file in module_ontologies:
@@ -54,7 +56,9 @@ def test_modular_ontology_structure(g):
     # Test module-specific namespaces
     namespaces = {
         "chatgpt": "http://ontology.naas.ai/abi/chatgpt/",
-        "claude": "http://ontology.naas.ai/abi/claude/"
+        "claude": "http://ontology.naas.ai/abi/claude/",
+        "gemini": "http://ontology.naas.ai/abi/gemini/",
+        "mistral": "http://ontology.naas.ai/abi/mistral/"
     }
     
     for module, namespace in namespaces.items():
@@ -83,6 +87,8 @@ def test_modular_ontology_structure(g):
     PREFIX abi: <http://ontology.naas.ai/abi/>
     PREFIX chatgpt: <http://ontology.naas.ai/abi/chatgpt/>
     PREFIX claude: <http://ontology.naas.ai/abi/claude/>
+    PREFIX gemini: <http://ontology.naas.ai/abi/gemini/>
+    PREFIX mistral: <http://ontology.naas.ai/abi/mistral/>
     
     SELECT ?agent1 ?agent2 ?priority
     WHERE {
@@ -92,7 +98,7 @@ def test_modular_ontology_structure(g):
         FILTER(?agent1 != ?agent2)
     }
     ORDER BY DESC(?priority)
-    LIMIT 10
+    LIMIT 15
     """
     
     results = g.query(query)
@@ -234,6 +240,8 @@ def test_temporal_coordination(g, df):
     PREFIX abi: <http://ontology.naas.ai/abi/>
     PREFIX chatgpt: <http://ontology.naas.ai/abi/chatgpt/>
     PREFIX claude: <http://ontology.naas.ai/abi/claude/>
+    PREFIX gemini: <http://ontology.naas.ai/abi/gemini/>
+    PREFIX mistral: <http://ontology.naas.ai/abi/mistral/>
     
     SELECT ?process1 ?process2 ?sequence1 ?sequence2
     WHERE {
@@ -338,6 +346,8 @@ def test_advanced_relationships(g, df):
     PREFIX abi: <http://ontology.naas.ai/abi/>
     PREFIX chatgpt: <http://ontology.naas.ai/abi/chatgpt/>
     PREFIX claude: <http://ontology.naas.ai/abi/claude/>
+    PREFIX gemini: <http://ontology.naas.ai/abi/gemini/>
+    PREFIX mistral: <http://ontology.naas.ai/abi/mistral/>
     
     SELECT ?mainSystem ?subsystem ?complexity
     WHERE {
