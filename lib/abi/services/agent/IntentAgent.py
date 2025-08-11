@@ -482,8 +482,11 @@ Last user message: "{last_human_message.content}"
                     return Command(goto=END, update={
                         "messages": [AIMessage(content=intent.intent_target)]
                     })
-                # elif intent.intent_type == IntentType.TOOL:
-                #     return Command(goto="model_call_tools")
+                elif intent.intent_type == IntentType.TOOL:
+                    # Route back to the model so it can select and call the appropriate tool.
+                    # Tools are already bound on the chat model (Agent.bind_tools), so forcing a
+                    # model step here ensures the tool call is emitted and then executed by call_tools.
+                    return Command(goto="call_model")
                 elif intent.intent_type == IntentType.AGENT:
                     return Command(goto=intent.intent_target)
                 else:
