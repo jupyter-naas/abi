@@ -1,4 +1,4 @@
-from rdflib import Graph, Literal, URIRef, RDF, OWL, RDFS
+from rdflib import Graph, URIRef, RDF, OWL, RDFS
 from pprint import pprint
 import pydash
 
