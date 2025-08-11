@@ -264,6 +264,62 @@ abi:temporalSequence a owl:DataProperty ;
     skos:definition "The sequence number of a process in a temporal workflow."@en ;
     rdfs:comment "This property indicates the order of processes in a workflow, where lower numbers indicate earlier execution in the sequence."@en .
 
+###  http://ontology.naas.ai/abi/inputTokenCost
+abi:inputTokenCost a owl:DataProperty ;
+    rdfs:label "input token cost"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The cost per million input tokens in USD."@en ;
+    rdfs:comment "Price data from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/outputTokenCost
+abi:outputTokenCost a owl:DataProperty ;
+    rdfs:label "output token cost"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The cost per million output tokens in USD."@en ;
+    rdfs:comment "Price data from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/outputSpeed
+abi:outputSpeed a owl:DataProperty ;
+    rdfs:label "output speed"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The median output generation speed in tokens per second."@en ;
+    rdfs:comment "Performance data from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/intelligenceIndex
+abi:intelligenceIndex a owl:DataProperty ;
+    rdfs:label "intelligence index"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The Artificial Analysis intelligence index score."@en ;
+    rdfs:comment "Composite intelligence score from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/codingIndex
+abi:codingIndex a owl:DataProperty ;
+    rdfs:label "coding index"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The Artificial Analysis coding index score."@en ;
+    rdfs:comment "Coding capability score from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/mathIndex
+abi:mathIndex a owl:DataProperty ;
+    rdfs:label "math index"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The Artificial Analysis math index score."@en ;
+    rdfs:comment "Mathematical reasoning score from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/sourceAPI
+abi:sourceAPI a owl:DataProperty ;
+    rdfs:label "source API"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:string ;
+    skos:definition "The API source URL for model data."@en ;
+    rdfs:comment "Attribution to data source API."@en .
+
 #################################################################
 #    Classes
 #################################################################
