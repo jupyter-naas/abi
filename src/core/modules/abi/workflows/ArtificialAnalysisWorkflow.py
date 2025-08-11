@@ -121,12 +121,12 @@ class ArtificialAnalysisWorkflow:
         
         return capabilities
     
-    def determine_agent_module(self, model_creator: Dict[str, Any]) -> str:
-        """Determine which AI agent module this model belongs to."""
+    def determine_model_provider_module(self, model_creator: Dict[str, Any]) -> str:
+        """Determine which model provider module this model belongs to."""
         creator_name = model_creator.get('name', '').lower()
         creator_slug = model_creator.get('slug', '').lower()
         
-        # Map to existing AI agent modules
+        # Map to existing AI model provider modules
         if 'openai' in creator_slug or 'gpt' in creator_slug:
             return 'openai'
         elif 'anthropic' in creator_slug or 'claude' in creator_slug:
@@ -140,7 +140,7 @@ class ArtificialAnalysisWorkflow:
         elif 'perplexity' in creator_slug:
             return 'perplexity'
         else:
-            # Create generic module for unknown creators
+            # Create generic module for unknown providers
             return creator_slug or 'unknown'
     
     def generate_model_ontology(self, model_data: Dict[str, Any], endpoint: str) -> str:
@@ -167,13 +167,13 @@ class ArtificialAnalysisWorkflow:
 @prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 
-# Model Instance
+# AI Model Instance (Material Entity)
 abi:{model_id} a abi:AIModelInstance ;
     rdfs:label "{model_name}"@en ;
     abi:modelName "{model_name}" ;
     abi:providerName "{creator_name}" ;"""
 
-        # Add capabilities
+        # Add capabilities - Models HAVE capabilities, not agents
         if capabilities:
             cap_list = ', '.join(capabilities)
             ttl_content += f"""
@@ -200,7 +200,7 @@ abi:{model_id} a abi:AIModelInstance ;
     abi:outputSpeed "{model_data['median_output_tokens_per_second']}"^^xsd:decimal ;"""
         
         ttl_content += f"""
-    rdfs:comment "AI model data from Artificial Analysis"@en ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
     abi:sourceAPI "https://artificialanalysis.ai/" .
 
 """
@@ -263,11 +263,11 @@ abi:{model_id}_Performance a abi:ModelAccuracy ;
             "modules": {}
         }
         
-        # Group models by creator/module
+        # Group models by provider/module
         module_models = {}
         for model in models:
             creator = model.get('model_creator', {})
-            module_name = self.determine_agent_module(creator)
+            module_name = self.determine_model_provider_module(creator)
             
             if module_name not in module_models:
                 module_models[module_name] = []
