@@ -5,10 +5,9 @@ Fetches AI model performance data from Artificial Analysis API and generates
 ontology files for each AI agent module with capabilities and performance metrics.
 """
 
-import json
 import requests
-import os
-from typing import Dict, List, Optional, Any
+import pandas as pd
+from typing import Dict, List, Any
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -200,7 +199,6 @@ class ArtificialAnalysisWorkflow:
         """Generate TTL ontology content for a model."""
         model_id = model_data.get('id', '').replace('-', '_')
         model_name = model_data.get('name', 'Unknown Model')
-        model_slug = model_data.get('slug', model_id)
         creator = model_data.get('model_creator', {})
         creator_name = creator.get('name', 'Unknown')
         
@@ -254,15 +252,15 @@ abi:{model_id} a abi:AIModelInstance ;
                 ttl_content += f"""
     abi:outputSpeed "{model_data['median_output_tokens_per_second']}"^^xsd:decimal ;"""
         
-        ttl_content += f"""
-    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
-    abi:sourceAPI "https://artificialanalysis.ai/" .
+            ttl_content += """
+     rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+     abi:sourceAPI "https://artificialanalysis.ai/" .
 
 """
         
         # Add AI processes this model can realize
         if processes:
-            ttl_content += f"""
+            ttl_content += """
 # AI Processes this model can realize
 """
             for process in processes:
@@ -293,12 +291,38 @@ abi:{model_id}_Performance a abi:ModelAccuracy ;
                 ttl_content += f"""
     abi:mathIndex "{evaluations['artificial_analysis_math_index']}"^^xsd:decimal ;"""
             
-            ttl_content += f"""
-    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+            ttl_content += """
+     rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
 
 """
         
         return ttl_content
+    
+    def to_camel_case(self, model_name: str) -> str:
+        """Convert model name to CamelCase following the existing naming convention."""
+        # Remove special characters and split by common separators
+        import re
+        # Replace special characters with spaces
+        cleaned = re.sub(r'[^\w\s]', ' ', model_name)
+        # Split by spaces and capitalize each word
+        words = cleaned.split()
+        # Join without spaces, capitalizing each word
+        camel_case = ''.join(word.capitalize() for word in words if word)
+        # Remove any remaining non-alphanumeric characters
+        camel_case = re.sub(r'[^\w]', '', camel_case)
+        return camel_case or 'UnknownModel'
+    
+    def write_individual_model_file(self, module_name: str, filename: str, content: str):
+        """Write individual model ontology file to appropriate module directory."""
+        module_path = Path(self.config.output_dir) / module_name / "ontologies"
+        module_path.mkdir(parents=True, exist_ok=True)
+        
+        file_path = module_path / filename
+        
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"📝 Generated model ontology: {file_path}")
     
     def write_ontology_file(self, module_name: str, content: str, endpoint: str):
         """Write ontology content to appropriate module directory."""
@@ -324,7 +348,15 @@ abi:{model_id}_Performance a abi:ModelAccuracy ;
             return {"status": "error", "message": "Failed to fetch data from API"}
         
         models = api_data.get('data', [])
-        results = {
+        
+        # Limit to top 50 models (sorted by intelligence index if available)
+        if params.endpoint == "llms":
+            models = sorted(models, 
+                          key=lambda x: x.get('evaluations', {}).get('artificial_analysis_intelligence_index') or 0, 
+                          reverse=True)[:50]
+            print("📊 Limited to top 50 models by intelligence index")
+        
+        results: Dict[str, Any] = {
             "status": "success",
             "endpoint": params.endpoint,
             "models_processed": 0,
@@ -333,7 +365,7 @@ abi:{model_id}_Performance a abi:ModelAccuracy ;
         }
         
         # Group models by provider/module
-        module_models = {}
+        module_models: Dict[str, List[Dict[str, Any]]] = {}
         for model in models:
             creator = model.get('model_creator', {})
             module_name = self.determine_model_provider_module(creator)
@@ -342,32 +374,37 @@ abi:{model_id}_Performance a abi:ModelAccuracy ;
                 module_models[module_name] = []
             module_models[module_name].append(model)
         
-        # Generate ontologies for each module
+        # Generate individual ontology files for each model
         if params.generate_ontologies:
             for module_name, module_model_list in module_models.items():
                 print(f"🏗️  Processing {len(module_model_list)} models for {module_name}")
                 
-                # Combine all models for this module into one ontology file
-                combined_content = f"""# Artificial Analysis Model Data for {module_name.title()}
+                # Generate individual TTL file for each model following naming convention
+                for model in module_model_list:
+                    model_name = model.get('name', 'UnknownModel')
+                    
+                    # Convert to CamelCase following the pattern: {ModelName}Instances.ttl
+                    camel_case_name = self.to_camel_case(model_name)
+                    filename = f"{camel_case_name}Instances.ttl"
+                    
+                    # Generate ontology content for single model
+                    model_content = f"""# {model_name} Model Instance
 # Generated from: https://artificialanalysis.ai/
-# Endpoint: {params.endpoint}
+# Provider: {model.get('model_creator', {}).get('name', 'Unknown')}
 # Generated: {pd.Timestamp.now().isoformat()}
 
 """
-                
-                for model in module_model_list:
-                    model_ontology = self.generate_model_ontology(model, params.endpoint)
-                    combined_content += model_ontology + "\n"
-                
-                # Write combined ontology file
-                self.write_ontology_file(module_name, combined_content, params.endpoint)
+                    model_content += self.generate_model_ontology(model, params.endpoint)
+                    
+                    # Write individual model ontology file
+                    self.write_individual_model_file(module_name, filename, model_content)
+                    results["ontologies_generated"] = results["ontologies_generated"] + 1
                 
                 results["modules"][module_name] = len(module_model_list)
-                results["ontologies_generated"] += 1
             
             results["models_processed"] = len(models)
         
-        print(f"✅ Completed Artificial Analysis integration:")
+        print("✅ Completed Artificial Analysis integration:")
         print(f"   - Models processed: {results['models_processed']}")
         print(f"   - Ontologies generated: {results['ontologies_generated']}")
         print(f"   - Modules updated: {list(results['modules'].keys())}")
@@ -408,14 +445,4 @@ def create_artificial_analysis_tools(config: ArtificialAnalysisWorkflowConfigura
     ]
 
 
-# Import pandas for timestamp
-try:
-    import pandas as pd
-except ImportError:
-    # Fallback to datetime if pandas not available
-    from datetime import datetime
-    class pd:
-        class Timestamp:
-            @staticmethod
-            def now():
-                return datetime.now()
+
