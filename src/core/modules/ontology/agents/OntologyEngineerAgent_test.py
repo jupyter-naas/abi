@@ -1,30 +1,7 @@
-from src.core.modules.ontology.agents.EntityExtractorAgent import create_agent
-from abi.utils.JSON import extract_json_from_completion
+from src.core.modules.ontology.agents.OntologyEngineerAgent import create_agent
 from pprint import pprint
 
 agent = create_agent()
-
-# result = agent.invoke("I am working as Freelancer. My company name is FRV SERVICES")
-# data = extract_json_from_completion(result)
-# print(data)
-
-# # Check if result contains at least 2 continuants and 1 occurrent
-# continuants = [entity for entity in data if entity['type'] == 'Continuant']
-# occurrents = [entity for entity in data if entity['type'] == 'Occurrent']
-
-# assert len(continuants) >= 2, "Result should contain at least 2 continuants"
-# assert len(occurrents) >= 1, "Result should contain at least 1 occurrent"
-
-# result = agent.invoke("I am working as Freelancer. My company name is FRV SERVICES")
-# data = extract_json_from_completion(result)
-# print(data)
-
-# # Check if result contains at least 2 continuants and 1 occurrent
-# continuants = [entity for entity in data if entity['type'] == 'Continuant']
-# occurrents = [entity for entity in data if entity['type'] == 'Occurrent']
-
-# assert len(continuants) >= 2, "Result should contain at least 2 continuants"
-# assert len(occurrents) >= 1, "Result should contain at least 1 occurrent"
 
 statement = """latest news on France today:
 Major Wildfire in Southern France (Aude Region)
@@ -50,5 +27,4 @@ AP News
 """
 
 result = agent.invoke(statement)
-data = extract_json_from_completion(result)
-pprint(data)
+pprint(result)
