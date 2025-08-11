@@ -145,21 +145,21 @@ def run_startup_sequence():
     # Step 1: Check if services are available
     log("[1/4] Checking services...")
     oxigraph_ok = check_service("http://localhost:7878", "Oxigraph")
-    log(f"Oxigraph: {'✅' if oxigraph_ok else '❌'}")
+    log(f"{'✅' if oxigraph_ok else '❌'} Oxigraph")
     
     yasgui_ok = check_service("http://localhost:3000", "YasGUI")
-    log(f"YasGUI: {'✅' if yasgui_ok else '❌'}")
+    log(f"{'✅' if yasgui_ok else '❌'} YasGUI")
     
     ollama_ok = check_service("http://localhost:11434/api/tags", "Ollama")
-    log(f"Ollama: {'✅' if ollama_ok else '❌'}")
+    log(f"{'✅' if ollama_ok else '❌'} Ollama")
     
     # Check Qwen model specifically
     qwen_ok, qwen_models = check_qwen_model()
     if qwen_ok:
         model_names = [model.get('name', '') for model in qwen_models]
-        log(f"Qwen Models: ✅ {', '.join(model_names)}")
+        log(f"✅ Qwen Models: {', '.join(model_names)}")
     else:
-        log("Qwen Models: ❌ Not found")
+        log("❌ Qwen Models: Not found")
     
     # Step 2: Load knowledge graph data (only if Oxigraph is available)
     log("[2/4] Loading knowledge graph...")
