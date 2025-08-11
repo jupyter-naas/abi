@@ -1,0 +1,136 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Phi AI Agent Ontology
+# Generated on: 20250811T205710
+# Models: 5
+
+# AI Agent Definition
+abi:PhiAgent a abi:AIAgent ;
+    rdfs:label "Phi AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Phi family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: Phi-4
+abi:Phi_4 a abi:AIModelInstance ;
+    rdfs:label "Phi-4"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "phi-4"@en ;
+    abi:provider "Microsoft Azure"@en ;
+    abi:inputTokenCost 0.125 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.219 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 44.527 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.393 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.393 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 27.9 ;
+    abi:codingIndex 24.6 ;
+    abi:mathIndex 47.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:PhiAgent abi:canUtilizeModel abi:Phi_4 .
+# Model Instance: Phi-4 Multimodal Instruct
+abi:Phi_4_Multimodal_Instruct a abi:AIModelInstance ;
+    rdfs:label "Phi-4 Multimodal Instruct"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "phi-4-multimodal"@en ;
+    abi:provider "Microsoft Azure"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 22.372 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.323 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.323 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 15.1 ;
+    abi:codingIndex 12.1 ;
+    abi:mathIndex 39.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:PhiAgent abi:canUtilizeModel abi:Phi_4_Multimodal_Instruct .
+# Model Instance: Phi-3 Medium Instruct 14B
+abi:Phi_3_Medium_Instruct_14B a abi:AIModelInstance ;
+    rdfs:label "Phi-3 Medium Instruct 14B"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "phi-3-medium"@en ;
+    abi:provider "Microsoft Azure"@en ;
+    abi:inputTokenCost 0.17 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.68 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.297 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 52.62 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.395 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.395 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 12.7 ;
+    abi:codingIndex 13.4 ;
+    abi:mathIndex 23.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:PhiAgent abi:canUtilizeModel abi:Phi_3_Medium_Instruct_14B .
+# Model Instance: Phi-3 Mini Instruct 3.8B
+abi:Phi_3_Mini_Instruct_3_8B a abi:AIModelInstance ;
+    rdfs:label "Phi-3 Mini Instruct 3.8B"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "phi-3-mini"@en ;
+    abi:provider "Microsoft Azure"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 10.1 ;
+    abi:codingIndex 10.3 ;
+    abi:mathIndex 24.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:PhiAgent abi:canUtilizeModel abi:Phi_3_Mini_Instruct_3_8B .
+# Model Instance: Phi-4 Mini Instruct
+abi:Phi_4_Mini_Instruct a abi:AIModelInstance ;
+    rdfs:label "Phi-4 Mini Instruct"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "phi-4-mini"@en ;
+    abi:provider "Microsoft Azure"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 56.143 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.327 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.327 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 14.2 ;
+    abi:codingIndex 11.7 ;
+    abi:mathIndex 36.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:PhiAgent abi:canUtilizeModel abi:Phi_4_Mini_Instruct .

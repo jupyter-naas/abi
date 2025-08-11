@@ -1,0 +1,40 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Lfm AI Agent Ontology
+# Generated on: 20250811T205710
+# Models: 1
+
+# AI Agent Definition
+abi:LfmAgent a abi:AIAgent ;
+    rdfs:label "Lfm AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Lfm family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: LFM 40B
+abi:LFM_40B a abi:AIModelInstance ;
+    rdfs:label "LFM 40B"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "lfm-40b"@en ;
+    abi:provider "Liquid AI"@en ;
+    abi:inputTokenCost 0.15 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.15 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.15 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 156.255 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.148 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.148 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 9.7 ;
+    abi:codingIndex 8.3 ;
+    abi:mathIndex 25.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:LfmAgent abi:canUtilizeModel abi:LFM_40B .
