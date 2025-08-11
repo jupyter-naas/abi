@@ -6,6 +6,7 @@ Shows real system status without fluff
 
 import time
 import requests
+import os
 from datetime import datetime
 
 def check_service(url, name):
@@ -17,6 +18,20 @@ def check_service(url, name):
         return False
     except Exception:
         return False
+
+def check_api_key(key_name, key_value=None):
+    """Check if an API key is configured"""
+    if key_value is None:
+        key_value = os.environ.get(key_name)
+    
+    if not key_value or key_value.strip() == "":
+        return False
+    
+    # Basic validation - check if it looks like a valid API key format
+    if len(key_value) < 10:  # Most API keys are longer than 10 chars
+        return False
+    
+    return True
 
 
 
@@ -260,6 +275,30 @@ def run_startup_sequence():
     ollama_ok = check_service("http://localhost:11434/api/tags", "Ollama")
     log(f"{'✅' if ollama_ok else '❌'} Ollama")
     
+    # Check API keys for AI providers
+    log("")
+    log("🔑 Checking API keys...")
+    
+    openai_ok = check_api_key("OPENAI_API_KEY")
+    log(f"{'✅' if openai_ok else '❌'} OpenAI API Key")
+    
+    anthropic_ok = check_api_key("ANTHROPIC_API_KEY")
+    log(f"{'✅' if anthropic_ok else '❌'} Anthropic API Key")
+    
+    google_ok = check_api_key("GOOGLE_API_KEY")
+    log(f"{'✅' if google_ok else '❌'} Google API Key")
+    
+    perplexity_ok = check_api_key("PERPLEXITY_API_KEY")
+    log(f"{'✅' if perplexity_ok else '❌'} Perplexity API Key")
+    
+    mistral_ok = check_api_key("MISTRAL_API_KEY")
+    log(f"{'✅' if mistral_ok else '❌'} Mistral API Key")
+    
+    xai_ok = check_api_key("XAI_API_KEY")
+    log(f"{'✅' if xai_ok else '❌'} XAI API Key (Grok)")
+    
+    log("")
+    
     # Step 2: Load knowledge graph data (only if Oxigraph is available)
     log("[2/4] Loading knowledge graph...")
     if oxigraph_ok:
@@ -338,6 +377,13 @@ def run_startup_sequence():
         data_property_count_ok = False
         object_property_count_ok = False
         instance_count_ok = False
+        # Initialize API key variables
+        openai_ok = check_api_key("OPENAI_API_KEY")
+        anthropic_ok = check_api_key("ANTHROPIC_API_KEY")
+        google_ok = check_api_key("GOOGLE_API_KEY")
+        perplexity_ok = check_api_key("PERPLEXITY_API_KEY")
+        mistral_ok = check_api_key("MISTRAL_API_KEY")
+        xai_ok = check_api_key("XAI_API_KEY")
     
     # Step 4: Final status and access URLs
     log("[4/4] System status:")
@@ -355,6 +401,17 @@ def run_startup_sequence():
             log("✅ Knowledge graph loaded")
         else:
             log("⚠️  Knowledge graph partially loaded (some queries failed)")
+        
+        # Check API key status
+        api_keys_configured = sum([openai_ok, anthropic_ok, google_ok, perplexity_ok, mistral_ok, xai_ok])
+        total_api_keys = 6
+        
+        if api_keys_configured == 0:
+            log("❌ No API keys configured")
+        elif api_keys_configured == total_api_keys:
+            log("✅ All API keys configured")
+        else:
+            log(f"⚠️  {api_keys_configured}/{total_api_keys} API keys configured")
         
         log("✅ Local models available")
         log("")
