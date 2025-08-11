@@ -238,6 +238,18 @@ def create_agent(
 
     tools: list = []
 
+                    # Add Process Router Workflow (BFO AI Process Network)
+                from src.core.modules.abi.workflows.ProcessRouterWorkflow import (
+                    ProcessRouterWorkflow,
+                    ProcessRouterWorkflowConfiguration,
+                )
+                
+                process_router_config = ProcessRouterWorkflowConfiguration(
+                    oxigraph_url="http://localhost:7878"
+                )
+                process_router_workflow = ProcessRouterWorkflow(process_router_config)
+                tools += process_router_workflow.as_tools()
+
     agents: list = []
     from src.__modules__ import get_modules
     modules = get_modules()
@@ -286,6 +298,34 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="call_model"),
+        # Process Router intents (BFO AI Process Network)
+        Intent(intent_type=IntentType.TOOL, intent_value="recommend agents for process", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="process analysis", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="analyze process", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="process costs", intent_target="analyze_process_costs"),
+        Intent(intent_type=IntentType.TOOL, intent_value="cost analysis", intent_target="analyze_process_costs"),
+        Intent(intent_type=IntentType.TOOL, intent_value="list processes", intent_target="list_available_processes"),
+        Intent(intent_type=IntentType.TOOL, intent_value="available processes", intent_target="list_available_processes"),
+        # Process-specific intents that should trigger process analysis
+        Intent(intent_type=IntentType.TOOL, intent_value="business proposal", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="create business proposal", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="write business proposal", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="generate code", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="write code", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="code a project", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="create image", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="generate image", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="analyze data", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="translate", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="search", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="calculate", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="calculate an arithmetic result", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="write", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="write a report", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="create", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="help me", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="i want to", intent_target="recommend_agents_for_process"),
+        Intent(intent_type=IntentType.TOOL, intent_value="i need to", intent_target="recommend_agents_for_process"),
     ] + (
         # xAI Grok Agent intents (only add if agent is available)
         [
