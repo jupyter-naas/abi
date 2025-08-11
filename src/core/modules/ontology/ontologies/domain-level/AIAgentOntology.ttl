@@ -619,3 +619,297 @@ abi:ValidatorRole a abi:AgentRole ;
     skos:definition "A role where an AI agent validates and quality-checks outputs from other agents."@en ;
     rdfs:comment "This role ensures output quality and compliance with system requirements."@en .
 
+#################################################################
+#    BFO AI Network Design - Specific Process Classes
+#################################################################
+
+###  http://ontology.naas.ai/abi/CreativeWritingProcess
+abi:CreativeWritingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Creative Writing Process"@en ;
+    skos:definition "A process in which an AI system generates creative text content including stories, poems, creative content, and imaginative writing."@en ;
+    skos:example "Writing a short story, composing poetry, creating marketing copy, generating creative narratives."@en .
+
+###  http://ontology.naas.ai/abi/TruthSeekingAnalysisProcess
+abi:TruthSeekingAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Truth Seeking Analysis Process"@en ;
+    skos:definition "A process in which an AI system analyzes information to find and validate factual truth, challenging assumptions and exploring alternative viewpoints."@en ;
+    skos:example "Fact-checking claims, validating information sources, contrarian analysis, truth-seeking research."@en .
+
+###  http://ontology.naas.ai/abi/EthicalAnalysisProcess
+abi:EthicalAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Ethical Analysis Process"@en ;
+    skos:definition "A process in which an AI system evaluates situations, decisions, or content from an ethical perspective using constitutional AI principles."@en ;
+    skos:example "Ethical decision analysis, moral reasoning, constitutional AI evaluation, ethical content review."@en .
+
+###  http://ontology.naas.ai/abi/CodeGenerationProcess
+abi:CodeGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Code Generation Process"@en ;
+    skos:definition "A process in which an AI system generates computer code, algorithms, and software solutions based on specifications."@en ;
+    skos:example "Programming algorithms, software development, debugging code, system design implementation."@en .
+
+###  http://ontology.naas.ai/abi/RealTimeSearchProcess
+abi:RealTimeSearchProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Real Time Search Process"@en ;
+    skos:definition "A process in which an AI system searches for and retrieves current, real-time information from live data sources."@en ;
+    skos:example "Live web search, current events research, real-time data analysis, live information retrieval."@en .
+
+###  http://ontology.naas.ai/abi/MathematicalComputationProcess
+abi:MathematicalComputationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Mathematical Computation Process"@en ;
+    skos:definition "A process in which an AI system performs mathematical calculations, reasoning, and quantitative analysis."@en ;
+    skos:example "Mathematical problem solving, statistical analysis, quantitative reasoning, mathematical modeling."@en .
+
+###  http://ontology.naas.ai/abi/ImageGenerationProcess
+abi:ImageGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Image Generation Process"@en ;
+    skos:definition "A process in which an AI system generates visual images, graphics, and visual content from text descriptions."@en ;
+    skos:example "Creating images from text prompts, generating graphics, visual content creation, image synthesis."@en .
+
+###  http://ontology.naas.ai/abi/DocumentAnalysisProcess
+abi:DocumentAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Document Analysis Process"@en ;
+    skos:definition "A process in which an AI system analyzes and extracts insights from large documents and text content."@en ;
+    skos:example "Long document processing, text analysis, document summarization, content extraction."@en .
+
+###  http://ontology.naas.ai/abi/OCRDocumentProcess
+abi:OCRDocumentProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "OCR Document Process"@en ;
+    skos:definition "A process in which an AI system performs optical character recognition to extract text, images, tables, and mathematical expressions from documents with unprecedented accuracy."@en ;
+    skos:example "PDF to markdown conversion, document digitization, scientific paper processing, multilingual document analysis."@en .
+
+###  http://ontology.naas.ai/abi/TranslationProcess
+abi:TranslationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Translation Process"@en ;
+    skos:definition "A process in which an AI system translates text content between different languages."@en ;
+    skos:example "Language translation, multilingual content processing, cross-language communication."@en .
+
+###  http://ontology.naas.ai/abi/ExecutiveCommunicationProcess
+abi:ExecutiveCommunicationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Executive Communication Process"@en ;
+    skos:definition "A process in which an AI system generates professional, executive-level communication and business content."@en ;
+    skos:example "Executive summaries, business reports, professional communication, strategic planning documents."@en .
+
+#################################################################
+#    BFO AI Network Design - Process Capabilities
+#################################################################
+
+###  http://ontology.naas.ai/abi/CreativeWritingCapability
+abi:CreativeWritingCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Creative Writing Capability"@en ;
+    skos:definition "A realizable entity that can be realized by creative writing processes."@en .
+
+###  http://ontology.naas.ai/abi/TruthSeekingCapability
+abi:TruthSeekingCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Truth Seeking Capability"@en ;
+    skos:definition "A realizable entity that can be realized by truth-seeking analysis processes."@en .
+
+###  http://ontology.naas.ai/abi/EthicalReasoningCapability
+abi:EthicalReasoningCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Ethical Reasoning Capability"@en ;
+    skos:definition "A realizable entity that can be realized by ethical analysis processes."@en .
+
+###  http://ontology.naas.ai/abi/CodeGenerationCapability
+abi:CodeGenerationCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Code Generation Capability"@en ;
+    skos:definition "A realizable entity that can be realized by code generation processes."@en .
+
+###  http://ontology.naas.ai/abi/RealTimeSearchCapability
+abi:RealTimeSearchCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Real Time Search Capability"@en ;
+    skos:definition "A realizable entity that can be realized by real-time search processes."@en .
+
+###  http://ontology.naas.ai/abi/MathematicalReasoningCapability
+abi:MathematicalReasoningCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Mathematical Reasoning Capability"@en ;
+    skos:definition "A realizable entity that can be realized by mathematical computation processes."@en .
+
+###  http://ontology.naas.ai/abi/ImageGenerationCapability
+abi:ImageGenerationCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Image Generation Capability"@en ;
+    skos:definition "A realizable entity that can be realized by image generation processes."@en .
+
+###  http://ontology.naas.ai/abi/DocumentAnalysisCapability
+abi:DocumentAnalysisCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Document Analysis Capability"@en ;
+    skos:definition "A realizable entity that can be realized by document analysis processes."@en .
+
+###  http://ontology.naas.ai/abi/OCRDocumentCapability
+abi:OCRDocumentCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "OCR Document Capability"@en ;
+    skos:definition "A realizable entity that can be realized by OCR document processes with multilingual support and complex document understanding."@en .
+
+###  http://ontology.naas.ai/abi/TranslationCapability
+abi:TranslationCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Translation Capability"@en ;
+    skos:definition "A realizable entity that can be realized by translation processes."@en .
+
+###  http://ontology.naas.ai/abi/ExecutiveCommunicationCapability
+abi:ExecutiveCommunicationCapability a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Executive Communication Capability"@en ;
+    skos:definition "A realizable entity that can be realized by executive communication processes."@en .
+
+#################################################################
+#    BFO AI Network Design - Process Examples (3 Concrete Instances)
+#################################################################
+
+### Creative Writing Process Example
+abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Claude Creative Writing Process"@en ;
+    abi:realizesCapability abi:CreativeWritingCapability ;
+    abi:hasParticipant abi:ClaudeAgent ;
+    abi:hasTemporalRegion abi:CreativeWritingSession ;
+    abi:occursIn abi:AnthropicDataCenter ;
+    abi:hasQuality abi:CreativeWritingQuality ;
+    abi:isDocumentedBy abi:CreativeWritingSpecification ;
+    rdfs:comment "Claude's creative writing process with constitutional AI principles and high-quality output."@en .
+
+### Truth Seeking Analysis Process Example  
+abi:GrokTruthSeekingProcess a abi:TruthSeekingAnalysisProcess ;
+    rdfs:label "Grok Truth Seeking Analysis Process"@en ;
+    abi:realizesCapability abi:TruthSeekingCapability ;
+    abi:hasParticipant abi:GrokAgent ;
+    abi:hasTemporalRegion abi:TruthSeekingSession ;
+    abi:occursIn abi:xAIDataCenter ;
+    abi:hasQuality abi:TruthSeekingQuality ;
+    abi:isDocumentedBy abi:TruthSeekingSpecification ;
+    rdfs:comment "Grok's truth-seeking process with contrarian analysis and real-time validation."@en .
+
+### Code Generation Process Example
+abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Mistral Code Generation Process"@en ;
+    abi:realizesCapability abi:CodeGenerationCapability ;
+    abi:hasParticipant abi:MistralAgent ;
+    abi:hasTemporalRegion abi:CodeGenerationSession ;
+    abi:occursIn abi:MistralDataCenter ;
+    abi:hasQuality abi:CodeGenerationQuality ;
+    abi:isDocumentedBy abi:CodeGenerationSpecification ;
+    rdfs:comment "Mistral's code generation process with mathematical reasoning and technical expertise."@en .
+
+### OCR Document Process Example
+abi:MistralOCRDocumentProcess a abi:OCRDocumentProcess ;
+    rdfs:label "Mistral OCR Document Process"@en ;
+    abi:realizesCapability abi:OCRDocumentCapability ;
+    abi:hasParticipant abi:MistralAgent ;
+    abi:hasTemporalRegion abi:OCRDocumentSession ;
+    abi:occursIn abi:MistralDataCenter ;
+    abi:hasQuality abi:OCRDocumentQuality ;
+    abi:isDocumentedBy abi:OCRDocumentSpecification ;
+    rdfs:comment "Mistral's OCR document process with state-of-the-art document understanding and multilingual support."@en .
+
+#################################################################
+#    Supporting Instances for Process Examples
+#################################################################
+
+### Temporal Regions
+abi:CreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Creative Writing Session"@en ;
+    rdfs:comment "Temporal region during which creative writing occurs."@en .
+
+abi:TruthSeekingSession a abi:InferenceSession ;
+    rdfs:label "Truth Seeking Session"@en ;
+    rdfs:comment "Temporal region during which truth-seeking analysis occurs."@en .
+
+abi:CodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Code Generation Session"@en ;
+    rdfs:comment "Temporal region during which code generation occurs."@en .
+
+abi:OCRDocumentSession a abi:InferenceSession ;
+    rdfs:label "OCR Document Session"@en ;
+    rdfs:comment "Temporal region during which OCR document processing occurs."@en .
+
+### Spatial Regions
+abi:AnthropicDataCenter a abi:DataCenterLocation ;
+    rdfs:label "Anthropic Data Center"@en ;
+    abi:locationName "Anthropic US West Data Center" ;
+    rdfs:comment "Spatial region where Anthropic's AI systems are located."@en .
+
+abi:xAIDataCenter a abi:DataCenterLocation ;
+    rdfs:label "xAI Data Center"@en ;
+    abi:locationName "xAI US Data Center" ;
+    rdfs:comment "Spatial region where xAI's AI systems are located."@en .
+
+abi:MistralDataCenter a abi:DataCenterLocation ;
+    rdfs:label "Mistral Data Center"@en ;
+    abi:locationName "Mistral Europe Data Center" ;
+    rdfs:comment "Spatial region where Mistral's AI systems are located."@en .
+
+### Qualities
+abi:CreativeWritingQuality a abi:ModelAccuracy ;
+    rdfs:label "Creative Writing Quality"@en ;
+    abi:accuracyValue "0.95"^^xsd:decimal ;
+    rdfs:comment "Quality measure for creative writing output."@en .
+
+abi:TruthSeekingQuality a abi:ModelAccuracy ;
+    rdfs:label "Truth Seeking Quality"@en ;
+    abi:accuracyValue "0.73"^^xsd:decimal ;
+    rdfs:comment "Quality measure for truth-seeking analysis."@en .
+
+abi:CodeGenerationQuality a abi:ModelAccuracy ;
+    rdfs:label "Code Generation Quality"@en ;
+    abi:accuracyValue "0.89"^^xsd:decimal ;
+    rdfs:comment "Quality measure for code generation."@en .
+
+abi:OCRDocumentQuality a abi:ModelAccuracy ;
+    rdfs:label "OCR Document Quality"@en ;
+    abi:accuracyValue "0.9489"^^xsd:decimal ;
+    rdfs:comment "Quality measure for OCR document processing with 94.89% overall accuracy."@en .
+
+### Information Content Entities
+abi:CreativeWritingSpecification a abi:ModelSpecification ;
+    rdfs:label "Creative Writing Process Specification"@en ;
+    abi:specificationContent "Creative writing process with constitutional AI principles, high-quality narrative generation, and ethical content creation."@en ;
+    rdfs:comment "Specification for creative writing process capabilities."@en .
+
+abi:TruthSeekingSpecification a abi:ModelSpecification ;
+    rdfs:label "Truth Seeking Process Specification"@en ;
+    abi:specificationContent "Truth-seeking process with contrarian analysis, real-time validation, assumption challenging, and factual verification."@en ;
+    rdfs:comment "Specification for truth-seeking process capabilities."@en .
+
+abi:CodeGenerationSpecification a abi:ModelSpecification ;
+    rdfs:label "Code Generation Process Specification"@en ;
+    abi:specificationContent "Code generation process with mathematical reasoning, technical expertise, algorithm development, and software engineering."@en ;
+    rdfs:comment "Specification for code generation process capabilities."@en .
+
+abi:OCRDocumentSpecification a abi:ModelSpecification ;
+    rdfs:label "OCR Document Process Specification"@en ;
+    abi:specificationContent "OCR document process with state-of-the-art document understanding, multilingual support (99.02% fuzzy match), complex document elements (tables, math, figures), and 2000 pages/minute processing speed."@en ;
+    rdfs:comment "Specification for OCR document process capabilities."@en .
+
+### AI Agent Instances (Material Entities)
+abi:ClaudeAgent a abi:AIAgent ;
+    rdfs:label "Claude Agent"@en ;
+    abi:hasCapability abi:CreativeWritingCapability, abi:EthicalReasoningCapability ;
+    rdfs:comment "Claude AI agent with creative writing and ethical reasoning capabilities."@en .
+
+abi:GrokAgent a abi:AIAgent ;
+    rdfs:label "Grok Agent"@en ;
+    abi:hasCapability abi:TruthSeekingCapability, abi:MathematicalReasoningCapability ;
+    rdfs:comment "Grok AI agent with truth-seeking and mathematical reasoning capabilities."@en .
+
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral Agent"@en ;
+    abi:hasCapability abi:CodeGenerationCapability, abi:MathematicalReasoningCapability ;
+    rdfs:comment "Mistral AI agent with code generation and mathematical reasoning capabilities."@en .
+

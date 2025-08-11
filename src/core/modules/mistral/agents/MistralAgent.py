@@ -58,6 +58,15 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=0)
     
     tools: list = []
+    
+    # Add Mistral OCR Workflow
+    from src.core.modules.mistral.workflows.MistralOCRWorkflow import (
+        create_mistral_ocr_workflow
+    )
+    
+    mistral_ocr_workflow = create_mistral_ocr_workflow()
+    tools += mistral_ocr_workflow.as_tools()
+    
     agents: list = []
     intents: list = [
         Intent(
@@ -68,7 +77,33 @@ def create_agent(
         Intent(
             intent_value="what can you do",
             intent_type=IntentType.RAW,
-            intent_target="Je peux vous aider avec la génération de code, le débogage, les calculs mathématiques, le raisonnement logique, la documentation technique et la communication multilingue.",
+            intent_target="Je peux vous aider avec la génération de code, le débogage, les calculs mathématiques, le raisonnement logique, la documentation technique, la communication multilingue et l'OCR de documents.",
+        ),
+        # OCR-related intents
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="ocr document",
+            intent_target="mistral_ocr_process_document"
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="process document",
+            intent_target="mistral_ocr_process_document"
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="extract text from document",
+            intent_target="mistral_ocr_process_document"
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="convert pdf to markdown",
+            intent_target="mistral_ocr_process_document"
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="extract tables from document",
+            intent_target="mistral_ocr_process_document"
         ),
     ]
     return MistralAgent(
