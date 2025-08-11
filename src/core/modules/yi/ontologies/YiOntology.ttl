@@ -1,0 +1,40 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Yi AI Agent Ontology
+# Generated on: 20250811T214515
+# Models: 1
+
+# AI Agent Definition
+abi:YiAgent a abi:AIAgent ;
+    rdfs:label "Yi AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Yi family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: Yi-Large
+abi:Yi_Large a abi:AIModelInstance ;
+    rdfs:label "Yi-Large"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "yi-large"@en ;
+    abi:provider "01.AI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 16.2 ;
+    abi:codingIndex 14.8 ;
+    abi:mathIndex 31.4 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:YiAgent abi:canUtilizeModel abi:Yi_Large .

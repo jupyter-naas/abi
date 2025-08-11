@@ -1,0 +1,88 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Minimax AI Agent Ontology
+# Generated on: 20250811T214515
+# Models: 3
+
+# AI Agent Definition
+abi:MinimaxAgent a abi:AIAgent ;
+    rdfs:label "Minimax AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Minimax family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: MiniMax-Text-01
+abi:MiniMax_Text_01 a abi:AIModelInstance ;
+    rdfs:label "MiniMax-Text-01"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "minimax-text-01"@en ;
+    abi:provider "MiniMax"@en ;
+    abi:inputTokenCost 0.2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 1.1 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.425 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 34.064 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.595 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.595 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 29.1 ;
+    abi:codingIndex 24.8 ;
+    abi:mathIndex 44.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:MinimaxAgent abi:canUtilizeModel abi:MiniMax_Text_01 .
+# Model Instance: MiniMax M1 80k
+abi:MiniMax_M1_80k a abi:AIModelInstance ;
+    rdfs:label "MiniMax M1 80k"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "minimax-m1-80k"@en ;
+    abi:provider "MiniMax"@en ;
+    abi:inputTokenCost 0.4 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 2.1 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.825 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 53.1 ;
+    abi:codingIndex 54.3 ;
+    abi:mathIndex 91.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:MinimaxAgent abi:canUtilizeModel abi:MiniMax_M1_80k .
+# Model Instance: MiniMax M1 40k
+abi:MiniMax_M1_40k a abi:AIModelInstance ;
+    rdfs:label "MiniMax M1 40k"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "minimax-m1-40k"@en ;
+    abi:provider "MiniMax"@en ;
+    abi:inputTokenCost 0.4 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 2.1 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.825 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 51.1 ;
+    abi:codingIndex 51.8 ;
+    abi:mathIndex 89.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:MinimaxAgent abi:canUtilizeModel abi:MiniMax_M1_40k .
