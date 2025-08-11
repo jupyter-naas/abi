@@ -120,14 +120,38 @@ def get_triple_count():
     except Exception:
         return 0
 
+def get_type_statement_count():
+    """Get number of type statements"""
+    try:
+        query = """
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        SELECT (COUNT(*) AS ?count) WHERE {
+            ?s a ?o .
+        }
+        """
+        response = requests.post(
+            "http://localhost:7878/query",
+            data=query,
+            headers={'Content-Type': 'application/sparql-query'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return int(result['results']['bindings'][0]['count']['value'])
+        return 0
+    except Exception:
+        return 0
+
 def get_class_count():
     """Get number of classes"""
     try:
         query = """
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
         SELECT (COUNT(DISTINCT ?class) AS ?count) WHERE {
-            ?class a rdfs:Class .
+            ?class a ?type .
+            FILTER(?type IN (rdfs:Class, owl:Class))
         }
         """
         response = requests.post(
@@ -245,6 +269,9 @@ def run_startup_sequence():
         triple_count = get_triple_count()
         log(f"ℹ️ Total Triples: {triple_count:,}")
         
+        type_statements = get_type_statement_count()
+        log(f"ℹ️ Type Statements: {type_statements:,}")
+        
         class_count = get_class_count()
         log(f"ℹ️ Classes: {class_count:,}")
         
@@ -252,7 +279,7 @@ def run_startup_sequence():
         log(f"ℹ️ Data Properties: {data_property_count:,}")
         
         object_property_count = get_object_property_count()
-        log(f"ℹ️ Object Properties / Relations: {object_property_count:,}")
+        log(f"ℹ️ Object Properties: {object_property_count:,}")
         
         instance_count = get_instance_count()
         log(f"ℹ️ Instances: {instance_count:,}")
