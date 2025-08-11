@@ -8,7 +8,7 @@ from typing import Any, Dict
 from enum import Enum
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -61,7 +61,7 @@ class ArtificialAnalysisWorkflow(Workflow):
             return {"status": "error", "message": "Failed to fetch data from API"}
         
         # Save raw API data as JSON with UTC timestamp
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
         filename = f"{timestamp}_{parameters.endpoint}_data.json"
         
         # Create storage directory
@@ -120,7 +120,7 @@ class ArtificialAnalysisWorkflow(Workflow):
                 "metadata": {
                     "endpoint": endpoint,
                     "total_models": models_count,
-                    "fetched_at": datetime.utcnow().isoformat(),
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
                     "api_url": url
                 }
             }
