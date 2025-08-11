@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage
 from langgraph.types import Command
 from pydantic import SecretStr
 from src import secret
@@ -541,7 +541,7 @@ def create_agent(
     # get_object_properties_from_class_workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration())
     # tools += get_object_properties_from_class_workflow.as_tools()
 
-    return EntityExtractorAgent(
+    return OntologyEngineerAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -552,7 +552,7 @@ def create_agent(
         configuration=agent_configuration,
     )
 
-class EntityExtractorAgent(Agent):
+class OntologyEngineerAgent(Agent):
     def __init__(
         self,
         name: str,

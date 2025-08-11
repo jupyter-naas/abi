@@ -1,5 +1,4 @@
 from src.core.modules.ontology.agents.EntityExtractorAgent import create_agent
-from abi.utils.JSON import extract_json_from_completion
 from pprint import pprint
 
 agent = create_agent()

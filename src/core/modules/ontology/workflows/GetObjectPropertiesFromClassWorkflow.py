@@ -8,7 +8,6 @@ from typing import Annotated
 from enum import Enum
 from rdflib import Graph, URIRef, RDF, OWL, RDFS
 import pydash
-from abi.utils.Graph import URI_REGEX
 
 
 # Ontology operators mapping
@@ -52,12 +51,12 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         self._ = pydash
         
         # Initialize data structures like in generate_docs
-        self.onto_tuples = {}
-        self.onto_classes = {}
-        self.onto = {}
+        self.onto_tuples: dict = {}
+        self.onto_classes: dict = {}
+        self.onto: dict = {}
         
         # Create basic mapping for common properties
-        self.mapping = {
+        self.mapping: dict = {
             "http://www.w3.org/2000/01/rdf-schema#label": "label",
             "http://www.w3.org/2000/01/rdf-schema#domain": "domain",
             "http://www.w3.org/2000/01/rdf-schema#range": "range",
@@ -265,7 +264,7 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         
         class_uri = URIRef(parameters.class_uri)
             
-        object_properties = []
+        object_properties: list[dict] = []
         
         # Query for object properties with domain class_uri or union containing it
         for s, p, o in self.graph.triples((None, RDF.type, OWL.ObjectProperty)):
@@ -277,12 +276,10 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
             }
             
             # Collect all domains
-            for domain_uri in self.graph.objects(s, RDFS.domain):
-                property_data["domain"].append(str(domain_uri))
+            property_data["domain"] = [str(domain_uri) for domain_uri in self.graph.objects(s, RDFS.domain)]
             
-            # Collect all ranges
-            for range_uri in self.graph.objects(s, RDFS.range):
-                property_data["range"].append(str(range_uri))
+            # Collect all ranges  
+            property_data["range"] = [str(range_uri) for range_uri in self.graph.objects(s, RDFS.range)]
             
             # Apply sophisticated mapping logic from generate_docs
             property_data = self.map_ranges_domains(property_data)
@@ -337,6 +334,6 @@ if __name__ == "__main__":
     from abi import logger
 
     workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration())
-    class_uri = "http://purl.obolibrary.org/obo/BFO_0000030"
+    class_uri = "http://purl.obolibrary.org/obo/BFO_0000015"
     result = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
     logger.info(result)
