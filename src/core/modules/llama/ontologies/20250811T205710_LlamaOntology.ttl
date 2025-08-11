@@ -5,7 +5,7 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
 
 # Llama AI Agent Ontology
-# Generated on: 20250811T204550
+# Generated on: 20250811T205710
 # Models: 28
 
 # AI Agent Definition
@@ -20,20 +20,21 @@ abi:Llama_3_3_Instruct_70B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-3-instruct-70b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.58 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.64 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.58 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 115.566 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.391 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.391 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 31.2 ;
+    abi:codingIndex 27.4 ;
+    abi:mathIndex 53.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_3_Instruct_70B .
@@ -43,20 +44,21 @@ abi:Llama_3_1_Instruct_405B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-1-instruct-405b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3.25 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 3.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.25 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 35.369 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.627 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.627 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 29.3 ;
+    abi:codingIndex 30.2 ;
+    abi:mathIndex 45.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Instruct_405B .
@@ -66,20 +68,21 @@ abi:Llama_3_2_Instruct_90B_Vision a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-2-instruct-90b-vision"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.535 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.56 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.541 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 34.312 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.311 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.311 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 21.9 ;
+    abi:codingIndex 22.7 ;
+    abi:mathIndex 34 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_2_Instruct_90B_Vision .
@@ -89,20 +92,21 @@ abi:Llama_3_2_Instruct_11B_Vision a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-2-instruct-11b-vision"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.105 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.105 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.105 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 66.1 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.437 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.437 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 13.2 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:mathIndex 30.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_2_Instruct_11B_Vision .
@@ -112,20 +116,21 @@ abi:Llama_4_Maverick a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-4-maverick"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.23 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.85 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.386 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 174.936 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.3 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.3 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 41.7 ;
+    abi:codingIndex 36.4 ;
+    abi:mathIndex 63.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_4_Maverick .
@@ -135,20 +140,21 @@ abi:Llama_4_Scout a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-4-scout"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.2 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 129.896 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.326 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.326 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 33.1 ;
+    abi:codingIndex 23.5 ;
+    abi:mathIndex 56.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_4_Scout .
@@ -158,20 +164,21 @@ abi:Llama_3_1_Nemotron_Instruct_70B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-1-nemotron-instruct-70b"@en ;
     abi:provider "NVIDIA"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.12 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.165 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 40.589 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.248 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.248 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 26 ;
+    abi:codingIndex 20.1 ;
+    abi:mathIndex 49 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Nemotron_Instruct_70B .
@@ -181,20 +188,21 @@ abi:Llama_3_1_Nemotron_Ultra_253B_v1_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-1-nemotron-ultra-253b-v1-reasoning"@en ;
     abi:provider "NVIDIA"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.6 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.9 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 41.753 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.669 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 48.57 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 46.4 ;
+    abi:codingIndex 49.4 ;
+    abi:mathIndex 84.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Nemotron_Ultra_253B_v1_Reasoning .
@@ -208,6 +216,7 @@ abi:Llama_Nemotron_Super_49B_v1_5_Reasoning a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -215,9 +224,9 @@ abi:Llama_Nemotron_Super_49B_v1_5_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 52.4 ;
+    abi:codingIndex 54.2 ;
+    abi:mathIndex 92.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_Nemotron_Super_49B_v1_5_Reasoning .
@@ -231,6 +240,7 @@ abi:Llama_3_3_Nemotron_Super_49B_v1_Reasoning a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -238,9 +248,9 @@ abi:Llama_3_3_Nemotron_Super_49B_v1_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 40.5 ;
+    abi:codingIndex 28 ;
+    abi:mathIndex 77.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_3_Nemotron_Super_49B_v1_Reasoning .
@@ -254,6 +264,7 @@ abi:Llama_3_3_Nemotron_Super_49B_v1 a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -261,9 +272,9 @@ abi:Llama_3_3_Nemotron_Super_49B_v1 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 28.1 ;
+    abi:codingIndex 25.5 ;
+    abi:mathIndex 48.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_3_Nemotron_Super_49B_v1 .
@@ -277,6 +288,7 @@ abi:Llama_3_1_Nemotron_Nano_4B_v1_1_Reasoning a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -284,9 +296,9 @@ abi:Llama_3_1_Nemotron_Nano_4B_v1_1_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 34.1 ;
+    abi:codingIndex 29.7 ;
+    abi:mathIndex 82.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Nemotron_Nano_4B_v1_1_Reasoning .
@@ -300,6 +312,7 @@ abi:Llama_Nemotron_Super_49B_v1_5 a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -307,9 +320,9 @@ abi:Llama_Nemotron_Super_49B_v1_5 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 26.9 ;
+    abi:codingIndex 26.4 ;
+    abi:mathIndex 45.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_Nemotron_Super_49B_v1_5 .
@@ -323,6 +336,7 @@ abi:DeepHermes_3_Llama_3_1_8B_Preview a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -330,9 +344,9 @@ abi:DeepHermes_3_Llama_3_1_8B_Preview a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 4 ;
+    abi:codingIndex 8.8 ;
+    abi:mathIndex 10.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:DeepHermes_3_Llama_3_1_8B_Preview .
@@ -342,20 +356,21 @@ abi:Llama_3_1_Instruct_70B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-1-instruct-70b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.76 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.76 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.76 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 53.371 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.372 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.372 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 24 ;
+    abi:codingIndex 25 ;
+    abi:mathIndex 41.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Instruct_70B .
@@ -365,20 +380,21 @@ abi:Llama_3_1_Instruct_8B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-1-instruct-8b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.1 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 222.974 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.298 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.298 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 19 ;
+    abi:codingIndex 12.4 ;
+    abi:mathIndex 29.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Instruct_8B .
@@ -388,20 +404,21 @@ abi:Llama_3_2_Instruct_3B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-2-instruct-3b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.03 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.05 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.035 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 156.876 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.472 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.472 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 7.4 ;
+    abi:codingIndex 6.7 ;
+    abi:mathIndex 27.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_2_Instruct_3B .
@@ -411,20 +428,21 @@ abi:Llama_3_Instruct_70B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-instruct-70b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.725 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.84 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.84 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 61.789 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.392 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.392 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 15.7 ;
+    abi:codingIndex 19.3 ;
+    abi:mathIndex 24.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_Instruct_70B .
@@ -434,20 +452,21 @@ abi:Llama_3_Instruct_8B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-instruct-8b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.05 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.08 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.07 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 104.16 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.356 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.356 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 9.5 ;
+    abi:codingIndex 10.8 ;
+    abi:mathIndex 25 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_Instruct_8B .
@@ -457,20 +476,21 @@ abi:Llama_3_2_Instruct_1B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-3-2-instruct-1b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.053 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.055 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.053 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 215.93 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.337 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.337 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 1 ;
+    abi:codingIndex 1.8 ;
+    abi:mathIndex 7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_2_Instruct_1B .
@@ -484,6 +504,7 @@ abi:Llama_2_Chat_70B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -491,9 +512,9 @@ abi:Llama_2_Chat_70B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 7.9 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:mathIndex 16.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_2_Chat_70B .
@@ -503,20 +524,21 @@ abi:Llama_2_Chat_7B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "llama-2-chat-7b"@en ;
     abi:provider "Meta"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.05 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.1 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 132.692 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.452 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.452 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 13.9 ;
+    abi:codingIndex 0.1 ;
+    abi:mathIndex 2.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_2_Chat_7B .
@@ -530,6 +552,7 @@ abi:Llama_65B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -537,7 +560,7 @@ abi:Llama_65B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 1 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -553,6 +576,7 @@ abi:Llama_2_Chat_13B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -560,9 +584,9 @@ abi:Llama_2_Chat_13B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 7.9 ;
+    abi:codingIndex 10.8 ;
+    abi:mathIndex 17.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_2_Chat_13B .
@@ -572,20 +596,21 @@ abi:DeepSeek_R1_Distill_Llama_70B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1-distill-llama-70b"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.8 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 76.583 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.472 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 26.587 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 37.4 ;
+    abi:codingIndex 28.9 ;
+    abi:mathIndex 80.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Llama_70B .
@@ -595,20 +620,21 @@ abi:DeepSeek_R1_Distill_Llama_8B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1-distill-llama-8b"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.04 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.04 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.04 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 56.162 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.802 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 36.414 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 22.6 ;
+    abi:codingIndex 17.6 ;
+    abi:mathIndex 59.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Llama_8B .
@@ -622,6 +648,7 @@ abi:Llama_3_1_Tulu3_405B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -629,9 +656,9 @@ abi:Llama_3_1_Tulu3_405B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 28.7 ;
+    abi:codingIndex 29.6 ;
+    abi:mathIndex 45.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Llama_3_1_Tulu3_405B .
@@ -641,20 +668,21 @@ abi:Hermes_3_Llama_3_1_70B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "hermes-3-llama-3-1-70b"@en ;
     abi:provider "Nous Research"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.28 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.145 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 36.591 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.288 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.288 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 17.5 ;
+    abi:codingIndex 21 ;
+    abi:mathIndex 28.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:LlamaAgent abi:canUtilizeModel abi:Hermes_3_Llama_3_1_70B .

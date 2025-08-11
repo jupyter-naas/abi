@@ -5,7 +5,7 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
 
 # Deepseek AI Agent Ontology
-# Generated on: 20250811T204550
+# Generated on: 20250811T205710
 # Models: 14
 
 # AI Agent Definition
@@ -20,20 +20,21 @@ abi:DeepSeek_R1_0528_Qwen3_8B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1-qwen3-8b"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.055 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.095 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.065 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 93.003 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.676 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 22.181 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 41.5 ;
+    abi:codingIndex 35.9 ;
+    abi:mathIndex 79.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_0528_Qwen3_8B .
@@ -43,20 +44,21 @@ abi:DeepSeek_R1_0528_May_25 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.55 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.19 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.96 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 21.393 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 3.424 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 96.911 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 58.7 ;
+    abi:codingIndex 58.7 ;
+    abi:mathIndex 93.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_0528_May_25 .
@@ -66,20 +68,21 @@ abi:DeepSeek_R1_Distill_Qwen_32B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1-distill-qwen-32b"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.3 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 32.546 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.639 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 62.09 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 41.2 ;
+    abi:codingIndex 32.3 ;
+    abi:mathIndex 81.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Qwen_32B .
@@ -89,10 +92,11 @@ abi:DeepSeek_V3_Dec_24 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-v3"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.27 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.477 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -100,9 +104,9 @@ abi:DeepSeek_V3_Dec_24 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 34.6 ;
+    abi:codingIndex 35.6 ;
+    abi:mathIndex 57 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V3_Dec_24 .
@@ -112,20 +116,21 @@ abi:DeepSeek_R1_Distill_Qwen_14B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1-distill-qwen-14b"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.2 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.2 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 84.922 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.898 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 24.449 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 38.2 ;
+    abi:codingIndex 30.7 ;
+    abi:mathIndex 80.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Qwen_14B .
@@ -135,10 +140,11 @@ abi:DeepSeek_V2_5_Dec_24 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-v2-5"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.14 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.28 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -146,7 +152,7 @@ abi:DeepSeek_V2_5_Dec_24 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 23.9 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -158,10 +164,11 @@ abi:DeepSeek_Coder_V2 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-coder-v2"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.14 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.28 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -169,7 +176,7 @@ abi:DeepSeek_Coder_V2 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 17.3 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -185,6 +192,7 @@ abi:DeepSeek_LLM_67B_Chat_V1 a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -192,7 +200,7 @@ abi:DeepSeek_LLM_67B_Chat_V1 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 7.9 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -208,6 +216,7 @@ abi:DeepSeek_R1_Distill_Qwen_1_5B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -215,9 +224,9 @@ abi:DeepSeek_R1_Distill_Qwen_1_5B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 7.1 ;
+    abi:codingIndex 6.8 ;
+    abi:mathIndex 43.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Qwen_1_5B .
@@ -227,10 +236,11 @@ abi:DeepSeek_R1_Jan_25 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-r1-0120"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 1.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 3 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 2 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -238,9 +248,9 @@ abi:DeepSeek_R1_Jan_25 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 49.9 ;
+    abi:codingIndex 48.7 ;
+    abi:mathIndex 82.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Jan_25 .
@@ -250,20 +260,21 @@ abi:DeepSeek_V3_0324_Mar_25 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-v3-0324"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.27 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.477 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 22.624 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 3.3 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 3.3 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 44 ;
+    abi:codingIndex 38.1 ;
+    abi:mathIndex 73.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V3_0324_Mar_25 .
@@ -273,10 +284,11 @@ abi:DeepSeek_V2_5 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-v2-5-sep-2024"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.14 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.28 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -284,7 +296,7 @@ abi:DeepSeek_V2_5 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 23.3 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -300,6 +312,7 @@ abi:DeepSeek_Coder_V2_Lite_Instruct a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -307,8 +320,8 @@ abi:DeepSeek_Coder_V2_Lite_Instruct a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
+    abi:intelligenceIndex 8.4 ;
+    abi:codingIndex 14.8 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
@@ -319,10 +332,11 @@ abi:DeepSeek_V2_Chat a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deepseek-v2"@en ;
     abi:provider "DeepSeek"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.14 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.28 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -330,7 +344,7 @@ abi:DeepSeek_V2_Chat a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 11.1 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .

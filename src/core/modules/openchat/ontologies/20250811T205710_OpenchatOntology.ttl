@@ -1,0 +1,40 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Openchat AI Agent Ontology
+# Generated on: 20250811T205710
+# Models: 1
+
+# AI Agent Definition
+abi:OpenchatAgent a abi:AIAgent ;
+    rdfs:label "Openchat AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Openchat family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: OpenChat 3.5 (1210)
+abi:OpenChat_3_5_1210 a abi:AIModelInstance ;
+    rdfs:label "OpenChat 3.5 (1210)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "openchat-35"@en ;
+    abi:provider "OpenChat"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 7.7 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 15.4 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:OpenchatAgent abi:canUtilizeModel abi:OpenChat_3_5_1210 .
