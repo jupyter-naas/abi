@@ -679,12 +679,7 @@ abi:DocumentAnalysisProcess a owl:Class ;
     skos:definition "A process in which an AI system analyzes and extracts insights from large documents and text content."@en ;
     skos:example "Long document processing, text analysis, document summarization, content extraction."@en .
 
-###  http://ontology.naas.ai/abi/OCRDocumentProcess
-abi:OCRDocumentProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "OCR Document Process"@en ;
-    skos:definition "A process in which an AI system performs optical character recognition to extract text, images, tables, and mathematical expressions from documents with unprecedented accuracy."@en ;
-    skos:example "PDF to markdown conversion, document digitization, scientific paper processing, multilingual document analysis."@en .
+
 
 ###  http://ontology.naas.ai/abi/TranslationProcess
 abi:TranslationProcess a owl:Class ;
@@ -752,11 +747,7 @@ abi:DocumentAnalysisCapability a owl:Class ;
     rdfs:label "Document Analysis Capability"@en ;
     skos:definition "A realizable entity that can be realized by document analysis processes."@en .
 
-###  http://ontology.naas.ai/abi/OCRDocumentCapability
-abi:OCRDocumentCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "OCR Document Capability"@en ;
-    skos:definition "A realizable entity that can be realized by OCR document processes with multilingual support and complex document understanding."@en .
+
 
 ###  http://ontology.naas.ai/abi/TranslationCapability
 abi:TranslationCapability a owl:Class ;
@@ -807,16 +798,7 @@ abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
     abi:isDocumentedBy abi:CodeGenerationSpecification ;
     rdfs:comment "Mistral's code generation process with mathematical reasoning and technical expertise."@en .
 
-### OCR Document Process Example
-abi:MistralOCRDocumentProcess a abi:OCRDocumentProcess ;
-    rdfs:label "Mistral OCR Document Process"@en ;
-    abi:realizesCapability abi:OCRDocumentCapability ;
-    abi:hasParticipant abi:MistralAgent ;
-    abi:hasTemporalRegion abi:OCRDocumentSession ;
-    abi:occursIn abi:MistralDataCenter ;
-    abi:hasQuality abi:OCRDocumentQuality ;
-    abi:isDocumentedBy abi:OCRDocumentSpecification ;
-    rdfs:comment "Mistral's OCR document process with state-of-the-art document understanding and multilingual support."@en .
+
 
 #################################################################
 #    Supporting Instances for Process Examples
@@ -835,9 +817,7 @@ abi:CodeGenerationSession a abi:InferenceSession ;
     rdfs:label "Code Generation Session"@en ;
     rdfs:comment "Temporal region during which code generation occurs."@en .
 
-abi:OCRDocumentSession a abi:InferenceSession ;
-    rdfs:label "OCR Document Session"@en ;
-    rdfs:comment "Temporal region during which OCR document processing occurs."@en .
+
 
 ### Spatial Regions
 abi:AnthropicDataCenter a abi:DataCenterLocation ;
@@ -871,10 +851,7 @@ abi:CodeGenerationQuality a abi:ModelAccuracy ;
     abi:accuracyValue "0.89"^^xsd:decimal ;
     rdfs:comment "Quality measure for code generation."@en .
 
-abi:OCRDocumentQuality a abi:ModelAccuracy ;
-    rdfs:label "OCR Document Quality"@en ;
-    abi:accuracyValue "0.9489"^^xsd:decimal ;
-    rdfs:comment "Quality measure for OCR document processing with 94.89% overall accuracy."@en .
+
 
 ### Information Content Entities
 abi:CreativeWritingSpecification a abi:ModelSpecification ;
@@ -892,10 +869,7 @@ abi:CodeGenerationSpecification a abi:ModelSpecification ;
     abi:specificationContent "Code generation process with mathematical reasoning, technical expertise, algorithm development, and software engineering."@en ;
     rdfs:comment "Specification for code generation process capabilities."@en .
 
-abi:OCRDocumentSpecification a abi:ModelSpecification ;
-    rdfs:label "OCR Document Process Specification"@en ;
-    abi:specificationContent "OCR document process with state-of-the-art document understanding, multilingual support (99.02% fuzzy match), complex document elements (tables, math, figures), and 2000 pages/minute processing speed."@en ;
-    rdfs:comment "Specification for OCR document process capabilities."@en .
+
 
 ### AI Agent Instances (Material Entities)
 abi:ClaudeAgent a abi:AIAgent ;
