@@ -98,6 +98,18 @@ mistral:MistralDebugAgent a abi:AIAgent ;
 mistral:MistralComplianceAgent a abi:AIAgent ;
     rdfs:label "Mistral Compliance Agent"@en ;
     abi:isAIAgentOf mistral:EuropeanComplianceSubsystem ;
+    abi:hasCapability abi:OCRDocumentCapability ;
+    rdfs:comment "Specialized agent for European regulatory compliance and GDPR adherence with OCR capabilities."@en .
+
+### OCR Document Processing Agent
+mistral:MistralOCRAgent a abi:AIAgent ;
+    rdfs:label "Mistral OCR Agent"@en ;
+    abi:isAIAgentOf mistral:TechnicalExcellenceSubsystem ;
+    abi:hasSpecializedRole abi:SpecializedTaskExecutorRole ;
+    abi:collaborationPriority "8" ;
+    abi:collaboratesWith mistral:MistralTechnicalAgent, mistral:MistralAnalysisAgent ;
+    abi:hasCapability abi:OCRDocumentCapability, abi:DocumentAnalysisCapability ;
+    rdfs:comment "Specialized agent for OCR document processing with state-of-the-art document understanding."@en .
     abi:hasSpecializedRole abi:ValidatorRole ;
     abi:collaborationPriority "8" ;
     abi:collaboratesWith mistral:MistralTechnicalAgent, mistral:MistralGDPRAgent ;
