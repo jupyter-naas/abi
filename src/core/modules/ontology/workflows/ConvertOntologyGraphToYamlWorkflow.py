@@ -168,7 +168,7 @@ class ConvertOntologyGraphToYamlWorkflow(Workflow):
                 message = (
                     f"✅ Ontology '{onto_label}' ({ontology_id}) successfully updated."
                 )
-        logger.debug(message)
+        logger.info(message)
         if ontology_id is None:
             raise ValueError("Failed to create or update ontology")
         return ontology_id
