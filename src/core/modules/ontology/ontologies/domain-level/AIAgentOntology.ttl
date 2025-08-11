@@ -321,23 +321,7 @@ abi:TokenCapacity a owl:Class ;
     rdfs:label "Token Capacity"@en ;
     skos:definition "A quality that inheres in an AI model and represents maximum token processing capacity."@en .
 
-###  http://ontology.naas.ai/abi/TextGenerationCapability
-abi:TextGenerationCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Text Generation Capability"@en ;
-    skos:definition "A realizable entity that can be realized by text generation processes."@en .
 
-###  http://ontology.naas.ai/abi/ImageAnalysisCapability
-abi:ImageAnalysisCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Image Analysis Capability"@en ;
-    skos:definition "A realizable entity that can be realized by image analysis processes."@en .
-
-###  http://ontology.naas.ai/abi/CodeGenerationCapability
-abi:CodeGenerationCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Code Generation Capability"@en ;
-    skos:definition "A realizable entity that can be realized by code generation processes."@en .
 
 ###  http://ontology.naas.ai/abi/TextGenerationProcess
 abi:TextGenerationProcess a owl:Class ;
@@ -410,21 +394,21 @@ abi:AIModelInstance rdfs:subClassOf abi:AISystem ;
 abi:TextGenerationProcess rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:realizesCapability ;
-    owl:someValuesFrom abi:TextGenerationCapability ;
+    owl:someValuesFrom capability:TextGenerationCapability ;
     rdfs:comment "Every text generation process must realize a text generation capability."@en
 ] .
 
 abi:ImageAnalysisProcess rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:realizesCapability ;
-    owl:someValuesFrom abi:ImageAnalysisCapability ;
+    owl:someValuesFrom capability:ImageAnalysisCapability ;
     rdfs:comment "Every image analysis process must realize an image analysis capability."@en
 ] .
 
 abi:CodeGenerationProcess rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:realizesCapability ;
-    owl:someValuesFrom abi:CodeGenerationCapability ;
+    owl:someValuesFrom capability:CodeGenerationCapability ;
     rdfs:comment "Every code generation process must realize a code generation capability."@en
 ] .
 
@@ -484,9 +468,9 @@ abi:triggersProcess a owl:IrreflexiveProperty ;
     rdfs:comment "A process cannot trigger itself - this prevents infinite loops in workflow definitions."@en .
 
 # Disjoint Classes
-abi:TextGenerationCapability owl:disjointWith abi:ImageAnalysisCapability .
-abi:TextGenerationCapability owl:disjointWith abi:CodeGenerationCapability .
-abi:ImageAnalysisCapability owl:disjointWith abi:CodeGenerationCapability .
+capability:TextGenerationCapability owl:disjointWith capability:ImageAnalysisCapability .
+capability:TextGenerationCapability owl:disjointWith capability:CodeGenerationCapability .
+capability:ImageAnalysisCapability owl:disjointWith capability:CodeGenerationCapability .
 
 abi:TextGenerationProcess owl:disjointWith abi:ImageAnalysisProcess .
 abi:TextGenerationProcess owl:disjointWith abi:CodeGenerationProcess .
@@ -639,12 +623,7 @@ abi:TruthSeekingAnalysisProcess a owl:Class ;
     skos:definition "A process in which an AI system analyzes information to find and validate factual truth, challenging assumptions and exploring alternative viewpoints."@en ;
     skos:example "Fact-checking claims, validating information sources, contrarian analysis, truth-seeking research."@en .
 
-###  http://ontology.naas.ai/abi/EthicalAnalysisProcess
-abi:EthicalAnalysisProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Ethical Analysis Process"@en ;
-    skos:definition "A process in which an AI system evaluates situations, decisions, or content from an ethical perspective using constitutional AI principles."@en ;
-    skos:example "Ethical decision analysis, moral reasoning, constitutional AI evaluation, ethical content review."@en .
+
 
 ###  http://ontology.naas.ai/abi/CodeGenerationProcess
 abi:CodeGenerationProcess a owl:Class ;
@@ -653,119 +632,17 @@ abi:CodeGenerationProcess a owl:Class ;
     skos:definition "A process in which an AI system generates computer code, algorithms, and software solutions based on specifications."@en ;
     skos:example "Programming algorithms, software development, debugging code, system design implementation."@en .
 
-###  http://ontology.naas.ai/abi/RealTimeSearchProcess
-abi:RealTimeSearchProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Real Time Search Process"@en ;
-    skos:definition "A process in which an AI system searches for and retrieves current, real-time information from live data sources."@en ;
-    skos:example "Live web search, current events research, real-time data analysis, live information retrieval."@en .
-
-###  http://ontology.naas.ai/abi/MathematicalComputationProcess
-abi:MathematicalComputationProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Mathematical Computation Process"@en ;
-    skos:definition "A process in which an AI system performs mathematical calculations, reasoning, and quantitative analysis."@en ;
-    skos:example "Mathematical problem solving, statistical analysis, quantitative reasoning, mathematical modeling."@en .
-
-###  http://ontology.naas.ai/abi/ImageGenerationProcess
-abi:ImageGenerationProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Image Generation Process"@en ;
-    skos:definition "A process in which an AI system generates visual images, graphics, and visual content from text descriptions."@en ;
-    skos:example "Creating images from text prompts, generating graphics, visual content creation, image synthesis."@en .
-
-###  http://ontology.naas.ai/abi/DocumentAnalysisProcess
-abi:DocumentAnalysisProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Document Analysis Process"@en ;
-    skos:definition "A process in which an AI system analyzes and extracts insights from large documents and text content."@en ;
-    skos:example "Long document processing, text analysis, document summarization, content extraction."@en .
 
 
 
-###  http://ontology.naas.ai/abi/TranslationProcess
-abi:TranslationProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Translation Process"@en ;
-    skos:definition "A process in which an AI system translates text content between different languages."@en ;
-    skos:example "Language translation, multilingual content processing, cross-language communication."@en .
-
-###  http://ontology.naas.ai/abi/ExecutiveCommunicationProcess
-abi:ExecutiveCommunicationProcess a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Executive Communication Process"@en ;
-    skos:definition "A process in which an AI system generates professional, executive-level communication and business content."@en ;
-    skos:example "Executive summaries, business reports, professional communication, strategic planning documents."@en .
-
-#################################################################
-#    BFO AI Network Design - Process Capabilities
-#################################################################
-
-###  http://ontology.naas.ai/abi/CreativeWritingCapability
-abi:CreativeWritingCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Creative Writing Capability"@en ;
-    skos:definition "A realizable entity that can be realized by creative writing processes."@en .
-
-###  http://ontology.naas.ai/abi/TruthSeekingCapability
-abi:TruthSeekingCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Truth Seeking Capability"@en ;
-    skos:definition "A realizable entity that can be realized by truth-seeking analysis processes."@en .
-
-###  http://ontology.naas.ai/abi/EthicalReasoningCapability
-abi:EthicalReasoningCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Ethical Reasoning Capability"@en ;
-    skos:definition "A realizable entity that can be realized by ethical analysis processes."@en .
-
-###  http://ontology.naas.ai/abi/CodeGenerationCapability
-abi:CodeGenerationCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Code Generation Capability"@en ;
-    skos:definition "A realizable entity that can be realized by code generation processes."@en .
-
-###  http://ontology.naas.ai/abi/RealTimeSearchCapability
-abi:RealTimeSearchCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Real Time Search Capability"@en ;
-    skos:definition "A realizable entity that can be realized by real-time search processes."@en .
-
-###  http://ontology.naas.ai/abi/MathematicalReasoningCapability
-abi:MathematicalReasoningCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Mathematical Reasoning Capability"@en ;
-    skos:definition "A realizable entity that can be realized by mathematical computation processes."@en .
-
-###  http://ontology.naas.ai/abi/ImageGenerationCapability
-abi:ImageGenerationCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Image Generation Capability"@en ;
-    skos:definition "A realizable entity that can be realized by image generation processes."@en .
-
-###  http://ontology.naas.ai/abi/DocumentAnalysisCapability
-abi:DocumentAnalysisCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Document Analysis Capability"@en ;
-    skos:definition "A realizable entity that can be realized by document analysis processes."@en .
 
 
-
-###  http://ontology.naas.ai/abi/TranslationCapability
-abi:TranslationCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Translation Capability"@en ;
-    skos:definition "A realizable entity that can be realized by translation processes."@en .
-
-###  http://ontology.naas.ai/abi/ExecutiveCommunicationCapability
-abi:ExecutiveCommunicationCapability a owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000017 ;
-    rdfs:label "Executive Communication Capability"@en ;
-    skos:definition "A realizable entity that can be realized by executive communication processes."@en .
 
 #################################################################
 #    BFO AI Network Design - Process Examples (3 Concrete Instances)
 #################################################################
+
+
 
 ### Creative Writing Process Example
 abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
@@ -781,7 +658,7 @@ abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
 ### Truth Seeking Analysis Process Example  
 abi:GrokTruthSeekingProcess a abi:TruthSeekingAnalysisProcess ;
     rdfs:label "Grok Truth Seeking Analysis Process"@en ;
-    abi:realizesCapability capability:TruthSeekingAnalysisCapability ;
+    abi:realizesCapability capability:TruthSeekingCapability ;
     abi:hasParticipant abi:GrokAgent ;
     abi:hasTemporalRegion abi:TruthSeekingSession ;
     abi:occursIn abi:xAIDataCenter ;
@@ -881,7 +758,7 @@ abi:ClaudeAgent a abi:AIAgent ;
 
 abi:GrokAgent a abi:AIAgent ;
     rdfs:label "Grok Agent"@en ;
-    abi:hasCapability capability:TruthSeekingAnalysisCapability, capability:ReasoningCapability ;
+    abi:hasCapability capability:TruthSeekingCapability, capability:ReasoningCapability ;
     rdfs:comment "Grok AI agent with truth-seeking analysis and reasoning capabilities."@en .
 
 abi:MistralAgent a abi:AIAgent ;
