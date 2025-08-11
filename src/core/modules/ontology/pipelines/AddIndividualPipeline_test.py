@@ -9,7 +9,6 @@ from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflowConfiguration,
 )
 from src import services
-from abi import logger
 
 @pytest.fixture
 def pipeline() -> AddIndividualPipeline:
@@ -25,7 +24,7 @@ def pipeline() -> AddIndividualPipeline:
     return pipeline
 
 def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
-    from rdflib import Namespace, URIRef, RDFS, Literal, RDF, OWL
+    from rdflib import URIRef, RDFS, Literal, RDF, OWL
     from src.utils.SPARQL import results_to_list
     
     label = "Naas.ai"
@@ -54,7 +53,7 @@ def test_add_individual_pipeline(pipeline: AddIndividualPipeline):
         FILTER(?s = <{{individual_uri}}>)
     }
     """
-    sparql_query = sparql_query.replace("{{individual_uri}}", individual_uri)
+    sparql_query = sparql_query.replace("{{individual_uri}}", str(individual_uri))
     results = services.triple_store_service.query(sparql_query)
     results_list = results_to_list(results)
     assert results_list is None, results_list
