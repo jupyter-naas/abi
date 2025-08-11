@@ -172,22 +172,28 @@ abi:{model_uri_id}_ReleaseTemporalRegion a bfo:BFO_0000008 ;
 # Pricing Quality (Quality - BFO_0000019)
 abi:{model_uri_id}_PricingQuality a bfo:BFO_0000019 ;
     rdfs:label "{model_name} Pricing Information"@en ;
-    bfo:inheres_in abi:{model_uri_id} ;'''
+    bfo:inheres_in abi:{model_uri_id} ;
+    abi:currency "USD"@en ;
+    abi:pricingUnit "per_million_tokens"@en ;'''
         
         if pricing.get('price_1m_input_tokens'):
             ttl_content += f'''
-    abi:inputTokenCost "{pricing['price_1m_input_tokens']}"^^xsd:decimal ;'''
+    abi:inputTokenCost "{pricing['price_1m_input_tokens']}"^^xsd:decimal ;
+    abi:inputTokenCostCurrency "USD"@en ;'''
         
         if pricing.get('price_1m_output_tokens'):
             ttl_content += f'''
-    abi:outputTokenCost "{pricing['price_1m_output_tokens']}"^^xsd:decimal ;'''
+    abi:outputTokenCost "{pricing['price_1m_output_tokens']}"^^xsd:decimal ;
+    abi:outputTokenCostCurrency "USD"@en ;'''
         
         if pricing.get('price_1m_blended_3_to_1'):
             ttl_content += f'''
-    abi:blendedCost "{pricing['price_1m_blended_3_to_1']}"^^xsd:decimal ;'''
+    abi:blendedCost "{pricing['price_1m_blended_3_to_1']}"^^xsd:decimal ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:blendedCostRatio "3:1"@en ;'''
         
         ttl_content += f'''
-    rdfs:comment "Pricing information for {model_name} per million tokens"@en .'''
+    rdfs:comment "Pricing information for {model_name} in USD per million tokens"@en .'''
 
     # Add performance metrics (Qualities - BFO_0000019)
     if model_data.get('median_output_tokens_per_second') or model_data.get('median_time_to_first_token_seconds'):
@@ -200,15 +206,18 @@ abi:{model_uri_id}_PerformanceQuality a bfo:BFO_0000019 ;
         
         if model_data.get('median_output_tokens_per_second'):
             ttl_content += f'''
-    abi:outputSpeed "{model_data['median_output_tokens_per_second']}"^^xsd:decimal ;'''
+    abi:outputSpeed "{model_data['median_output_tokens_per_second']}"^^xsd:decimal ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;'''
         
         if model_data.get('median_time_to_first_token_seconds'):
             ttl_content += f'''
-    abi:timeToFirstToken "{model_data['median_time_to_first_token_seconds']}"^^xsd:decimal ;'''
+    abi:timeToFirstToken "{model_data['median_time_to_first_token_seconds']}"^^xsd:decimal ;
+    abi:timeToFirstTokenUnit "seconds"@en ;'''
         
         if model_data.get('median_time_to_first_answer_token'):
             ttl_content += f'''
-    abi:timeToFirstAnswerToken "{model_data['median_time_to_first_answer_token']}"^^xsd:decimal ;'''
+    abi:timeToFirstAnswerToken "{model_data['median_time_to_first_answer_token']}"^^xsd:decimal ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;'''
         
         ttl_content += f'''
     rdfs:comment "Performance metrics for {model_name} from Artificial Analysis benchmarks"@en .'''
