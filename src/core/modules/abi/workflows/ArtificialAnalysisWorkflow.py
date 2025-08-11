@@ -92,14 +92,18 @@ class ArtificialAnalysisWorkflow:
         capabilities.append('capability:TextGenerationCapability')
         capabilities.append('capability:ReasoningCapability')
         
-        # Specialized capabilities based on performance scores
-        if evaluations.get('artificial_analysis_coding_index', 0) > 50:
+        # Specialized capabilities based on performance scores (handle None values)
+        coding_index = evaluations.get('artificial_analysis_coding_index') or 0
+        math_index = evaluations.get('artificial_analysis_math_index') or 0
+        intelligence_index = evaluations.get('artificial_analysis_intelligence_index') or 0
+        
+        if coding_index > 50:
             capabilities.append('capability:CodeGenerationCapability')
         
-        if evaluations.get('artificial_analysis_math_index', 0) > 60:
+        if math_index > 60:
             capabilities.append('capability:ReasoningCapability')
         
-        if evaluations.get('artificial_analysis_intelligence_index', 0) > 70:
+        if intelligence_index > 70:
             capabilities.append('capability:TruthSeekingCapability')
         
         return capabilities
@@ -122,26 +126,75 @@ class ArtificialAnalysisWorkflow:
         return capabilities
     
     def determine_model_provider_module(self, model_creator: Dict[str, Any]) -> str:
-        """Determine which model provider module this model belongs to."""
+        """Determine which model provider module this model belongs to based on exact module structure."""
         creator_name = model_creator.get('name', '').lower()
         creator_slug = model_creator.get('slug', '').lower()
         
-        # Map to existing AI model provider modules
-        if 'openai' in creator_slug or 'gpt' in creator_slug:
-            return 'openai'
-        elif 'anthropic' in creator_slug or 'claude' in creator_slug:
-            return 'anthropic'
-        elif 'mistral' in creator_slug:
+        # Map to actual existing module directories in src/core/modules/
+        if 'openai' in creator_slug or 'gpt' in creator_name.lower():
+            return 'chatgpt'  # Module is 'chatgpt', not 'openai'
+        elif 'anthropic' in creator_slug or 'claude' in creator_name.lower():
+            return 'claude'  # Module is 'claude'
+        elif 'mistral' in creator_slug or 'mistral' in creator_name.lower():
             return 'mistral'
-        elif 'grok' in creator_slug or 'xai' in creator_slug:
+        elif 'grok' in creator_slug or 'xai' in creator_slug or 'x.ai' in creator_name.lower():
             return 'grok'
-        elif 'google' in creator_slug or 'gemini' in creator_slug:
-            return 'google'
-        elif 'perplexity' in creator_slug:
+        elif 'google' in creator_slug or 'gemini' in creator_name.lower():
+            return 'gemini'  # Module is 'gemini', not 'google'
+        elif 'perplexity' in creator_slug or 'perplexity' in creator_name.lower():
             return 'perplexity'
+        elif 'meta' in creator_slug or 'llama' in creator_name.lower():
+            return 'llama'
+        elif 'qwen' in creator_slug or 'alibaba' in creator_name.lower():
+            return 'qwen'
+        elif 'deepseek' in creator_slug or 'deepseek' in creator_name.lower():
+            return 'deepseek'
+        elif 'gemma' in creator_slug or 'gemma' in creator_name.lower():
+            return 'gemma'
         else:
-            # Create generic module for unknown providers
-            return creator_slug or 'unknown'
+            # Create generic module for unknown providers using creator slug
+            return creator_slug.replace('-', '_').replace('.', '_') or 'unknown'
+    
+    def extract_model_processes_mapping(self, model_data: Dict[str, Any], endpoint: str) -> List[str]:
+        """Extract which AI processes this model can help realize based on its capabilities."""
+        processes = []
+        
+        if endpoint == "llms":
+            evaluations = model_data.get('evaluations', {})
+            
+            # All LLMs can do basic text generation
+            processes.append('abi:TextGenerationProcess')
+            
+            # Specialized processes based on performance thresholds (handle None values)
+            coding_index = evaluations.get('artificial_analysis_coding_index') or 0
+            math_index = evaluations.get('artificial_analysis_math_index') or 0
+            intelligence_index = evaluations.get('artificial_analysis_intelligence_index') or 0
+            
+            if coding_index > 60:
+                processes.append('abi:CodeGenerationProcess')
+            
+            if intelligence_index > 75:
+                processes.append('abi:TruthSeekingAnalysisProcess')
+                
+            if intelligence_index > 70:
+                processes.append('abi:CreativeWritingProcess')
+                
+            # If model has strong reasoning scores, it can do ethical analysis
+            if intelligence_index > 65 and math_index > 70:
+                processes.append('abi:EthicalAnalysisProcess')
+                
+        elif endpoint == "text-to-image":
+            processes.append('abi:ImageGenerationProcess')
+        elif endpoint == "text-to-speech":
+            processes.append('abi:SpeechGenerationProcess')
+        elif endpoint == "text-to-video":
+            processes.append('abi:VideoGenerationProcess')
+        elif endpoint == "image-editing":
+            processes.append('abi:ImageAnalysisProcess')
+        elif endpoint == "image-to-video":
+            processes.append('abi:VideoGenerationProcess')
+        
+        return processes
     
     def generate_model_ontology(self, model_data: Dict[str, Any], endpoint: str) -> str:
         """Generate TTL ontology content for a model."""
@@ -151,11 +204,13 @@ class ArtificialAnalysisWorkflow:
         creator = model_data.get('model_creator', {})
         creator_name = creator.get('name', 'Unknown')
         
-        # Determine capabilities
+        # Determine capabilities and processes
         if endpoint == "llms":
             capabilities = self.map_llm_to_capabilities(model_data)
+            processes = self.extract_model_processes_mapping(model_data, endpoint)
         else:
             capabilities = self.map_media_to_capabilities(model_data, endpoint)
+            processes = self.extract_model_processes_mapping(model_data, endpoint)
         
         # Build TTL content
         ttl_content = f"""@prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -203,6 +258,20 @@ abi:{model_id} a abi:AIModelInstance ;
     rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
     abi:sourceAPI "https://artificialanalysis.ai/" .
 
+"""
+        
+        # Add AI processes this model can realize
+        if processes:
+            ttl_content += f"""
+# AI Processes this model can realize
+"""
+            for process in processes:
+                process_name = process.replace('abi:', '')
+                ttl_content += f"""
+abi:{model_id}_{process_name}_Realization a {process} ;
+    rdfs:label "{model_name} {process_name} Realization"@en ;
+    abi:utilizesModel abi:{model_id} ;
+    rdfs:comment "Process realization using {model_name} model instance."@en .
 """
         
         # Add performance quality instance for LLMs

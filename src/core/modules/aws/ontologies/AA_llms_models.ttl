@@ -1,0 +1,156 @@
+# Artificial Analysis Model Data for Aws
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.010147
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:e58bbffd_fdc2_412a_b6d7_ca0e3f5d611a a abi:AIModelInstance ;
+    rdfs:label "Nova Premier"@en ;
+    abi:modelName "Nova Premier" ;
+    abi:providerName "Amazon" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:e58bbffd_fdc2_412a_b6d7_ca0e3f5d611a_Performance ;
+    abi:inputTokenCost "2.5"^^xsd:decimal ;
+    abi:outputTokenCost "12.5"^^xsd:decimal ;
+    abi:outputSpeed "87.76"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:e58bbffd_fdc2_412a_b6d7_ca0e3f5d611a_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Nova Premier TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:e58bbffd_fdc2_412a_b6d7_ca0e3f5d611a ;
+    rdfs:comment "Process realization using Nova Premier model instance."@en .
+# Performance Quality
+abi:e58bbffd_fdc2_412a_b6d7_ca0e3f5d611a_Performance a abi:ModelAccuracy ;
+    rdfs:label "Nova Premier Performance"@en ;
+    abi:intelligenceIndex "34.8"^^xsd:decimal ;
+    abi:codingIndex "29.8"^^xsd:decimal ;
+    abi:mathIndex "50.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:546ec53f_273c_4af7_b13f_b88c41f45905 a abi:AIModelInstance ;
+    rdfs:label "Nova Pro"@en ;
+    abi:modelName "Nova Pro" ;
+    abi:providerName "Amazon" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:546ec53f_273c_4af7_b13f_b88c41f45905_Performance ;
+    abi:inputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputTokenCost "3.2"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:546ec53f_273c_4af7_b13f_b88c41f45905_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Nova Pro TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:546ec53f_273c_4af7_b13f_b88c41f45905 ;
+    rdfs:comment "Process realization using Nova Pro model instance."@en .
+# Performance Quality
+abi:546ec53f_273c_4af7_b13f_b88c41f45905_Performance a abi:ModelAccuracy ;
+    rdfs:label "Nova Pro Performance"@en ;
+    abi:intelligenceIndex "28.8"^^xsd:decimal ;
+    abi:codingIndex "22.1"^^xsd:decimal ;
+    abi:mathIndex "44.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:5c3dd927_48a3_4f3c_8045_9b135f62dfbb a abi:AIModelInstance ;
+    rdfs:label "Nova Lite"@en ;
+    abi:modelName "Nova Lite" ;
+    abi:providerName "Amazon" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:5c3dd927_48a3_4f3c_8045_9b135f62dfbb_Performance ;
+    abi:inputTokenCost "0.06"^^xsd:decimal ;
+    abi:outputTokenCost "0.24"^^xsd:decimal ;
+    abi:outputSpeed "271.452"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:5c3dd927_48a3_4f3c_8045_9b135f62dfbb_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Nova Lite TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:5c3dd927_48a3_4f3c_8045_9b135f62dfbb ;
+    rdfs:comment "Process realization using Nova Lite model instance."@en .
+# Performance Quality
+abi:5c3dd927_48a3_4f3c_8045_9b135f62dfbb_Performance a abi:ModelAccuracy ;
+    rdfs:label "Nova Lite Performance"@en ;
+    abi:intelligenceIndex "24.5"^^xsd:decimal ;
+    abi:codingIndex "15.3"^^xsd:decimal ;
+    abi:mathIndex "43.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:344c6718_c573_41d4_9556_10287a3fa1fc a abi:AIModelInstance ;
+    rdfs:label "Nova Micro"@en ;
+    abi:modelName "Nova Micro" ;
+    abi:providerName "Amazon" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:344c6718_c573_41d4_9556_10287a3fa1fc_Performance ;
+    abi:inputTokenCost "0.035"^^xsd:decimal ;
+    abi:outputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputSpeed "369.292"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:344c6718_c573_41d4_9556_10287a3fa1fc_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Nova Micro TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:344c6718_c573_41d4_9556_10287a3fa1fc ;
+    rdfs:comment "Process realization using Nova Micro model instance."@en .
+# Performance Quality
+abi:344c6718_c573_41d4_9556_10287a3fa1fc_Performance a abi:ModelAccuracy ;
+    rdfs:label "Nova Micro Performance"@en ;
+    abi:intelligenceIndex "20.2"^^xsd:decimal ;
+    abi:codingIndex "11.7"^^xsd:decimal ;
+    abi:mathIndex "39.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+

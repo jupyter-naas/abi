@@ -1,0 +1,1210 @@
+# Artificial Analysis Model Data for Gemini
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.008603
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:515852e7_ba9c_4571_8cf9_82ad6b45f22f a abi:AIModelInstance ;
+    rdfs:label "PALM-2"@en ;
+    abi:modelName "PALM-2" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:515852e7_ba9c_4571_8cf9_82ad6b45f22f_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:515852e7_ba9c_4571_8cf9_82ad6b45f22f_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "PALM-2 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:515852e7_ba9c_4571_8cf9_82ad6b45f22f ;
+    rdfs:comment "Process realization using PALM-2 model instance."@en .
+# Performance Quality
+abi:515852e7_ba9c_4571_8cf9_82ad6b45f22f_Performance a abi:ModelAccuracy ;
+    rdfs:label "PALM-2 Performance"@en ;
+    abi:intelligenceIndex "9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2bfdd17a_e027_4068_a54e_b0e90a6df118 a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 27B Instruct"@en ;
+    abi:modelName "Gemma 3 27B Instruct" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2bfdd17a_e027_4068_a54e_b0e90a6df118_Performance ;
+    abi:outputSpeed "47.884"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2bfdd17a_e027_4068_a54e_b0e90a6df118_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3 27B Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2bfdd17a_e027_4068_a54e_b0e90a6df118 ;
+    rdfs:comment "Process realization using Gemma 3 27B Instruct model instance."@en .
+# Performance Quality
+abi:2bfdd17a_e027_4068_a54e_b0e90a6df118_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3 27B Instruct Performance"@en ;
+    abi:intelligenceIndex "25.2"^^xsd:decimal ;
+    abi:codingIndex "17.4"^^xsd:decimal ;
+    abi:mathIndex "56.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:222fb320_6e55_4672_846a_b6d5a24a45f4 a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 4B Instruct"@en ;
+    abi:modelName "Gemma 3 4B Instruct" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:222fb320_6e55_4672_846a_b6d5a24a45f4_Performance ;
+    abi:inputTokenCost "0.02"^^xsd:decimal ;
+    abi:outputTokenCost "0.04"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:222fb320_6e55_4672_846a_b6d5a24a45f4_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3 4B Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:222fb320_6e55_4672_846a_b6d5a24a45f4 ;
+    rdfs:comment "Process realization using Gemma 3 4B Instruct model instance."@en .
+# Performance Quality
+abi:222fb320_6e55_4672_846a_b6d5a24a45f4_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3 4B Instruct Performance"@en ;
+    abi:intelligenceIndex "13.5"^^xsd:decimal ;
+    abi:codingIndex "9.3"^^xsd:decimal ;
+    abi:mathIndex "41.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:6afbfb62_27e4_435e_9c85_d9fe1b92519e a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash"@en ;
+    abi:modelName "Gemini 2.5 Flash" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:6afbfb62_27e4_435e_9c85_d9fe1b92519e_Performance ;
+    abi:inputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputTokenCost "2.5"^^xsd:decimal ;
+    abi:outputSpeed "272.7"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:6afbfb62_27e4_435e_9c85_d9fe1b92519e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Flash TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:6afbfb62_27e4_435e_9c85_d9fe1b92519e ;
+    rdfs:comment "Process realization using Gemini 2.5 Flash model instance."@en .
+# Performance Quality
+abi:6afbfb62_27e4_435e_9c85_d9fe1b92519e_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Flash Performance"@en ;
+    abi:intelligenceIndex "47.3"^^xsd:decimal ;
+    abi:codingIndex "39.3"^^xsd:decimal ;
+    abi:mathIndex "71.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2e6400f5_85ca_4ebc_ba8f_c2811a631138 a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 12B Instruct"@en ;
+    abi:modelName "Gemma 3 12B Instruct" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2e6400f5_85ca_4ebc_ba8f_c2811a631138_Performance ;
+    abi:inputTokenCost "0.05"^^xsd:decimal ;
+    abi:outputTokenCost "0.1"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2e6400f5_85ca_4ebc_ba8f_c2811a631138_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3 12B Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2e6400f5_85ca_4ebc_ba8f_c2811a631138 ;
+    rdfs:comment "Process realization using Gemma 3 12B Instruct model instance."@en .
+# Performance Quality
+abi:2e6400f5_85ca_4ebc_ba8f_c2811a631138_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3 12B Instruct Performance"@en ;
+    abi:intelligenceIndex "24"^^xsd:decimal ;
+    abi:codingIndex "15.5"^^xsd:decimal ;
+    abi:mathIndex "53.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:a8c67863_9d66_44dd_8d27_f58654ecde03 a abi:AIModelInstance ;
+    rdfs:label "Gemma 3n E2B Instruct"@en ;
+    abi:modelName "Gemma 3n E2B Instruct" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:a8c67863_9d66_44dd_8d27_f58654ecde03_Performance ;
+    abi:outputSpeed "48.892"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:a8c67863_9d66_44dd_8d27_f58654ecde03_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3n E2B Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:a8c67863_9d66_44dd_8d27_f58654ecde03 ;
+    rdfs:comment "Process realization using Gemma 3n E2B Instruct model instance."@en .
+# Performance Quality
+abi:a8c67863_9d66_44dd_8d27_f58654ecde03_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3n E2B Instruct Performance"@en ;
+    abi:intelligenceIndex "10.4"^^xsd:decimal ;
+    abi:codingIndex "7.4"^^xsd:decimal ;
+    abi:mathIndex "39.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:27202e5f_c82d_4710_92e9_4317877d4883 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro"@en ;
+    abi:modelName "Gemini 2.5 Pro" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:27202e5f_c82d_4710_92e9_4317877d4883_Performance ;
+    abi:inputTokenCost "1.25"^^xsd:decimal ;
+    abi:outputTokenCost "10"^^xsd:decimal ;
+    abi:outputSpeed "147.882"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:27202e5f_c82d_4710_92e9_4317877d4883_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Pro TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:27202e5f_c82d_4710_92e9_4317877d4883 ;
+    rdfs:comment "Process realization using Gemini 2.5 Pro model instance."@en .
+
+abi:27202e5f_c82d_4710_92e9_4317877d4883_CodeGenerationProcess_Realization a abi:CodeGenerationProcess ;
+    rdfs:label "Gemini 2.5 Pro CodeGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:27202e5f_c82d_4710_92e9_4317877d4883 ;
+    rdfs:comment "Process realization using Gemini 2.5 Pro model instance."@en .
+# Performance Quality
+abi:27202e5f_c82d_4710_92e9_4317877d4883_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Pro Performance"@en ;
+    abi:intelligenceIndex "64.6"^^xsd:decimal ;
+    abi:codingIndex "61.5"^^xsd:decimal ;
+    abi:mathIndex "92.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:d1720545_d0a8_4c15_a53e_ef5ca99ac7ea a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 1B Instruct"@en ;
+    abi:modelName "Gemma 3 1B Instruct" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:d1720545_d0a8_4c15_a53e_ef5ca99ac7ea_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:d1720545_d0a8_4c15_a53e_ef5ca99ac7ea_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3 1B Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:d1720545_d0a8_4c15_a53e_ef5ca99ac7ea ;
+    rdfs:comment "Process realization using Gemma 3 1B Instruct model instance."@en .
+# Performance Quality
+abi:d1720545_d0a8_4c15_a53e_ef5ca99ac7ea_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3 1B Instruct Performance"@en ;
+    abi:intelligenceIndex "1.1"^^xsd:decimal ;
+    abi:codingIndex "1.2"^^xsd:decimal ;
+    abi:mathIndex "24.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:1d81aa1c_64c8_442a_9c41_81b37e407b91 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash-Lite"@en ;
+    abi:modelName "Gemini 2.5 Flash-Lite" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:1d81aa1c_64c8_442a_9c41_81b37e407b91_Performance ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.4"^^xsd:decimal ;
+    abi:outputSpeed "337.736"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:1d81aa1c_64c8_442a_9c41_81b37e407b91_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Flash-Lite TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:1d81aa1c_64c8_442a_9c41_81b37e407b91 ;
+    rdfs:comment "Process realization using Gemini 2.5 Flash-Lite model instance."@en .
+# Performance Quality
+abi:1d81aa1c_64c8_442a_9c41_81b37e407b91_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Flash-Lite Performance"@en ;
+    abi:intelligenceIndex "34.7"^^xsd:decimal ;
+    abi:codingIndex "28.9"^^xsd:decimal ;
+    abi:mathIndex "71.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:f4e8194a_d0e6_48eb_92be_4307de5aeeec a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash-Lite (Reasoning)"@en ;
+    abi:modelName "Gemini 2.5 Flash-Lite (Reasoning)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:f4e8194a_d0e6_48eb_92be_4307de5aeeec_Performance ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.4"^^xsd:decimal ;
+    abi:outputSpeed "476.698"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:f4e8194a_d0e6_48eb_92be_4307de5aeeec_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Flash-Lite (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:f4e8194a_d0e6_48eb_92be_4307de5aeeec ;
+    rdfs:comment "Process realization using Gemini 2.5 Flash-Lite (Reasoning) model instance."@en .
+# Performance Quality
+abi:f4e8194a_d0e6_48eb_92be_4307de5aeeec_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Flash-Lite (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "44.3"^^xsd:decimal ;
+    abi:codingIndex "39.3"^^xsd:decimal ;
+    abi:mathIndex "83.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:219ed587_60c5_4a48_9517_8480e08d0ca1 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash (Reasoning)"@en ;
+    abi:modelName "Gemini 2.5 Flash (Reasoning)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:219ed587_60c5_4a48_9517_8480e08d0ca1_Performance ;
+    abi:inputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputTokenCost "2.5"^^xsd:decimal ;
+    abi:outputSpeed "315.202"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:219ed587_60c5_4a48_9517_8480e08d0ca1_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Flash (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:219ed587_60c5_4a48_9517_8480e08d0ca1 ;
+    rdfs:comment "Process realization using Gemini 2.5 Flash (Reasoning) model instance."@en .
+# Performance Quality
+abi:219ed587_60c5_4a48_9517_8480e08d0ca1_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Flash (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "58.4"^^xsd:decimal ;
+    abi:codingIndex "54.4"^^xsd:decimal ;
+    abi:mathIndex "90.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:a797eaf3_6d75_4f29_86a8_e1243ce52d43 a abi:AIModelInstance ;
+    rdfs:label "Gemma 3n E4B Instruct"@en ;
+    abi:modelName "Gemma 3n E4B Instruct" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:a797eaf3_6d75_4f29_86a8_e1243ce52d43_Performance ;
+    abi:inputTokenCost "0.02"^^xsd:decimal ;
+    abi:outputTokenCost "0.04"^^xsd:decimal ;
+    abi:outputSpeed "87.237"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:a797eaf3_6d75_4f29_86a8_e1243ce52d43_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3n E4B Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:a797eaf3_6d75_4f29_86a8_e1243ce52d43 ;
+    rdfs:comment "Process realization using Gemma 3n E4B Instruct model instance."@en .
+# Performance Quality
+abi:a797eaf3_6d75_4f29_86a8_e1243ce52d43_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3n E4B Instruct Performance"@en ;
+    abi:intelligenceIndex "18.5"^^xsd:decimal ;
+    abi:codingIndex "11.3"^^xsd:decimal ;
+    abi:mathIndex "45.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:c6a47d8a_7517_46e2_8383_329fe7241725 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Pro Experimental (Feb '25)"@en ;
+    abi:modelName "Gemini 2.0 Pro Experimental (Feb '25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:c6a47d8a_7517_46e2_8383_329fe7241725_Performance ;
+    abi:outputSpeed "32.849"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:c6a47d8a_7517_46e2_8383_329fe7241725_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Pro Experimental (Feb '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:c6a47d8a_7517_46e2_8383_329fe7241725 ;
+    rdfs:comment "Process realization using Gemini 2.0 Pro Experimental (Feb '25) model instance."@en .
+# Performance Quality
+abi:c6a47d8a_7517_46e2_8383_329fe7241725_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Pro Experimental (Feb '25) Performance"@en ;
+    abi:intelligenceIndex "38.4"^^xsd:decimal ;
+    abi:codingIndex "33"^^xsd:decimal ;
+    abi:mathIndex "64.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:fddb72bd_60d3_41af_acc5_3df9a290eb8e a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash (experimental)"@en ;
+    abi:modelName "Gemini 2.0 Flash (experimental)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:fddb72bd_60d3_41af_acc5_3df9a290eb8e_Performance ;
+    abi:outputSpeed "213.797"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:fddb72bd_60d3_41af_acc5_3df9a290eb8e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Flash (experimental) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:fddb72bd_60d3_41af_acc5_3df9a290eb8e ;
+    rdfs:comment "Process realization using Gemini 2.0 Flash (experimental) model instance."@en .
+# Performance Quality
+abi:fddb72bd_60d3_41af_acc5_3df9a290eb8e_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Flash (experimental) Performance"@en ;
+    abi:intelligenceIndex "35.5"^^xsd:decimal ;
+    abi:codingIndex "27.5"^^xsd:decimal ;
+    abi:mathIndex "60.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2ac96b67_f4f8_4c8c_ac08_c7510faa7bb9 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Pro (Sep '24)"@en ;
+    abi:modelName "Gemini 1.5 Pro (Sep '24)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2ac96b67_f4f8_4c8c_ac08_c7510faa7bb9_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2ac96b67_f4f8_4c8c_ac08_c7510faa7bb9_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.5 Pro (Sep '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2ac96b67_f4f8_4c8c_ac08_c7510faa7bb9 ;
+    rdfs:comment "Process realization using Gemini 1.5 Pro (Sep '24) model instance."@en .
+# Performance Quality
+abi:2ac96b67_f4f8_4c8c_ac08_c7510faa7bb9_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.5 Pro (Sep '24) Performance"@en ;
+    abi:intelligenceIndex "33.6"^^xsd:decimal ;
+    abi:codingIndex "30.6"^^xsd:decimal ;
+    abi:mathIndex "55.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:3de55b83_e02b_412e_8211_315bbebe3e94 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Preview)"@en ;
+    abi:modelName "Gemini 2.0 Flash-Lite (Preview)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:3de55b83_e02b_412e_8211_315bbebe3e94_Performance ;
+    abi:inputTokenCost "0.075"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputSpeed "216.838"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:3de55b83_e02b_412e_8211_315bbebe3e94_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Preview) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:3de55b83_e02b_412e_8211_315bbebe3e94 ;
+    rdfs:comment "Process realization using Gemini 2.0 Flash-Lite (Preview) model instance."@en .
+# Performance Quality
+abi:3de55b83_e02b_412e_8211_315bbebe3e94_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Preview) Performance"@en ;
+    abi:intelligenceIndex "29.7"^^xsd:decimal ;
+    abi:codingIndex "21.3"^^xsd:decimal ;
+    abi:mathIndex "58.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:bcca0e70_7e80_4c07_b1fa_b33bcfb19e51 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash (Feb '25)"@en ;
+    abi:modelName "Gemini 2.0 Flash (Feb '25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:bcca0e70_7e80_4c07_b1fa_b33bcfb19e51_Performance ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.4"^^xsd:decimal ;
+    abi:outputSpeed "223.837"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:bcca0e70_7e80_4c07_b1fa_b33bcfb19e51_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Flash (Feb '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:bcca0e70_7e80_4c07_b1fa_b33bcfb19e51 ;
+    rdfs:comment "Process realization using Gemini 2.0 Flash (Feb '25) model instance."@en .
+# Performance Quality
+abi:bcca0e70_7e80_4c07_b1fa_b33bcfb19e51_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Flash (Feb '25) Performance"@en ;
+    abi:intelligenceIndex "37.8"^^xsd:decimal ;
+    abi:codingIndex "33.4"^^xsd:decimal ;
+    abi:mathIndex "63"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:41faf421_118b_465b_b170_d200776580d1 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash (Sep '24)"@en ;
+    abi:modelName "Gemini 1.5 Flash (Sep '24)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:41faf421_118b_465b_b170_d200776580d1_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:41faf421_118b_465b_b170_d200776580d1_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.5 Flash (Sep '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:41faf421_118b_465b_b170_d200776580d1 ;
+    rdfs:comment "Process realization using Gemini 1.5 Flash (Sep '24) model instance."@en .
+# Performance Quality
+abi:41faf421_118b_465b_b170_d200776580d1_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.5 Flash (Sep '24) Performance"@en ;
+    abi:intelligenceIndex "27.7"^^xsd:decimal ;
+    abi:codingIndex "27"^^xsd:decimal ;
+    abi:mathIndex "50.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:8b6574d7_03ce_4847_882c_064467349a45 a abi:AIModelInstance ;
+    rdfs:label "Gemma 2 27B"@en ;
+    abi:modelName "Gemma 2 27B" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:8b6574d7_03ce_4847_882c_064467349a45_Performance ;
+    abi:inputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputTokenCost "0.8"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:8b6574d7_03ce_4847_882c_064467349a45_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 2 27B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:8b6574d7_03ce_4847_882c_064467349a45 ;
+    rdfs:comment "Process realization using Gemma 2 27B model instance."@en .
+# Performance Quality
+abi:8b6574d7_03ce_4847_882c_064467349a45_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 2 27B Performance"@en ;
+    abi:intelligenceIndex "20.1"^^xsd:decimal ;
+    abi:codingIndex "20.2"^^xsd:decimal ;
+    abi:mathIndex "41.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:53082390_b2ac_408e_aa69_cc885b3984b4 a abi:AIModelInstance ;
+    rdfs:label "Gemma 2 9B"@en ;
+    abi:modelName "Gemma 2 9B" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:53082390_b2ac_408e_aa69_cc885b3984b4_Performance ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.2"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:53082390_b2ac_408e_aa69_cc885b3984b4_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 2 9B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:53082390_b2ac_408e_aa69_cc885b3984b4 ;
+    rdfs:comment "Process realization using Gemma 2 9B model instance."@en .
+# Performance Quality
+abi:53082390_b2ac_408e_aa69_cc885b3984b4_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 2 9B Performance"@en ;
+    abi:intelligenceIndex "10.2"^^xsd:decimal ;
+    abi:codingIndex "6.6"^^xsd:decimal ;
+    abi:mathIndex "25.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:94229066_9381_4ee1_bf70_a16d63756a6e a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash-8B"@en ;
+    abi:modelName "Gemini 1.5 Flash-8B" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:94229066_9381_4ee1_bf70_a16d63756a6e_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:94229066_9381_4ee1_bf70_a16d63756a6e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.5 Flash-8B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:94229066_9381_4ee1_bf70_a16d63756a6e ;
+    rdfs:comment "Process realization using Gemini 1.5 Flash-8B model instance."@en .
+# Performance Quality
+abi:94229066_9381_4ee1_bf70_a16d63756a6e_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.5 Flash-8B Performance"@en ;
+    abi:intelligenceIndex "19.2"^^xsd:decimal ;
+    abi:codingIndex "22.3"^^xsd:decimal ;
+    abi:mathIndex "36.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:0399e614_5d46_484f_9183_e4f32d74e1c6 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Jan '25)"@en ;
+    abi:modelName "Gemini 2.0 Flash Thinking Experimental (Jan '25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:0399e614_5d46_484f_9183_e4f32d74e1c6_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:0399e614_5d46_484f_9183_e4f32d74e1c6_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Jan '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:0399e614_5d46_484f_9183_e4f32d74e1c6 ;
+    rdfs:comment "Process realization using Gemini 2.0 Flash Thinking Experimental (Jan '25) model instance."@en .
+# Performance Quality
+abi:0399e614_5d46_484f_9183_e4f32d74e1c6_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Jan '25) Performance"@en ;
+    abi:intelligenceIndex "41.7"^^xsd:decimal ;
+    abi:codingIndex "32.5"^^xsd:decimal ;
+    abi:mathIndex "72.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:16f2578b_1b28_4be3_b371_700c2677bcd6 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Pro (May '24)"@en ;
+    abi:modelName "Gemini 1.5 Pro (May '24)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:16f2578b_1b28_4be3_b371_700c2677bcd6_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:16f2578b_1b28_4be3_b371_700c2677bcd6_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.5 Pro (May '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:16f2578b_1b28_4be3_b371_700c2677bcd6 ;
+    rdfs:comment "Process realization using Gemini 1.5 Pro (May '24) model instance."@en .
+# Performance Quality
+abi:16f2578b_1b28_4be3_b371_700c2677bcd6_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.5 Pro (May '24) Performance"@en ;
+    abi:intelligenceIndex "22.2"^^xsd:decimal ;
+    abi:codingIndex "25.9"^^xsd:decimal ;
+    abi:mathIndex "37.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:55a3ebf6_6117_4cc1_8596_c6de6e552fd4 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash Preview"@en ;
+    abi:modelName "Gemini 2.5 Flash Preview" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:55a3ebf6_6117_4cc1_8596_c6de6e552fd4_Performance ;
+    abi:inputTokenCost "0.15"^^xsd:decimal ;
+    abi:outputTokenCost "0.6"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:55a3ebf6_6117_4cc1_8596_c6de6e552fd4_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Flash Preview TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:55a3ebf6_6117_4cc1_8596_c6de6e552fd4 ;
+    rdfs:comment "Process realization using Gemini 2.5 Flash Preview model instance."@en .
+# Performance Quality
+abi:55a3ebf6_6117_4cc1_8596_c6de6e552fd4_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Flash Preview Performance"@en ;
+    abi:intelligenceIndex "38"^^xsd:decimal ;
+    abi:codingIndex "31.9"^^xsd:decimal ;
+    abi:mathIndex "68"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:62de31e8_a1a3_429c_b634_a2afccfd9363 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro Preview (Mar' 25)"@en ;
+    abi:modelName "Gemini 2.5 Pro Preview (Mar' 25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:62de31e8_a1a3_429c_b634_a2afccfd9363_Performance ;
+    abi:inputTokenCost "1.25"^^xsd:decimal ;
+    abi:outputTokenCost "10"^^xsd:decimal ;
+    abi:outputSpeed "147.041"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:62de31e8_a1a3_429c_b634_a2afccfd9363_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Pro Preview (Mar' 25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:62de31e8_a1a3_429c_b634_a2afccfd9363 ;
+    rdfs:comment "Process realization using Gemini 2.5 Pro Preview (Mar' 25) model instance."@en .
+# Performance Quality
+abi:62de31e8_a1a3_429c_b634_a2afccfd9363_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Pro Preview (Mar' 25) Performance"@en ;
+    abi:intelligenceIndex "59"^^xsd:decimal ;
+    abi:codingIndex "58.6"^^xsd:decimal ;
+    abi:mathIndex "92.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:8ddacd41_bf43_411b_aa30_43ebf0567dd8 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.0 Pro"@en ;
+    abi:modelName "Gemini 1.0 Pro" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:8ddacd41_bf43_411b_aa30_43ebf0567dd8_Performance ;
+    abi:inputTokenCost "0.5"^^xsd:decimal ;
+    abi:outputTokenCost "1.5"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:8ddacd41_bf43_411b_aa30_43ebf0567dd8_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.0 Pro TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:8ddacd41_bf43_411b_aa30_43ebf0567dd8 ;
+    rdfs:comment "Process realization using Gemini 1.0 Pro model instance."@en .
+# Performance Quality
+abi:8ddacd41_bf43_411b_aa30_43ebf0567dd8_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.0 Pro Performance"@en ;
+    abi:intelligenceIndex "8.5"^^xsd:decimal ;
+    abi:codingIndex "11.7"^^xsd:decimal ;
+    abi:mathIndex "20.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:ac48c49d_9e77_4394_ac4e_d1ee51fd5fee a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash (May '24)"@en ;
+    abi:modelName "Gemini 1.5 Flash (May '24)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:ac48c49d_9e77_4394_ac4e_d1ee51fd5fee_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:ac48c49d_9e77_4394_ac4e_d1ee51fd5fee_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.5 Flash (May '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:ac48c49d_9e77_4394_ac4e_d1ee51fd5fee ;
+    rdfs:comment "Process realization using Gemini 1.5 Flash (May '24) model instance."@en .
+# Performance Quality
+abi:ac48c49d_9e77_4394_ac4e_d1ee51fd5fee_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.5 Flash (May '24) Performance"@en ;
+    abi:intelligenceIndex "16.8"^^xsd:decimal ;
+    abi:codingIndex "18.8"^^xsd:decimal ;
+    abi:mathIndex "32.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:dfeeb904_e784_4d5c_ad66_9400146b150b a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Dec '24)"@en ;
+    abi:modelName "Gemini 2.0 Flash Thinking Experimental (Dec '24)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:dfeeb904_e784_4d5c_ad66_9400146b150b_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:dfeeb904_e784_4d5c_ad66_9400146b150b_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Dec '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:dfeeb904_e784_4d5c_ad66_9400146b150b ;
+    rdfs:comment "Process realization using Gemini 2.0 Flash Thinking Experimental (Dec '24) model instance."@en .
+# Performance Quality
+abi:dfeeb904_e784_4d5c_ad66_9400146b150b_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Dec '24) Performance"@en ;
+    abi:intelligenceIndex "23.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2ae624ca_25b4_4cc8_8970_cdfdd3320691 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.0 Ultra"@en ;
+    abi:modelName "Gemini 1.0 Ultra" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2ae624ca_25b4_4cc8_8970_cdfdd3320691_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2ae624ca_25b4_4cc8_8970_cdfdd3320691_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 1.0 Ultra TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2ae624ca_25b4_4cc8_8970_cdfdd3320691 ;
+    rdfs:comment "Process realization using Gemini 1.0 Ultra model instance."@en .
+# Performance Quality
+abi:2ae624ca_25b4_4cc8_8970_cdfdd3320691_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 1.0 Ultra Performance"@en ;
+    abi:intelligenceIndex "15.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:68c89ebf_779c_4445_9241_de964cd17355 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash Preview (Reasoning)"@en ;
+    abi:modelName "Gemini 2.5 Flash Preview (Reasoning)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:68c89ebf_779c_4445_9241_de964cd17355_Performance ;
+    abi:inputTokenCost "0.15"^^xsd:decimal ;
+    abi:outputTokenCost "3.5"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:68c89ebf_779c_4445_9241_de964cd17355_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Flash Preview (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:68c89ebf_779c_4445_9241_de964cd17355 ;
+    rdfs:comment "Process realization using Gemini 2.5 Flash Preview (Reasoning) model instance."@en .
+# Performance Quality
+abi:68c89ebf_779c_4445_9241_de964cd17355_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Flash Preview (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "50.2"^^xsd:decimal ;
+    abi:codingIndex "43.2"^^xsd:decimal ;
+    abi:mathIndex "91.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:073b5329_c4b3_4f1f_8f97_4753aadf4398 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro Preview (May' 25)"@en ;
+    abi:modelName "Gemini 2.5 Pro Preview (May' 25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:073b5329_c4b3_4f1f_8f97_4753aadf4398_Performance ;
+    abi:inputTokenCost "1.25"^^xsd:decimal ;
+    abi:outputTokenCost "10"^^xsd:decimal ;
+    abi:outputSpeed "146.932"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:073b5329_c4b3_4f1f_8f97_4753aadf4398_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.5 Pro Preview (May' 25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:073b5329_c4b3_4f1f_8f97_4753aadf4398 ;
+    rdfs:comment "Process realization using Gemini 2.5 Pro Preview (May' 25) model instance."@en .
+# Performance Quality
+abi:073b5329_c4b3_4f1f_8f97_4753aadf4398_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.5 Pro Preview (May' 25) Performance"@en ;
+    abi:intelligenceIndex "58"^^xsd:decimal ;
+    abi:codingIndex "59.3"^^xsd:decimal ;
+    abi:mathIndex "91.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:7b269763_ecc0_41ef_aa29_47ef632ac065 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Feb '25)"@en ;
+    abi:modelName "Gemini 2.0 Flash-Lite (Feb '25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:7b269763_ecc0_41ef_aa29_47ef632ac065_Performance ;
+    abi:inputTokenCost "0.075"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputSpeed "211.541"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:7b269763_ecc0_41ef_aa29_47ef632ac065_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Feb '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:7b269763_ecc0_41ef_aa29_47ef632ac065 ;
+    rdfs:comment "Process realization using Gemini 2.0 Flash-Lite (Feb '25) model instance."@en .
+# Performance Quality
+abi:7b269763_ecc0_41ef_aa29_47ef632ac065_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Feb '25) Performance"@en ;
+    abi:intelligenceIndex "30.3"^^xsd:decimal ;
+    abi:codingIndex "21.8"^^xsd:decimal ;
+    abi:mathIndex "57.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:bd2c3517_00d8_4ba5_a989_1f1e52f3ffab a abi:AIModelInstance ;
+    rdfs:label "Gemma 3n E4B Instruct Preview (May '25)"@en ;
+    abi:modelName "Gemma 3n E4B Instruct Preview (May '25)" ;
+    abi:providerName "Google" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:bd2c3517_00d8_4ba5_a989_1f1e52f3ffab_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:bd2c3517_00d8_4ba5_a989_1f1e52f3ffab_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Gemma 3n E4B Instruct Preview (May '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:bd2c3517_00d8_4ba5_a989_1f1e52f3ffab ;
+    rdfs:comment "Process realization using Gemma 3n E4B Instruct Preview (May '25) model instance."@en .
+# Performance Quality
+abi:bd2c3517_00d8_4ba5_a989_1f1e52f3ffab_Performance a abi:ModelAccuracy ;
+    rdfs:label "Gemma 3n E4B Instruct Preview (May '25) Performance"@en ;
+    abi:intelligenceIndex "15.2"^^xsd:decimal ;
+    abi:codingIndex "11.2"^^xsd:decimal ;
+    abi:mathIndex "42.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
