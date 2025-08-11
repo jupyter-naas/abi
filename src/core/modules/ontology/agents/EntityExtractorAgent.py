@@ -4,11 +4,11 @@ from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Callable, Optional, Union
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage
 from langgraph.types import Command
 from pydantic import SecretStr
 from src import secret
@@ -617,7 +617,7 @@ class EntityExtractorAgent(Agent):
             if class_uri:
                 if class_uri not in object_properties:
                     oprop = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
-                    if len(oprop.get("object_properties")) > 0:
+                    if len(oprop.get("object_properties", [])) > 0:
                         object_properties[class_uri] = oprop
         data = {
             "entities": entities,
