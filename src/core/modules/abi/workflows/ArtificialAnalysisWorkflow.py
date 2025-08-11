@@ -89,10 +89,15 @@ class ArtificialAnalysisWorkflow(Workflow):
 
     def _fetch_models_data(self, endpoint: str, include_categories: bool = False) -> Dict[str, Any]:
         """Fetch model data from Artificial Analysis API."""
-        url = f"{self.__configuration.base_url}/data/{endpoint}/models"
+        # Different URL structure for LLMs vs media endpoints
+        if endpoint == "llms":
+            url = f"{self.__configuration.base_url}/data/llms/models"
+        else:
+            # Media endpoints like text-to-image, text-to-speech, etc.
+            url = f"{self.__configuration.base_url}/data/media/{endpoint}"
         
         headers = {
-            'Authorization': f'Bearer {self.__configuration.api_key}',
+            'x-api-key': self.__configuration.api_key,
             'Content-Type': 'application/json'
         }
         
