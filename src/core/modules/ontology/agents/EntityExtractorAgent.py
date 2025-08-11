@@ -602,7 +602,6 @@ class EntityExtractorAgent(Agent):
             GetObjectPropertiesFromClassWorkflowConfiguration,
             GetObjectPropertiesFromClassWorkflowParameters
         )
-        from datetime import datetime
         workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration(
             triple_store=services.triple_store_service
         ))
@@ -628,7 +627,7 @@ class EntityExtractorAgent(Agent):
             "entities": entities,
             "object_properties": list(object_properties.values())
         }
-        save_json(data, "datastore/ontology/extract_entities", f"message.json")
+        save_json(data, "datastore/ontology/extract_entities", "message.json")
         return Command(goto="__end__", update={"messages": [AIMessage(content=str(data))]})
          
 
