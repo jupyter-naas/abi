@@ -65,6 +65,14 @@ abi:hasAIAgent a owl:ObjectProperty ;
     rdfs:range abi:AIAgent ;
     skos:definition "A relation between an AI system and the AI agent it implements."@en .
 
+###  http://ontology.naas.ai/abi/canUtilizeModel
+abi:canUtilizeModel a owl:ObjectProperty ;
+    rdfs:label "can utilize model"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AIModelInstance ;
+    skos:definition "A relation between an AI agent and the AI model instances it can dynamically select for different processes."@en ;
+    rdfs:comment "AI agents can choose different models based on process requirements, cost optimization, and capability matching."@en .
+
 ###  http://ontology.naas.ai/abi/isAIAgentOf
 abi:isAIAgentOf a owl:ObjectProperty ;
     rdfs:label "is AI agent of"@en ;
@@ -179,6 +187,14 @@ abi:hasLoadBalancer a owl:ObjectProperty ;
     rdfs:range abi:LoadBalancer ;
     skos:definition "A relation between an AI system and its load balancing component."@en ;
     rdfs:comment "This relationship models how AI systems distribute workload across multiple agents to optimize performance and resource utilization."@en .
+
+###  http://ontology.naas.ai/abi/utilizesModel
+abi:utilizesModel a owl:ObjectProperty ;
+    rdfs:label "utilizes model"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:AIModelInstance ;
+    skos:definition "A relation between an AI process and the specific AI model instance actually used in that process execution."@en ;
+    rdfs:comment "This captures the actual model selection made by an AI agent for a specific process instance."@en .
 
 #################################################################
 #    Data Properties
@@ -476,6 +492,13 @@ abi:AIAgent rdfs:subClassOf [
     rdfs:comment "Every AI agent must have at least one specialized role within a system."@en
 ] .
 
+abi:AIAgent rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:canUtilizeModel ;
+    owl:someValuesFrom abi:AIModelInstance ;
+    rdfs:comment "Every AI agent must be able to utilize at least one AI model instance."@en
+] .
+
 abi:AISystem rdfs:subClassOf [
     rdf:type owl:Restriction ;
     owl:onProperty abi:hasLoadBalancer ;
@@ -488,6 +511,14 @@ abi:TextGenerationProcess rdfs:subClassOf [
     owl:onProperty abi:triggersProcess ;
     owl:someValuesFrom abi:TextGenerationProcess ;
     rdfs:comment "Text generation processes can trigger other text generation processes in workflows."@en
+] .
+
+# Model-Process Relationship Axioms
+bfo:BFO_0000015 rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:utilizesModel ;
+    owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+    rdfs:comment "Each process instance utilizes exactly one AI model instance."@en
 ] .
 
 # Property Axioms
@@ -705,33 +736,36 @@ abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
     rdfs:label "Claude Creative Writing Process"@en ;
     abi:realizesCapability capability:TextGenerationCapability ;
     abi:hasParticipant abi:ClaudeAgent ;
+    abi:utilizesModel abi:claude_3_5_sonnet_20241022 ;
     abi:hasTemporalRegion abi:CreativeWritingSession ;
     abi:occursIn abi:AnthropicDataCenter ;
     abi:hasQuality abi:CreativeWritingQuality ;
     abi:isDocumentedBy abi:CreativeWritingSpecification ;
-    rdfs:comment "Claude's creative writing process with constitutional AI principles and high-quality output."@en .
+    rdfs:comment "Claude agent's creative writing process utilizing Claude-3.5-Sonnet model instance for high-quality constitutional AI output."@en .
 
 ### Truth Seeking Analysis Process Example  
 abi:GrokTruthSeekingProcess a abi:TruthSeekingAnalysisProcess ;
     rdfs:label "Grok Truth Seeking Analysis Process"@en ;
     abi:realizesCapability capability:TruthSeekingCapability ;
     abi:hasParticipant abi:GrokAgent ;
+    abi:utilizesModel abi:grok_beta ;
     abi:hasTemporalRegion abi:TruthSeekingSession ;
     abi:occursIn abi:xAIDataCenter ;
     abi:hasQuality abi:TruthSeekingQuality ;
     abi:isDocumentedBy abi:TruthSeekingSpecification ;
-    rdfs:comment "Grok's truth-seeking process with contrarian analysis and real-time validation."@en .
+    rdfs:comment "Grok agent's truth-seeking process utilizing Grok-Beta model instance for contrarian analysis and real-time validation."@en .
 
 ### Code Generation Process Example
 abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
     rdfs:label "Mistral Code Generation Process"@en ;
     abi:realizesCapability capability:CodeGenerationCapability ;
     abi:hasParticipant abi:MistralAgent ;
+    abi:utilizesModel abi:mistral_large_2411 ;
     abi:hasTemporalRegion abi:CodeGenerationSession ;
     abi:occursIn abi:MistralDataCenter ;
     abi:hasQuality abi:CodeGenerationQuality ;
     abi:isDocumentedBy abi:CodeGenerationSpecification ;
-    rdfs:comment "Mistral's code generation process with mathematical reasoning and technical expertise."@en .
+    rdfs:comment "Mistral agent's code generation process utilizing Mistral-Large-2411 model instance for mathematical reasoning and technical expertise."@en .
 
 
 
@@ -807,18 +841,25 @@ abi:CodeGenerationSpecification a abi:ModelSpecification ;
 
 
 ### AI Agent Instances (Material Entities)
+# Note: AI Agents orchestrate processes but capabilities belong to the AI Model Instances they utilize
+
+abi:ChatGPTAgent a abi:AIAgent ;
+    rdfs:label "ChatGPT Agent"@en ;
+    rdfs:comment "OpenAI ChatGPT AI agent that can dynamically select from multiple OpenAI model instances (GPT-4o, GPT-4o-mini, o1, etc.) based on process requirements."@en .
+
 abi:ClaudeAgent a abi:AIAgent ;
     rdfs:label "Claude Agent"@en ;
-    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
-    rdfs:comment "Claude AI agent with text generation and reasoning capabilities."@en .
+    rdfs:comment "Anthropic Claude AI agent that can dynamically select from multiple Claude model instances (Claude-3.5-Sonnet, Claude-3-Haiku, etc.) based on process requirements."@en .
 
 abi:GrokAgent a abi:AIAgent ;
     rdfs:label "Grok Agent"@en ;
-    abi:hasCapability capability:TruthSeekingCapability, capability:ReasoningCapability ;
-    rdfs:comment "Grok AI agent with truth-seeking analysis and reasoning capabilities."@en .
+    rdfs:comment "xAI Grok AI agent that can dynamically select from multiple Grok model instances based on process requirements and truth-seeking analysis needs."@en .
 
 abi:MistralAgent a abi:AIAgent ;
     rdfs:label "Mistral Agent"@en ;
-    abi:hasCapability capability:CodeGenerationCapability, capability:ReasoningCapability ;
-    rdfs:comment "Mistral AI agent with code generation and reasoning capabilities."@en .
+    rdfs:comment "Mistral AI agent that can dynamically select from multiple Mistral model instances (Mistral-Large, Codestral, etc.) based on process requirements."@en .
+
+abi:GeminiAgent a abi:AIAgent ;
+    rdfs:label "Gemini Agent"@en ;
+    rdfs:comment "Google Gemini AI agent that can dynamically select from multiple Gemini model instances (Gemini-2.0-Flash, Gemini-Pro, etc.) based on process requirements."@en .
 
