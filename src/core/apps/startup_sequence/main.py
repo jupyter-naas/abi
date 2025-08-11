@@ -38,9 +38,9 @@ def get_agent_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Agent count query failed: {str(e)}")
 
 def get_agent_breakdown():
     """Get actual agent breakdown from knowledge graph"""
@@ -116,9 +116,9 @@ def get_triple_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Triple count query failed: {str(e)}")
 
 def get_type_statement_count():
     """Get number of type statements"""
@@ -138,9 +138,9 @@ def get_type_statement_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Type statement count query failed: {str(e)}")
 
 def get_class_count():
     """Get number of classes"""
@@ -163,9 +163,9 @@ def get_class_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Class count query failed: {str(e)}")
 
 def get_data_property_count():
     """Get number of data properties"""
@@ -186,9 +186,9 @@ def get_data_property_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Data properties query failed: {str(e)}")
 
 def get_object_property_count():
     """Get number of object properties"""
@@ -209,9 +209,9 @@ def get_object_property_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Object property count query failed: {str(e)}")
 
 def get_instance_count():
     """Get number of instances"""
@@ -233,9 +233,9 @@ def get_instance_count():
         if response.status_code == 200:
             result = response.json()
             return int(result['results']['bindings'][0]['count']['value'])
-        return 0
-    except Exception:
-        return 0
+        raise Exception(f"SPARQL query failed with status {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Instance count query failed: {str(e)}")
 
 def run_startup_sequence():
     """Run clean startup sequence with timestamps"""
@@ -263,26 +263,62 @@ def run_startup_sequence():
     # Step 2: Load knowledge graph data (only if Oxigraph is available)
     log("[2/4] Loading knowledge graph...")
     if oxigraph_ok:
-        agent_count = get_agent_count()
-        log(f"ℹ️ AI Agents: {agent_count}")
+        # Check each query individually with proper error handling
+        agent_count_ok = True
+        try:
+            agent_count = get_agent_count()
+            log(f"ℹ️ AI Agents: {agent_count}")
+        except Exception:
+            log("❌ AI Agents: Query failed")
+            agent_count_ok = False
         
-        triple_count = get_triple_count()
-        log(f"ℹ️ Total Triples: {triple_count:,}")
+        triple_count_ok = True
+        try:
+            triple_count = get_triple_count()
+            log(f"ℹ️ Total Triples: {triple_count:,}")
+        except Exception:
+            log("❌ Total Triples: Query failed")
+            triple_count_ok = False
         
-        type_statements = get_type_statement_count()
-        log(f"ℹ️ Type Statements: {type_statements:,}")
+        type_statements_ok = True
+        try:
+            type_statements = get_type_statement_count()
+            log(f"ℹ️ Type Statements: {type_statements:,}")
+        except Exception:
+            log("❌ Type Statements: Query failed")
+            type_statements_ok = False
         
-        class_count = get_class_count()
-        log(f"ℹ️ Classes: {class_count:,}")
+        class_count_ok = True
+        try:
+            class_count = get_class_count()
+            log(f"ℹ️ Classes: {class_count:,}")
+        except Exception:
+            log("❌ Classes: Query failed")
+            class_count_ok = False
         
-        data_property_count = get_data_property_count()
-        log(f"ℹ️ Data Properties: {data_property_count:,}")
+        data_property_count_ok = True
+        try:
+            data_property_count = get_data_property_count()
+            log(f"ℹ️ Data Properties: {data_property_count:,}")
+        except Exception:
+            log("❌ Data Properties: Query failed")
+            data_property_count_ok = False
         
-        object_property_count = get_object_property_count()
-        log(f"ℹ️ Object Properties: {object_property_count:,}")
+        object_property_count_ok = True
+        try:
+            object_property_count = get_object_property_count()
+            log(f"ℹ️ Object Properties: {object_property_count:,}")
+        except Exception:
+            log("❌ Object Properties: Query failed")
+            object_property_count_ok = False
         
-        instance_count = get_instance_count()
-        log(f"ℹ️ Instances: {instance_count:,}")
+        instance_count_ok = True
+        try:
+            instance_count = get_instance_count()
+            log(f"ℹ️ Instances: {instance_count:,}")
+        except Exception:
+            log("❌ Instances: Query failed")
+            instance_count_ok = False
         
         # Step 3: Show actual agent breakdown from data
         log("[3/4] Agent breakdown:")
@@ -294,14 +330,32 @@ def run_startup_sequence():
             log("⚠️  No agents found in knowledge graph")
     else:
         log("❌ Cannot load knowledge graph - Oxigraph not available")
-        agent_count = 0
-        triple_count = 0
+        # Initialize variables to avoid NameError
+        agent_count_ok = False
+        triple_count_ok = False
+        type_statements_ok = False
+        class_count_ok = False
+        data_property_count_ok = False
+        object_property_count_ok = False
+        instance_count_ok = False
     
     # Step 4: Final status and access URLs
     log("[4/4] System status:")
     if oxigraph_ok and yasgui_ok and ollama_ok:
         log("✅ All services running")
-        log("✅ Knowledge graph loaded")
+        
+        # Check knowledge graph query status
+        kg_queries_ok = all([
+            agent_count_ok, triple_count_ok, type_statements_ok,
+            class_count_ok, data_property_count_ok, 
+            object_property_count_ok, instance_count_ok
+        ])
+        
+        if kg_queries_ok:
+            log("✅ Knowledge graph loaded")
+        else:
+            log("⚠️  Knowledge graph partially loaded (some queries failed)")
+        
         log("✅ Local models available")
         log("")
         log("🌐 SPARQL: http://localhost:3000")
