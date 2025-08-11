@@ -124,11 +124,11 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
             # Write to file with proper naming convention
             agent_title = agent_module.replace('_', '').title()  # Convert gpt_oss to GptOss
             filename = f"{timestamp}_{agent_title}Ontology.ttl"
-            output_file = output_dir / filename
             
+            # Write to central datastore
+            output_file = output_dir / filename
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(ontology_content)
-            
             generated_files.append(output_file)
         
         # Generate summary
@@ -372,7 +372,7 @@ abi:{model_id} a abi:AIModelInstance ;
         return [
             StructuredTool(
                 name="ai_agent_ontology_generation",
-                description="Generates AI agent ontologies from Artificial Analysis data",
+                description="Generates AI agent ontologies from Artificial Analysis data (datastore only, no module deployment)",
                 func=lambda **kwargs: self.run(AIAgentOntologyGenerationParameters(**kwargs)),
                 args_schema=AIAgentOntologyGenerationParameters
             )
