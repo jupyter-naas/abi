@@ -7,6 +7,7 @@ from langchain_core.tools import StructuredTool, BaseTool
 from typing import Annotated
 from enum import Enum
 from rdflib import Graph, URIRef, RDF, OWL, RDFS
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 import pydash
 
 
@@ -19,9 +20,11 @@ class GetObjectPropertiesFromClassWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for GetObjectPropertiesFromClassWorkflow.
     
     Attributes:
+        triple_store (ITripleStoreService): The triple store service to use
         ontology_file_path (str): Path to the ontology file
     """
-    ontology_file_path: str = "src/core/modules/ontology/ontologies/top-level/bfo-core.ttl"
+    triple_store: ITripleStoreService
+    ontology_file_path: str = None
 
 
 class GetObjectPropertiesFromClassWorkflowParameters(WorkflowParameters):
@@ -46,7 +49,10 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         super().__init__(configuration)
         self.__configuration = configuration
         self.graph = Graph()
-        self.graph.parse(self.__configuration.ontology_file_path, format="turtle")
+        if self.__configuration.ontology_file_path:
+            self.graph.parse(self.__configuration.ontology_file_path, format="turtle")
+        else:
+            self.graph = self.__configuration.triple_store.get_schema_graph()
         self.operators = ONTOLOGY_OPERATORS
         self._ = pydash
         
@@ -331,9 +337,12 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
         return None
     
 if __name__ == "__main__":
+    from src import services
     from abi import logger
 
-    workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration())
-    class_uri = "http://purl.obolibrary.org/obo/BFO_0000015"
+    workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration(
+        triple_store=services.triple_store_service
+    ))
+    class_uri = "https://www.commoncoreontologies.org/ont00000443"
     result = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
     logger.info(result)
