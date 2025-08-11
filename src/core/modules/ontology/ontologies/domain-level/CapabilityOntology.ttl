@@ -16,7 +16,7 @@
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/CapabilityOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc11:contributor "Barry Smith" , "John Beverley" ;
-    dc:description "Capability ontology based on Barry Smith and John Beverley's work, following BFO standards and integrating with AIAgent ontology."@en ;
+    dc:description "Capability ontology based on Barry Smith and John Beverley's work, following BFO standards."@en ;
     dc:title "Capability Ontology (BFO+CCO)" ;
     dc:source "Capabilities: An Ontology - John Beverley, David Limbaugh, Eric Merrell, Peter M. Koch, Barry Smith" .
 
@@ -54,63 +54,7 @@ capability:Capability rdf:type owl:Class ;
     rdfs:subClassOf bfo:BFO_0000017 ;
     rdfs:label "Capability"@en ;
     skos:definition "A disposition in whose realization some organism or group of organisms has or had an interest."@en ;
-    skos:example "A student's capability to code in C++, a car's capability to ferry passengers, an AI agent's capability to generate text."@en .
-
-###  http://ontology.naas.ai/abi/capability/AICapability
-capability:AICapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:Capability ;
-    rdfs:label "AI Capability"@en ;
-    skos:definition "A capability specifically borne by AI agents or AI systems."@en ;
-    skos:example "Text generation capability, image analysis capability, reasoning capability."@en .
-
-###  http://ontology.naas.ai/abi/capability/CreativeCapability
-capability:CreativeCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Creative Capability"@en ;
-    skos:definition "A capability for creative tasks such as writing, art generation, or innovative problem-solving."@en ;
-    skos:example "Creative writing, image generation, music composition."@en .
-
-###  http://ontology.naas.ai/abi/capability/AnalyticalCapability
-capability:AnalyticalCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Analytical Capability"@en ;
-    skos:definition "A capability for analysis, reasoning, and logical processing."@en ;
-    skos:example "Data analysis, logical reasoning, mathematical computation."@en .
-
-###  http://ontology.naas.ai/abi/capability/TechnicalCapability
-capability:TechnicalCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Technical Capability"@en ;
-    skos:definition "A capability for technical tasks such as coding, debugging, or system design."@en ;
-    skos:example "Code generation, debugging, system architecture design."@en .
-
-###  http://ontology.naas.ai/abi/capability/CommunicationCapability
-capability:CommunicationCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Communication Capability"@en ;
-    skos:definition "A capability for communication, translation, and language processing."@en ;
-    skos:example "Translation, conversation, text summarization."@en .
-
-###  http://ontology.naas.ai/abi/capability/PerceptionCapability
-capability:PerceptionCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Perception Capability"@en ;
-    skos:definition "A capability for perceiving and understanding multimodal inputs."@en ;
-    skos:example "Image recognition, audio processing, video analysis."@en .
-
-###  http://ontology.naas.ai/abi/capability/ResearchCapability
-capability:ResearchCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Research Capability"@en ;
-    skos:definition "A capability for research, information gathering, and knowledge synthesis."@en ;
-    skos:example "Web search, fact verification, knowledge synthesis."@en .
-
-###  http://ontology.naas.ai/abi/capability/TruthSeekingCapability
-capability:TruthSeekingCapability rdf:type owl:Class ;
-    rdfs:subClassOf capability:AICapability ;
-    rdfs:label "Truth-Seeking Capability"@en ;
-    skos:definition "A capability for truth-seeking, contrarian analysis, and unbiased evaluation."@en ;
-    skos:example "Contrarian reasoning, truth verification, unbiased analysis."@en .
+    skos:example "A car's capability to ferry passengers, an AI's capability to generate text, a screwdriver's capability to open paint cans."@en .
 
 ###  http://ontology.naas.ai/abi/capability/Interest
 capability:Interest rdf:type owl:Class ;
@@ -125,13 +69,6 @@ capability:CapabilityRealization rdf:type owl:Class ;
     rdfs:label "Capability Realization"@en ;
     skos:definition "A process that realizes a specific capability."@en ;
     skos:example "The process of generating text, analyzing data, or creating an image."@en .
-
-###  http://ontology.naas.ai/abi/capability/CapabilityEvaluation
-capability:CapabilityEvaluation rdf:type owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000015 ;
-    rdfs:label "Capability Evaluation"@en ;
-    skos:definition "A process for evaluating the degree to which a capability is realized."@en ;
-    skos:example "Testing code quality, evaluating text coherence, measuring accuracy."@en .
 
 #################################################################
 #    Object Properties
@@ -158,65 +95,6 @@ capability:realizesCapability rdf:type owl:ObjectProperty ;
     rdfs:range capability:Capability ;
     skos:definition "A relation between a capability realization process and the capability it realizes."@en .
 
-###  http://ontology.naas.ai/abi/capability/evaluatesCapability
-capability:evaluatesCapability rdf:type owl:ObjectProperty ;
-    rdfs:label "evaluates capability"@en ;
-    rdfs:domain capability:CapabilityEvaluation ;
-    rdfs:range capability:Capability ;
-    skos:definition "A relation between a capability evaluation process and the capability it evaluates."@en .
-
-###  http://ontology.naas.ai/abi/capability/hasCapabilityType
-capability:hasCapabilityType rdf:type owl:ObjectProperty ;
-    rdfs:label "has capability type"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range owl:Class ;
-    skos:definition "A relation between a capability and its specific type classification."@en .
-
-###  http://ontology.naas.ai/abi/capability/requiresCapability
-capability:requiresCapability rdf:type owl:ObjectProperty ;
-    rdfs:label "requires capability"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range capability:Capability ;
-    skos:definition "A relation indicating that one capability requires another capability for its realization."@en .
-
-###  http://ontology.naas.ai/abi/capability/enablesCapability
-capability:enablesCapability rdf:type owl:ObjectProperty ;
-    rdfs:label "enables capability"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range capability:Capability ;
-    skos:definition "A relation indicating that one capability enables the realization of another capability."@en .
-
-###  http://ontology.naas.ai/abi/capability/hasComplexity
-capability:hasComplexity rdf:type owl:ObjectProperty ;
-    rdfs:label "has complexity"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range capability:ComplexityLevel ;
-    skos:definition "A relation between a capability and its complexity level."@en .
-
-###  http://ontology.naas.ai/abi/capability/ComplexityLevel
-capability:ComplexityLevel rdf:type owl:Class ;
-    rdfs:subClassOf bfo:BFO_0000019 ;
-    rdfs:label "Complexity Level"@en ;
-    skos:definition "A quality indicating the complexity level of a capability."@en .
-
-###  http://ontology.naas.ai/abi/capability/LowComplexity
-capability:LowComplexity rdf:type owl:Class ;
-    rdfs:subClassOf capability:ComplexityLevel ;
-    rdfs:label "Low Complexity"@en ;
-    skos:definition "A low complexity level for capabilities."@en .
-
-###  http://ontology.naas.ai/abi/capability/MediumComplexity
-capability:MediumComplexity rdf:type owl:Class ;
-    rdfs:subClassOf capability:ComplexityLevel ;
-    rdfs:label "Medium Complexity"@en ;
-    skos:definition "A medium complexity level for capabilities."@en .
-
-###  http://ontology.naas.ai/abi/capability/HighComplexity
-capability:HighComplexity rdf:type owl:Class ;
-    rdfs:subClassOf capability:ComplexityLevel ;
-    rdfs:label "High Complexity"@en ;
-    skos:definition "A high complexity level for capabilities."@en .
-
 #################################################################
 #    Data Properties
 #################################################################
@@ -235,40 +113,12 @@ capability:capabilityDescription rdf:type owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "A description of what the capability enables."@en .
 
-###  http://ontology.naas.ai/abi/capability/realizationFrequency
-capability:realizationFrequency rdf:type owl:DatatypeProperty ;
-    rdfs:label "realization frequency"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range xsd:decimal ;
-    skos:definition "The frequency with which a capability is realized."@en .
-
-###  http://ontology.naas.ai/abi/capability/successRate
-capability:successRate rdf:type owl:DatatypeProperty ;
-    rdfs:label "success rate"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range xsd:decimal ;
-    skos:definition "The success rate of capability realizations."@en .
-
 ###  http://ontology.naas.ai/abi/capability/interestStrength
 capability:interestStrength rdf:type owl:DatatypeProperty ;
     rdfs:label "interest strength"@en ;
     rdfs:domain capability:Interest ;
     rdfs:range xsd:decimal ;
     skos:definition "The strength of interest in a capability realization."@en .
-
-###  http://ontology.naas.ai/abi/capability/creationDate
-capability:creationDate rdf:type owl:DatatypeProperty ;
-    rdfs:label "creation date"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range xsd:dateTime ;
-    skos:definition "The date when a capability was created or discovered."@en .
-
-###  http://ontology.naas.ai/abi/capability/expirationDate
-capability:expirationDate rdf:type owl:DatatypeProperty ;
-    rdfs:label "expiration date"@en ;
-    rdfs:domain capability:Capability ;
-    rdfs:range xsd:dateTime ;
-    skos:definition "The date when a capability expires or becomes obsolete."@en .
 
 #################################################################
 #    Axioms
@@ -294,13 +144,6 @@ capability:Capability rdfs:subClassOf [
     owl:someValuesFrom bfo:BFO_0000015
 ] .
 
-# AI Capabilities are borne by AI agents or systems
-capability:AICapability rdfs:subClassOf [
-    rdf:type owl:Restriction ;
-    owl:onProperty bfo:BFO_0000052 ;
-    owl:someValuesFrom abi:AIAgent
-] .
-
 # Capability realizations have participants
 capability:CapabilityRealization rdfs:subClassOf [
     rdf:type owl:Restriction ;
@@ -320,101 +163,64 @@ capability:Interest rdfs:subClassOf [
 #################################################################
 
 ###  http://ontology.naas.ai/abi/capability/TextGenerationCapability
-capability:TextGenerationCapability rdf:type capability:CreativeCapability ;
+capability:TextGenerationCapability rdf:type capability:Capability ;
     rdfs:label "Text Generation Capability"@en ;
     capability:capabilityName "text_generation" ;
     capability:capabilityDescription "The capability to generate coherent and contextually appropriate text."@en ;
-    capability:hasComplexity capability:MediumComplexity ;
-    capability:realizationFrequency "0.85"^^xsd:decimal ;
-    capability:successRate "0.92"^^xsd:decimal ;
     skos:example "Generating articles, writing emails, creating stories."@en .
 
 ###  http://ontology.naas.ai/abi/capability/CodeGenerationCapability
-capability:CodeGenerationCapability rdf:type capability:TechnicalCapability ;
+capability:CodeGenerationCapability rdf:type capability:Capability ;
     rdfs:label "Code Generation Capability"@en ;
     capability:capabilityName "code_generation" ;
     capability:capabilityDescription "The capability to generate functional code in various programming languages."@en ;
-    capability:hasComplexity capability:HighComplexity ;
-    capability:realizationFrequency "0.70"^^xsd:decimal ;
-    capability:successRate "0.78"^^xsd:decimal ;
     skos:example "Writing Python scripts, debugging code, creating algorithms."@en .
 
 ###  http://ontology.naas.ai/abi/capability/DataAnalysisCapability
-capability:DataAnalysisCapability rdf:type capability:AnalyticalCapability ;
+capability:DataAnalysisCapability rdf:type capability:Capability ;
     rdfs:label "Data Analysis Capability"@en ;
     capability:capabilityName "data_analysis" ;
     capability:capabilityDescription "The capability to analyze data and extract meaningful insights."@en ;
-    capability:hasComplexity capability:MediumComplexity ;
-    capability:realizationFrequency "0.80"^^xsd:decimal ;
-    capability:successRate "0.85"^^xsd:decimal ;
     skos:example "Statistical analysis, pattern recognition, trend identification."@en .
 
 ###  http://ontology.naas.ai/abi/capability/ImageGenerationCapability
-capability:ImageGenerationCapability rdf:type capability:CreativeCapability ;
+capability:ImageGenerationCapability rdf:type capability:Capability ;
     rdfs:label "Image Generation Capability"@en ;
     capability:capabilityName "image_generation" ;
     capability:capabilityDescription "The capability to generate images from textual descriptions."@en ;
-    capability:hasComplexity capability:MediumComplexity ;
-    capability:realizationFrequency "0.75"^^xsd:decimal ;
-    capability:successRate "0.88"^^xsd:decimal ;
     skos:example "Creating artwork, generating illustrations, producing visual content."@en .
 
-###  http://ontology.naas.ai/abi/capability/TruthSeekingAnalysisCapability
-capability:TruthSeekingAnalysisCapability rdf:type capability:TruthSeekingCapability ;
-    rdfs:label "Truth-Seeking Analysis Capability"@en ;
-    capability:capabilityName "truth_seeking_analysis" ;
-    capability:capabilityDescription "The capability to perform contrarian analysis and seek objective truth."@en ;
-    capability:hasComplexity capability:HighComplexity ;
-    capability:realizationFrequency "0.60"^^xsd:decimal ;
-    capability:successRate "0.82"^^xsd:decimal ;
-    skos:example "Contrarian reasoning, unbiased evaluation, truth verification."@en .
-
-###  http://ontology.naas.ai/abi/capability/WebSearchCapability
-capability:WebSearchCapability rdf:type capability:ResearchCapability ;
-    rdfs:label "Web Search Capability"@en ;
-    capability:capabilityName "web_search" ;
-    capability:capabilityDescription "The capability to search the web and retrieve current information."@en ;
-    capability:hasComplexity capability:LowComplexity ;
-    capability:realizationFrequency "0.90"^^xsd:decimal ;
-    capability:successRate "0.95"^^xsd:decimal ;
-    skos:example "Finding current news, researching topics, fact verification."@en .
-
-###  http://ontology.naas.ai/abi/capability/TranslationCapability
-capability:TranslationCapability rdf:type capability:CommunicationCapability ;
-    rdfs:label "Translation Capability"@en ;
-    capability:capabilityName "translation" ;
-    capability:capabilityDescription "The capability to translate text between different languages."@en ;
-    capability:hasComplexity capability:MediumComplexity ;
-    capability:realizationFrequency "0.85"^^xsd:decimal ;
-    capability:successRate "0.90"^^xsd:decimal ;
-    skos:example "Language translation, cultural adaptation, multilingual communication."@en .
-
-###  http://ontology.naas.ai/abi/capability/ImageAnalysisCapability
-capability:ImageAnalysisCapability rdf:type capability:PerceptionCapability ;
-    rdfs:label "Image Analysis Capability"@en ;
-    capability:capabilityName "image_analysis" ;
-    capability:capabilityDescription "The capability to analyze and understand visual content."@en ;
-    capability:hasComplexity capability:MediumComplexity ;
-    capability:realizationFrequency "0.80"^^xsd:decimal ;
-    capability:successRate "0.87"^^xsd:decimal ;
-    skos:example "Object recognition, scene understanding, visual content analysis."@en .
-
 ###  http://ontology.naas.ai/abi/capability/ReasoningCapability
-capability:ReasoningCapability rdf:type capability:AnalyticalCapability ;
+capability:ReasoningCapability rdf:type capability:Capability ;
     rdfs:label "Reasoning Capability"@en ;
     capability:capabilityName "reasoning" ;
     capability:capabilityDescription "The capability to perform logical reasoning and problem-solving."@en ;
-    capability:hasComplexity capability:HighComplexity ;
-    capability:realizationFrequency "0.75"^^xsd:decimal ;
-    capability:successRate "0.83"^^xsd:decimal ;
-    skos:example "Logical deduction, problem-solving, mathematical reasoning."@en .
+    skos:example "Logical deduction, mathematical reasoning, complex problem-solving."@en .
 
-###  http://ontology.naas.ai/abi/capability/MultimodalAnalysisCapability
-capability:MultimodalAnalysisCapability rdf:type capability:PerceptionCapability ;
-    rdfs:label "Multimodal Analysis Capability"@en ;
-    capability:capabilityName "multimodal_analysis" ;
-    capability:capabilityDescription "The capability to analyze and understand multiple types of input (text, image, audio, video)."@en ;
-    capability:hasComplexity capability:HighComplexity ;
-    capability:realizationFrequency "0.65"^^xsd:decimal ;
-    capability:successRate "0.80"^^xsd:decimal ;
-    skos:example "Video analysis, audio processing, multimodal content understanding."@en .
+###  http://ontology.naas.ai/abi/capability/WebSearchCapability
+capability:WebSearchCapability rdf:type capability:Capability ;
+    rdfs:label "Web Search Capability"@en ;
+    capability:capabilityName "web_search" ;
+    capability:capabilityDescription "The capability to search the web and retrieve current information."@en ;
+    skos:example "Finding current news, researching topics, fact verification."@en .
+
+###  http://ontology.naas.ai/abi/capability/TranslationCapability
+capability:TranslationCapability rdf:type capability:Capability ;
+    rdfs:label "Translation Capability"@en ;
+    capability:capabilityName "translation" ;
+    capability:capabilityDescription "The capability to translate text between different languages."@en ;
+    skos:example "Language translation, cultural adaptation, multilingual communication."@en .
+
+###  http://ontology.naas.ai/abi/capability/ImageAnalysisCapability
+capability:ImageAnalysisCapability rdf:type capability:Capability ;
+    rdfs:label "Image Analysis Capability"@en ;
+    capability:capabilityName "image_analysis" ;
+    capability:capabilityDescription "The capability to analyze and understand visual content."@en ;
+    skos:example "Object recognition, scene understanding, visual content analysis."@en .
+
+###  http://ontology.naas.ai/abi/capability/TruthSeekingCapability
+capability:TruthSeekingCapability rdf:type capability:Capability ;
+    rdfs:label "Truth-Seeking Capability"@en ;
+    capability:capabilityName "truth_seeking" ;
+    capability:capabilityDescription "The capability to perform contrarian analysis and seek objective truth."@en ;
+    skos:example "Contrarian reasoning, truth verification, unbiased analysis."@en .
