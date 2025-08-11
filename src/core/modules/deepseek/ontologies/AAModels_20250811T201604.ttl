@@ -1,0 +1,1449 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Deepseek Agent Model Ontology
+# Generated from Artificial Analysis API data
+# Generated: 2025-08-11T20:15:31.700784+00:00
+# Total Models: 16
+
+<http://ontology.naas.ai/abi/deepseek> a owl:Ontology ;
+    rdfs:label "Deepseek Agent Model Ontology"@en ;
+    rdfs:comment "Ontology defining Deepseek AI agent and its associated models with BFO-compliant structure"@en ;
+    owl:versionInfo "1.0" ;
+    abi:generatedFrom "https://artificialanalysis.ai/" ;
+    abi:generatedAt "2025-08-11T20:15:31.700784+00:00"^^xsd:dateTime .
+
+
+# DeepSeek R1 0528 Qwen3 8B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700849+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_qwen3_8b a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B"@en ;
+    abi:modelName "DeepSeek R1 0528 Qwen3 8B" ;
+    abi:modelSlug "deepseek-r1-qwen3-8b" ;
+    abi:artificialAnalysisId "6000145b-0e3d-4fef-a55f-bcaac84803b2" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_qwen3_8b_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_qwen3_8b_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_qwen3_8b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_qwen3_8b ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 0528 Qwen3 8B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 0528 Qwen3 8B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 0528 Qwen3 8B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_qwen3_8b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Release Date"@en ;
+    abi:releaseDate "2025-05-29"^^xsd:date ;
+    abi:releaseDateRaw "2025-05-29" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 0528 Qwen3 8B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_qwen3_8b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_qwen3_8b ;
+    abi:inputTokenCost "0.055"^^xsd:decimal ;
+    abi:outputTokenCost "0.095"^^xsd:decimal ;
+    abi:blendedCost "0.065"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 0528 Qwen3 8B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_r1_qwen3_8b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_r1_qwen3_8b ;
+    abi:outputSpeed "93.003"^^xsd:decimal ;
+    abi:timeToFirstToken "0.676"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "22.181"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek R1 0528 Qwen3 8B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_qwen3_8b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_qwen3_8b ;
+    abi:artificial_analysis_intelligence_index "41.5"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "35.9"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "79.1"^^xsd:decimal ;
+    abi:mmlu_pro "0.739"^^xsd:decimal ;
+    abi:gpqa "0.612"^^xsd:decimal ;
+    abi:hle "0.056"^^xsd:decimal ;
+    abi:livecodebench "0.513"^^xsd:decimal ;
+    abi:scicode "0.204"^^xsd:decimal ;
+    abi:math_500 "0.932"^^xsd:decimal ;
+    abi:aime "0.65"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 0528 Qwen3 8B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_qwen3_8b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_qwen3_8b ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_qwen3_8b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 0528 Qwen3 8B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_qwen3_8b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_qwen3_8b ;
+    bfo:has_part abi:deepseek_r1_qwen3_8b_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_qwen3_8b_PerformanceQuality ;
+    bfo:has_part abi:deepseek_r1_qwen3_8b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 0528 Qwen3 8B"@en .
+
+
+# DeepSeek R1 0528 (May '25) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700917+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 0528 (May '25)"@en ;
+    abi:modelName "DeepSeek R1 0528 (May '25)" ;
+    abi:modelSlug "deepseek-r1" ;
+    abi:artificialAnalysisId "a83f84b3-473a-4276-9ae1-8909da723159" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 0528 (May '25) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 0528 (May '25) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 0528 (May '25) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Release Date"@en ;
+    abi:releaseDate "2025-05-28"^^xsd:date ;
+    abi:releaseDateRaw "2025-05-28" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 0528 (May '25)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1 ;
+    abi:inputTokenCost "0.55"^^xsd:decimal ;
+    abi:outputTokenCost "2.19"^^xsd:decimal ;
+    abi:blendedCost "0.96"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 0528 (May '25) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_r1_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_r1 ;
+    abi:outputSpeed "21.393"^^xsd:decimal ;
+    abi:timeToFirstToken "3.424"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "96.911"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek R1 0528 (May '25) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1 ;
+    abi:artificial_analysis_intelligence_index "58.7"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "58.7"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "93.8"^^xsd:decimal ;
+    abi:mmlu_pro "0.849"^^xsd:decimal ;
+    abi:gpqa "0.813"^^xsd:decimal ;
+    abi:hle "0.149"^^xsd:decimal ;
+    abi:livecodebench "0.77"^^xsd:decimal ;
+    abi:scicode "0.403"^^xsd:decimal ;
+    abi:math_500 "0.983"^^xsd:decimal ;
+    abi:aime "0.893"^^xsd:decimal ;
+    abi:aime_25 "0.76"^^xsd:decimal ;
+    abi:ifbench "0.396"^^xsd:decimal ;
+    abi:lcr "0.56"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 0528 (May '25) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 0528 (May '25)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1 ;
+    bfo:has_part abi:deepseek_r1_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_PerformanceQuality ;
+    bfo:has_part abi:deepseek_r1_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 0528 (May '25)"@en .
+
+
+# DeepSeek R1 Distill Qwen 32B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700962+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_distill_qwen_32b a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B"@en ;
+    abi:modelName "DeepSeek R1 Distill Qwen 32B" ;
+    abi:modelSlug "deepseek-r1-distill-qwen-32b" ;
+    abi:artificialAnalysisId "df95f83f-5ebb-466a-9d2d-b95efc8c012c" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_distill_qwen_32b_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_distill_qwen_32b_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_distill_qwen_32b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_distill_qwen_32b ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 Distill Qwen 32B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 Distill Qwen 32B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 Distill Qwen 32B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_distill_qwen_32b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Release Date"@en ;
+    abi:releaseDate "2025-01-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-20" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 Distill Qwen 32B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_32b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_32b ;
+    abi:inputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:blendedCost "0.3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 Distill Qwen 32B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_32b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_32b ;
+    abi:outputSpeed "32.546"^^xsd:decimal ;
+    abi:timeToFirstToken "0.639"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "62.09"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek R1 Distill Qwen 32B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_32b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_32b ;
+    abi:artificial_analysis_intelligence_index "41.2"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "32.3"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "81.4"^^xsd:decimal ;
+    abi:mmlu_pro "0.739"^^xsd:decimal ;
+    abi:gpqa "0.615"^^xsd:decimal ;
+    abi:hle "0.055"^^xsd:decimal ;
+    abi:livecodebench "0.27"^^xsd:decimal ;
+    abi:scicode "0.376"^^xsd:decimal ;
+    abi:math_500 "0.941"^^xsd:decimal ;
+    abi:aime "0.687"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 Distill Qwen 32B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_distill_qwen_32b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_distill_qwen_32b ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_distill_qwen_32b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 Distill Qwen 32B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_distill_qwen_32b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_32b ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_32b_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_32b_PerformanceQuality ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_32b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 Distill Qwen 32B"@en .
+
+
+# DeepSeek R1 Distill Llama 70B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701001+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_distill_llama_70b a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B"@en ;
+    abi:modelName "DeepSeek R1 Distill Llama 70B" ;
+    abi:modelSlug "deepseek-r1-distill-llama-70b" ;
+    abi:artificialAnalysisId "4a845d7b-a52d-43bb-80b7-b58c7a0c155e" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_distill_llama_70b_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_distill_llama_70b_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_distill_llama_70b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_distill_llama_70b ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 Distill Llama 70B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 Distill Llama 70B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 Distill Llama 70B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_distill_llama_70b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Release Date"@en ;
+    abi:releaseDate "2025-01-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-20" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 Distill Llama 70B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_llama_70b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_70b ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "0.8"^^xsd:decimal ;
+    abi:blendedCost "0.8"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 Distill Llama 70B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_llama_70b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_70b ;
+    abi:outputSpeed "76.583"^^xsd:decimal ;
+    abi:timeToFirstToken "0.472"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "26.587"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek R1 Distill Llama 70B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_llama_70b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_70b ;
+    abi:artificial_analysis_intelligence_index "37.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "28.9"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "80.2"^^xsd:decimal ;
+    abi:mmlu_pro "0.795"^^xsd:decimal ;
+    abi:gpqa "0.402"^^xsd:decimal ;
+    abi:hle "0.061"^^xsd:decimal ;
+    abi:livecodebench "0.266"^^xsd:decimal ;
+    abi:scicode "0.312"^^xsd:decimal ;
+    abi:math_500 "0.935"^^xsd:decimal ;
+    abi:aime "0.67"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 Distill Llama 70B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_distill_llama_70b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_distill_llama_70b ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_distill_llama_70b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 Distill Llama 70B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_distill_llama_70b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_70b ;
+    bfo:has_part abi:deepseek_r1_distill_llama_70b_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_distill_llama_70b_PerformanceQuality ;
+    bfo:has_part abi:deepseek_r1_distill_llama_70b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 Distill Llama 70B"@en .
+
+
+# DeepSeek V3 (Dec '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701036+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_v3 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek V3 (Dec '24)"@en ;
+    abi:modelName "DeepSeek V3 (Dec '24)" ;
+    abi:modelSlug "deepseek-v3" ;
+    abi:artificialAnalysisId "43fc5506-c5ed-4dee-9b85-962bf7ae3986" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_v3_ProcessRealization ;
+    bfo:has_quality abi:deepseek_v3_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_v3_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_v3 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek V3 (Dec '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek V3 (Dec '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek V3 (Dec '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_v3_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek V3 (Dec '24) Release Date"@en ;
+    abi:releaseDate "2024-12-26"^^xsd:date ;
+    abi:releaseDateRaw "2024-12-26" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek V3 (Dec '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_v3_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 (Dec '24) Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_v3 ;
+    abi:inputTokenCost "0.27"^^xsd:decimal ;
+    abi:outputTokenCost "1.1"^^xsd:decimal ;
+    abi:blendedCost "0.477"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek V3 (Dec '24) per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_v3_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 (Dec '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_v3 ;
+    abi:artificial_analysis_intelligence_index "34.6"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "35.6"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "57"^^xsd:decimal ;
+    abi:mmlu_pro "0.752"^^xsd:decimal ;
+    abi:gpqa "0.557"^^xsd:decimal ;
+    abi:hle "0.036"^^xsd:decimal ;
+    abi:livecodebench "0.359"^^xsd:decimal ;
+    abi:scicode "0.354"^^xsd:decimal ;
+    abi:math_500 "0.887"^^xsd:decimal ;
+    abi:aime "0.253"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek V3 (Dec '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_v3_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek V3 (Dec '24) Inference Process"@en ;
+    bfo:has_participant abi:deepseek_v3 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_v3_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek V3 (Dec '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_v3_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 (Dec '24) Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_v3 ;
+    bfo:has_part abi:deepseek_v3_PricingQuality ;
+    bfo:has_part abi:deepseek_v3_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek V3 (Dec '24)"@en .
+
+
+# DeepSeek R1 Distill Qwen 14B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701083+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_distill_qwen_14b a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B"@en ;
+    abi:modelName "DeepSeek R1 Distill Qwen 14B" ;
+    abi:modelSlug "deepseek-r1-distill-qwen-14b" ;
+    abi:artificialAnalysisId "b26ff709-1773-4595-ae44-78e0a5bac29c" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_distill_qwen_14b_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_distill_qwen_14b_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_distill_qwen_14b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_distill_qwen_14b ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 Distill Qwen 14B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 Distill Qwen 14B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 Distill Qwen 14B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_distill_qwen_14b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Release Date"@en ;
+    abi:releaseDate "2025-01-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-20" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 Distill Qwen 14B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_14b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_14b ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.2"^^xsd:decimal ;
+    abi:blendedCost "0.2"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 Distill Qwen 14B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_14b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_14b ;
+    abi:outputSpeed "84.922"^^xsd:decimal ;
+    abi:timeToFirstToken "0.898"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "24.449"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek R1 Distill Qwen 14B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_14b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_14b ;
+    abi:artificial_analysis_intelligence_index "38.2"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "30.7"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "80.8"^^xsd:decimal ;
+    abi:mmlu_pro "0.74"^^xsd:decimal ;
+    abi:gpqa "0.484"^^xsd:decimal ;
+    abi:hle "0.044"^^xsd:decimal ;
+    abi:livecodebench "0.376"^^xsd:decimal ;
+    abi:scicode "0.239"^^xsd:decimal ;
+    abi:math_500 "0.949"^^xsd:decimal ;
+    abi:aime "0.667"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 Distill Qwen 14B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_distill_qwen_14b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_distill_qwen_14b ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_distill_qwen_14b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 Distill Qwen 14B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_distill_qwen_14b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_14b ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_14b_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_14b_PerformanceQuality ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_14b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 Distill Qwen 14B"@en .
+
+
+# DeepSeek-V2.5 (Dec '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701120+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_v2_5 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24)"@en ;
+    abi:modelName "DeepSeek-V2.5 (Dec '24)" ;
+    abi:modelSlug "deepseek-v2-5" ;
+    abi:artificialAnalysisId "bc4579d2-9c46-46c3-ace0-454039bf21bb" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_v2_5_ProcessRealization ;
+    bfo:has_quality abi:deepseek_v2_5_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_v2_5_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_v2_5 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek-V2.5 (Dec '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek-V2.5 (Dec '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek-V2.5 (Dec '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_v2_5_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) Release Date"@en ;
+    abi:releaseDate "2024-12-10"^^xsd:date ;
+    abi:releaseDateRaw "2024-12-10" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek-V2.5 (Dec '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_v2_5_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_v2_5 ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    abi:blendedCost "0.175"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek-V2.5 (Dec '24) per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_v2_5_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_v2_5 ;
+    abi:artificial_analysis_intelligence_index "23.9"^^xsd:decimal ;
+    abi:math_500 "0.763"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek-V2.5 (Dec '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_v2_5_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) Inference Process"@en ;
+    bfo:has_participant abi:deepseek_v2_5 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_v2_5_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek-V2.5 (Dec '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_v2_5_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_v2_5 ;
+    bfo:has_part abi:deepseek_v2_5_PricingQuality ;
+    bfo:has_part abi:deepseek_v2_5_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek-V2.5 (Dec '24)"@en .
+
+
+# DeepSeek-Coder-V2 - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701169+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_coder_v2 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-Coder-V2"@en ;
+    abi:modelName "DeepSeek-Coder-V2" ;
+    abi:modelSlug "deepseek-coder-v2" ;
+    abi:artificialAnalysisId "8f0a75d6-8d00-4c2e-bcd4-8e88a570a93c" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_coder_v2_ProcessRealization ;
+    bfo:has_quality abi:deepseek_coder_v2_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_coder_v2_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_coder_v2 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek-Coder-V2 model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek-Coder-V2 model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek-Coder-V2 operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_coder_v2_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek-Coder-V2 Release Date"@en ;
+    abi:releaseDate "2024-06-17"^^xsd:date ;
+    abi:releaseDateRaw "2024-06-17" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek-Coder-V2"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_coder_v2_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-Coder-V2 Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_coder_v2 ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    abi:blendedCost "0.175"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek-Coder-V2 per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_coder_v2_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-Coder-V2 Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_coder_v2 ;
+    abi:artificial_analysis_intelligence_index "17.3"^^xsd:decimal ;
+    abi:math_500 "0.743"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek-Coder-V2 from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_coder_v2_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek-Coder-V2 Inference Process"@en ;
+    bfo:has_participant abi:deepseek_coder_v2 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_coder_v2_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek-Coder-V2"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_coder_v2_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-Coder-V2 Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_coder_v2 ;
+    bfo:has_part abi:deepseek_coder_v2_PricingQuality ;
+    bfo:has_part abi:deepseek_coder_v2_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek-Coder-V2"@en .
+
+
+# DeepSeek R1 Distill Llama 8B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701191+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_distill_llama_8b a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B"@en ;
+    abi:modelName "DeepSeek R1 Distill Llama 8B" ;
+    abi:modelSlug "deepseek-r1-distill-llama-8b" ;
+    abi:artificialAnalysisId "0e49fe2d-dd3c-4ae5-b56f-a1c89e14b89e" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_distill_llama_8b_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_distill_llama_8b_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_distill_llama_8b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_distill_llama_8b ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 Distill Llama 8B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 Distill Llama 8B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 Distill Llama 8B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_distill_llama_8b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Release Date"@en ;
+    abi:releaseDate "2025-01-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-20" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 Distill Llama 8B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_llama_8b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_8b ;
+    abi:inputTokenCost "0.04"^^xsd:decimal ;
+    abi:outputTokenCost "0.04"^^xsd:decimal ;
+    abi:blendedCost "0.04"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 Distill Llama 8B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_llama_8b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_8b ;
+    abi:outputSpeed "56.162"^^xsd:decimal ;
+    abi:timeToFirstToken "0.802"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "36.414"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek R1 Distill Llama 8B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_llama_8b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_8b ;
+    abi:artificial_analysis_intelligence_index "22.6"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "17.6"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "59.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.543"^^xsd:decimal ;
+    abi:gpqa "0.302"^^xsd:decimal ;
+    abi:hle "0.042"^^xsd:decimal ;
+    abi:livecodebench "0.233"^^xsd:decimal ;
+    abi:scicode "0.119"^^xsd:decimal ;
+    abi:math_500 "0.853"^^xsd:decimal ;
+    abi:aime "0.333"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 Distill Llama 8B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_distill_llama_8b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_distill_llama_8b ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_distill_llama_8b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 Distill Llama 8B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_distill_llama_8b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_llama_8b ;
+    bfo:has_part abi:deepseek_r1_distill_llama_8b_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_distill_llama_8b_PerformanceQuality ;
+    bfo:has_part abi:deepseek_r1_distill_llama_8b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 Distill Llama 8B"@en .
+
+
+# DeepSeek LLM 67B Chat (V1) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701226+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_llm_67b_chat a abi:AIModelInstance ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1)"@en ;
+    abi:modelName "DeepSeek LLM 67B Chat (V1)" ;
+    abi:modelSlug "deepseek-llm-67b-chat" ;
+    abi:artificialAnalysisId "7764d514-694f-444c-8d60-bdc6e24e223f" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_llm_67b_chat_ProcessRealization ;
+    bfo:has_quality abi:deepseek_llm_67b_chat_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_llm_67b_chat_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_llm_67b_chat ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek LLM 67B Chat (V1) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek LLM 67B Chat (V1) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek LLM 67B Chat (V1) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_llm_67b_chat_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) Release Date"@en ;
+    abi:releaseDate "2023-11-29"^^xsd:date ;
+    abi:releaseDateRaw "2023-11-29" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek LLM 67B Chat (V1)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_llm_67b_chat_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_llm_67b_chat ;
+    rdfs:comment "Pricing information for DeepSeek LLM 67B Chat (V1) per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_llm_67b_chat_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_llm_67b_chat ;
+    abi:artificial_analysis_intelligence_index "7.9"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek LLM 67B Chat (V1) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_llm_67b_chat_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) Inference Process"@en ;
+    bfo:has_participant abi:deepseek_llm_67b_chat ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_llm_67b_chat_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek LLM 67B Chat (V1)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_llm_67b_chat_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_llm_67b_chat ;
+    bfo:has_part abi:deepseek_llm_67b_chat_PricingQuality ;
+    bfo:has_part abi:deepseek_llm_67b_chat_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek LLM 67B Chat (V1)"@en .
+
+
+# DeepSeek R1 Distill Qwen 1.5B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701244+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_distill_qwen_1_5b a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B"@en ;
+    abi:modelName "DeepSeek R1 Distill Qwen 1.5B" ;
+    abi:modelSlug "deepseek-r1-distill-qwen-1-5b" ;
+    abi:artificialAnalysisId "444cdb1e-bab8-42cd-938c-b2d7a93e2da1" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_distill_qwen_1_5b_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_distill_qwen_1_5b_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_distill_qwen_1_5b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_distill_qwen_1_5b ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 Distill Qwen 1.5B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 Distill Qwen 1.5B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 Distill Qwen 1.5B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_distill_qwen_1_5b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B Release Date"@en ;
+    abi:releaseDate "2025-01-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-20" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 Distill Qwen 1.5B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_1_5b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_1_5b ;
+    rdfs:comment "Pricing information for DeepSeek R1 Distill Qwen 1.5B per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_distill_qwen_1_5b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_1_5b ;
+    abi:artificial_analysis_intelligence_index "7.1"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "6.8"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "43.2"^^xsd:decimal ;
+    abi:mmlu_pro "0.269"^^xsd:decimal ;
+    abi:gpqa "0.098"^^xsd:decimal ;
+    abi:hle "0.033"^^xsd:decimal ;
+    abi:livecodebench "0.07"^^xsd:decimal ;
+    abi:scicode "0.066"^^xsd:decimal ;
+    abi:math_500 "0.687"^^xsd:decimal ;
+    abi:aime "0.177"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 Distill Qwen 1.5B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_distill_qwen_1_5b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_distill_qwen_1_5b ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_distill_qwen_1_5b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 Distill Qwen 1.5B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_distill_qwen_1_5b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_distill_qwen_1_5b ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_1_5b_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_distill_qwen_1_5b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 Distill Qwen 1.5B"@en .
+
+
+# DeepSeek R1 (Jan '25) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701276+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_r1_0120 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 (Jan '25)"@en ;
+    abi:modelName "DeepSeek R1 (Jan '25)" ;
+    abi:modelSlug "deepseek-r1-0120" ;
+    abi:artificialAnalysisId "0e34f05c-387e-4968-be15-ccec4a55d8c1" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_r1_0120_ProcessRealization ;
+    bfo:has_quality abi:deepseek_r1_0120_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_r1_0120_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_r1_0120 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek R1 (Jan '25) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek R1 (Jan '25) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek R1 (Jan '25) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_r1_0120_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek R1 (Jan '25) Release Date"@en ;
+    abi:releaseDate "2025-01-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-20" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek R1 (Jan '25)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_r1_0120_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 (Jan '25) Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_r1_0120 ;
+    abi:inputTokenCost "1.35"^^xsd:decimal ;
+    abi:outputTokenCost "3"^^xsd:decimal ;
+    abi:blendedCost "2"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek R1 (Jan '25) per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_r1_0120_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 (Jan '25) Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_r1_0120 ;
+    abi:artificial_analysis_intelligence_index "49.9"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "48.7"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "82.5"^^xsd:decimal ;
+    abi:mmlu_pro "0.844"^^xsd:decimal ;
+    abi:gpqa "0.708"^^xsd:decimal ;
+    abi:hle "0.093"^^xsd:decimal ;
+    abi:livecodebench "0.617"^^xsd:decimal ;
+    abi:scicode "0.357"^^xsd:decimal ;
+    abi:math_500 "0.966"^^xsd:decimal ;
+    abi:aime "0.683"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek R1 (Jan '25) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_r1_0120_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek R1 (Jan '25) Inference Process"@en ;
+    bfo:has_participant abi:deepseek_r1_0120 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_r1_0120_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek R1 (Jan '25)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_r1_0120_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek R1 (Jan '25) Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_r1_0120 ;
+    bfo:has_part abi:deepseek_r1_0120_PricingQuality ;
+    bfo:has_part abi:deepseek_r1_0120_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek R1 (Jan '25)"@en .
+
+
+# DeepSeek V3 0324 (Mar '25) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701311+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_v3_0324 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25)"@en ;
+    abi:modelName "DeepSeek V3 0324 (Mar '25)" ;
+    abi:modelSlug "deepseek-v3-0324" ;
+    abi:artificialAnalysisId "75e1c197-f239-4361-a9d6-66dccfead236" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_v3_0324_ProcessRealization ;
+    bfo:has_quality abi:deepseek_v3_0324_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_v3_0324_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_v3_0324 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek V3 0324 (Mar '25) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek V3 0324 (Mar '25) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek V3 0324 (Mar '25) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_v3_0324_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Release Date"@en ;
+    abi:releaseDate "2025-03-25"^^xsd:date ;
+    abi:releaseDateRaw "2025-03-25" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek V3 0324 (Mar '25)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_v3_0324_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_v3_0324 ;
+    abi:inputTokenCost "0.27"^^xsd:decimal ;
+    abi:outputTokenCost "1.1"^^xsd:decimal ;
+    abi:blendedCost "0.477"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek V3 0324 (Mar '25) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:deepseek_v3_0324_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Performance Metrics"@en ;
+    bfo:inheres_in abi:deepseek_v3_0324 ;
+    abi:outputSpeed "22.624"^^xsd:decimal ;
+    abi:timeToFirstToken "3.3"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "3.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for DeepSeek V3 0324 (Mar '25) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_v3_0324_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_v3_0324 ;
+    abi:artificial_analysis_intelligence_index "44"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "38.1"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "73.1"^^xsd:decimal ;
+    abi:mmlu_pro "0.819"^^xsd:decimal ;
+    abi:gpqa "0.655"^^xsd:decimal ;
+    abi:hle "0.052"^^xsd:decimal ;
+    abi:livecodebench "0.405"^^xsd:decimal ;
+    abi:scicode "0.358"^^xsd:decimal ;
+    abi:math_500 "0.942"^^xsd:decimal ;
+    abi:aime "0.52"^^xsd:decimal ;
+    abi:aime_25 "0.41"^^xsd:decimal ;
+    abi:ifbench "0.41"^^xsd:decimal ;
+    abi:lcr "0.41"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek V3 0324 (Mar '25) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_v3_0324_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Inference Process"@en ;
+    bfo:has_participant abi:deepseek_v3_0324 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_v3_0324_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek V3 0324 (Mar '25)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_v3_0324_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_v3_0324 ;
+    bfo:has_part abi:deepseek_v3_0324_PricingQuality ;
+    bfo:has_part abi:deepseek_v3_0324_PerformanceQuality ;
+    bfo:has_part abi:deepseek_v3_0324_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek V3 0324 (Mar '25)"@en .
+
+
+# DeepSeek-V2.5 - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701350+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_v2_5_sep_2024 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-V2.5"@en ;
+    abi:modelName "DeepSeek-V2.5" ;
+    abi:modelSlug "deepseek-v2-5-sep-2024" ;
+    abi:artificialAnalysisId "8a24865b-90d9-4e2b-a2fd-6851c2e9d627" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_v2_5_sep_2024_ProcessRealization ;
+    bfo:has_quality abi:deepseek_v2_5_sep_2024_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_v2_5_sep_2024_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_v2_5_sep_2024 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek-V2.5 model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek-V2.5 model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek-V2.5 operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_v2_5_sep_2024_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek-V2.5 Release Date"@en ;
+    abi:releaseDate "2024-09-06"^^xsd:date ;
+    abi:releaseDateRaw "2024-09-06" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek-V2.5"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_v2_5_sep_2024_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2.5 Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_v2_5_sep_2024 ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    abi:blendedCost "0.175"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek-V2.5 per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_v2_5_sep_2024_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2.5 Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_v2_5_sep_2024 ;
+    abi:artificial_analysis_intelligence_index "23.3"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek-V2.5 from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_v2_5_sep_2024_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek-V2.5 Inference Process"@en ;
+    bfo:has_participant abi:deepseek_v2_5_sep_2024 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_v2_5_sep_2024_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek-V2.5"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_v2_5_sep_2024_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2.5 Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_v2_5_sep_2024 ;
+    bfo:has_part abi:deepseek_v2_5_sep_2024_PricingQuality ;
+    bfo:has_part abi:deepseek_v2_5_sep_2024_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek-V2.5"@en .
+
+
+# DeepSeek Coder V2 Lite Instruct - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701368+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_coder_v2_lite a abi:AIModelInstance ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct"@en ;
+    abi:modelName "DeepSeek Coder V2 Lite Instruct" ;
+    abi:modelSlug "deepseek-coder-v2-lite" ;
+    abi:artificialAnalysisId "c7327e6e-b27f-4b1b-859d-159a34e0ba1c" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_coder_v2_lite_ProcessRealization ;
+    bfo:has_quality abi:deepseek_coder_v2_lite_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_coder_v2_lite_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_coder_v2_lite ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek Coder V2 Lite Instruct model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek Coder V2 Lite Instruct model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek Coder V2 Lite Instruct operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_coder_v2_lite_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct Release Date"@en ;
+    abi:releaseDate "2024-06-17"^^xsd:date ;
+    abi:releaseDateRaw "2024-06-17" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek Coder V2 Lite Instruct"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_coder_v2_lite_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_coder_v2_lite ;
+    rdfs:comment "Pricing information for DeepSeek Coder V2 Lite Instruct per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_coder_v2_lite_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_coder_v2_lite ;
+    abi:artificial_analysis_intelligence_index "8.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "14.8"^^xsd:decimal ;
+    abi:mmlu_pro "0.429"^^xsd:decimal ;
+    abi:gpqa "0.319"^^xsd:decimal ;
+    abi:hle "0.053"^^xsd:decimal ;
+    abi:livecodebench "0.158"^^xsd:decimal ;
+    abi:scicode "0.139"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek Coder V2 Lite Instruct from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_coder_v2_lite_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct Inference Process"@en ;
+    bfo:has_participant abi:deepseek_coder_v2_lite ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_coder_v2_lite_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek Coder V2 Lite Instruct"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_coder_v2_lite_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_coder_v2_lite ;
+    bfo:has_part abi:deepseek_coder_v2_lite_PricingQuality ;
+    bfo:has_part abi:deepseek_coder_v2_lite_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek Coder V2 Lite Instruct"@en .
+
+
+# DeepSeek-V2-Chat - AI Model Instance
+# Generated: 2025-08-11T20:15:31.701395+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:deepseek_v2 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-V2-Chat"@en ;
+    abi:modelName "DeepSeek-V2-Chat" ;
+    abi:modelSlug "deepseek-v2" ;
+    abi:artificialAnalysisId "2d19c2d1-062d-436e-b2c2-3d3ecad34acc" ;
+    abi:providerName "DeepSeek" ;
+    abi:belongsToAgent abi:DeepseekAgent ;
+    bfo:participates_in abi:deepseek_v2_ProcessRealization ;
+    bfo:has_quality abi:deepseek_v2_Performance ;
+    bfo:located_in abi:deepseek_InfrastructureSite ;
+    bfo:exists_at abi:deepseek_v2_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:DeepseekAgent a abi:AIAgent ;
+    rdfs:label "Deepseek AI Agent"@en ;
+    abi:utilizesModel abi:deepseek_v2 ;
+    rdfs:comment "AI Agent that can utilize the DeepSeek-V2-Chat model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:deepseek_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "DeepSeek"@en ;
+    abi:organizationName "DeepSeek" ;
+    abi:organizationSlug "deepseek" ;
+    bfo:has_part abi:deepseek_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the DeepSeek-V2-Chat model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:deepseek_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "DeepSeek Infrastructure Site"@en ;
+    bfo:part_of abi:deepseek_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where DeepSeek-V2-Chat operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:deepseek_v2_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek-V2-Chat Release Date"@en ;
+    abi:releaseDate "2024-05-06"^^xsd:date ;
+    abi:releaseDateRaw "2024-05-06" ;
+    rdfs:comment "Temporal region marking the release of DeepSeek-V2-Chat"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:deepseek_v2_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2-Chat Pricing Information"@en ;
+    bfo:inheres_in abi:deepseek_v2 ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    abi:blendedCost "0.175"^^xsd:decimal ;
+    rdfs:comment "Pricing information for DeepSeek-V2-Chat per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:deepseek_v2_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2-Chat Evaluation Scores"@en ;
+    bfo:inheres_in abi:deepseek_v2 ;
+    abi:artificial_analysis_intelligence_index "11.1"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for DeepSeek-V2-Chat from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:deepseek_v2_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "DeepSeek-V2-Chat Inference Process"@en ;
+    bfo:has_participant abi:deepseek_v2 ;
+    bfo:occurs_in abi:deepseek_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:deepseek_v2_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by DeepSeek-V2-Chat"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:deepseek_v2_Performance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek-V2-Chat Overall Performance"@en ;
+    bfo:inheres_in abi:deepseek_v2 ;
+    bfo:has_part abi:deepseek_v2_PricingQuality ;
+    bfo:has_part abi:deepseek_v2_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of DeepSeek-V2-Chat"@en .
+

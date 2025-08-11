@@ -1,0 +1,2649 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+# Mistral Agent Model Ontology
+# Generated from Artificial Analysis API data
+# Generated: 2025-08-11T20:15:31.699416+00:00
+# Total Models: 27
+
+<http://ontology.naas.ai/abi/mistral> a owl:Ontology ;
+    rdfs:label "Mistral Agent Model Ontology"@en ;
+    rdfs:comment "Ontology defining Mistral AI agent and its associated models with BFO-compliant structure"@en ;
+    owl:versionInfo "1.0" ;
+    abi:generatedFrom "https://artificialanalysis.ai/" ;
+    abi:generatedAt "2025-08-11T20:15:31.699416+00:00"^^xsd:dateTime .
+
+
+# Ministral 8B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699428+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:ministral_8b a abi:AIModelInstance ;
+    rdfs:label "Ministral 8B"@en ;
+    abi:modelName "Ministral 8B" ;
+    abi:modelSlug "ministral-8b" ;
+    abi:artificialAnalysisId "27272c33-a688-4c3a-bf46-b0a1f51651d8" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:ministral_8b_ProcessRealization ;
+    bfo:has_quality abi:ministral_8b_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:ministral_8b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:ministral_8b ;
+    rdfs:comment "AI Agent that can utilize the Ministral 8B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Ministral 8B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Ministral 8B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:ministral_8b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Ministral 8B Release Date"@en ;
+    abi:releaseDate "2024-10-16"^^xsd:date ;
+    abi:releaseDateRaw "2024-10-16" ;
+    rdfs:comment "Temporal region marking the release of Ministral 8B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:ministral_8b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 8B Pricing Information"@en ;
+    bfo:inheres_in abi:ministral_8b ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.1"^^xsd:decimal ;
+    abi:blendedCost "0.1"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Ministral 8B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:ministral_8b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 8B Performance Metrics"@en ;
+    bfo:inheres_in abi:ministral_8b ;
+    abi:outputSpeed "185.565"^^xsd:decimal ;
+    abi:timeToFirstToken "0.304"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.304"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Ministral 8B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:ministral_8b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 8B Evaluation Scores"@en ;
+    bfo:inheres_in abi:ministral_8b ;
+    abi:artificial_analysis_intelligence_index "10.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "11.3"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "30.4"^^xsd:decimal ;
+    abi:mmlu_pro "0.389"^^xsd:decimal ;
+    abi:gpqa "0.276"^^xsd:decimal ;
+    abi:hle "0.049"^^xsd:decimal ;
+    abi:livecodebench "0.112"^^xsd:decimal ;
+    abi:scicode "0.115"^^xsd:decimal ;
+    abi:math_500 "0.571"^^xsd:decimal ;
+    abi:aime "0.037"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Ministral 8B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:ministral_8b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Ministral 8B Inference Process"@en ;
+    bfo:has_participant abi:ministral_8b ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:ministral_8b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Ministral 8B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:ministral_8b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 8B Overall Performance"@en ;
+    bfo:inheres_in abi:ministral_8b ;
+    bfo:has_part abi:ministral_8b_PricingQuality ;
+    bfo:has_part abi:ministral_8b_PerformanceQuality ;
+    bfo:has_part abi:ministral_8b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Ministral 8B"@en .
+
+
+# Ministral 3B - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699467+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:ministral_3b a abi:AIModelInstance ;
+    rdfs:label "Ministral 3B"@en ;
+    abi:modelName "Ministral 3B" ;
+    abi:modelSlug "ministral-3b" ;
+    abi:artificialAnalysisId "459543f9-d14e-43c8-8a23-3fbfbb5f69ee" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:ministral_3b_ProcessRealization ;
+    bfo:has_quality abi:ministral_3b_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:ministral_3b_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:ministral_3b ;
+    rdfs:comment "AI Agent that can utilize the Ministral 3B model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Ministral 3B model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Ministral 3B operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:ministral_3b_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Ministral 3B Release Date"@en ;
+    abi:releaseDate "2024-10-16"^^xsd:date ;
+    abi:releaseDateRaw "2024-10-16" ;
+    rdfs:comment "Temporal region marking the release of Ministral 3B"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:ministral_3b_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 3B Pricing Information"@en ;
+    bfo:inheres_in abi:ministral_3b ;
+    abi:inputTokenCost "0.04"^^xsd:decimal ;
+    abi:outputTokenCost "0.04"^^xsd:decimal ;
+    abi:blendedCost "0.04"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Ministral 3B per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:ministral_3b_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 3B Performance Metrics"@en ;
+    bfo:inheres_in abi:ministral_3b ;
+    abi:outputSpeed "285.435"^^xsd:decimal ;
+    abi:timeToFirstToken "0.28"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.28"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Ministral 3B from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:ministral_3b_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 3B Evaluation Scores"@en ;
+    bfo:inheres_in abi:ministral_3b ;
+    abi:artificial_analysis_intelligence_index "7.5"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "8.1"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "26.8"^^xsd:decimal ;
+    abi:mmlu_pro "0.339"^^xsd:decimal ;
+    abi:gpqa "0.26"^^xsd:decimal ;
+    abi:hle "0.055"^^xsd:decimal ;
+    abi:livecodebench "0.069"^^xsd:decimal ;
+    abi:scicode "0.094"^^xsd:decimal ;
+    abi:math_500 "0.537"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Ministral 3B from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:ministral_3b_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Ministral 3B Inference Process"@en ;
+    bfo:has_participant abi:ministral_3b ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:ministral_3b_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Ministral 3B"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:ministral_3b_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Ministral 3B Overall Performance"@en ;
+    bfo:inheres_in abi:ministral_3b ;
+    bfo:has_part abi:ministral_3b_PricingQuality ;
+    bfo:has_part abi:ministral_3b_PerformanceQuality ;
+    bfo:has_part abi:ministral_3b_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Ministral 3B"@en .
+
+
+# Mistral Medium 3 - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699503+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_medium_3 a abi:AIModelInstance ;
+    rdfs:label "Mistral Medium 3"@en ;
+    abi:modelName "Mistral Medium 3" ;
+    abi:modelSlug "mistral-medium-3" ;
+    abi:artificialAnalysisId "59e22326-1bca-4432-a5fa-147fbe8854e7" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_medium_3_ProcessRealization ;
+    bfo:has_quality abi:mistral_medium_3_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_medium_3_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_medium_3 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Medium 3 model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Medium 3 model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Medium 3 operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_medium_3_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Medium 3 Release Date"@en ;
+    abi:releaseDate "2025-05-07"^^xsd:date ;
+    abi:releaseDateRaw "2025-05-07" ;
+    rdfs:comment "Temporal region marking the release of Mistral Medium 3"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_medium_3_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium 3 Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_medium_3 ;
+    abi:inputTokenCost "0.4"^^xsd:decimal ;
+    abi:outputTokenCost "2"^^xsd:decimal ;
+    abi:blendedCost "0.8"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Medium 3 per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_medium_3_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium 3 Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_medium_3 ;
+    abi:outputSpeed "62.029"^^xsd:decimal ;
+    abi:timeToFirstToken "0.361"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.361"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Medium 3 from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_medium_3_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium 3 Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_medium_3 ;
+    abi:artificial_analysis_intelligence_index "38.6"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "36.5"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "67.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.76"^^xsd:decimal ;
+    abi:gpqa "0.578"^^xsd:decimal ;
+    abi:hle "0.043"^^xsd:decimal ;
+    abi:livecodebench "0.4"^^xsd:decimal ;
+    abi:scicode "0.331"^^xsd:decimal ;
+    abi:math_500 "0.907"^^xsd:decimal ;
+    abi:aime "0.44"^^xsd:decimal ;
+    abi:aime_25 "0.303"^^xsd:decimal ;
+    abi:ifbench "0.393"^^xsd:decimal ;
+    abi:lcr "0.28"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Medium 3 from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_medium_3_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Medium 3 Inference Process"@en ;
+    bfo:has_participant abi:mistral_medium_3 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_medium_3_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Medium 3"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_medium_3_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium 3 Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_medium_3 ;
+    bfo:has_part abi:mistral_medium_3_PricingQuality ;
+    bfo:has_part abi:mistral_medium_3_PerformanceQuality ;
+    bfo:has_part abi:mistral_medium_3_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Medium 3"@en .
+
+
+# Mistral Small 3.2 - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699544+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_small_3_2 a abi:AIModelInstance ;
+    rdfs:label "Mistral Small 3.2"@en ;
+    abi:modelName "Mistral Small 3.2" ;
+    abi:modelSlug "mistral-small-3-2" ;
+    abi:artificialAnalysisId "43da3718-3d6e-40dd-901a-05664179ff7f" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_small_3_2_ProcessRealization ;
+    bfo:has_quality abi:mistral_small_3_2_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_small_3_2_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_small_3_2 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Small 3.2 model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Small 3.2 model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Small 3.2 operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_small_3_2_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Small 3.2 Release Date"@en ;
+    abi:releaseDate "2025-06-20"^^xsd:date ;
+    abi:releaseDateRaw "2025-06-20" ;
+    rdfs:comment "Temporal region marking the release of Mistral Small 3.2"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_small_3_2_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.2 Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_small_3_2 ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Small 3.2 per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_small_3_2_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.2 Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_small_3_2 ;
+    abi:outputSpeed "179.008"^^xsd:decimal ;
+    abi:timeToFirstToken "0.284"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.284"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Small 3.2 from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_small_3_2_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.2 Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_small_3_2 ;
+    abi:artificial_analysis_intelligence_index "31.8"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "26.9"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "60.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.681"^^xsd:decimal ;
+    abi:gpqa "0.505"^^xsd:decimal ;
+    abi:hle "0.043"^^xsd:decimal ;
+    abi:livecodebench "0.275"^^xsd:decimal ;
+    abi:scicode "0.264"^^xsd:decimal ;
+    abi:math_500 "0.883"^^xsd:decimal ;
+    abi:aime "0.323"^^xsd:decimal ;
+    abi:aime_25 "0.27"^^xsd:decimal ;
+    abi:ifbench "0.335"^^xsd:decimal ;
+    abi:lcr "0.173"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Small 3.2 from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_small_3_2_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Small 3.2 Inference Process"@en ;
+    bfo:has_participant abi:mistral_small_3_2 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_small_3_2_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Small 3.2"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_small_3_2_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.2 Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_small_3_2 ;
+    bfo:has_part abi:mistral_small_3_2_PricingQuality ;
+    bfo:has_part abi:mistral_small_3_2_PerformanceQuality ;
+    bfo:has_part abi:mistral_small_3_2_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Small 3.2"@en .
+
+
+# Magistral Small - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699583+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:magistral_small a abi:AIModelInstance ;
+    rdfs:label "Magistral Small"@en ;
+    abi:modelName "Magistral Small" ;
+    abi:modelSlug "magistral-small" ;
+    abi:artificialAnalysisId "0fec07d5-a9b2-407a-b5f8-5bf10bd86b59" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:magistral_small_ProcessRealization ;
+    bfo:has_quality abi:magistral_small_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:magistral_small_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:magistral_small ;
+    rdfs:comment "AI Agent that can utilize the Magistral Small model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Magistral Small model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Magistral Small operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:magistral_small_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Magistral Small Release Date"@en ;
+    abi:releaseDate "2025-06-10"^^xsd:date ;
+    abi:releaseDateRaw "2025-06-10" ;
+    rdfs:comment "Temporal region marking the release of Magistral Small"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:magistral_small_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Small Pricing Information"@en ;
+    bfo:inheres_in abi:magistral_small ;
+    abi:inputTokenCost "0.5"^^xsd:decimal ;
+    abi:outputTokenCost "1.5"^^xsd:decimal ;
+    abi:blendedCost "0.75"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Magistral Small per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:magistral_small_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Small Performance Metrics"@en ;
+    bfo:inheres_in abi:magistral_small ;
+    abi:outputSpeed "201.759"^^xsd:decimal ;
+    abi:timeToFirstToken "0.315"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "10.228"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Magistral Small from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:magistral_small_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Small Evaluation Scores"@en ;
+    bfo:inheres_in abi:magistral_small ;
+    abi:artificial_analysis_intelligence_index "36"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "37.8"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "83.8"^^xsd:decimal ;
+    abi:mmlu_pro "0.746"^^xsd:decimal ;
+    abi:gpqa "0.641"^^xsd:decimal ;
+    abi:hle "0.072"^^xsd:decimal ;
+    abi:livecodebench "0.514"^^xsd:decimal ;
+    abi:scicode "0.241"^^xsd:decimal ;
+    abi:math_500 "0.963"^^xsd:decimal ;
+    abi:aime "0.713"^^xsd:decimal ;
+    abi:aime_25 "0.413"^^xsd:decimal ;
+    abi:ifbench "0.248"^^xsd:decimal ;
+    abi:lcr "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Magistral Small from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:magistral_small_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Magistral Small Inference Process"@en ;
+    bfo:has_participant abi:magistral_small ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:magistral_small_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Magistral Small"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:magistral_small_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Small Overall Performance"@en ;
+    bfo:inheres_in abi:magistral_small ;
+    bfo:has_part abi:magistral_small_PricingQuality ;
+    bfo:has_part abi:magistral_small_PerformanceQuality ;
+    bfo:has_part abi:magistral_small_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Magistral Small"@en .
+
+
+# Devstral Small (Jul '25) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699623+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:devstral_small a abi:AIModelInstance ;
+    rdfs:label "Devstral Small (Jul '25)"@en ;
+    abi:modelName "Devstral Small (Jul '25)" ;
+    abi:modelSlug "devstral-small" ;
+    abi:artificialAnalysisId "9eae4ec4-61b8-48bc-9843-3edd506ae933" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:devstral_small_ProcessRealization ;
+    bfo:has_quality abi:devstral_small_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:devstral_small_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:devstral_small ;
+    rdfs:comment "AI Agent that can utilize the Devstral Small (Jul '25) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Devstral Small (Jul '25) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Devstral Small (Jul '25) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:devstral_small_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Devstral Small (Jul '25) Release Date"@en ;
+    abi:releaseDate "2025-07-10"^^xsd:date ;
+    abi:releaseDateRaw "2025-07-10" ;
+    rdfs:comment "Temporal region marking the release of Devstral Small (Jul '25)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:devstral_small_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (Jul '25) Pricing Information"@en ;
+    bfo:inheres_in abi:devstral_small ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Devstral Small (Jul '25) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:devstral_small_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (Jul '25) Performance Metrics"@en ;
+    bfo:inheres_in abi:devstral_small ;
+    abi:outputSpeed "157.869"^^xsd:decimal ;
+    abi:timeToFirstToken "0.315"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.315"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Devstral Small (Jul '25) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:devstral_small_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (Jul '25) Evaluation Scores"@en ;
+    bfo:inheres_in abi:devstral_small ;
+    abi:artificial_analysis_intelligence_index "20.5"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "24.9"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "31.9"^^xsd:decimal ;
+    abi:mmlu_pro "0.622"^^xsd:decimal ;
+    abi:gpqa "0.414"^^xsd:decimal ;
+    abi:hle "0.037"^^xsd:decimal ;
+    abi:livecodebench "0.254"^^xsd:decimal ;
+    abi:scicode "0.243"^^xsd:decimal ;
+    abi:math_500 "0.635"^^xsd:decimal ;
+    abi:aime "0.003"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Devstral Small (Jul '25) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:devstral_small_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Devstral Small (Jul '25) Inference Process"@en ;
+    bfo:has_participant abi:devstral_small ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:devstral_small_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Devstral Small (Jul '25)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:devstral_small_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (Jul '25) Overall Performance"@en ;
+    bfo:inheres_in abi:devstral_small ;
+    bfo:has_part abi:devstral_small_PricingQuality ;
+    bfo:has_part abi:devstral_small_PerformanceQuality ;
+    bfo:has_part abi:devstral_small_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Devstral Small (Jul '25)"@en .
+
+
+# Devstral Medium - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699658+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:devstral_medium a abi:AIModelInstance ;
+    rdfs:label "Devstral Medium"@en ;
+    abi:modelName "Devstral Medium" ;
+    abi:modelSlug "devstral-medium" ;
+    abi:artificialAnalysisId "aba82268-2bb7-4a0f-80be-9b7722e2145b" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:devstral_medium_ProcessRealization ;
+    bfo:has_quality abi:devstral_medium_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:devstral_medium_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:devstral_medium ;
+    rdfs:comment "AI Agent that can utilize the Devstral Medium model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Devstral Medium model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Devstral Medium operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:devstral_medium_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Devstral Medium Release Date"@en ;
+    abi:releaseDate "2025-07-10"^^xsd:date ;
+    abi:releaseDateRaw "2025-07-10" ;
+    rdfs:comment "Temporal region marking the release of Devstral Medium"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:devstral_medium_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Medium Pricing Information"@en ;
+    bfo:inheres_in abi:devstral_medium ;
+    abi:inputTokenCost "0.4"^^xsd:decimal ;
+    abi:outputTokenCost "2"^^xsd:decimal ;
+    abi:blendedCost "0.8"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Devstral Medium per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:devstral_medium_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Medium Performance Metrics"@en ;
+    bfo:inheres_in abi:devstral_medium ;
+    abi:outputSpeed "108.397"^^xsd:decimal ;
+    abi:timeToFirstToken "0.373"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.373"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Devstral Medium from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:devstral_medium_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Medium Evaluation Scores"@en ;
+    bfo:inheres_in abi:devstral_medium ;
+    abi:artificial_analysis_intelligence_index "31.3"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "31.5"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "38.7"^^xsd:decimal ;
+    abi:mmlu_pro "0.708"^^xsd:decimal ;
+    abi:gpqa "0.492"^^xsd:decimal ;
+    abi:hle "0.038"^^xsd:decimal ;
+    abi:livecodebench "0.337"^^xsd:decimal ;
+    abi:scicode "0.294"^^xsd:decimal ;
+    abi:math_500 "0.707"^^xsd:decimal ;
+    abi:aime "0.067"^^xsd:decimal ;
+    abi:aime_25 "0.047"^^xsd:decimal ;
+    abi:ifbench "0.299"^^xsd:decimal ;
+    abi:lcr "0.287"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Devstral Medium from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:devstral_medium_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Devstral Medium Inference Process"@en ;
+    bfo:has_participant abi:devstral_medium ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:devstral_medium_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Devstral Medium"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:devstral_medium_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Medium Overall Performance"@en ;
+    bfo:inheres_in abi:devstral_medium ;
+    bfo:has_part abi:devstral_medium_PricingQuality ;
+    bfo:has_part abi:devstral_medium_PerformanceQuality ;
+    bfo:has_part abi:devstral_medium_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Devstral Medium"@en .
+
+
+# Magistral Medium - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699699+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:magistral_medium a abi:AIModelInstance ;
+    rdfs:label "Magistral Medium"@en ;
+    abi:modelName "Magistral Medium" ;
+    abi:modelSlug "magistral-medium" ;
+    abi:artificialAnalysisId "660965b2-66d2-49ee-a6b9-79a6ac47d3c0" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:magistral_medium_ProcessRealization ;
+    bfo:has_quality abi:magistral_medium_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:magistral_medium_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:magistral_medium ;
+    rdfs:comment "AI Agent that can utilize the Magistral Medium model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Magistral Medium model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Magistral Medium operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:magistral_medium_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Magistral Medium Release Date"@en ;
+    abi:releaseDate "2025-06-10"^^xsd:date ;
+    abi:releaseDateRaw "2025-06-10" ;
+    rdfs:comment "Temporal region marking the release of Magistral Medium"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:magistral_medium_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Medium Pricing Information"@en ;
+    bfo:inheres_in abi:magistral_medium ;
+    abi:inputTokenCost "2"^^xsd:decimal ;
+    abi:outputTokenCost "5"^^xsd:decimal ;
+    abi:blendedCost "2.75"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Magistral Medium per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:magistral_medium_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Medium Performance Metrics"@en ;
+    bfo:inheres_in abi:magistral_medium ;
+    abi:outputSpeed "150.055"^^xsd:decimal ;
+    abi:timeToFirstToken "0.378"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "13.706"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Magistral Medium from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:magistral_medium_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Medium Evaluation Scores"@en ;
+    bfo:inheres_in abi:magistral_medium ;
+    abi:artificial_analysis_intelligence_index "37.6"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "41.2"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "80.9"^^xsd:decimal ;
+    abi:mmlu_pro "0.753"^^xsd:decimal ;
+    abi:gpqa "0.679"^^xsd:decimal ;
+    abi:hle "0.095"^^xsd:decimal ;
+    abi:livecodebench "0.527"^^xsd:decimal ;
+    abi:scicode "0.297"^^xsd:decimal ;
+    abi:math_500 "0.917"^^xsd:decimal ;
+    abi:aime "0.7"^^xsd:decimal ;
+    abi:aime_25 "0.403"^^xsd:decimal ;
+    abi:ifbench "0.251"^^xsd:decimal ;
+    abi:lcr "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Magistral Medium from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:magistral_medium_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Magistral Medium Inference Process"@en ;
+    bfo:has_participant abi:magistral_medium ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:magistral_medium_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Magistral Medium"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:magistral_medium_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Magistral Medium Overall Performance"@en ;
+    bfo:inheres_in abi:magistral_medium ;
+    bfo:has_part abi:magistral_medium_PricingQuality ;
+    bfo:has_part abi:magistral_medium_PerformanceQuality ;
+    bfo:has_part abi:magistral_medium_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Magistral Medium"@en .
+
+
+# Codestral (Jan '25) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699737+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:codestral a abi:AIModelInstance ;
+    rdfs:label "Codestral (Jan '25)"@en ;
+    abi:modelName "Codestral (Jan '25)" ;
+    abi:modelSlug "codestral" ;
+    abi:artificialAnalysisId "fd83b089-139a-4445-8989-583993889b64" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:codestral_ProcessRealization ;
+    bfo:has_quality abi:codestral_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:codestral_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:codestral ;
+    rdfs:comment "AI Agent that can utilize the Codestral (Jan '25) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Codestral (Jan '25) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Codestral (Jan '25) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:codestral_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Codestral (Jan '25) Release Date"@en ;
+    abi:releaseDate "2025-01-13"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-13" ;
+    rdfs:comment "Temporal region marking the release of Codestral (Jan '25)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:codestral_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (Jan '25) Pricing Information"@en ;
+    bfo:inheres_in abi:codestral ;
+    abi:inputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputTokenCost "0.9"^^xsd:decimal ;
+    abi:blendedCost "0.45"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Codestral (Jan '25) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:codestral_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (Jan '25) Performance Metrics"@en ;
+    bfo:inheres_in abi:codestral ;
+    abi:outputSpeed "198.303"^^xsd:decimal ;
+    abi:timeToFirstToken "0.291"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.291"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Codestral (Jan '25) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:codestral_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (Jan '25) Evaluation Scores"@en ;
+    bfo:inheres_in abi:codestral ;
+    abi:artificial_analysis_intelligence_index "15.9"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "24.5"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "32.5"^^xsd:decimal ;
+    abi:mmlu_pro "0.446"^^xsd:decimal ;
+    abi:gpqa "0.312"^^xsd:decimal ;
+    abi:hle "0.045"^^xsd:decimal ;
+    abi:livecodebench "0.243"^^xsd:decimal ;
+    abi:scicode "0.247"^^xsd:decimal ;
+    abi:math_500 "0.607"^^xsd:decimal ;
+    abi:aime "0.043"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Codestral (Jan '25) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:codestral_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Codestral (Jan '25) Inference Process"@en ;
+    bfo:has_participant abi:codestral ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:codestral_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Codestral (Jan '25)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:codestral_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (Jan '25) Overall Performance"@en ;
+    bfo:inheres_in abi:codestral ;
+    bfo:has_part abi:codestral_PricingQuality ;
+    bfo:has_part abi:codestral_PerformanceQuality ;
+    bfo:has_part abi:codestral_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Codestral (Jan '25)"@en .
+
+
+# Mistral Large 2 (Nov '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699773+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_large_2 a abi:AIModelInstance ;
+    rdfs:label "Mistral Large 2 (Nov '24)"@en ;
+    abi:modelName "Mistral Large 2 (Nov '24)" ;
+    abi:modelSlug "mistral-large-2" ;
+    abi:artificialAnalysisId "50f92d5f-f413-4c97-8dab-331101622a28" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_large_2_ProcessRealization ;
+    bfo:has_quality abi:mistral_large_2_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_large_2_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_large_2 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Large 2 (Nov '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Large 2 (Nov '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Large 2 (Nov '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_large_2_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Large 2 (Nov '24) Release Date"@en ;
+    abi:releaseDate "2024-11-18"^^xsd:date ;
+    abi:releaseDateRaw "2024-11-18" ;
+    rdfs:comment "Temporal region marking the release of Mistral Large 2 (Nov '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_large_2_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Nov '24) Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_large_2 ;
+    abi:inputTokenCost "2"^^xsd:decimal ;
+    abi:outputTokenCost "6"^^xsd:decimal ;
+    abi:blendedCost "3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Large 2 (Nov '24) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_large_2_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Nov '24) Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_large_2 ;
+    abi:outputSpeed "49.46"^^xsd:decimal ;
+    abi:timeToFirstToken "0.38"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.38"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Large 2 (Nov '24) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_large_2_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Nov '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_large_2 ;
+    abi:artificial_analysis_intelligence_index "27"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "29.2"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "42.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.697"^^xsd:decimal ;
+    abi:gpqa "0.486"^^xsd:decimal ;
+    abi:hle "0.04"^^xsd:decimal ;
+    abi:livecodebench "0.293"^^xsd:decimal ;
+    abi:scicode "0.292"^^xsd:decimal ;
+    abi:math_500 "0.736"^^xsd:decimal ;
+    abi:aime "0.11"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Large 2 (Nov '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_large_2_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Large 2 (Nov '24) Inference Process"@en ;
+    bfo:has_participant abi:mistral_large_2 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_large_2_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Large 2 (Nov '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_large_2_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Nov '24) Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_large_2 ;
+    bfo:has_part abi:mistral_large_2_PricingQuality ;
+    bfo:has_part abi:mistral_large_2_PerformanceQuality ;
+    bfo:has_part abi:mistral_large_2_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Large 2 (Nov '24)"@en .
+
+
+# Mistral Large 2 (Jul '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699809+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_large_2407 a abi:AIModelInstance ;
+    rdfs:label "Mistral Large 2 (Jul '24)"@en ;
+    abi:modelName "Mistral Large 2 (Jul '24)" ;
+    abi:modelSlug "mistral-large-2407" ;
+    abi:artificialAnalysisId "1b05e346-e86a-4a20-8feb-7da8c65a99aa" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_large_2407_ProcessRealization ;
+    bfo:has_quality abi:mistral_large_2407_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_large_2407_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_large_2407 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Large 2 (Jul '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Large 2 (Jul '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Large 2 (Jul '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_large_2407_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Large 2 (Jul '24) Release Date"@en ;
+    abi:releaseDate "2024-07-24"^^xsd:date ;
+    abi:releaseDateRaw "2024-07-24" ;
+    rdfs:comment "Temporal region marking the release of Mistral Large 2 (Jul '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_large_2407_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Jul '24) Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_large_2407 ;
+    abi:inputTokenCost "2"^^xsd:decimal ;
+    abi:outputTokenCost "6"^^xsd:decimal ;
+    abi:blendedCost "3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Large 2 (Jul '24) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_large_2407_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Jul '24) Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_large_2407 ;
+    abi:outputSpeed "107.657"^^xsd:decimal ;
+    abi:timeToFirstToken "0.396"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.396"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Large 2 (Jul '24) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_large_2407_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Jul '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_large_2407 ;
+    abi:artificial_analysis_intelligence_index "25.2"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "26.9"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "40.4"^^xsd:decimal ;
+    abi:mmlu_pro "0.683"^^xsd:decimal ;
+    abi:gpqa "0.472"^^xsd:decimal ;
+    abi:hle "0.032"^^xsd:decimal ;
+    abi:livecodebench "0.267"^^xsd:decimal ;
+    abi:scicode "0.271"^^xsd:decimal ;
+    abi:math_500 "0.714"^^xsd:decimal ;
+    abi:aime "0.093"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Large 2 (Jul '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_large_2407_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Large 2 (Jul '24) Inference Process"@en ;
+    bfo:has_participant abi:mistral_large_2407 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_large_2407_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Large 2 (Jul '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_large_2407_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large 2 (Jul '24) Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_large_2407 ;
+    bfo:has_part abi:mistral_large_2407_PricingQuality ;
+    bfo:has_part abi:mistral_large_2407_PerformanceQuality ;
+    bfo:has_part abi:mistral_large_2407_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Large 2 (Jul '24)"@en .
+
+
+# Pixtral Large - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699843+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:pixtral_large_2411 a abi:AIModelInstance ;
+    rdfs:label "Pixtral Large"@en ;
+    abi:modelName "Pixtral Large" ;
+    abi:modelSlug "pixtral-large-2411" ;
+    abi:artificialAnalysisId "de0beaf0-c951-487a-8eb4-3dd12e74122c" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:pixtral_large_2411_ProcessRealization ;
+    bfo:has_quality abi:pixtral_large_2411_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:pixtral_large_2411_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:pixtral_large_2411 ;
+    rdfs:comment "AI Agent that can utilize the Pixtral Large model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Pixtral Large model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Pixtral Large operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:pixtral_large_2411_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Pixtral Large Release Date"@en ;
+    abi:releaseDate "2024-11-18"^^xsd:date ;
+    abi:releaseDateRaw "2024-11-18" ;
+    rdfs:comment "Temporal region marking the release of Pixtral Large"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:pixtral_large_2411_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral Large Pricing Information"@en ;
+    bfo:inheres_in abi:pixtral_large_2411 ;
+    abi:inputTokenCost "2"^^xsd:decimal ;
+    abi:outputTokenCost "6"^^xsd:decimal ;
+    abi:blendedCost "3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Pixtral Large per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:pixtral_large_2411_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral Large Performance Metrics"@en ;
+    bfo:inheres_in abi:pixtral_large_2411 ;
+    abi:outputSpeed "81.451"^^xsd:decimal ;
+    abi:timeToFirstToken "30.617"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "30.617"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Pixtral Large from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:pixtral_large_2411_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral Large Evaluation Scores"@en ;
+    bfo:inheres_in abi:pixtral_large_2411 ;
+    abi:artificial_analysis_intelligence_index "26.1"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "27.6"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "39.2"^^xsd:decimal ;
+    abi:mmlu_pro "0.701"^^xsd:decimal ;
+    abi:gpqa "0.505"^^xsd:decimal ;
+    abi:hle "0.036"^^xsd:decimal ;
+    abi:livecodebench "0.261"^^xsd:decimal ;
+    abi:scicode "0.292"^^xsd:decimal ;
+    abi:math_500 "0.714"^^xsd:decimal ;
+    abi:aime "0.07"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Pixtral Large from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:pixtral_large_2411_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Pixtral Large Inference Process"@en ;
+    bfo:has_participant abi:pixtral_large_2411 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:pixtral_large_2411_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Pixtral Large"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:pixtral_large_2411_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral Large Overall Performance"@en ;
+    bfo:inheres_in abi:pixtral_large_2411 ;
+    bfo:has_part abi:pixtral_large_2411_PricingQuality ;
+    bfo:has_part abi:pixtral_large_2411_PerformanceQuality ;
+    bfo:has_part abi:pixtral_large_2411_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Pixtral Large"@en .
+
+
+# Mistral Small 3 - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699883+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_small_3 a abi:AIModelInstance ;
+    rdfs:label "Mistral Small 3"@en ;
+    abi:modelName "Mistral Small 3" ;
+    abi:modelSlug "mistral-small-3" ;
+    abi:artificialAnalysisId "e5dd499f-c330-45ec-9ff0-a99209c82af7" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_small_3_ProcessRealization ;
+    bfo:has_quality abi:mistral_small_3_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_small_3_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_small_3 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Small 3 model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Small 3 model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Small 3 operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_small_3_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Small 3 Release Date"@en ;
+    abi:releaseDate "2025-01-30"^^xsd:date ;
+    abi:releaseDateRaw "2025-01-30" ;
+    rdfs:comment "Temporal region marking the release of Mistral Small 3"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_small_3_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3 Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_small_3 ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Small 3 per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_small_3_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3 Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_small_3 ;
+    abi:outputSpeed "171.423"^^xsd:decimal ;
+    abi:timeToFirstToken "0.283"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.283"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Small 3 from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_small_3_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3 Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_small_3 ;
+    abi:artificial_analysis_intelligence_index "23.9"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "24.4"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "39.8"^^xsd:decimal ;
+    abi:mmlu_pro "0.652"^^xsd:decimal ;
+    abi:gpqa "0.462"^^xsd:decimal ;
+    abi:hle "0.041"^^xsd:decimal ;
+    abi:livecodebench "0.252"^^xsd:decimal ;
+    abi:scicode "0.236"^^xsd:decimal ;
+    abi:math_500 "0.715"^^xsd:decimal ;
+    abi:aime "0.08"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Small 3 from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_small_3_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Small 3 Inference Process"@en ;
+    bfo:has_participant abi:mistral_small_3 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_small_3_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Small 3"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_small_3_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3 Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_small_3 ;
+    bfo:has_part abi:mistral_small_3_PricingQuality ;
+    bfo:has_part abi:mistral_small_3_PerformanceQuality ;
+    bfo:has_part abi:mistral_small_3_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Small 3"@en .
+
+
+# Mistral Small (Sep '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699920+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_small a abi:AIModelInstance ;
+    rdfs:label "Mistral Small (Sep '24)"@en ;
+    abi:modelName "Mistral Small (Sep '24)" ;
+    abi:modelSlug "mistral-small" ;
+    abi:artificialAnalysisId "7c045ca0-b331-488d-af31-df0fd331dfd1" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_small_ProcessRealization ;
+    bfo:has_quality abi:mistral_small_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_small_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_small ;
+    rdfs:comment "AI Agent that can utilize the Mistral Small (Sep '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Small (Sep '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Small (Sep '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_small_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Small (Sep '24) Release Date"@en ;
+    abi:releaseDate "2024-09-17"^^xsd:date ;
+    abi:releaseDateRaw "2024-09-17" ;
+    rdfs:comment "Temporal region marking the release of Mistral Small (Sep '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_small_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Sep '24) Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_small ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.6"^^xsd:decimal ;
+    abi:blendedCost "0.3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Small (Sep '24) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_small_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Sep '24) Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_small ;
+    abi:outputSpeed "95.887"^^xsd:decimal ;
+    abi:timeToFirstToken "0.31"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.31"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Small (Sep '24) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_small_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Sep '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_small ;
+    abi:artificial_analysis_intelligence_index "15.7"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "14.8"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "31.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.529"^^xsd:decimal ;
+    abi:gpqa "0.381"^^xsd:decimal ;
+    abi:hle "0.043"^^xsd:decimal ;
+    abi:livecodebench "0.141"^^xsd:decimal ;
+    abi:scicode "0.156"^^xsd:decimal ;
+    abi:math_500 "0.563"^^xsd:decimal ;
+    abi:aime "0.063"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Small (Sep '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_small_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Small (Sep '24) Inference Process"@en ;
+    bfo:has_participant abi:mistral_small ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_small_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Small (Sep '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_small_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Sep '24) Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_small ;
+    bfo:has_part abi:mistral_small_PricingQuality ;
+    bfo:has_part abi:mistral_small_PerformanceQuality ;
+    bfo:has_part abi:mistral_small_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Small (Sep '24)"@en .
+
+
+# Mixtral 8x22B Instruct - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699960+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_8x22b_instruct a abi:AIModelInstance ;
+    rdfs:label "Mixtral 8x22B Instruct"@en ;
+    abi:modelName "Mixtral 8x22B Instruct" ;
+    abi:modelSlug "mistral-8x22b-instruct" ;
+    abi:artificialAnalysisId "ca6c1412-f3c1-4391-9231-f83a702aa7af" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_8x22b_instruct_ProcessRealization ;
+    bfo:has_quality abi:mistral_8x22b_instruct_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_8x22b_instruct_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_8x22b_instruct ;
+    rdfs:comment "AI Agent that can utilize the Mixtral 8x22B Instruct model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mixtral 8x22B Instruct model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mixtral 8x22B Instruct operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_8x22b_instruct_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mixtral 8x22B Instruct Release Date"@en ;
+    abi:releaseDate "2024-04-17"^^xsd:date ;
+    abi:releaseDateRaw "2024-04-17" ;
+    rdfs:comment "Temporal region marking the release of Mixtral 8x22B Instruct"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_8x22b_instruct_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x22B Instruct Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_8x22b_instruct ;
+    abi:inputTokenCost "2"^^xsd:decimal ;
+    abi:outputTokenCost "6"^^xsd:decimal ;
+    abi:blendedCost "3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mixtral 8x22B Instruct per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_8x22b_instruct_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x22B Instruct Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_8x22b_instruct ;
+    abi:outputSpeed "54.895"^^xsd:decimal ;
+    abi:timeToFirstToken "0.367"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.367"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mixtral 8x22B Instruct from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_8x22b_instruct_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x22B Instruct Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_8x22b_instruct ;
+    abi:artificial_analysis_intelligence_index "14.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "16.8"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "27.2"^^xsd:decimal ;
+    abi:mmlu_pro "0.537"^^xsd:decimal ;
+    abi:gpqa "0.332"^^xsd:decimal ;
+    abi:hle "0.041"^^xsd:decimal ;
+    abi:livecodebench "0.148"^^xsd:decimal ;
+    abi:scicode "0.188"^^xsd:decimal ;
+    abi:math_500 "0.545"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mixtral 8x22B Instruct from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_8x22b_instruct_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mixtral 8x22B Instruct Inference Process"@en ;
+    bfo:has_participant abi:mistral_8x22b_instruct ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_8x22b_instruct_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mixtral 8x22B Instruct"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_8x22b_instruct_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x22B Instruct Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_8x22b_instruct ;
+    bfo:has_part abi:mistral_8x22b_instruct_PricingQuality ;
+    bfo:has_part abi:mistral_8x22b_instruct_PerformanceQuality ;
+    bfo:has_part abi:mistral_8x22b_instruct_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mixtral 8x22B Instruct"@en .
+
+
+# Mistral Small (Feb '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.699996+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_small_2402 a abi:AIModelInstance ;
+    rdfs:label "Mistral Small (Feb '24)"@en ;
+    abi:modelName "Mistral Small (Feb '24)" ;
+    abi:modelSlug "mistral-small-2402" ;
+    abi:artificialAnalysisId "35d602fc-b8b8-4698-9f4d-f2ce11ca50e4" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_small_2402_ProcessRealization ;
+    bfo:has_quality abi:mistral_small_2402_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_small_2402_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_small_2402 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Small (Feb '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Small (Feb '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Small (Feb '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_small_2402_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Small (Feb '24) Release Date"@en ;
+    abi:releaseDate "2024-02-26"^^xsd:date ;
+    abi:releaseDateRaw "2024-02-26" ;
+    rdfs:comment "Temporal region marking the release of Mistral Small (Feb '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_small_2402_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Feb '24) Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_small_2402 ;
+    abi:inputTokenCost "1"^^xsd:decimal ;
+    abi:outputTokenCost "3"^^xsd:decimal ;
+    abi:blendedCost "1.5"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Small (Feb '24) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_small_2402_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Feb '24) Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_small_2402 ;
+    abi:outputSpeed "174.843"^^xsd:decimal ;
+    abi:timeToFirstToken "0.283"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.283"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Small (Feb '24) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_small_2402_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Feb '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_small_2402 ;
+    abi:artificial_analysis_intelligence_index "11"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "12.3"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "28.4"^^xsd:decimal ;
+    abi:mmlu_pro "0.419"^^xsd:decimal ;
+    abi:gpqa "0.302"^^xsd:decimal ;
+    abi:hle "0.044"^^xsd:decimal ;
+    abi:livecodebench "0.111"^^xsd:decimal ;
+    abi:scicode "0.134"^^xsd:decimal ;
+    abi:math_500 "0.562"^^xsd:decimal ;
+    abi:aime "0.007"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Small (Feb '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_small_2402_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Small (Feb '24) Inference Process"@en ;
+    bfo:has_participant abi:mistral_small_2402 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_small_2402_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Small (Feb '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_small_2402_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small (Feb '24) Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_small_2402 ;
+    bfo:has_part abi:mistral_small_2402_PricingQuality ;
+    bfo:has_part abi:mistral_small_2402_PerformanceQuality ;
+    bfo:has_part abi:mistral_small_2402_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Small (Feb '24)"@en .
+
+
+# Mistral Large (Feb '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700051+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_large a abi:AIModelInstance ;
+    rdfs:label "Mistral Large (Feb '24)"@en ;
+    abi:modelName "Mistral Large (Feb '24)" ;
+    abi:modelSlug "mistral-large" ;
+    abi:artificialAnalysisId "5e4e4590-a77e-4b66-95f8-f3960a1a7c68" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_large_ProcessRealization ;
+    bfo:has_quality abi:mistral_large_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_large_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_large ;
+    rdfs:comment "AI Agent that can utilize the Mistral Large (Feb '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Large (Feb '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Large (Feb '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_large_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Large (Feb '24) Release Date"@en ;
+    abi:releaseDate "2024-02-26"^^xsd:date ;
+    abi:releaseDateRaw "2024-02-26" ;
+    rdfs:comment "Temporal region marking the release of Mistral Large (Feb '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_large_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large (Feb '24) Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_large ;
+    abi:inputTokenCost "4"^^xsd:decimal ;
+    abi:outputTokenCost "12"^^xsd:decimal ;
+    abi:blendedCost "6"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Large (Feb '24) per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_large_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large (Feb '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_large ;
+    abi:artificial_analysis_intelligence_index "14.6"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "19.3"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "26.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.515"^^xsd:decimal ;
+    abi:gpqa "0.351"^^xsd:decimal ;
+    abi:hle "0.034"^^xsd:decimal ;
+    abi:livecodebench "0.178"^^xsd:decimal ;
+    abi:scicode "0.208"^^xsd:decimal ;
+    abi:math_500 "0.527"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Large (Feb '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_large_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Large (Feb '24) Inference Process"@en ;
+    bfo:has_participant abi:mistral_large ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_large_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Large (Feb '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_large_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Large (Feb '24) Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_large ;
+    bfo:has_part abi:mistral_large_PricingQuality ;
+    bfo:has_part abi:mistral_large_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Large (Feb '24)"@en .
+
+
+# Pixtral 12B (2409) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700101+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:pixtral a abi:AIModelInstance ;
+    rdfs:label "Pixtral 12B (2409)"@en ;
+    abi:modelName "Pixtral 12B (2409)" ;
+    abi:modelSlug "pixtral" ;
+    abi:artificialAnalysisId "3197f919-027c-4739-b8e1-c04e912c8a84" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:pixtral_ProcessRealization ;
+    bfo:has_quality abi:pixtral_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:pixtral_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:pixtral ;
+    rdfs:comment "AI Agent that can utilize the Pixtral 12B (2409) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Pixtral 12B (2409) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Pixtral 12B (2409) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:pixtral_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Pixtral 12B (2409) Release Date"@en ;
+    abi:releaseDate "2024-09-11"^^xsd:date ;
+    abi:releaseDateRaw "2024-09-11" ;
+    rdfs:comment "Temporal region marking the release of Pixtral 12B (2409)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:pixtral_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral 12B (2409) Pricing Information"@en ;
+    bfo:inheres_in abi:pixtral ;
+    abi:inputTokenCost "0.15"^^xsd:decimal ;
+    abi:outputTokenCost "0.15"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Pixtral 12B (2409) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:pixtral_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral 12B (2409) Performance Metrics"@en ;
+    bfo:inheres_in abi:pixtral ;
+    abi:outputSpeed "101.3"^^xsd:decimal ;
+    abi:timeToFirstToken "0.314"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.314"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Pixtral 12B (2409) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:pixtral_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral 12B (2409) Evaluation Scores"@en ;
+    bfo:inheres_in abi:pixtral ;
+    abi:artificial_analysis_intelligence_index "11.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "12.5"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "22.9"^^xsd:decimal ;
+    abi:mmlu_pro "0.473"^^xsd:decimal ;
+    abi:gpqa "0.343"^^xsd:decimal ;
+    abi:hle "0.053"^^xsd:decimal ;
+    abi:livecodebench "0.115"^^xsd:decimal ;
+    abi:scicode "0.135"^^xsd:decimal ;
+    abi:math_500 "0.458"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Pixtral 12B (2409) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:pixtral_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Pixtral 12B (2409) Inference Process"@en ;
+    bfo:has_participant abi:pixtral ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:pixtral_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Pixtral 12B (2409)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:pixtral_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Pixtral 12B (2409) Overall Performance"@en ;
+    bfo:inheres_in abi:pixtral ;
+    bfo:has_part abi:pixtral_PricingQuality ;
+    bfo:has_part abi:pixtral_PerformanceQuality ;
+    bfo:has_part abi:pixtral_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Pixtral 12B (2409)"@en .
+
+
+# Mistral NeMo - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700142+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_nemo a abi:AIModelInstance ;
+    rdfs:label "Mistral NeMo"@en ;
+    abi:modelName "Mistral NeMo" ;
+    abi:modelSlug "mistral-nemo" ;
+    abi:artificialAnalysisId "265fff6b-44c0-4264-96b5-dca943ef0605" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_nemo_ProcessRealization ;
+    bfo:has_quality abi:mistral_nemo_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_nemo_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_nemo ;
+    rdfs:comment "AI Agent that can utilize the Mistral NeMo model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral NeMo model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral NeMo operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_nemo_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral NeMo Release Date"@en ;
+    abi:releaseDate "2024-07-18"^^xsd:date ;
+    abi:releaseDateRaw "2024-07-18" ;
+    rdfs:comment "Temporal region marking the release of Mistral NeMo"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_nemo_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral NeMo Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_nemo ;
+    abi:inputTokenCost "0.15"^^xsd:decimal ;
+    abi:outputTokenCost "0.15"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral NeMo per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_nemo_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral NeMo Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_nemo ;
+    abi:outputSpeed "178.608"^^xsd:decimal ;
+    abi:timeToFirstToken "0.304"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.304"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral NeMo from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_nemo_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral NeMo Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_nemo ;
+    abi:artificial_analysis_intelligence_index "7.5"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "8.1"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "19.9"^^xsd:decimal ;
+    abi:mmlu_pro "0.399"^^xsd:decimal ;
+    abi:gpqa "0.314"^^xsd:decimal ;
+    abi:hle "0.044"^^xsd:decimal ;
+    abi:livecodebench "0.057"^^xsd:decimal ;
+    abi:scicode "0.104"^^xsd:decimal ;
+    abi:math_500 "0.395"^^xsd:decimal ;
+    abi:aime "0.003"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral NeMo from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_nemo_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral NeMo Inference Process"@en ;
+    bfo:has_participant abi:mistral_nemo ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_nemo_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral NeMo"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_nemo_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral NeMo Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_nemo ;
+    bfo:has_part abi:mistral_nemo_PricingQuality ;
+    bfo:has_part abi:mistral_nemo_PerformanceQuality ;
+    bfo:has_part abi:mistral_nemo_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral NeMo"@en .
+
+
+# Mixtral 8x7B Instruct - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700181+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mixtral_8x7b_instruct a abi:AIModelInstance ;
+    rdfs:label "Mixtral 8x7B Instruct"@en ;
+    abi:modelName "Mixtral 8x7B Instruct" ;
+    abi:modelSlug "mixtral-8x7b-instruct" ;
+    abi:artificialAnalysisId "3edcb2ed-6981-4f88-a556-563f7f8f00aa" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mixtral_8x7b_instruct_ProcessRealization ;
+    bfo:has_quality abi:mixtral_8x7b_instruct_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mixtral_8x7b_instruct_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mixtral_8x7b_instruct ;
+    rdfs:comment "AI Agent that can utilize the Mixtral 8x7B Instruct model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mixtral 8x7B Instruct model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mixtral 8x7B Instruct operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mixtral_8x7b_instruct_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mixtral 8x7B Instruct Release Date"@en ;
+    abi:releaseDate "2023-12-11"^^xsd:date ;
+    abi:releaseDateRaw "2023-12-11" ;
+    rdfs:comment "Temporal region marking the release of Mixtral 8x7B Instruct"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mixtral_8x7b_instruct_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x7B Instruct Pricing Information"@en ;
+    bfo:inheres_in abi:mixtral_8x7b_instruct ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "0.7"^^xsd:decimal ;
+    abi:blendedCost "0.7"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mixtral 8x7B Instruct per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mixtral_8x7b_instruct_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x7B Instruct Performance Metrics"@en ;
+    bfo:inheres_in abi:mixtral_8x7b_instruct ;
+    abi:outputSpeed "79.663"^^xsd:decimal ;
+    abi:timeToFirstToken "0.345"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.345"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mixtral 8x7B Instruct from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mixtral_8x7b_instruct_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x7B Instruct Evaluation Scores"@en ;
+    bfo:inheres_in abi:mixtral_8x7b_instruct ;
+    abi:artificial_analysis_intelligence_index "4.8"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "4.7"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "15"^^xsd:decimal ;
+    abi:mmlu_pro "0.387"^^xsd:decimal ;
+    abi:gpqa "0.292"^^xsd:decimal ;
+    abi:hle "0.045"^^xsd:decimal ;
+    abi:livecodebench "0.066"^^xsd:decimal ;
+    abi:scicode "0.028"^^xsd:decimal ;
+    abi:math_500 "0.299"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mixtral 8x7B Instruct from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mixtral_8x7b_instruct_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mixtral 8x7B Instruct Inference Process"@en ;
+    bfo:has_participant abi:mixtral_8x7b_instruct ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mixtral_8x7b_instruct_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mixtral 8x7B Instruct"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mixtral_8x7b_instruct_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mixtral 8x7B Instruct Overall Performance"@en ;
+    bfo:inheres_in abi:mixtral_8x7b_instruct ;
+    bfo:has_part abi:mixtral_8x7b_instruct_PricingQuality ;
+    bfo:has_part abi:mixtral_8x7b_instruct_PerformanceQuality ;
+    bfo:has_part abi:mixtral_8x7b_instruct_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mixtral 8x7B Instruct"@en .
+
+
+# Codestral-Mamba - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700218+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:codestral_mamba a abi:AIModelInstance ;
+    rdfs:label "Codestral-Mamba"@en ;
+    abi:modelName "Codestral-Mamba" ;
+    abi:modelSlug "codestral-mamba" ;
+    abi:artificialAnalysisId "843c3155-6d57-48e1-80fd-d7481dedec29" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:codestral_mamba_ProcessRealization ;
+    bfo:has_quality abi:codestral_mamba_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:codestral_mamba_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:codestral_mamba ;
+    rdfs:comment "AI Agent that can utilize the Codestral-Mamba model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Codestral-Mamba model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Codestral-Mamba operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:codestral_mamba_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Codestral-Mamba Release Date"@en ;
+    abi:releaseDate "2024-07-16"^^xsd:date ;
+    abi:releaseDateRaw "2024-07-16" ;
+    rdfs:comment "Temporal region marking the release of Codestral-Mamba"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:codestral_mamba_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral-Mamba Pricing Information"@en ;
+    bfo:inheres_in abi:codestral_mamba ;
+    rdfs:comment "Pricing information for Codestral-Mamba per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:codestral_mamba_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral-Mamba Evaluation Scores"@en ;
+    bfo:inheres_in abi:codestral_mamba ;
+    abi:artificial_analysis_intelligence_index "1.6"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "12.1"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "12"^^xsd:decimal ;
+    abi:mmlu_pro "0.209"^^xsd:decimal ;
+    abi:gpqa "0.21"^^xsd:decimal ;
+    abi:hle "0.054"^^xsd:decimal ;
+    abi:livecodebench "0.133"^^xsd:decimal ;
+    abi:scicode "0.108"^^xsd:decimal ;
+    abi:math_500 "0.24"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Codestral-Mamba from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:codestral_mamba_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Codestral-Mamba Inference Process"@en ;
+    bfo:has_participant abi:codestral_mamba ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:codestral_mamba_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Codestral-Mamba"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:codestral_mamba_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Codestral-Mamba Overall Performance"@en ;
+    bfo:inheres_in abi:codestral_mamba ;
+    bfo:has_part abi:codestral_mamba_PricingQuality ;
+    bfo:has_part abi:codestral_mamba_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Codestral-Mamba"@en .
+
+
+# Mistral 7B Instruct - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700252+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_7b_instruct a abi:AIModelInstance ;
+    rdfs:label "Mistral 7B Instruct"@en ;
+    abi:modelName "Mistral 7B Instruct" ;
+    abi:modelSlug "mistral-7b-instruct" ;
+    abi:artificialAnalysisId "217b34ec-5920-4fc1-8886-6a70a324837d" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_7b_instruct_ProcessRealization ;
+    bfo:has_quality abi:mistral_7b_instruct_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_7b_instruct_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_7b_instruct ;
+    rdfs:comment "AI Agent that can utilize the Mistral 7B Instruct model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral 7B Instruct model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral 7B Instruct operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_7b_instruct_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral 7B Instruct Release Date"@en ;
+    abi:releaseDate "2023-09-27"^^xsd:date ;
+    abi:releaseDateRaw "2023-09-27" ;
+    rdfs:comment "Temporal region marking the release of Mistral 7B Instruct"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_7b_instruct_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral 7B Instruct Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_7b_instruct ;
+    abi:inputTokenCost "0.25"^^xsd:decimal ;
+    abi:outputTokenCost "0.25"^^xsd:decimal ;
+    abi:blendedCost "0.25"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral 7B Instruct per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_7b_instruct_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral 7B Instruct Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_7b_instruct ;
+    abi:outputSpeed "124.089"^^xsd:decimal ;
+    abi:timeToFirstToken "0.295"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.295"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral 7B Instruct from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_7b_instruct_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral 7B Instruct Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_7b_instruct ;
+    abi:artificial_analysis_intelligence_index "1"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "3.5"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "6.1"^^xsd:decimal ;
+    abi:mmlu_pro "0.245"^^xsd:decimal ;
+    abi:gpqa "0.177"^^xsd:decimal ;
+    abi:hle "0.043"^^xsd:decimal ;
+    abi:livecodebench "0.046"^^xsd:decimal ;
+    abi:scicode "0.024"^^xsd:decimal ;
+    abi:math_500 "0.121"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral 7B Instruct from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_7b_instruct_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral 7B Instruct Inference Process"@en ;
+    bfo:has_participant abi:mistral_7b_instruct ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_7b_instruct_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral 7B Instruct"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_7b_instruct_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral 7B Instruct Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_7b_instruct ;
+    bfo:has_part abi:mistral_7b_instruct_PricingQuality ;
+    bfo:has_part abi:mistral_7b_instruct_PerformanceQuality ;
+    bfo:has_part abi:mistral_7b_instruct_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral 7B Instruct"@en .
+
+
+# Codestral (May '24) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700293+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:codestral_2405 a abi:AIModelInstance ;
+    rdfs:label "Codestral (May '24)"@en ;
+    abi:modelName "Codestral (May '24)" ;
+    abi:modelSlug "codestral-2405" ;
+    abi:artificialAnalysisId "55c73488-1da5-4be6-9dd4-9dd2a421d0d0" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:codestral_2405_ProcessRealization ;
+    bfo:has_quality abi:codestral_2405_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:codestral_2405_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:codestral_2405 ;
+    rdfs:comment "AI Agent that can utilize the Codestral (May '24) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Codestral (May '24) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Codestral (May '24) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:codestral_2405_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Codestral (May '24) Release Date"@en ;
+    abi:releaseDate "2024-05-29"^^xsd:date ;
+    abi:releaseDateRaw "2024-05-29" ;
+    rdfs:comment "Temporal region marking the release of Codestral (May '24)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:codestral_2405_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (May '24) Pricing Information"@en ;
+    bfo:inheres_in abi:codestral_2405 ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.6"^^xsd:decimal ;
+    abi:blendedCost "0.3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Codestral (May '24) per million tokens"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:codestral_2405_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (May '24) Evaluation Scores"@en ;
+    bfo:inheres_in abi:codestral_2405 ;
+    abi:artificial_analysis_intelligence_index "8.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "21.5"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "17.7"^^xsd:decimal ;
+    abi:mmlu_pro "0.331"^^xsd:decimal ;
+    abi:gpqa "0.255"^^xsd:decimal ;
+    abi:hle "0.051"^^xsd:decimal ;
+    abi:livecodebench "0.213"^^xsd:decimal ;
+    abi:scicode "0.218"^^xsd:decimal ;
+    abi:math_500 "0.354"^^xsd:decimal ;
+    abi:aime "0"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Codestral (May '24) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:codestral_2405_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Codestral (May '24) Inference Process"@en ;
+    bfo:has_participant abi:codestral_2405 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:codestral_2405_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Codestral (May '24)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:codestral_2405_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Codestral (May '24) Overall Performance"@en ;
+    bfo:inheres_in abi:codestral_2405 ;
+    bfo:has_part abi:codestral_2405_PricingQuality ;
+    bfo:has_part abi:codestral_2405_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Codestral (May '24)"@en .
+
+
+# Mistral Saba - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700327+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_saba a abi:AIModelInstance ;
+    rdfs:label "Mistral Saba"@en ;
+    abi:modelName "Mistral Saba" ;
+    abi:modelSlug "mistral-saba" ;
+    abi:artificialAnalysisId "7a7b52f6-fdef-4dae-9203-58c710ccc81d" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_saba_ProcessRealization ;
+    bfo:has_quality abi:mistral_saba_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_saba_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_saba ;
+    rdfs:comment "AI Agent that can utilize the Mistral Saba model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Saba model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Saba operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_saba_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Saba Release Date"@en ;
+    abi:releaseDate "2025-02-17"^^xsd:date ;
+    abi:releaseDateRaw "2025-02-17" ;
+    rdfs:comment "Temporal region marking the release of Mistral Saba"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_saba_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Saba Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_saba ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.6"^^xsd:decimal ;
+    abi:blendedCost "0.3"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Saba per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_saba_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Saba Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_saba ;
+    abi:outputSpeed "96.49"^^xsd:decimal ;
+    abi:timeToFirstToken "0.309"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.309"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Saba from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_saba_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Saba Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_saba ;
+    abi:artificial_analysis_intelligence_index "22.6"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "40.3"^^xsd:decimal ;
+    abi:mmlu_pro "0.611"^^xsd:decimal ;
+    abi:gpqa "0.424"^^xsd:decimal ;
+    abi:hle "0.041"^^xsd:decimal ;
+    abi:scicode "0.241"^^xsd:decimal ;
+    abi:math_500 "0.677"^^xsd:decimal ;
+    abi:aime "0.13"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Saba from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_saba_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Saba Inference Process"@en ;
+    bfo:has_participant abi:mistral_saba ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_saba_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Saba"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_saba_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Saba Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_saba ;
+    bfo:has_part abi:mistral_saba_PricingQuality ;
+    bfo:has_part abi:mistral_saba_PerformanceQuality ;
+    bfo:has_part abi:mistral_saba_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Saba"@en .
+
+
+# Mistral Small 3.1 - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700359+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_small_3_1 a abi:AIModelInstance ;
+    rdfs:label "Mistral Small 3.1"@en ;
+    abi:modelName "Mistral Small 3.1" ;
+    abi:modelSlug "mistral-small-3-1" ;
+    abi:artificialAnalysisId "24ac5b00-5f03-4c47-8e37-522d1195383e" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_small_3_1_ProcessRealization ;
+    bfo:has_quality abi:mistral_small_3_1_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_small_3_1_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_small_3_1 ;
+    rdfs:comment "AI Agent that can utilize the Mistral Small 3.1 model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Small 3.1 model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Small 3.1 operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_small_3_1_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Small 3.1 Release Date"@en ;
+    abi:releaseDate "2025-03-17"^^xsd:date ;
+    abi:releaseDateRaw "2025-03-17" ;
+    rdfs:comment "Temporal region marking the release of Mistral Small 3.1"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_small_3_1_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.1 Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_small_3_1 ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Small 3.1 per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_small_3_1_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.1 Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_small_3_1 ;
+    abi:outputSpeed "152.866"^^xsd:decimal ;
+    abi:timeToFirstToken "0.297"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.297"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Small 3.1 from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_small_3_1_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.1 Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_small_3_1 ;
+    abi:artificial_analysis_intelligence_index "26.4"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "23.8"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "40"^^xsd:decimal ;
+    abi:mmlu_pro "0.659"^^xsd:decimal ;
+    abi:gpqa "0.454"^^xsd:decimal ;
+    abi:hle "0.048"^^xsd:decimal ;
+    abi:livecodebench "0.212"^^xsd:decimal ;
+    abi:scicode "0.265"^^xsd:decimal ;
+    abi:math_500 "0.707"^^xsd:decimal ;
+    abi:aime "0.093"^^xsd:decimal ;
+    abi:aime_25 "0.037"^^xsd:decimal ;
+    abi:ifbench "0.299"^^xsd:decimal ;
+    abi:lcr "0.137"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Small 3.1 from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_small_3_1_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Small 3.1 Inference Process"@en ;
+    bfo:has_participant abi:mistral_small_3_1 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_small_3_1_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Small 3.1"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_small_3_1_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Small 3.1 Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_small_3_1 ;
+    bfo:has_part abi:mistral_small_3_1_PricingQuality ;
+    bfo:has_part abi:mistral_small_3_1_PerformanceQuality ;
+    bfo:has_part abi:mistral_small_3_1_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Small 3.1"@en .
+
+
+# Devstral Small (May '25) - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700399+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:devstral_small_2505 a abi:AIModelInstance ;
+    rdfs:label "Devstral Small (May '25)"@en ;
+    abi:modelName "Devstral Small (May '25)" ;
+    abi:modelSlug "devstral-small-2505" ;
+    abi:artificialAnalysisId "cc1fa238-1a76-486d-a997-22309275eadd" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:devstral_small_2505_ProcessRealization ;
+    bfo:has_quality abi:devstral_small_2505_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:devstral_small_2505_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:devstral_small_2505 ;
+    rdfs:comment "AI Agent that can utilize the Devstral Small (May '25) model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Devstral Small (May '25) model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Devstral Small (May '25) operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:devstral_small_2505_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Devstral Small (May '25) Release Date"@en ;
+    abi:releaseDate "2025-05-21"^^xsd:date ;
+    abi:releaseDateRaw "2025-05-21" ;
+    rdfs:comment "Temporal region marking the release of Devstral Small (May '25)"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:devstral_small_2505_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (May '25) Pricing Information"@en ;
+    bfo:inheres_in abi:devstral_small_2505 ;
+    abi:inputTokenCost "0.1"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:blendedCost "0.15"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Devstral Small (May '25) per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:devstral_small_2505_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (May '25) Performance Metrics"@en ;
+    bfo:inheres_in abi:devstral_small_2505 ;
+    abi:outputSpeed "127.368"^^xsd:decimal ;
+    abi:timeToFirstToken "0.342"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.342"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Devstral Small (May '25) from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:devstral_small_2505_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (May '25) Evaluation Scores"@en ;
+    bfo:inheres_in abi:devstral_small_2505 ;
+    abi:artificial_analysis_intelligence_index "22.7"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "25.2"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "37.5"^^xsd:decimal ;
+    abi:mmlu_pro "0.632"^^xsd:decimal ;
+    abi:gpqa "0.434"^^xsd:decimal ;
+    abi:hle "0.04"^^xsd:decimal ;
+    abi:livecodebench "0.258"^^xsd:decimal ;
+    abi:scicode "0.245"^^xsd:decimal ;
+    abi:math_500 "0.684"^^xsd:decimal ;
+    abi:aime "0.067"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Devstral Small (May '25) from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:devstral_small_2505_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Devstral Small (May '25) Inference Process"@en ;
+    bfo:has_participant abi:devstral_small_2505 ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:devstral_small_2505_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Devstral Small (May '25)"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:devstral_small_2505_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Devstral Small (May '25) Overall Performance"@en ;
+    bfo:inheres_in abi:devstral_small_2505 ;
+    bfo:has_part abi:devstral_small_2505_PricingQuality ;
+    bfo:has_part abi:devstral_small_2505_PerformanceQuality ;
+    bfo:has_part abi:devstral_small_2505_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Devstral Small (May '25)"@en .
+
+
+# Mistral Medium - AI Model Instance
+# Generated: 2025-08-11T20:15:31.700435+00:00
+# Source: Artificial Analysis API
+
+# AI Model Instance (Material Entity - BFO_0000040)
+abi:mistral_medium a abi:AIModelInstance ;
+    rdfs:label "Mistral Medium"@en ;
+    abi:modelName "Mistral Medium" ;
+    abi:modelSlug "mistral-medium" ;
+    abi:artificialAnalysisId "1f05af98-1ec6-4506-a0b8-57a8c9b63878" ;
+    abi:providerName "Mistral" ;
+    abi:belongsToAgent abi:MistralAgent ;
+    bfo:participates_in abi:mistral_medium_ProcessRealization ;
+    bfo:has_quality abi:mistral_medium_Performance ;
+    bfo:located_in abi:mistral_InfrastructureSite ;
+    bfo:exists_at abi:mistral_medium_ReleaseTemporalRegion ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data"@en .
+
+# AI Agent (this model belongs to)
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral AI Agent"@en ;
+    abi:utilizesModel abi:mistral_medium ;
+    rdfs:comment "AI Agent that can utilize the Mistral Medium model"@en .
+
+# Provider/Creator Entity (Independent Continuant - BFO_0000004)  
+abi:mistral_Organization a bfo:BFO_0000027 ;  # object aggregate
+    rdfs:label "Mistral"@en ;
+    abi:organizationName "Mistral" ;
+    abi:organizationSlug "mistral" ;
+    bfo:has_part abi:mistral_InfrastructureSite ;
+    rdfs:comment "Organization that created and operates the Mistral Medium model"@en .
+
+# Infrastructure Site (Site - BFO_0000029)
+abi:mistral_InfrastructureSite a bfo:BFO_0000029 ;
+    rdfs:label "Mistral Infrastructure Site"@en ;
+    bfo:part_of abi:mistral_Organization ;
+    rdfs:comment "Physical/virtual infrastructure site where Mistral Medium operates"@en .
+
+# Release Temporal Region (Temporal Region - BFO_0000008)
+abi:mistral_medium_ReleaseTemporalRegion a bfo:BFO_0000008 ;
+    rdfs:label "Mistral Medium Release Date"@en ;
+    abi:releaseDate "2023-12-11"^^xsd:date ;
+    abi:releaseDateRaw "2023-12-11" ;
+    rdfs:comment "Temporal region marking the release of Mistral Medium"@en .
+
+# Pricing Quality (Quality - BFO_0000019)
+abi:mistral_medium_PricingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium Pricing Information"@en ;
+    bfo:inheres_in abi:mistral_medium ;
+    abi:inputTokenCost "2.75"^^xsd:decimal ;
+    abi:outputTokenCost "8.1"^^xsd:decimal ;
+    abi:blendedCost "4.088"^^xsd:decimal ;
+    rdfs:comment "Pricing information for Mistral Medium per million tokens"@en .
+
+# Performance Quality (Quality - BFO_0000019)
+abi:mistral_medium_PerformanceQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium Performance Metrics"@en ;
+    bfo:inheres_in abi:mistral_medium ;
+    abi:outputSpeed "59.968"^^xsd:decimal ;
+    abi:timeToFirstToken "0.379"^^xsd:decimal ;
+    abi:timeToFirstAnswerToken "0.379"^^xsd:decimal ;
+    rdfs:comment "Performance metrics for Mistral Medium from Artificial Analysis benchmarks"@en .
+
+# Evaluation Quality (Quality - BFO_0000019)
+abi:mistral_medium_EvaluationQuality a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium Evaluation Scores"@en ;
+    bfo:inheres_in abi:mistral_medium ;
+    abi:artificial_analysis_intelligence_index "10.9"^^xsd:decimal ;
+    abi:artificial_analysis_coding_index "10.9"^^xsd:decimal ;
+    abi:artificial_analysis_math_index "22.1"^^xsd:decimal ;
+    abi:mmlu_pro "0.491"^^xsd:decimal ;
+    abi:gpqa "0.349"^^xsd:decimal ;
+    abi:hle "0.034"^^xsd:decimal ;
+    abi:livecodebench "0.099"^^xsd:decimal ;
+    abi:scicode "0.118"^^xsd:decimal ;
+    abi:math_500 "0.405"^^xsd:decimal ;
+    abi:aime "0.037"^^xsd:decimal ;
+    abi:sourceAPI "https://artificialanalysis.ai/" ;
+    rdfs:comment "Evaluation scores for Mistral Medium from various benchmarks"@en .
+
+# Model Process Realization (Process - BFO_0000015)
+abi:mistral_medium_ProcessRealization a bfo:BFO_0000015 ;
+    rdfs:label "Mistral Medium Inference Process"@en ;
+    bfo:has_participant abi:mistral_medium ;
+    bfo:occurs_in abi:mistral_InfrastructureSite ;
+    bfo:occupies_temporal_region abi:mistral_medium_ReleaseTemporalRegion ;
+    rdfs:comment "Process of model inference and text generation by Mistral Medium"@en .
+
+# Performance Quality Collection (inheres in the model)
+abi:mistral_medium_Performance a bfo:BFO_0000019 ;
+    rdfs:label "Mistral Medium Overall Performance"@en ;
+    bfo:inheres_in abi:mistral_medium ;
+    bfo:has_part abi:mistral_medium_PricingQuality ;
+    bfo:has_part abi:mistral_medium_PerformanceQuality ;
+    bfo:has_part abi:mistral_medium_EvaluationQuality ;
+    rdfs:comment "Overall performance characteristics of Mistral Medium"@en .
+
