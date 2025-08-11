@@ -8,6 +8,10 @@ import time
 import requests
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 def check_service(url, name):
     """Check if a service is running"""
