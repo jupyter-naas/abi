@@ -40,16 +40,94 @@ def load_artificial_analysis_data() -> Dict[str, Any]:
     with open(latest_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def determine_ai_agent_module(model_creator: Dict[str, Any]) -> Optional[str]:
-    """Map model creator to AI agent module name."""
-    creator_name = model_creator.get('name', '').lower()
-    creator_slug = model_creator.get('slug', '').lower()
+def determine_ai_agent_module(model_data: Dict[str, Any]) -> Optional[str]:
+    """Map model to AI agent module based on model name/slug, not just provider."""
+    model_name = model_data.get('name', '').lower()
+    model_slug = model_data.get('slug', '').lower()
+    creator = model_data.get('model_creator', {})
+    creator_name = creator.get('name', '').lower()
+    creator_slug = creator.get('slug', '').lower()
     
-    # Provider to module mapping
+    # Model family to module mapping (prioritizing model name over provider)
+    model_mapping = {
+        # OpenAI models
+        'gpt': 'chatgpt',
+        'chatgpt': 'chatgpt', 
+        'o1': 'chatgpt',
+        'o3': 'chatgpt',
+        'o4': 'chatgpt',
+        'gpt-4': 'chatgpt',
+        'gpt-5': 'chatgpt',
+        'davinci': 'chatgpt',
+        
+        # OpenAI Open Source models (different from ChatGPT)
+        'gpt-oss': 'gpt_oss',
+        'gpt_oss': 'gpt_oss',
+        
+        # Anthropic
+        'claude': 'claude',
+        
+        # Google models - separate by family
+        'gemini': 'gemini',
+        'gemma': 'gemma',
+        'palm': 'gemini',  # Palm is part of Gemini family
+        
+        # Meta/Facebook
+        'llama': 'llama',
+        'meta': 'llama',
+        
+        # xAI
+        'grok': 'grok',
+        
+        # Mistral
+        'mistral': 'mistral',
+        'mixtral': 'mistral',
+        'codestral': 'mistral',
+        
+        # DeepSeek
+        'deepseek': 'deepseek',
+        
+        # Alibaba
+        'qwen': 'qwen',
+        'qwq': 'qwen',
+        
+        # Perplexity
+        'sonar': 'perplexity',
+        'perplexity': 'perplexity',
+        
+        # Other model families
+        'claude': 'claude',
+        'phi': 'phi',
+        'titan': 'titan',
+        'yi': 'yi',
+        'solar': 'solar',
+        'exaone': 'exaone',
+        'glm': 'glm',
+        'minimax': 'minimax',
+        'kimi': 'kimi',
+        'arctic': 'arctic',
+        'dbrx': 'dbrx',
+        'lfm': 'lfm',
+        'cohere': 'cohere',
+        'command': 'cohere',
+        'jamba': 'jamba',
+        'reka': 'reka',
+        'openchat': 'openchat',
+        'tulu': 'tulu',
+        'nous': 'nous_research',
+        'hermes': 'nous_research'
+    }
+    
+    # Check model name/slug first for family identification
+    for pattern, module in model_mapping.items():
+        if pattern in model_name or pattern in model_slug:
+            return module
+    
+    # Fallback to provider-based mapping for unmapped models
     provider_mapping = {
         'openai': 'chatgpt',
         'anthropic': 'claude',
-        'google': 'gemini', 
+        'google': 'gemini',  # Default Google to Gemini if no specific family found
         'x.ai': 'grok',
         'xai': 'grok',
         'mistral ai': 'mistral',
@@ -60,16 +138,9 @@ def determine_ai_agent_module(model_creator: Dict[str, Any]) -> Optional[str]:
         'alibaba': 'qwen'
     }
     
-    # Try exact match first
-    if creator_name in provider_mapping:
-        return provider_mapping[creator_name]
-    
-    if creator_slug in provider_mapping:
-        return provider_mapping[creator_slug]
-    
-    # Try partial matches
-    for key, module in provider_mapping.items():
-        if key in creator_name or key in creator_slug:
+    # Try provider match as fallback
+    for provider, module in provider_mapping.items():
+        if provider in creator_name or provider in creator_slug:
             return module
     
     return None
@@ -329,15 +400,19 @@ def main():
     unassigned_models = []
     
     for model in models:
-        creator = model.get('model_creator', {})
-        agent_module = determine_ai_agent_module(creator)
+        agent_module = determine_ai_agent_module(model)
+        model_name = model.get('name', 'Unknown')
+        model_slug = model.get('slug', 'unknown')
         
         if agent_module:
             if agent_module not in agent_models:
                 agent_models[agent_module] = []
             agent_models[agent_module].append(model)
+            print(f"   ✅ {model_name} ({model_slug}) → {agent_module}")
         else:
             unassigned_models.append(model)
+            creator_name = model.get('model_creator', {}).get('name', 'Unknown')
+            print(f"   ❓ {model_name} ({model_slug}) from {creator_name} → UNASSIGNED")
     
     print(f"📋 Grouped models into {len(agent_models)} AI agents")
     if unassigned_models:
@@ -355,8 +430,10 @@ def main():
         # Generate ontology content
         ontology_content = generate_agent_ontology_file(agent_module, models)
         
-        # Write to file
-        filename = f"{agent_module}_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}.ttl"
+        # Write to file with proper naming convention
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
+        agent_title = agent_module.replace('_', '').title()  # Convert gpt_oss to GptOss
+        filename = f"{timestamp}_{agent_title}Ontology.ttl"
         output_file = output_dir / filename
         
         with open(output_file, 'w', encoding='utf-8') as f:
