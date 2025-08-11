@@ -1,0 +1,40 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Dbrx AI Agent Ontology
+# Generated on: 20250811T214515
+# Models: 1
+
+# AI Agent Definition
+abi:DbrxAgent a abi:AIAgent ;
+    rdfs:label "Dbrx AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Dbrx family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: DBRX Instruct
+abi:DBRX_Instruct a abi:AIModelInstance ;
+    rdfs:label "DBRX Instruct"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "dbrx"@en ;
+    abi:provider "Databricks"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 7.7 ;
+    abi:codingIndex 10.6 ;
+    abi:mathIndex 15.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:DbrxAgent abi:canUtilizeModel abi:DBRX_Instruct .

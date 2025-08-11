@@ -1,0 +1,136 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Solar AI Agent Ontology
+# Generated on: 20250811T214515
+# Models: 5
+
+# AI Agent Definition
+abi:SolarAgent a abi:AIAgent ;
+    rdfs:label "Solar AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Solar family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: Solar Pro 2
+abi:Solar_Pro_2 a abi:AIModelInstance ;
+    rdfs:label "Solar Pro 2"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "solar-pro-2"@en ;
+    abi:provider "Upstage"@en ;
+    abi:inputTokenCost 0.5 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.5 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 131.721 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 1.296 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 1.296 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 33.2 ;
+    abi:codingIndex 33.6 ;
+    abi:mathIndex 64.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2 .
+# Model Instance: Solar Pro 2 (Reasoning)
+abi:Solar_Pro_2_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Solar Pro 2 (Reasoning)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "solar-pro-2-reasoning"@en ;
+    abi:provider "Upstage"@en ;
+    abi:inputTokenCost 0.5 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.5 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 119.98 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 1.286 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 17.956 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 43.3 ;
+    abi:codingIndex 45.9 ;
+    abi:mathIndex 82.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2_Reasoning .
+# Model Instance: Solar Mini
+abi:Solar_Mini a abi:AIModelInstance ;
+    rdfs:label "Solar Mini"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "solar-mini"@en ;
+    abi:provider "Upstage"@en ;
+    abi:inputTokenCost 0.15 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.15 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.15 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 92.376 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 1.1 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 1.1 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 21.9 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:SolarAgent abi:canUtilizeModel abi:Solar_Mini .
+# Model Instance: Solar Pro 2 (Preview)
+abi:Solar_Pro_2_Preview a abi:AIModelInstance ;
+    rdfs:label "Solar Pro 2 (Preview)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "solar-pro-2-preview"@en ;
+    abi:provider "Upstage"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 33.6 ;
+    abi:codingIndex 32.9 ;
+    abi:mathIndex 58.4 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2_Preview .
+# Model Instance: Solar Pro 2 (Preview) (Reasoning)
+abi:Solar_Pro_2_Preview_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Solar Pro 2 (Preview) (Reasoning)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "solar-pro-2-preview-reasoning"@en ;
+    abi:provider "Upstage"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 40.1 ;
+    abi:codingIndex 31.3 ;
+    abi:mathIndex 78.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2_Preview_Reasoning .
