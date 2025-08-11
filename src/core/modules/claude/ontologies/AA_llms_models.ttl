@@ -1,0 +1,640 @@
+# Artificial Analysis Model Data for Claude
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.009057
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:8a4a5ead_7789_4389_8400_30e9d20370b7 a abi:AIModelInstance ;
+    rdfs:label "Claude 4 Opus (Extended Thinking)"@en ;
+    abi:modelName "Claude 4 Opus (Extended Thinking)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:8a4a5ead_7789_4389_8400_30e9d20370b7_Performance ;
+    abi:inputTokenCost "15"^^xsd:decimal ;
+    abi:outputTokenCost "75"^^xsd:decimal ;
+    abi:outputSpeed "22.603"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:8a4a5ead_7789_4389_8400_30e9d20370b7_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 4 Opus (Extended Thinking) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:8a4a5ead_7789_4389_8400_30e9d20370b7 ;
+    rdfs:comment "Process realization using Claude 4 Opus (Extended Thinking) model instance."@en .
+# Performance Quality
+abi:8a4a5ead_7789_4389_8400_30e9d20370b7_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 4 Opus (Extended Thinking) Performance"@en ;
+    abi:intelligenceIndex "55.3"^^xsd:decimal ;
+    abi:codingIndex "51.7"^^xsd:decimal ;
+    abi:mathIndex "86.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:a7564055_f8ba_4c4b_9e2d_060f61263645 a abi:AIModelInstance ;
+    rdfs:label "Claude 4 Sonnet (Extended Thinking)"@en ;
+    abi:modelName "Claude 4 Sonnet (Extended Thinking)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:a7564055_f8ba_4c4b_9e2d_060f61263645_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    abi:outputSpeed "57.567"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:a7564055_f8ba_4c4b_9e2d_060f61263645_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 4 Sonnet (Extended Thinking) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:a7564055_f8ba_4c4b_9e2d_060f61263645 ;
+    rdfs:comment "Process realization using Claude 4 Sonnet (Extended Thinking) model instance."@en .
+# Performance Quality
+abi:a7564055_f8ba_4c4b_9e2d_060f61263645_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 4 Sonnet (Extended Thinking) Performance"@en ;
+    abi:intelligenceIndex "58.8"^^xsd:decimal ;
+    abi:codingIndex "52.8"^^xsd:decimal ;
+    abi:mathIndex "88.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:f2f60e3a_e5f5_4471_acd2_9f2f29c76007 a abi:AIModelInstance ;
+    rdfs:label "Claude 4.1 Opus"@en ;
+    abi:modelName "Claude 4.1 Opus" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:f2f60e3a_e5f5_4471_acd2_9f2f29c76007_Performance ;
+    abi:inputTokenCost "15"^^xsd:decimal ;
+    abi:outputTokenCost "75"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:f2f60e3a_e5f5_4471_acd2_9f2f29c76007_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 4.1 Opus TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:f2f60e3a_e5f5_4471_acd2_9f2f29c76007 ;
+    rdfs:comment "Process realization using Claude 4.1 Opus model instance."@en .
+# Performance Quality
+abi:f2f60e3a_e5f5_4471_acd2_9f2f29c76007_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 4.1 Opus Performance"@en ;
+    abi:intelligenceIndex "49"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:504412c2_2ada_499b_aebf_7e0a35c9d286 a abi:AIModelInstance ;
+    rdfs:label "Claude 4 Opus"@en ;
+    abi:modelName "Claude 4 Opus" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:504412c2_2ada_499b_aebf_7e0a35c9d286_Performance ;
+    abi:inputTokenCost "15"^^xsd:decimal ;
+    abi:outputTokenCost "75"^^xsd:decimal ;
+    abi:outputSpeed "21.962"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:504412c2_2ada_499b_aebf_7e0a35c9d286_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 4 Opus TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:504412c2_2ada_499b_aebf_7e0a35c9d286 ;
+    rdfs:comment "Process realization using Claude 4 Opus model instance."@en .
+# Performance Quality
+abi:504412c2_2ada_499b_aebf_7e0a35c9d286_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 4 Opus Performance"@en ;
+    abi:intelligenceIndex "46.6"^^xsd:decimal ;
+    abi:codingIndex "47.5"^^xsd:decimal ;
+    abi:mathIndex "75.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:d034dafe_463d_4c50_956f_84fca657b26f a abi:AIModelInstance ;
+    rdfs:label "Claude 4 Sonnet"@en ;
+    abi:modelName "Claude 4 Sonnet" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:d034dafe_463d_4c50_956f_84fca657b26f_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    abi:outputSpeed "95.87"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:d034dafe_463d_4c50_956f_84fca657b26f_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 4 Sonnet TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:d034dafe_463d_4c50_956f_84fca657b26f ;
+    rdfs:comment "Process realization using Claude 4 Sonnet model instance."@en .
+# Performance Quality
+abi:d034dafe_463d_4c50_956f_84fca657b26f_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 4 Sonnet Performance"@en ;
+    abi:intelligenceIndex "45.7"^^xsd:decimal ;
+    abi:codingIndex "41.1"^^xsd:decimal ;
+    abi:mathIndex "67"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:ccbfa8c3_a762_480b_aade_34fb9697f98c a abi:AIModelInstance ;
+    rdfs:label "Claude 4.1 Opus (Extended Thinking)"@en ;
+    abi:modelName "Claude 4.1 Opus (Extended Thinking)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:ccbfa8c3_a762_480b_aade_34fb9697f98c_Performance ;
+    abi:inputTokenCost "15"^^xsd:decimal ;
+    abi:outputTokenCost "75"^^xsd:decimal ;
+    abi:outputSpeed "30.169"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:ccbfa8c3_a762_480b_aade_34fb9697f98c_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 4.1 Opus (Extended Thinking) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:ccbfa8c3_a762_480b_aade_34fb9697f98c ;
+    rdfs:comment "Process realization using Claude 4.1 Opus (Extended Thinking) model instance."@en .
+# Performance Quality
+abi:ccbfa8c3_a762_480b_aade_34fb9697f98c_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 4.1 Opus (Extended Thinking) Performance"@en ;
+    abi:intelligenceIndex "61"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:0a603978_03b9_4f47_a273_2f7fd969be85 a abi:AIModelInstance ;
+    rdfs:label "Claude 3.5 Sonnet (Oct '24)"@en ;
+    abi:modelName "Claude 3.5 Sonnet (Oct '24)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:0a603978_03b9_4f47_a273_2f7fd969be85_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    abi:outputSpeed "79.204"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:0a603978_03b9_4f47_a273_2f7fd969be85_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3.5 Sonnet (Oct '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:0a603978_03b9_4f47_a273_2f7fd969be85 ;
+    rdfs:comment "Process realization using Claude 3.5 Sonnet (Oct '24) model instance."@en .
+# Performance Quality
+abi:0a603978_03b9_4f47_a273_2f7fd969be85_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3.5 Sonnet (Oct '24) Performance"@en ;
+    abi:intelligenceIndex "33.5"^^xsd:decimal ;
+    abi:codingIndex "37.3"^^xsd:decimal ;
+    abi:mathIndex "46.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:aca9c1ad_fc86_49f3_a312_b1e517ea100c a abi:AIModelInstance ;
+    rdfs:label "Claude 3.5 Sonnet (June '24)"@en ;
+    abi:modelName "Claude 3.5 Sonnet (June '24)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:aca9c1ad_fc86_49f3_a312_b1e517ea100c_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    abi:outputSpeed "79.078"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:aca9c1ad_fc86_49f3_a312_b1e517ea100c_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3.5 Sonnet (June '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:aca9c1ad_fc86_49f3_a312_b1e517ea100c ;
+    rdfs:comment "Process realization using Claude 3.5 Sonnet (June '24) model instance."@en .
+# Performance Quality
+abi:aca9c1ad_fc86_49f3_a312_b1e517ea100c_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3.5 Sonnet (June '24) Performance"@en ;
+    abi:intelligenceIndex "28.8"^^xsd:decimal ;
+    abi:mathIndex "39.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:7829427f_f0e3_4f6d_a228_5fbf70dacc02 a abi:AIModelInstance ;
+    rdfs:label "Claude 3 Opus"@en ;
+    abi:modelName "Claude 3 Opus" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:7829427f_f0e3_4f6d_a228_5fbf70dacc02_Performance ;
+    abi:inputTokenCost "15"^^xsd:decimal ;
+    abi:outputTokenCost "75"^^xsd:decimal ;
+    abi:outputSpeed "28.012"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:7829427f_f0e3_4f6d_a228_5fbf70dacc02_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3 Opus TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:7829427f_f0e3_4f6d_a228_5fbf70dacc02 ;
+    rdfs:comment "Process realization using Claude 3 Opus model instance."@en .
+# Performance Quality
+abi:7829427f_f0e3_4f6d_a228_5fbf70dacc02_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3 Opus Performance"@en ;
+    abi:intelligenceIndex "23.7"^^xsd:decimal ;
+    abi:codingIndex "25.6"^^xsd:decimal ;
+    abi:mathIndex "33.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:033e4aa9_a556_4224_87b0_341ed1070257 a abi:AIModelInstance ;
+    rdfs:label "Claude 3.5 Haiku"@en ;
+    abi:modelName "Claude 3.5 Haiku" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:033e4aa9_a556_4224_87b0_341ed1070257_Performance ;
+    abi:inputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputTokenCost "4"^^xsd:decimal ;
+    abi:outputSpeed "65.769"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:033e4aa9_a556_4224_87b0_341ed1070257_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3.5 Haiku TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:033e4aa9_a556_4224_87b0_341ed1070257 ;
+    rdfs:comment "Process realization using Claude 3.5 Haiku model instance."@en .
+# Performance Quality
+abi:033e4aa9_a556_4224_87b0_341ed1070257_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3.5 Haiku Performance"@en ;
+    abi:intelligenceIndex "23.3"^^xsd:decimal ;
+    abi:codingIndex "29.4"^^xsd:decimal ;
+    abi:mathIndex "37.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b2e68f0a_8f66_4e4c_9821_2b786cea601b a abi:AIModelInstance ;
+    rdfs:label "Claude 3 Sonnet"@en ;
+    abi:modelName "Claude 3 Sonnet" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b2e68f0a_8f66_4e4c_9821_2b786cea601b_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b2e68f0a_8f66_4e4c_9821_2b786cea601b_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3 Sonnet TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b2e68f0a_8f66_4e4c_9821_2b786cea601b ;
+    rdfs:comment "Process realization using Claude 3 Sonnet model instance."@en .
+# Performance Quality
+abi:b2e68f0a_8f66_4e4c_9821_2b786cea601b_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3 Sonnet Performance"@en ;
+    abi:intelligenceIndex "16"^^xsd:decimal ;
+    abi:codingIndex "20.2"^^xsd:decimal ;
+    abi:mathIndex "23"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:1fc54cef_d179_48b1_a27d_046874e9b208 a abi:AIModelInstance ;
+    rdfs:label "Claude 3 Haiku"@en ;
+    abi:modelName "Claude 3 Haiku" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:1fc54cef_d179_48b1_a27d_046874e9b208_Performance ;
+    abi:inputTokenCost "0.25"^^xsd:decimal ;
+    abi:outputTokenCost "1.25"^^xsd:decimal ;
+    abi:outputSpeed "142.305"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:1fc54cef_d179_48b1_a27d_046874e9b208_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3 Haiku TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:1fc54cef_d179_48b1_a27d_046874e9b208 ;
+    rdfs:comment "Process realization using Claude 3 Haiku model instance."@en .
+# Performance Quality
+abi:1fc54cef_d179_48b1_a27d_046874e9b208_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3 Haiku Performance"@en ;
+    abi:intelligenceIndex "12.1"^^xsd:decimal ;
+    abi:codingIndex "17"^^xsd:decimal ;
+    abi:mathIndex "20.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:83cb898e_05d9_4e4b_9de3_2d305014d923 a abi:AIModelInstance ;
+    rdfs:label "Claude Instant"@en ;
+    abi:modelName "Claude Instant" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:83cb898e_05d9_4e4b_9de3_2d305014d923_Performance ;
+    abi:inputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputTokenCost "2.4"^^xsd:decimal ;
+    abi:outputSpeed "66.639"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:83cb898e_05d9_4e4b_9de3_2d305014d923_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude Instant TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:83cb898e_05d9_4e4b_9de3_2d305014d923 ;
+    rdfs:comment "Process realization using Claude Instant model instance."@en .
+# Performance Quality
+abi:83cb898e_05d9_4e4b_9de3_2d305014d923_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude Instant Performance"@en ;
+    abi:intelligenceIndex "1.7"^^xsd:decimal ;
+    abi:mathIndex "13.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:9e141c0d_fc82_4e07_bb2e_fe0003bc030b a abi:AIModelInstance ;
+    rdfs:label "Claude 2.1"@en ;
+    abi:modelName "Claude 2.1" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:9e141c0d_fc82_4e07_bb2e_fe0003bc030b_Performance ;
+    abi:inputTokenCost "8"^^xsd:decimal ;
+    abi:outputTokenCost "24"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:9e141c0d_fc82_4e07_bb2e_fe0003bc030b_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 2.1 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:9e141c0d_fc82_4e07_bb2e_fe0003bc030b ;
+    rdfs:comment "Process realization using Claude 2.1 model instance."@en .
+# Performance Quality
+abi:9e141c0d_fc82_4e07_bb2e_fe0003bc030b_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 2.1 Performance"@en ;
+    abi:intelligenceIndex "12.2"^^xsd:decimal ;
+    abi:codingIndex "18.9"^^xsd:decimal ;
+    abi:mathIndex "20.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:13358187_4584_479c_ab43_5bcdf8f297a4 a abi:AIModelInstance ;
+    rdfs:label "Claude 3.7 Sonnet (Extended Thinking)"@en ;
+    abi:modelName "Claude 3.7 Sonnet (Extended Thinking)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:13358187_4584_479c_ab43_5bcdf8f297a4_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    abi:outputSpeed "85.599"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:13358187_4584_479c_ab43_5bcdf8f297a4_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3.7 Sonnet (Extended Thinking) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:13358187_4584_479c_ab43_5bcdf8f297a4 ;
+    rdfs:comment "Process realization using Claude 3.7 Sonnet (Extended Thinking) model instance."@en .
+# Performance Quality
+abi:13358187_4584_479c_ab43_5bcdf8f297a4_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3.7 Sonnet (Extended Thinking) Performance"@en ;
+    abi:intelligenceIndex "47"^^xsd:decimal ;
+    abi:codingIndex "43.8"^^xsd:decimal ;
+    abi:mathIndex "71.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:d925845d_39ad_4de3_8495_f176b79828c0 a abi:AIModelInstance ;
+    rdfs:label "Claude 3.7 Sonnet (Standard)"@en ;
+    abi:modelName "Claude 3.7 Sonnet (Standard)" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:d925845d_39ad_4de3_8495_f176b79828c0_Performance ;
+    abi:inputTokenCost "3"^^xsd:decimal ;
+    abi:outputTokenCost "15"^^xsd:decimal ;
+    abi:outputSpeed "76.798"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:d925845d_39ad_4de3_8495_f176b79828c0_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 3.7 Sonnet (Standard) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:d925845d_39ad_4de3_8495_f176b79828c0 ;
+    rdfs:comment "Process realization using Claude 3.7 Sonnet (Standard) model instance."@en .
+# Performance Quality
+abi:d925845d_39ad_4de3_8495_f176b79828c0_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 3.7 Sonnet (Standard) Performance"@en ;
+    abi:intelligenceIndex "37.3"^^xsd:decimal ;
+    abi:codingIndex "38.5"^^xsd:decimal ;
+    abi:mathIndex "53.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:ddc748d0_6a9b_466b_8d6c_68417980d56d a abi:AIModelInstance ;
+    rdfs:label "Claude 2.0"@en ;
+    abi:modelName "Claude 2.0" ;
+    abi:providerName "Anthropic" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:ddc748d0_6a9b_466b_8d6c_68417980d56d_Performance ;
+    abi:inputTokenCost "8"^^xsd:decimal ;
+    abi:outputTokenCost "24"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:ddc748d0_6a9b_466b_8d6c_68417980d56d_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Claude 2.0 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:ddc748d0_6a9b_466b_8d6c_68417980d56d ;
+    rdfs:comment "Process realization using Claude 2.0 model instance."@en .
+# Performance Quality
+abi:ddc748d0_6a9b_466b_8d6c_68417980d56d_Performance a abi:ModelAccuracy ;
+    rdfs:label "Claude 2.0 Performance"@en ;
+    abi:intelligenceIndex "11.1"^^xsd:decimal ;
+    abi:codingIndex "18.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
