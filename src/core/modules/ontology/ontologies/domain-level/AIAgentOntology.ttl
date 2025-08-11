@@ -8,12 +8,14 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
 
 <http://ontology.naas.ai/abi/AIAgentOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:imports <http://ontology.naas.ai/abi/CapabilityOntology> ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AIAgentOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
-    dc:description "Ontology for AI agents and AI systems using BFO and CCO standards."@en ;
+    dc:description "Ontology for AI agents and AI systems using BFO and CCO standards, integrated with capability ontology."@en ;
     dc:title "AI Agent Ontology (BFO+CCO)" .
 
 #################################################################
@@ -45,16 +47,16 @@ skos:prefLabel rdf:type owl:AnnotationProperty .
 ###  http://ontology.naas.ai/abi/hasCapability
 abi:hasCapability a owl:ObjectProperty ;
     rdfs:label "has capability"@en ;
-    rdfs:domain bfo:BFO_0000040 ;
-    rdfs:range bfo:BFO_0000017 ;
-    skos:definition "A relation between a material entity and its realizable capabilities."@en .
+    rdfs:domain abi:AIAgent ;
+    rdfs:range capability:Capability ;
+    skos:definition "A relation between an AI agent and its capabilities."@en .
 
 ###  http://ontology.naas.ai/abi/realizesCapability
 abi:realizesCapability a owl:ObjectProperty ;
     rdfs:label "realizes capability"@en ;
-    rdfs:domain bfo:BFO_0000015 ;
-    rdfs:range bfo:BFO_0000017 ;
-    skos:definition "A relation between a process and the capability it realizes."@en .
+    rdfs:domain abi:AIProcess ;
+    rdfs:range capability:Capability ;
+    skos:definition "A relation between an AI process and the capability it realizes."@en .
 
 ###  http://ontology.naas.ai/abi/hasAIAgent
 abi:hasAIAgent a owl:ObjectProperty ;
@@ -768,7 +770,7 @@ abi:ExecutiveCommunicationCapability a owl:Class ;
 ### Creative Writing Process Example
 abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
     rdfs:label "Claude Creative Writing Process"@en ;
-    abi:realizesCapability abi:CreativeWritingCapability ;
+    abi:realizesCapability capability:TextGenerationCapability ;
     abi:hasParticipant abi:ClaudeAgent ;
     abi:hasTemporalRegion abi:CreativeWritingSession ;
     abi:occursIn abi:AnthropicDataCenter ;
@@ -779,7 +781,7 @@ abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
 ### Truth Seeking Analysis Process Example  
 abi:GrokTruthSeekingProcess a abi:TruthSeekingAnalysisProcess ;
     rdfs:label "Grok Truth Seeking Analysis Process"@en ;
-    abi:realizesCapability abi:TruthSeekingCapability ;
+    abi:realizesCapability capability:TruthSeekingAnalysisCapability ;
     abi:hasParticipant abi:GrokAgent ;
     abi:hasTemporalRegion abi:TruthSeekingSession ;
     abi:occursIn abi:xAIDataCenter ;
@@ -790,7 +792,7 @@ abi:GrokTruthSeekingProcess a abi:TruthSeekingAnalysisProcess ;
 ### Code Generation Process Example
 abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
     rdfs:label "Mistral Code Generation Process"@en ;
-    abi:realizesCapability abi:CodeGenerationCapability ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
     abi:hasParticipant abi:MistralAgent ;
     abi:hasTemporalRegion abi:CodeGenerationSession ;
     abi:occursIn abi:MistralDataCenter ;
@@ -874,16 +876,16 @@ abi:CodeGenerationSpecification a abi:ModelSpecification ;
 ### AI Agent Instances (Material Entities)
 abi:ClaudeAgent a abi:AIAgent ;
     rdfs:label "Claude Agent"@en ;
-    abi:hasCapability abi:CreativeWritingCapability, abi:EthicalReasoningCapability ;
-    rdfs:comment "Claude AI agent with creative writing and ethical reasoning capabilities."@en .
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    rdfs:comment "Claude AI agent with text generation and reasoning capabilities."@en .
 
 abi:GrokAgent a abi:AIAgent ;
     rdfs:label "Grok Agent"@en ;
-    abi:hasCapability abi:TruthSeekingCapability, abi:MathematicalReasoningCapability ;
-    rdfs:comment "Grok AI agent with truth-seeking and mathematical reasoning capabilities."@en .
+    abi:hasCapability capability:TruthSeekingAnalysisCapability, capability:ReasoningCapability ;
+    rdfs:comment "Grok AI agent with truth-seeking analysis and reasoning capabilities."@en .
 
 abi:MistralAgent a abi:AIAgent ;
     rdfs:label "Mistral Agent"@en ;
-    abi:hasCapability abi:CodeGenerationCapability, abi:MathematicalReasoningCapability ;
-    rdfs:comment "Mistral AI agent with code generation and mathematical reasoning capabilities."@en .
+    abi:hasCapability capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    rdfs:comment "Mistral AI agent with code generation and reasoning capabilities."@en .
 
