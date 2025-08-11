@@ -313,8 +313,8 @@ class KnowledgeGraphBuilderAgent(Agent):
         router: APIRouter,
         route_name: str = NAME.lower(),
         name: str = NAME.replace("_", " "),
-        description: str = "API endpoints to call the Bob Ontology agent completion.",
-        description_stream: str = "API endpoints to call the Bob Ontology agent stream completion.",
+        description: str = "API endpoints to call the Knowledge Graph Builder agent completion.",
+        description_stream: str = "API endpoints to call the Knowledge Graph Builder agent stream completion.",
         tags: Optional[list[str | Enum]] = None,
     ) -> None:
         if tags is None:
