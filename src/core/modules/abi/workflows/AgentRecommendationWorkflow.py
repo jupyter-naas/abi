@@ -79,17 +79,25 @@ class AgentRecommendationWorkflow(Workflow):
         if not isinstance(parameters, AgentRecommendationParameters):
             raise ValueError("Parameters must be of type AgentRecommendationParameters")
         
+        print(f"🔍 [AgentRecommendation] Processing intent: '{parameters.intent_description}'")
+        
         # Step 1: Match intent to appropriate query
         selected_query = self._match_intent_to_query(parameters.intent_description)
+        print(f"📋 [AgentRecommendation] Matched query: {selected_query['intent_description']}")
         
         # Step 2: Template the SPARQL query with parameters
         templated_query = self._template_query(selected_query, parameters)
+        print("🔧 [AgentRecommendation] Templated SPARQL query:")
+        print(templated_query)
         
         # Step 3: Execute the query against Oxigraph
+        print("⚡ [AgentRecommendation] Executing SPARQL query against Oxigraph...")
         results = self._execute_sparql_query(templated_query)
+        print(f"📊 [AgentRecommendation] Query returned {len(results)} raw results")
         
         # Step 4: Format recommendations for user
         recommendations = self._format_recommendations(results, parameters)
+        print(f"✅ [AgentRecommendation] Formatted {len(recommendations)} recommendations")
         
         return {
             "intent": parameters.intent_description,
