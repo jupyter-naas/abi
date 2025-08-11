@@ -120,6 +120,99 @@ def get_triple_count():
     except Exception:
         return 0
 
+def get_class_count():
+    """Get number of classes"""
+    try:
+        query = """
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT (COUNT(DISTINCT ?class) AS ?count) WHERE {
+            ?class a rdfs:Class .
+        }
+        """
+        response = requests.post(
+            "http://localhost:7878/query",
+            data=query,
+            headers={'Content-Type': 'application/sparql-query'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return int(result['results']['bindings'][0]['count']['value'])
+        return 0
+    except Exception:
+        return 0
+
+def get_data_property_count():
+    """Get number of data properties"""
+    try:
+        query = """
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT (COUNT(DISTINCT ?prop) AS ?count) WHERE {
+            ?prop a owl:DatatypeProperty .
+        }
+        """
+        response = requests.post(
+            "http://localhost:7878/query",
+            data=query,
+            headers={'Content-Type': 'application/sparql-query'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return int(result['results']['bindings'][0]['count']['value'])
+        return 0
+    except Exception:
+        return 0
+
+def get_object_property_count():
+    """Get number of object properties"""
+    try:
+        query = """
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT (COUNT(DISTINCT ?prop) AS ?count) WHERE {
+            ?prop a owl:ObjectProperty .
+        }
+        """
+        response = requests.post(
+            "http://localhost:7878/query",
+            data=query,
+            headers={'Content-Type': 'application/sparql-query'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return int(result['results']['bindings'][0]['count']['value'])
+        return 0
+    except Exception:
+        return 0
+
+def get_instance_count():
+    """Get number of instances"""
+    try:
+        query = """
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT (COUNT(DISTINCT ?instance) AS ?count) WHERE {
+            ?instance a ?class .
+            ?class a rdfs:Class .
+        }
+        """
+        response = requests.post(
+            "http://localhost:7878/query",
+            data=query,
+            headers={'Content-Type': 'application/sparql-query'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return int(result['results']['bindings'][0]['count']['value'])
+        return 0
+    except Exception:
+        return 0
+
 def run_startup_sequence():
     """Run clean startup sequence with timestamps"""
     start_time = time.time()
@@ -147,10 +240,22 @@ def run_startup_sequence():
     log("[2/4] Loading knowledge graph...")
     if oxigraph_ok:
         agent_count = get_agent_count()
-        log(f"AI Agents: {agent_count}")
+        log(f"ℹ️ AI Agents: {agent_count}")
         
         triple_count = get_triple_count()
-        log(f"Total Triples: {triple_count:,}")
+        log(f"ℹ️ Total Triples: {triple_count:,}")
+        
+        class_count = get_class_count()
+        log(f"ℹ️ Classes: {class_count:,}")
+        
+        data_property_count = get_data_property_count()
+        log(f"ℹ️ Data Properties: {data_property_count:,}")
+        
+        object_property_count = get_object_property_count()
+        log(f"ℹ️ Object Properties / Relations: {object_property_count:,}")
+        
+        instance_count = get_instance_count()
+        log(f"ℹ️ Instances: {instance_count:,}")
         
         # Step 3: Show actual agent breakdown from data
         log("[3/4] Agent breakdown:")
