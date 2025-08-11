@@ -28,19 +28,15 @@ abi:findBusinessProposalAgentsQuery a intentMapping:TemplatableSparqlQuery ;
           ?agent a abi:AIAgent ;
                  rdfs:label ?agentLabel ;
                  abi:canUtilizeModel ?model .
-          ?model abi:provider ?provider ;
-                 abi:inputTokenCost ?inputCost ;
-                 abi:outputTokenCost ?outputCost ;
-                 abi:intelligenceIndex ?intelligenceIndex ;
-                 abi:codingIndex ?codingIndex .
+          ?model abi:provider ?provider .
           
-          # Filter for agents with good intelligence for business content
-          FILTER(?intelligenceIndex >= {{ min_intelligence_score }})
+          OPTIONAL { ?model abi:inputTokenCost ?inputCost }
+          OPTIONAL { ?model abi:outputTokenCost ?outputCost }
+          OPTIONAL { ?model abi:intelligenceIndex ?intelligenceIndex }
+          OPTIONAL { ?model abi:codingIndex ?codingIndex }
           
-          # Optional cost filtering
-          {% if max_input_cost %}
-          FILTER(?inputCost <= {{ max_input_cost }})
-          {% endif %}
+          # Filter for agents with reasonable intelligence for business content (if available)
+          FILTER(!bound(?intelligenceIndex) || ?intelligenceIndex >= {{ min_intelligence_score }})
         }
         ORDER BY ?inputCost ?outputCost DESC(?intelligenceIndex)
         LIMIT {{ max_results }}
@@ -59,14 +55,15 @@ abi:findCodingAgentsQuery a intentMapping:TemplatableSparqlQuery ;
           ?agent a abi:AIAgent ;
                  rdfs:label ?agentLabel ;
                  abi:canUtilizeModel ?model .
-          ?model abi:provider ?provider ;
-                 abi:inputTokenCost ?inputCost ;
-                 abi:outputTokenCost ?outputCost ;
-                 abi:codingIndex ?codingIndex ;
-                 abi:intelligenceIndex ?intelligenceIndex .
+          ?model abi:provider ?provider .
           
-          # Filter for agents with strong coding capabilities
-          FILTER(?codingIndex >= {{ min_coding_score }})
+          OPTIONAL { ?model abi:inputTokenCost ?inputCost }
+          OPTIONAL { ?model abi:outputTokenCost ?outputCost }
+          OPTIONAL { ?model abi:codingIndex ?codingIndex }
+          OPTIONAL { ?model abi:intelligenceIndex ?intelligenceIndex }
+          
+          # Filter for agents with strong coding capabilities (if available)
+          FILTER(!bound(?codingIndex) || ?codingIndex >= {{ min_coding_score }})
           
           # Optional programming language filtering (could be extended)
           {% if programming_language %}

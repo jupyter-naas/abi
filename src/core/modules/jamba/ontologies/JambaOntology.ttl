@@ -1,0 +1,184 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Jamba AI Agent Ontology
+# Generated on: 20250811T214515
+# Models: 7
+
+# AI Agent Definition
+abi:JambaAgent a abi:AIAgent ;
+    rdfs:label "Jamba AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Jamba family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: Jamba 1.7 Large
+abi:Jamba_1_7_Large a abi:AIModelInstance ;
+    rdfs:label "Jamba 1.7 Large"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-1-7-large"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 8 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.5 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 48.782 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.825 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.825 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 17.9 ;
+    abi:codingIndex 18.4 ;
+    abi:mathIndex 32.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_1_7_Large .
+# Model Instance: Jamba 1.7 Mini
+abi:Jamba_1_7_Mini a abi:AIModelInstance ;
+    rdfs:label "Jamba 1.7 Mini"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-1-7-mini"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 0.2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.4 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.25 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 165.715 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.689 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.689 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 5.8 ;
+    abi:codingIndex 7.7 ;
+    abi:mathIndex 13.6 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_1_7_Mini .
+# Model Instance: Jamba Instruct
+abi:Jamba_Instruct a abi:AIModelInstance ;
+    rdfs:label "Jamba Instruct"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-instruct"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 14.5 ;
+    abi:codingIndex 6.4 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_Instruct .
+# Model Instance: Jamba 1.5 Large
+abi:Jamba_1_5_Large a abi:AIModelInstance ;
+    rdfs:label "Jamba 1.5 Large"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-1-5-large"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 8 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.5 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 17.7 ;
+    abi:codingIndex 15.3 ;
+    abi:mathIndex 32.6 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_1_5_Large .
+# Model Instance: Jamba 1.6 Mini
+abi:Jamba_1_6_Mini a abi:AIModelInstance ;
+    rdfs:label "Jamba 1.6 Mini"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-1-6-mini"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 0.2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.4 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.25 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 165.278 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.678 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.678 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 5.5 ;
+    abi:codingIndex 8.6 ;
+    abi:mathIndex 14.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_1_6_Mini .
+# Model Instance: Jamba 1.6 Large
+abi:Jamba_1_6_Large a abi:AIModelInstance ;
+    rdfs:label "Jamba 1.6 Large"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-1-6-large"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 8 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.5 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 50.814 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.876 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.876 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 17.1 ;
+    abi:codingIndex 17.8 ;
+    abi:mathIndex 31.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_1_6_Large .
+# Model Instance: Jamba 1.5 Mini
+abi:Jamba_1_5_Mini a abi:AIModelInstance ;
+    rdfs:label "Jamba 1.5 Mini"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "jamba-1-5-mini"@en ;
+    abi:provider "AI21 Labs"@en ;
+    abi:inputTokenCost 0.2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.4 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.25 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 6.3 ;
+    abi:codingIndex 7.1 ;
+    abi:mathIndex 18.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:JambaAgent abi:canUtilizeModel abi:Jamba_1_5_Mini .

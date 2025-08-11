@@ -37,7 +37,7 @@ class AgentRecommendationParameters(WorkflowParameters):
         provider_preference (str): Optional preferred provider name
     """
     intent_description: str
-    min_intelligence_score: Optional[int] = 70
+    min_intelligence_score: Optional[int] = 10
     max_input_cost: Optional[float] = None
     max_results: Optional[int] = 10
     provider_preference: Optional[str] = None
@@ -72,6 +72,8 @@ class AgentRecommendationWorkflow(Workflow):
                 "intent_description": intent_desc,
                 "sparql_template": sparql_template
             }
+        
+
     
     def run_workflow(self, parameters: WorkflowParameters) -> Dict[str, Any]:
         if not isinstance(parameters, AgentRecommendationParameters):
@@ -102,18 +104,18 @@ class AgentRecommendationWorkflow(Workflow):
         
         # Intent matching logic
         if any(word in intent_lower for word in ["business", "proposal", "professional", "document"]):
-            return self._queries["findBusinessProposalAgents"]
+            return self._queries["abi#findBusinessProposalAgents"]
         elif any(word in intent_lower for word in ["code", "programming", "development", "script"]):
-            return self._queries["findCodingAgents"]
+            return self._queries["abi#findCodingAgents"]  
         elif any(word in intent_lower for word in ["math", "calculation", "equation", "statistics"]):
-            return self._queries["findMathAgents"]
+            return self._queries["abi#findMathAgents"]
         elif any(word in intent_lower for word in ["fast", "quick", "speed", "rapid"]):
-            return self._queries["findFastestAgents"]
+            return self._queries["abi#findFastestAgents"]
         elif any(word in intent_lower for word in ["cheap", "cost", "value", "budget"]):
-            return self._queries["findBestValueAgents"]
+            return self._queries["abi#findBestValueAgents"]
         else:
             # Default to business proposal for general requests
-            return self._queries["findBusinessProposalAgents"]
+            return self._queries["abi#findBusinessProposalAgents"]
     
     def _template_query(self, query_info: Dict[str, str], parameters: AgentRecommendationParameters) -> str:
         """Template the SPARQL query with user parameters."""
@@ -121,10 +123,10 @@ class AgentRecommendationWorkflow(Workflow):
         
         # Replace template variables
         replacements: Dict[str, Any] = {
-            "min_intelligence_score": parameters.min_intelligence_score or 70,
+            "min_intelligence_score": parameters.min_intelligence_score or 10,
             "max_results": parameters.max_results or 10,
-            "min_coding_score": parameters.min_intelligence_score or 70,  # Use intelligence as fallback
-            "min_math_score": parameters.min_intelligence_score or 70,    # Use intelligence as fallback
+            "min_coding_score": parameters.min_intelligence_score or 10,  # Use intelligence as fallback
+            "min_math_score": parameters.min_intelligence_score or 10,    # Use intelligence as fallback
         }
         
         # Add optional parameters
