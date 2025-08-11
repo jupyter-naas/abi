@@ -299,7 +299,6 @@ def run_startup_sequence():
     log(f"{'✅' if ollama_ok else '❌'} Ollama")
     
     # Check API keys for AI providers
-    log("")
     log("🔑 Checking API keys...")
     
     openai_ok = check_api_key("OPENAI_API_KEY")
@@ -319,8 +318,6 @@ def run_startup_sequence():
     
     xai_ok = check_api_key("XAI_API_KEY")
     log(f"{'✅' if xai_ok else '❌'} XAI API Key (Grok)")
-    
-    log("")
     
     # Step 2: Load knowledge graph data (only if Oxigraph is available)
     log("[2/4] Loading knowledge graph...")
@@ -437,7 +434,6 @@ def run_startup_sequence():
             log(f"⚠️  {api_keys_configured}/{total_api_keys} API keys configured")
         
         log("✅ Local models available")
-        log("")
         log("🌐 SPARQL: http://localhost:3000")
         log("🔍 Explorer: http://localhost:7878/")
         log("🤖 Ollama: http://localhost:11434")
