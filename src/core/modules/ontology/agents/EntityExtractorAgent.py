@@ -8,13 +8,13 @@ from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from langgraph.types import Command
 from pydantic import SecretStr
 from src import secret
 
 
-NAME = "entity_extractor_agent"
+NAME = "Entities_Extractor_Agent"
 DESCRIPTION = "A agent that extracts entities from the last message."
 MODEL = "o3-mini"
 TEMPERATURE = None
@@ -596,12 +596,16 @@ class EntityExtractorAgent(Agent):
         from abi.utils.JSON import extract_json_from_completion
         from src.utils.Storage import save_json
         import uuid
+        from src import services
         from src.core.modules.ontology.workflows.GetObjectPropertiesFromClassWorkflow import (
             GetObjectPropertiesFromClassWorkflow, 
             GetObjectPropertiesFromClassWorkflowConfiguration,
             GetObjectPropertiesFromClassWorkflowParameters
         )
-        workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration())
+        from datetime import datetime
+        workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration(
+            triple_store=services.triple_store_service
+        ))
 
         last_message_content = state["messages"][-1].content
         assert isinstance(last_message_content, str), "Last message content must be a string"
@@ -620,11 +624,12 @@ class EntityExtractorAgent(Agent):
                     if len(oprop.get("object_properties", [])) > 0:
                         object_properties[class_uri] = oprop
         data = {
+            "message": state["messages"][0].content,
             "entities": entities,
             "object_properties": list(object_properties.values())
         }
-        save_json(data, "datastore/ontology/extract_entities", "data.json")
-        return Command(goto="__end__", update={"messages": [SystemMessage(content=str(data))]})
+        save_json(data, "datastore/ontology/extract_entities", f"message.json")
+        return Command(goto="__end__", update={"messages": [AIMessage(content=str(data))]})
          
 
     def build_graph(self, patcher: Optional[Callable] = None):
