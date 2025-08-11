@@ -67,11 +67,13 @@ def get_agent_breakdown():
         query = """
         PREFIX abi: <http://ontology.naas.ai/abi/>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT DISTINCT ?label WHERE {
-            ?s a abi:AIAgent .
-            ?s rdfs:label ?label .
+        SELECT ?system ?systemLabel (COUNT(?agent) AS ?count) WHERE {
+            ?agent a abi:AIAgent .
+            ?agent abi:isAIAgentOf ?system .
+            OPTIONAL { ?system rdfs:label ?systemLabel }
         }
-        ORDER BY ?label
+        GROUP BY ?system ?systemLabel
+        ORDER BY ?systemLabel
         """
         response = requests.post(
             "http://localhost:7878/query",
@@ -81,46 +83,63 @@ def get_agent_breakdown():
         )
         if response.status_code == 200:
             result = response.json()
-            agents = [binding['label']['value'] for binding in result['results']['bindings']]
-            
-            # Group agents by main type for cleaner display
             agent_groups = {}
-            for agent in agents:
-                if "ABI" in agent:
-                    group = "ABI Core"
-                elif "ChatGPT" in agent or "GPT" in agent:
-                    group = "ChatGPT"
-                elif "Claude" in agent:
-                    group = "Claude"
-                elif "Gemini" in agent:
-                    group = "Gemini"
-                elif "Mistral" in agent:
-                    group = "Mistral"
-                elif "Grok" in agent:
-                    group = "Grok"
-                elif "Llama" in agent:
-                    group = "Llama"
-                elif "DeepSeek" in agent:
-                    group = "DeepSeek"
-                elif "Gemma" in agent:
-                    group = "Gemma"
-                elif "Qwen" in agent:
-                    group = "Qwen"
-                elif "Perplexity" in agent:
-                    group = "Perplexity"
-                elif "DALL-E" in agent:
-                    group = "DALL-E"
-                else:
-                    group = "Other"
+            
+            for binding in result['results']['bindings']:
+                system_uri = binding['system']['value']
+                system_label = binding.get('systemLabel', {}).get('value', 'Unknown')
+                count = int(binding['count']['value'])
                 
-                if group not in agent_groups:
-                    agent_groups[group] = 0
-                agent_groups[group] += 1
+                # Extract clean system name from URI or label
+                if system_label and system_label != 'Unknown':
+                    system_name = system_label
+                else:
+                    # Extract from URI as fallback
+                    system_name = system_uri.split('/')[-1]
+                    # Clean up the name
+                    system_name = system_name.replace('System', '').replace('Subsystem', '')
+                
+                # Group by main AI provider for cleaner display
+                main_provider = get_main_provider(system_uri, system_name)
+                
+                if main_provider not in agent_groups:
+                    agent_groups[main_provider] = 0
+                agent_groups[main_provider] += count
             
             return agent_groups
         return {}
     except Exception:
         return {}
+
+def get_main_provider(system_uri, system_name):
+    """Extract main AI provider from system URI or name"""
+    uri_lower = system_uri.lower()
+    
+    # Map to main providers
+    if 'openai' in uri_lower or 'chatgpt' in uri_lower:
+        return "OpenAI"
+    elif 'anthropic' in uri_lower or 'claude' in uri_lower:
+        return "Anthropic"
+    elif 'google' in uri_lower or 'gemini' in uri_lower:
+        return "Google"
+    elif 'mistral' in uri_lower:
+        return "Mistral"
+    elif 'grok' in uri_lower or 'xai' in uri_lower:
+        return "XAI (Grok)"
+    elif 'llama' in uri_lower:
+        return "Llama"
+    elif 'deepseek' in uri_lower:
+        return "DeepSeek"
+    elif 'gemma' in uri_lower:
+        return "Gemma"
+    elif 'qwen' in uri_lower:
+        return "Qwen"
+    elif 'perplexity' in uri_lower:
+        return "Perplexity"
+    elif 'abi' in uri_lower:
+        return "ABI Core"
+    else:
+        return system_name
 
 def get_triple_count():
     """Get total triple count"""
