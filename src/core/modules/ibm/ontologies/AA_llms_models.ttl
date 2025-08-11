@@ -1,0 +1,43 @@
+# Artificial Analysis Model Data for Ibm
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.011923
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2cff73da_4855_403c_afc9_5540feadcc15 a abi:AIModelInstance ;
+    rdfs:label "Granite 3.3 Instruct 8B"@en ;
+    abi:modelName "Granite 3.3 Instruct 8B" ;
+    abi:providerName "IBM" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2cff73da_4855_403c_afc9_5540feadcc15_Performance ;
+    abi:inputTokenCost "0.03"^^xsd:decimal ;
+    abi:outputTokenCost "0.25"^^xsd:decimal ;
+    abi:outputSpeed "126.905"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2cff73da_4855_403c_afc9_5540feadcc15_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Granite 3.3 Instruct 8B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2cff73da_4855_403c_afc9_5540feadcc15 ;
+    rdfs:comment "Process realization using Granite 3.3 Instruct 8B model instance."@en .
+# Performance Quality
+abi:2cff73da_4855_403c_afc9_5540feadcc15_Performance a abi:ModelAccuracy ;
+    rdfs:label "Granite 3.3 Instruct 8B Performance"@en ;
+    abi:intelligenceIndex "17.6"^^xsd:decimal ;
+    abi:codingIndex "11.4"^^xsd:decimal ;
+    abi:mathIndex "35.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+

@@ -1,0 +1,1282 @@
+# Artificial Analysis Model Data for Qwen
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.014514
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:ceb4d610_d0a4_48c1_bea0_80ed76f1e5ca a abi:AIModelInstance ;
+    rdfs:label "QwQ 32B"@en ;
+    abi:modelName "QwQ 32B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:ceb4d610_d0a4_48c1_bea0_80ed76f1e5ca_Performance ;
+    abi:inputTokenCost "0.35"^^xsd:decimal ;
+    abi:outputTokenCost "0.825"^^xsd:decimal ;
+    abi:outputSpeed "53.033"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:ceb4d610_d0a4_48c1_bea0_80ed76f1e5ca_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "QwQ 32B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:ceb4d610_d0a4_48c1_bea0_80ed76f1e5ca ;
+    rdfs:comment "Process realization using QwQ 32B model instance."@en .
+# Performance Quality
+abi:ceb4d610_d0a4_48c1_bea0_80ed76f1e5ca_Performance a abi:ModelAccuracy ;
+    rdfs:label "QwQ 32B Performance"@en ;
+    abi:intelligenceIndex "47.7"^^xsd:decimal ;
+    abi:codingIndex "49.4"^^xsd:decimal ;
+    abi:mathIndex "86.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:3373245b_e6dc_4b66_a7b0_3f06f9b7bd46 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 235B A22B 2507 (Non-reasoning)"@en ;
+    abi:modelName "Qwen3 235B A22B 2507 (Non-reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:3373245b_e6dc_4b66_a7b0_3f06f9b7bd46_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "2.8"^^xsd:decimal ;
+    abi:outputSpeed "40.19"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:3373245b_e6dc_4b66_a7b0_3f06f9b7bd46_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 235B A22B 2507 (Non-reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:3373245b_e6dc_4b66_a7b0_3f06f9b7bd46 ;
+    rdfs:comment "Process realization using Qwen3 235B A22B 2507 (Non-reasoning) model instance."@en .
+# Performance Quality
+abi:3373245b_e6dc_4b66_a7b0_3f06f9b7bd46_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 235B A22B 2507 (Non-reasoning) Performance"@en ;
+    abi:intelligenceIndex "50.7"^^xsd:decimal ;
+    abi:codingIndex "44.2"^^xsd:decimal ;
+    abi:mathIndex "84.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d a abi:AIModelInstance ;
+    rdfs:label "Qwen3 235B A22B 2507 (Reasoning)"@en ;
+    abi:modelName "Qwen3 235B A22B 2507 (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "8.4"^^xsd:decimal ;
+    abi:outputSpeed "60.681"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 235B A22B 2507 (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d ;
+    rdfs:comment "Process realization using Qwen3 235B A22B 2507 (Reasoning) model instance."@en .
+
+abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d_CodeGenerationProcess_Realization a abi:CodeGenerationProcess ;
+    rdfs:label "Qwen3 235B A22B 2507 (Reasoning) CodeGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d ;
+    rdfs:comment "Process realization using Qwen3 235B A22B 2507 (Reasoning) model instance."@en .
+# Performance Quality
+abi:f6ccbe1d_bd7e_484b_9795_18cc9f91552d_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 235B A22B 2507 (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "63.6"^^xsd:decimal ;
+    abi:codingIndex "60.6"^^xsd:decimal ;
+    abi:mathIndex "96.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:7ec1065a_c90e_41e4_bd17_abb7042eed76 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 30B A3B 2507 (Non-reasoning)"@en ;
+    abi:modelName "Qwen3 30B A3B 2507 (Non-reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:7ec1065a_c90e_41e4_bd17_abb7042eed76_Performance ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputSpeed "105.018"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:7ec1065a_c90e_41e4_bd17_abb7042eed76_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 30B A3B 2507 (Non-reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:7ec1065a_c90e_41e4_bd17_abb7042eed76 ;
+    rdfs:comment "Process realization using Qwen3 30B A3B 2507 (Non-reasoning) model instance."@en .
+# Performance Quality
+abi:7ec1065a_c90e_41e4_bd17_abb7042eed76_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 30B A3B 2507 (Non-reasoning) Performance"@en ;
+    abi:intelligenceIndex "46.1"^^xsd:decimal ;
+    abi:codingIndex "41"^^xsd:decimal ;
+    abi:mathIndex "85.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:093883ed_f5fc_443b_8e18_afbfb166699e a abi:AIModelInstance ;
+    rdfs:label "Qwen3 Coder 480B A35B"@en ;
+    abi:modelName "Qwen3 Coder 480B A35B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:093883ed_f5fc_443b_8e18_afbfb166699e_Performance ;
+    abi:inputTokenCost "1.5"^^xsd:decimal ;
+    abi:outputTokenCost "7.5"^^xsd:decimal ;
+    abi:outputSpeed "49.721"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:093883ed_f5fc_443b_8e18_afbfb166699e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 Coder 480B A35B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:093883ed_f5fc_443b_8e18_afbfb166699e ;
+    rdfs:comment "Process realization using Qwen3 Coder 480B A35B model instance."@en .
+# Performance Quality
+abi:093883ed_f5fc_443b_8e18_afbfb166699e_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 Coder 480B A35B Performance"@en ;
+    abi:intelligenceIndex "45.2"^^xsd:decimal ;
+    abi:codingIndex "47.2"^^xsd:decimal ;
+    abi:mathIndex "70.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:5e0164b3_d902_4bcb_a1b2_83b4f4cd6143 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 30B A3B 2507 (Reasoning)"@en ;
+    abi:modelName "Qwen3 30B A3B 2507 (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:5e0164b3_d902_4bcb_a1b2_83b4f4cd6143_Performance ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "2.4"^^xsd:decimal ;
+    abi:outputSpeed "111.105"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:5e0164b3_d902_4bcb_a1b2_83b4f4cd6143_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 30B A3B 2507 (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:5e0164b3_d902_4bcb_a1b2_83b4f4cd6143 ;
+    rdfs:comment "Process realization using Qwen3 30B A3B 2507 (Reasoning) model instance."@en .
+# Performance Quality
+abi:5e0164b3_d902_4bcb_a1b2_83b4f4cd6143_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 30B A3B 2507 (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "53.2"^^xsd:decimal ;
+    abi:codingIndex "52"^^xsd:decimal ;
+    abi:mathIndex "94.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:da9fe224_8af3_46d7_a8c4_6220779c3f35 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 Coder 30B A3B"@en ;
+    abi:modelName "Qwen3 Coder 30B A3B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:da9fe224_8af3_46d7_a8c4_6220779c3f35_Performance ;
+    abi:inputTokenCost "0.45"^^xsd:decimal ;
+    abi:outputTokenCost "2.25"^^xsd:decimal ;
+    abi:outputSpeed "114.837"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:da9fe224_8af3_46d7_a8c4_6220779c3f35_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 Coder 30B A3B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:da9fe224_8af3_46d7_a8c4_6220779c3f35 ;
+    rdfs:comment "Process realization using Qwen3 Coder 30B A3B model instance."@en .
+# Performance Quality
+abi:da9fe224_8af3_46d7_a8c4_6220779c3f35_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 Coder 30B A3B Performance"@en ;
+    abi:intelligenceIndex "33.4"^^xsd:decimal ;
+    abi:codingIndex "34"^^xsd:decimal ;
+    abi:mathIndex "59.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:c43aa1f9_31bd_4a99_be70_84c5e6bd2e75 a abi:AIModelInstance ;
+    rdfs:label "Qwen Chat 14B"@en ;
+    abi:modelName "Qwen Chat 14B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:c43aa1f9_31bd_4a99_be70_84c5e6bd2e75_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:c43aa1f9_31bd_4a99_be70_84c5e6bd2e75_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen Chat 14B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:c43aa1f9_31bd_4a99_be70_84c5e6bd2e75 ;
+    rdfs:comment "Process realization using Qwen Chat 14B model instance."@en .
+# Performance Quality
+abi:c43aa1f9_31bd_4a99_be70_84c5e6bd2e75_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen Chat 14B Performance"@en ;
+    abi:intelligenceIndex "1.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b9dc72c6_7bea_4936_a55a_4b0c835fc755 a abi:AIModelInstance ;
+    rdfs:label "Qwen2.5 Max"@en ;
+    abi:modelName "Qwen2.5 Max" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b9dc72c6_7bea_4936_a55a_4b0c835fc755_Performance ;
+    abi:inputTokenCost "1.6"^^xsd:decimal ;
+    abi:outputTokenCost "6.4"^^xsd:decimal ;
+    abi:outputSpeed "40.76"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b9dc72c6_7bea_4936_a55a_4b0c835fc755_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2.5 Max TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b9dc72c6_7bea_4936_a55a_4b0c835fc755 ;
+    rdfs:comment "Process realization using Qwen2.5 Max model instance."@en .
+# Performance Quality
+abi:b9dc72c6_7bea_4936_a55a_4b0c835fc755_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2.5 Max Performance"@en ;
+    abi:intelligenceIndex "34.3"^^xsd:decimal ;
+    abi:codingIndex "34.8"^^xsd:decimal ;
+    abi:mathIndex "53.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b4f7d7a4_869a_4ee7_b17a_4046cd1e79fd a abi:AIModelInstance ;
+    rdfs:label "Qwen2.5 Instruct 72B"@en ;
+    abi:modelName "Qwen2.5 Instruct 72B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b4f7d7a4_869a_4ee7_b17a_4046cd1e79fd_Performance ;
+    abi:outputSpeed "58.16"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b4f7d7a4_869a_4ee7_b17a_4046cd1e79fd_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2.5 Instruct 72B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b4f7d7a4_869a_4ee7_b17a_4046cd1e79fd ;
+    rdfs:comment "Process realization using Qwen2.5 Instruct 72B model instance."@en .
+# Performance Quality
+abi:b4f7d7a4_869a_4ee7_b17a_4046cd1e79fd_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2.5 Instruct 72B Performance"@en ;
+    abi:intelligenceIndex "29.2"^^xsd:decimal ;
+    abi:codingIndex "27.2"^^xsd:decimal ;
+    abi:mathIndex "50.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:04586102_6a28_48f8_a82e_85775d7ed779 a abi:AIModelInstance ;
+    rdfs:label "Qwen2.5 Coder Instruct 32B"@en ;
+    abi:modelName "Qwen2.5 Coder Instruct 32B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:04586102_6a28_48f8_a82e_85775d7ed779_Performance ;
+    abi:inputTokenCost "0.135"^^xsd:decimal ;
+    abi:outputTokenCost "0.18"^^xsd:decimal ;
+    abi:outputSpeed "52.712"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:04586102_6a28_48f8_a82e_85775d7ed779_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2.5 Coder Instruct 32B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:04586102_6a28_48f8_a82e_85775d7ed779 ;
+    rdfs:comment "Process realization using Qwen2.5 Coder Instruct 32B model instance."@en .
+# Performance Quality
+abi:04586102_6a28_48f8_a82e_85775d7ed779_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2.5 Coder Instruct 32B Performance"@en ;
+    abi:intelligenceIndex "25"^^xsd:decimal ;
+    abi:codingIndex "28.3"^^xsd:decimal ;
+    abi:mathIndex "44.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:352f834f_a03c_4117_8a29_c3ccd8a568ce a abi:AIModelInstance ;
+    rdfs:label "Qwen2.5 Turbo"@en ;
+    abi:modelName "Qwen2.5 Turbo" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:352f834f_a03c_4117_8a29_c3ccd8a568ce_Performance ;
+    abi:inputTokenCost "0.05"^^xsd:decimal ;
+    abi:outputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputSpeed "89.338"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:352f834f_a03c_4117_8a29_c3ccd8a568ce_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2.5 Turbo TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:352f834f_a03c_4117_8a29_c3ccd8a568ce ;
+    rdfs:comment "Process realization using Qwen2.5 Turbo model instance."@en .
+# Performance Quality
+abi:352f834f_a03c_4117_8a29_c3ccd8a568ce_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2.5 Turbo Performance"@en ;
+    abi:intelligenceIndex "22.1"^^xsd:decimal ;
+    abi:codingIndex "15.8"^^xsd:decimal ;
+    abi:mathIndex "46.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:7656c62b_5345_435b_bf12_b6ce2ca0d58d a abi:AIModelInstance ;
+    rdfs:label "Qwen2 Instruct 72B"@en ;
+    abi:modelName "Qwen2 Instruct 72B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:7656c62b_5345_435b_bf12_b6ce2ca0d58d_Performance ;
+    abi:outputSpeed "30.918"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:7656c62b_5345_435b_bf12_b6ce2ca0d58d_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2 Instruct 72B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:7656c62b_5345_435b_bf12_b6ce2ca0d58d ;
+    rdfs:comment "Process realization using Qwen2 Instruct 72B model instance."@en .
+# Performance Quality
+abi:7656c62b_5345_435b_bf12_b6ce2ca0d58d_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2 Instruct 72B Performance"@en ;
+    abi:intelligenceIndex "21.1"^^xsd:decimal ;
+    abi:codingIndex "19.4"^^xsd:decimal ;
+    abi:mathIndex "42.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:bbe6d782_e630_48d5_b11c_3ce37f373f1e a abi:AIModelInstance ;
+    rdfs:label "Qwen3 235B A22B (Reasoning)"@en ;
+    abi:modelName "Qwen3 235B A22B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:bbe6d782_e630_48d5_b11c_3ce37f373f1e_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "8.4"^^xsd:decimal ;
+    abi:outputSpeed "31.807"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:bbe6d782_e630_48d5_b11c_3ce37f373f1e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 235B A22B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:bbe6d782_e630_48d5_b11c_3ce37f373f1e ;
+    rdfs:comment "Process realization using Qwen3 235B A22B (Reasoning) model instance."@en .
+# Performance Quality
+abi:bbe6d782_e630_48d5_b11c_3ce37f373f1e_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 235B A22B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "48.4"^^xsd:decimal ;
+    abi:codingIndex "51.1"^^xsd:decimal ;
+    abi:mathIndex "88.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:3e6cf518_a1f4_42d3_8fcf_827c9bd8e6d5 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 30B A3B (Reasoning)"@en ;
+    abi:modelName "Qwen3 30B A3B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:3e6cf518_a1f4_42d3_8fcf_827c9bd8e6d5_Performance ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "2.4"^^xsd:decimal ;
+    abi:outputSpeed "85.824"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:3e6cf518_a1f4_42d3_8fcf_827c9bd8e6d5_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 30B A3B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:3e6cf518_a1f4_42d3_8fcf_827c9bd8e6d5 ;
+    rdfs:comment "Process realization using Qwen3 30B A3B (Reasoning) model instance."@en .
+# Performance Quality
+abi:3e6cf518_a1f4_42d3_8fcf_827c9bd8e6d5_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 30B A3B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "42.3"^^xsd:decimal ;
+    abi:codingIndex "39.5"^^xsd:decimal ;
+    abi:mathIndex "85.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:43573c57_2403_46fb_af4b_a93de9a0c3f5 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 235B A22B"@en ;
+    abi:modelName "Qwen3 235B A22B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:43573c57_2403_46fb_af4b_a93de9a0c3f5_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "2.8"^^xsd:decimal ;
+    abi:outputSpeed "34.011"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:43573c57_2403_46fb_af4b_a93de9a0c3f5_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 235B A22B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:43573c57_2403_46fb_af4b_a93de9a0c3f5 ;
+    rdfs:comment "Process realization using Qwen3 235B A22B model instance."@en .
+# Performance Quality
+abi:43573c57_2403_46fb_af4b_a93de9a0c3f5_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 235B A22B Performance"@en ;
+    abi:intelligenceIndex "33.3"^^xsd:decimal ;
+    abi:codingIndex "32.1"^^xsd:decimal ;
+    abi:mathIndex "61.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b00ecd62_a53f_4aed_b833_3e9d6b0170ba a abi:AIModelInstance ;
+    rdfs:label "Qwen3 32B (Reasoning)"@en ;
+    abi:modelName "Qwen3 32B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b00ecd62_a53f_4aed_b833_3e9d6b0170ba_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "8.4"^^xsd:decimal ;
+    abi:outputSpeed "65.505"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b00ecd62_a53f_4aed_b833_3e9d6b0170ba_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 32B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b00ecd62_a53f_4aed_b833_3e9d6b0170ba ;
+    rdfs:comment "Process realization using Qwen3 32B (Reasoning) model instance."@en .
+# Performance Quality
+abi:b00ecd62_a53f_4aed_b833_3e9d6b0170ba_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 32B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "44.3"^^xsd:decimal ;
+    abi:codingIndex "45"^^xsd:decimal ;
+    abi:mathIndex "88.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:e46198a7_cd29_4afd_933d_cdf180f0f305 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 4B"@en ;
+    abi:modelName "Qwen3 4B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:e46198a7_cd29_4afd_933d_cdf180f0f305_Performance ;
+    abi:inputTokenCost "0.11"^^xsd:decimal ;
+    abi:outputTokenCost "0.42"^^xsd:decimal ;
+    abi:outputSpeed "106.643"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:e46198a7_cd29_4afd_933d_cdf180f0f305_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 4B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:e46198a7_cd29_4afd_933d_cdf180f0f305 ;
+    rdfs:comment "Process realization using Qwen3 4B model instance."@en .
+# Performance Quality
+abi:e46198a7_cd29_4afd_933d_cdf180f0f305_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 4B Performance"@en ;
+    abi:intelligenceIndex "23.8"^^xsd:decimal ;
+    abi:codingIndex "20"^^xsd:decimal ;
+    abi:mathIndex "52.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:9dba61f5_78ee_4190_8d1d_8e7063ffd386 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 8B (Reasoning)"@en ;
+    abi:modelName "Qwen3 8B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:9dba61f5_78ee_4190_8d1d_8e7063ffd386_Performance ;
+    abi:inputTokenCost "0.18"^^xsd:decimal ;
+    abi:outputTokenCost "2.1"^^xsd:decimal ;
+    abi:outputSpeed "98.804"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:9dba61f5_78ee_4190_8d1d_8e7063ffd386_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 8B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:9dba61f5_78ee_4190_8d1d_8e7063ffd386 ;
+    rdfs:comment "Process realization using Qwen3 8B (Reasoning) model instance."@en .
+# Performance Quality
+abi:9dba61f5_78ee_4190_8d1d_8e7063ffd386_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 8B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "40.8"^^xsd:decimal ;
+    abi:codingIndex "31.6"^^xsd:decimal ;
+    abi:mathIndex "82.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b2dd592a_fbc5_458a_b26d_f3964cbab82f a abi:AIModelInstance ;
+    rdfs:label "Qwen3 8B"@en ;
+    abi:modelName "Qwen3 8B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b2dd592a_fbc5_458a_b26d_f3964cbab82f_Performance ;
+    abi:inputTokenCost "0.18"^^xsd:decimal ;
+    abi:outputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputSpeed "100.054"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b2dd592a_fbc5_458a_b26d_f3964cbab82f_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 8B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b2dd592a_fbc5_458a_b26d_f3964cbab82f ;
+    rdfs:comment "Process realization using Qwen3 8B model instance."@en .
+# Performance Quality
+abi:b2dd592a_fbc5_458a_b26d_f3964cbab82f_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 8B Performance"@en ;
+    abi:intelligenceIndex "25.4"^^xsd:decimal ;
+    abi:codingIndex "18.5"^^xsd:decimal ;
+    abi:mathIndex "53.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2bb84433_f38e_4edc_9b65_4d7b1f473db9 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 1.7B"@en ;
+    abi:modelName "Qwen3 1.7B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2bb84433_f38e_4edc_9b65_4d7b1f473db9_Performance ;
+    abi:inputTokenCost "0.11"^^xsd:decimal ;
+    abi:outputTokenCost "0.42"^^xsd:decimal ;
+    abi:outputSpeed "140.109"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2bb84433_f38e_4edc_9b65_4d7b1f473db9_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 1.7B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2bb84433_f38e_4edc_9b65_4d7b1f473db9 ;
+    rdfs:comment "Process realization using Qwen3 1.7B model instance."@en .
+# Performance Quality
+abi:2bb84433_f38e_4edc_9b65_4d7b1f473db9_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 1.7B Performance"@en ;
+    abi:intelligenceIndex "13.2"^^xsd:decimal ;
+    abi:codingIndex "9.8"^^xsd:decimal ;
+    abi:mathIndex "40.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:0e5f6140_1154_4583_a3e0_8c032a338892 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 0.6B"@en ;
+    abi:modelName "Qwen3 0.6B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:0e5f6140_1154_4583_a3e0_8c032a338892_Performance ;
+    abi:inputTokenCost "0.11"^^xsd:decimal ;
+    abi:outputTokenCost "0.42"^^xsd:decimal ;
+    abi:outputSpeed "230.666"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:0e5f6140_1154_4583_a3e0_8c032a338892_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 0.6B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:0e5f6140_1154_4583_a3e0_8c032a338892 ;
+    rdfs:comment "Process realization using Qwen3 0.6B model instance."@en .
+# Performance Quality
+abi:0e5f6140_1154_4583_a3e0_8c032a338892_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 0.6B Performance"@en ;
+    abi:intelligenceIndex "4.5"^^xsd:decimal ;
+    abi:codingIndex "5.7"^^xsd:decimal ;
+    abi:mathIndex "26.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:ecc6524a_d521_458a_8327_5009e8ce6549 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 14B"@en ;
+    abi:modelName "Qwen3 14B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:ecc6524a_d521_458a_8327_5009e8ce6549_Performance ;
+    abi:inputTokenCost "0.35"^^xsd:decimal ;
+    abi:outputTokenCost "1.4"^^xsd:decimal ;
+    abi:outputSpeed "55.329"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:ecc6524a_d521_458a_8327_5009e8ce6549_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 14B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:ecc6524a_d521_458a_8327_5009e8ce6549 ;
+    rdfs:comment "Process realization using Qwen3 14B model instance."@en .
+# Performance Quality
+abi:ecc6524a_d521_458a_8327_5009e8ce6549_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 14B Performance"@en ;
+    abi:intelligenceIndex "29.8"^^xsd:decimal ;
+    abi:codingIndex "27.3"^^xsd:decimal ;
+    abi:mathIndex "57.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:191a2097_cce3_49cf_881e_0c790892059f a abi:AIModelInstance ;
+    rdfs:label "Qwen3 4B (Reasoning)"@en ;
+    abi:modelName "Qwen3 4B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:191a2097_cce3_49cf_881e_0c790892059f_Performance ;
+    abi:inputTokenCost "0.11"^^xsd:decimal ;
+    abi:outputTokenCost "1.26"^^xsd:decimal ;
+    abi:outputSpeed "104.934"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:191a2097_cce3_49cf_881e_0c790892059f_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 4B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:191a2097_cce3_49cf_881e_0c790892059f ;
+    rdfs:comment "Process realization using Qwen3 4B (Reasoning) model instance."@en .
+# Performance Quality
+abi:191a2097_cce3_49cf_881e_0c790892059f_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 4B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "36.4"^^xsd:decimal ;
+    abi:codingIndex "25"^^xsd:decimal ;
+    abi:mathIndex "79.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:bf60740e_6aa5_422f_ba49_ef6e9d171205 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 32B"@en ;
+    abi:modelName "Qwen3 32B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:bf60740e_6aa5_422f_ba49_ef6e9d171205_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "2.8"^^xsd:decimal ;
+    abi:outputSpeed "65.58"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:bf60740e_6aa5_422f_ba49_ef6e9d171205_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 32B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:bf60740e_6aa5_422f_ba49_ef6e9d171205 ;
+    rdfs:comment "Process realization using Qwen3 32B model instance."@en .
+# Performance Quality
+abi:bf60740e_6aa5_422f_ba49_ef6e9d171205_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 32B Performance"@en ;
+    abi:intelligenceIndex "29.8"^^xsd:decimal ;
+    abi:codingIndex "28.4"^^xsd:decimal ;
+    abi:mathIndex "58.6"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:f3169f25_8c6f_48e4_ae87_0cf872dc0ec1 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 30B A3B"@en ;
+    abi:modelName "Qwen3 30B A3B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:f3169f25_8c6f_48e4_ae87_0cf872dc0ec1_Performance ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputSpeed "90.66"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:f3169f25_8c6f_48e4_ae87_0cf872dc0ec1_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 30B A3B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:f3169f25_8c6f_48e4_ae87_0cf872dc0ec1 ;
+    rdfs:comment "Process realization using Qwen3 30B A3B model instance."@en .
+# Performance Quality
+abi:f3169f25_8c6f_48e4_ae87_0cf872dc0ec1_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 30B A3B Performance"@en ;
+    abi:intelligenceIndex "29.9"^^xsd:decimal ;
+    abi:codingIndex "29.3"^^xsd:decimal ;
+    abi:mathIndex "56.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:4559e9f0_8aad_4681_89fb_68cb915e0f16 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 14B (Reasoning)"@en ;
+    abi:modelName "Qwen3 14B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:4559e9f0_8aad_4681_89fb_68cb915e0f16_Performance ;
+    abi:inputTokenCost "0.35"^^xsd:decimal ;
+    abi:outputTokenCost "4.2"^^xsd:decimal ;
+    abi:outputSpeed "53.623"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:4559e9f0_8aad_4681_89fb_68cb915e0f16_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 14B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:4559e9f0_8aad_4681_89fb_68cb915e0f16 ;
+    rdfs:comment "Process realization using Qwen3 14B (Reasoning) model instance."@en .
+# Performance Quality
+abi:4559e9f0_8aad_4681_89fb_68cb915e0f16_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 14B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "45.2"^^xsd:decimal ;
+    abi:codingIndex "41.9"^^xsd:decimal ;
+    abi:mathIndex "86.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:5962d643_0a6f_4630_bb08_ab5720d80056 a abi:AIModelInstance ;
+    rdfs:label "Qwen3 1.7B (Reasoning)"@en ;
+    abi:modelName "Qwen3 1.7B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:5962d643_0a6f_4630_bb08_ab5720d80056_Performance ;
+    abi:inputTokenCost "0.11"^^xsd:decimal ;
+    abi:outputTokenCost "1.26"^^xsd:decimal ;
+    abi:outputSpeed "137.957"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:5962d643_0a6f_4630_bb08_ab5720d80056_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 1.7B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:5962d643_0a6f_4630_bb08_ab5720d80056 ;
+    rdfs:comment "Process realization using Qwen3 1.7B (Reasoning) model instance."@en .
+# Performance Quality
+abi:5962d643_0a6f_4630_bb08_ab5720d80056_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 1.7B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "26.9"^^xsd:decimal ;
+    abi:codingIndex "17.5"^^xsd:decimal ;
+    abi:mathIndex "70.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:4ae6c88d_9e4a_4850_89fe_18a1c04a66cc a abi:AIModelInstance ;
+    rdfs:label "Qwen3 0.6B (Reasoning)"@en ;
+    abi:modelName "Qwen3 0.6B (Reasoning)" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:4ae6c88d_9e4a_4850_89fe_18a1c04a66cc_Performance ;
+    abi:inputTokenCost "0.11"^^xsd:decimal ;
+    abi:outputTokenCost "1.26"^^xsd:decimal ;
+    abi:outputSpeed "227.975"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:4ae6c88d_9e4a_4850_89fe_18a1c04a66cc_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen3 0.6B (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:4ae6c88d_9e4a_4850_89fe_18a1c04a66cc ;
+    rdfs:comment "Process realization using Qwen3 0.6B (Reasoning) model instance."@en .
+# Performance Quality
+abi:4ae6c88d_9e4a_4850_89fe_18a1c04a66cc_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen3 0.6B (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "11.3"^^xsd:decimal ;
+    abi:codingIndex "7.4"^^xsd:decimal ;
+    abi:mathIndex "42.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:8823351e_8232_4c9c_8a1d_cd2c1d2c1196 a abi:AIModelInstance ;
+    rdfs:label "QwQ 32B-Preview"@en ;
+    abi:modelName "QwQ 32B-Preview" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:8823351e_8232_4c9c_8a1d_cd2c1d2c1196_Performance ;
+    abi:inputTokenCost "0.66"^^xsd:decimal ;
+    abi:outputTokenCost "0.69"^^xsd:decimal ;
+    abi:outputSpeed "47.735"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:8823351e_8232_4c9c_8a1d_cd2c1d2c1196_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "QwQ 32B-Preview TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:8823351e_8232_4c9c_8a1d_cd2c1d2c1196 ;
+    rdfs:comment "Process realization using QwQ 32B-Preview model instance."@en .
+# Performance Quality
+abi:8823351e_8232_4c9c_8a1d_cd2c1d2c1196_Performance a abi:ModelAccuracy ;
+    rdfs:label "QwQ 32B-Preview Performance"@en ;
+    abi:intelligenceIndex "31.5"^^xsd:decimal ;
+    abi:codingIndex "18.7"^^xsd:decimal ;
+    abi:mathIndex "68.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:e410e854_104d_4b35_a171_899ff9d974bb a abi:AIModelInstance ;
+    rdfs:label "Qwen2.5 Coder Instruct 7B "@en ;
+    abi:modelName "Qwen2.5 Coder Instruct 7B " ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:e410e854_104d_4b35_a171_899ff9d974bb_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:e410e854_104d_4b35_a171_899ff9d974bb_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2.5 Coder Instruct 7B  TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:e410e854_104d_4b35_a171_899ff9d974bb ;
+    rdfs:comment "Process realization using Qwen2.5 Coder Instruct 7B  model instance."@en .
+# Performance Quality
+abi:e410e854_104d_4b35_a171_899ff9d974bb_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2.5 Coder Instruct 7B  Performance"@en ;
+    abi:intelligenceIndex "14.9"^^xsd:decimal ;
+    abi:codingIndex "13.7"^^xsd:decimal ;
+    abi:mathIndex "35.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:1d0db5a3_3132_4213_a94b_c2e395d08283 a abi:AIModelInstance ;
+    rdfs:label "Qwen2.5 Instruct 32B"@en ;
+    abi:modelName "Qwen2.5 Instruct 32B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:1d0db5a3_3132_4213_a94b_c2e395d08283_Performance ;
+    abi:inputTokenCost "0.095"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:1d0db5a3_3132_4213_a94b_c2e395d08283_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen2.5 Instruct 32B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:1d0db5a3_3132_4213_a94b_c2e395d08283 ;
+    rdfs:comment "Process realization using Qwen2.5 Instruct 32B model instance."@en .
+# Performance Quality
+abi:1d0db5a3_3132_4213_a94b_c2e395d08283_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen2.5 Instruct 32B Performance"@en ;
+    abi:intelligenceIndex "26.1"^^xsd:decimal ;
+    abi:codingIndex "23.8"^^xsd:decimal ;
+    abi:mathIndex "45.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:d1768b3a_0a21_4e08_b3f6_56a9ab6cfbf3 a abi:AIModelInstance ;
+    rdfs:label "Qwen1.5 Chat 110B"@en ;
+    abi:modelName "Qwen1.5 Chat 110B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:d1768b3a_0a21_4e08_b3f6_56a9ab6cfbf3_Performance ;
+    abi:outputSpeed "23.665"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:d1768b3a_0a21_4e08_b3f6_56a9ab6cfbf3_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen1.5 Chat 110B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:d1768b3a_0a21_4e08_b3f6_56a9ab6cfbf3 ;
+    rdfs:comment "Process realization using Qwen1.5 Chat 110B model instance."@en .
+# Performance Quality
+abi:d1768b3a_0a21_4e08_b3f6_56a9ab6cfbf3_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen1.5 Chat 110B Performance"@en ;
+    abi:intelligenceIndex "13.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:41f73c27_880c_4f30_8b07_9999ce89a4ae a abi:AIModelInstance ;
+    rdfs:label "Qwen Chat 72B"@en ;
+    abi:modelName "Qwen Chat 72B" ;
+    abi:providerName "Alibaba" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:41f73c27_880c_4f30_8b07_9999ce89a4ae_Performance ;
+    abi:inputTokenCost "1"^^xsd:decimal ;
+    abi:outputTokenCost "1"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:41f73c27_880c_4f30_8b07_9999ce89a4ae_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Qwen Chat 72B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:41f73c27_880c_4f30_8b07_9999ce89a4ae ;
+    rdfs:comment "Process realization using Qwen Chat 72B model instance."@en .
+# Performance Quality
+abi:41f73c27_880c_4f30_8b07_9999ce89a4ae_Performance a abi:ModelAccuracy ;
+    rdfs:label "Qwen Chat 72B Performance"@en ;
+    abi:intelligenceIndex "10"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+

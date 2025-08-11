@@ -1,0 +1,587 @@
+# Artificial Analysis Model Data for Deepseek
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.009698
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:6000145b_0e3d_4fef_a55f_bcaac84803b2 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B"@en ;
+    abi:modelName "DeepSeek R1 0528 Qwen3 8B" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:6000145b_0e3d_4fef_a55f_bcaac84803b2_Performance ;
+    abi:inputTokenCost "0.055"^^xsd:decimal ;
+    abi:outputTokenCost "0.095"^^xsd:decimal ;
+    abi:outputSpeed "93.003"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:6000145b_0e3d_4fef_a55f_bcaac84803b2_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:6000145b_0e3d_4fef_a55f_bcaac84803b2 ;
+    rdfs:comment "Process realization using DeepSeek R1 0528 Qwen3 8B model instance."@en .
+# Performance Quality
+abi:6000145b_0e3d_4fef_a55f_bcaac84803b2_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 0528 Qwen3 8B Performance"@en ;
+    abi:intelligenceIndex "41.5"^^xsd:decimal ;
+    abi:codingIndex "35.9"^^xsd:decimal ;
+    abi:mathIndex "79.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:a83f84b3_473a_4276_9ae1_8909da723159 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 0528 (May '25)"@en ;
+    abi:modelName "DeepSeek R1 0528 (May '25)" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:a83f84b3_473a_4276_9ae1_8909da723159_Performance ;
+    abi:inputTokenCost "0.55"^^xsd:decimal ;
+    abi:outputTokenCost "2.19"^^xsd:decimal ;
+    abi:outputSpeed "21.393"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:a83f84b3_473a_4276_9ae1_8909da723159_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 0528 (May '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:a83f84b3_473a_4276_9ae1_8909da723159 ;
+    rdfs:comment "Process realization using DeepSeek R1 0528 (May '25) model instance."@en .
+# Performance Quality
+abi:a83f84b3_473a_4276_9ae1_8909da723159_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 0528 (May '25) Performance"@en ;
+    abi:intelligenceIndex "58.7"^^xsd:decimal ;
+    abi:codingIndex "58.7"^^xsd:decimal ;
+    abi:mathIndex "93.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:df95f83f_5ebb_466a_9d2d_b95efc8c012c a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B"@en ;
+    abi:modelName "DeepSeek R1 Distill Qwen 32B" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:df95f83f_5ebb_466a_9d2d_b95efc8c012c_Performance ;
+    abi:inputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputSpeed "32.546"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:df95f83f_5ebb_466a_9d2d_b95efc8c012c_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:df95f83f_5ebb_466a_9d2d_b95efc8c012c ;
+    rdfs:comment "Process realization using DeepSeek R1 Distill Qwen 32B model instance."@en .
+# Performance Quality
+abi:df95f83f_5ebb_466a_9d2d_b95efc8c012c_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 Distill Qwen 32B Performance"@en ;
+    abi:intelligenceIndex "41.2"^^xsd:decimal ;
+    abi:codingIndex "32.3"^^xsd:decimal ;
+    abi:mathIndex "81.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:4a845d7b_a52d_43bb_80b7_b58c7a0c155e a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B"@en ;
+    abi:modelName "DeepSeek R1 Distill Llama 70B" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:4a845d7b_a52d_43bb_80b7_b58c7a0c155e_Performance ;
+    abi:inputTokenCost "0.7"^^xsd:decimal ;
+    abi:outputTokenCost "0.8"^^xsd:decimal ;
+    abi:outputSpeed "76.583"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:4a845d7b_a52d_43bb_80b7_b58c7a0c155e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:4a845d7b_a52d_43bb_80b7_b58c7a0c155e ;
+    rdfs:comment "Process realization using DeepSeek R1 Distill Llama 70B model instance."@en .
+# Performance Quality
+abi:4a845d7b_a52d_43bb_80b7_b58c7a0c155e_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 Distill Llama 70B Performance"@en ;
+    abi:intelligenceIndex "37.4"^^xsd:decimal ;
+    abi:codingIndex "28.9"^^xsd:decimal ;
+    abi:mathIndex "80.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:43fc5506_c5ed_4dee_9b85_962bf7ae3986 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek V3 (Dec '24)"@en ;
+    abi:modelName "DeepSeek V3 (Dec '24)" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:43fc5506_c5ed_4dee_9b85_962bf7ae3986_Performance ;
+    abi:inputTokenCost "0.27"^^xsd:decimal ;
+    abi:outputTokenCost "1.1"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:43fc5506_c5ed_4dee_9b85_962bf7ae3986_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek V3 (Dec '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:43fc5506_c5ed_4dee_9b85_962bf7ae3986 ;
+    rdfs:comment "Process realization using DeepSeek V3 (Dec '24) model instance."@en .
+# Performance Quality
+abi:43fc5506_c5ed_4dee_9b85_962bf7ae3986_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek V3 (Dec '24) Performance"@en ;
+    abi:intelligenceIndex "34.6"^^xsd:decimal ;
+    abi:codingIndex "35.6"^^xsd:decimal ;
+    abi:mathIndex "57"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b26ff709_1773_4595_ae44_78e0a5bac29c a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B"@en ;
+    abi:modelName "DeepSeek R1 Distill Qwen 14B" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b26ff709_1773_4595_ae44_78e0a5bac29c_Performance ;
+    abi:inputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputTokenCost "0.2"^^xsd:decimal ;
+    abi:outputSpeed "84.922"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b26ff709_1773_4595_ae44_78e0a5bac29c_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b26ff709_1773_4595_ae44_78e0a5bac29c ;
+    rdfs:comment "Process realization using DeepSeek R1 Distill Qwen 14B model instance."@en .
+# Performance Quality
+abi:b26ff709_1773_4595_ae44_78e0a5bac29c_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 Distill Qwen 14B Performance"@en ;
+    abi:intelligenceIndex "38.2"^^xsd:decimal ;
+    abi:codingIndex "30.7"^^xsd:decimal ;
+    abi:mathIndex "80.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:bc4579d2_9c46_46c3_ace0_454039bf21bb a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24)"@en ;
+    abi:modelName "DeepSeek-V2.5 (Dec '24)" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:bc4579d2_9c46_46c3_ace0_454039bf21bb_Performance ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:bc4579d2_9c46_46c3_ace0_454039bf21bb_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:bc4579d2_9c46_46c3_ace0_454039bf21bb ;
+    rdfs:comment "Process realization using DeepSeek-V2.5 (Dec '24) model instance."@en .
+# Performance Quality
+abi:bc4579d2_9c46_46c3_ace0_454039bf21bb_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek-V2.5 (Dec '24) Performance"@en ;
+    abi:intelligenceIndex "23.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:8f0a75d6_8d00_4c2e_bcd4_8e88a570a93c a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-Coder-V2"@en ;
+    abi:modelName "DeepSeek-Coder-V2" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:8f0a75d6_8d00_4c2e_bcd4_8e88a570a93c_Performance ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:8f0a75d6_8d00_4c2e_bcd4_8e88a570a93c_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek-Coder-V2 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:8f0a75d6_8d00_4c2e_bcd4_8e88a570a93c ;
+    rdfs:comment "Process realization using DeepSeek-Coder-V2 model instance."@en .
+# Performance Quality
+abi:8f0a75d6_8d00_4c2e_bcd4_8e88a570a93c_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek-Coder-V2 Performance"@en ;
+    abi:intelligenceIndex "17.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:0e49fe2d_dd3c_4ae5_b56f_a1c89e14b89e a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B"@en ;
+    abi:modelName "DeepSeek R1 Distill Llama 8B" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:0e49fe2d_dd3c_4ae5_b56f_a1c89e14b89e_Performance ;
+    abi:inputTokenCost "0.04"^^xsd:decimal ;
+    abi:outputTokenCost "0.04"^^xsd:decimal ;
+    abi:outputSpeed "56.162"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:0e49fe2d_dd3c_4ae5_b56f_a1c89e14b89e_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:0e49fe2d_dd3c_4ae5_b56f_a1c89e14b89e ;
+    rdfs:comment "Process realization using DeepSeek R1 Distill Llama 8B model instance."@en .
+# Performance Quality
+abi:0e49fe2d_dd3c_4ae5_b56f_a1c89e14b89e_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 Distill Llama 8B Performance"@en ;
+    abi:intelligenceIndex "22.6"^^xsd:decimal ;
+    abi:codingIndex "17.6"^^xsd:decimal ;
+    abi:mathIndex "59.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:7764d514_694f_444c_8d60_bdc6e24e223f a abi:AIModelInstance ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1)"@en ;
+    abi:modelName "DeepSeek LLM 67B Chat (V1)" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:7764d514_694f_444c_8d60_bdc6e24e223f_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:7764d514_694f_444c_8d60_bdc6e24e223f_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:7764d514_694f_444c_8d60_bdc6e24e223f ;
+    rdfs:comment "Process realization using DeepSeek LLM 67B Chat (V1) model instance."@en .
+# Performance Quality
+abi:7764d514_694f_444c_8d60_bdc6e24e223f_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek LLM 67B Chat (V1) Performance"@en ;
+    abi:intelligenceIndex "7.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:444cdb1e_bab8_42cd_938c_b2d7a93e2da1 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B"@en ;
+    abi:modelName "DeepSeek R1 Distill Qwen 1.5B" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:444cdb1e_bab8_42cd_938c_b2d7a93e2da1_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:444cdb1e_bab8_42cd_938c_b2d7a93e2da1_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:444cdb1e_bab8_42cd_938c_b2d7a93e2da1 ;
+    rdfs:comment "Process realization using DeepSeek R1 Distill Qwen 1.5B model instance."@en .
+# Performance Quality
+abi:444cdb1e_bab8_42cd_938c_b2d7a93e2da1_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 Distill Qwen 1.5B Performance"@en ;
+    abi:intelligenceIndex "7.1"^^xsd:decimal ;
+    abi:codingIndex "6.8"^^xsd:decimal ;
+    abi:mathIndex "43.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:0e34f05c_387e_4968_be15_ccec4a55d8c1 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek R1 (Jan '25)"@en ;
+    abi:modelName "DeepSeek R1 (Jan '25)" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:0e34f05c_387e_4968_be15_ccec4a55d8c1_Performance ;
+    abi:inputTokenCost "1.35"^^xsd:decimal ;
+    abi:outputTokenCost "3"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:0e34f05c_387e_4968_be15_ccec4a55d8c1_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek R1 (Jan '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:0e34f05c_387e_4968_be15_ccec4a55d8c1 ;
+    rdfs:comment "Process realization using DeepSeek R1 (Jan '25) model instance."@en .
+# Performance Quality
+abi:0e34f05c_387e_4968_be15_ccec4a55d8c1_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek R1 (Jan '25) Performance"@en ;
+    abi:intelligenceIndex "49.9"^^xsd:decimal ;
+    abi:codingIndex "48.7"^^xsd:decimal ;
+    abi:mathIndex "82.5"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:75e1c197_f239_4361_a9d6_66dccfead236 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25)"@en ;
+    abi:modelName "DeepSeek V3 0324 (Mar '25)" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:75e1c197_f239_4361_a9d6_66dccfead236_Performance ;
+    abi:inputTokenCost "0.27"^^xsd:decimal ;
+    abi:outputTokenCost "1.1"^^xsd:decimal ;
+    abi:outputSpeed "22.624"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:75e1c197_f239_4361_a9d6_66dccfead236_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:75e1c197_f239_4361_a9d6_66dccfead236 ;
+    rdfs:comment "Process realization using DeepSeek V3 0324 (Mar '25) model instance."@en .
+# Performance Quality
+abi:75e1c197_f239_4361_a9d6_66dccfead236_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek V3 0324 (Mar '25) Performance"@en ;
+    abi:intelligenceIndex "44"^^xsd:decimal ;
+    abi:codingIndex "38.1"^^xsd:decimal ;
+    abi:mathIndex "73.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:8a24865b_90d9_4e2b_a2fd_6851c2e9d627 a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-V2.5"@en ;
+    abi:modelName "DeepSeek-V2.5" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:8a24865b_90d9_4e2b_a2fd_6851c2e9d627_Performance ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:8a24865b_90d9_4e2b_a2fd_6851c2e9d627_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek-V2.5 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:8a24865b_90d9_4e2b_a2fd_6851c2e9d627 ;
+    rdfs:comment "Process realization using DeepSeek-V2.5 model instance."@en .
+# Performance Quality
+abi:8a24865b_90d9_4e2b_a2fd_6851c2e9d627_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek-V2.5 Performance"@en ;
+    abi:intelligenceIndex "23.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:c7327e6e_b27f_4b1b_859d_159a34e0ba1c a abi:AIModelInstance ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct"@en ;
+    abi:modelName "DeepSeek Coder V2 Lite Instruct" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:c7327e6e_b27f_4b1b_859d_159a34e0ba1c_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:c7327e6e_b27f_4b1b_859d_159a34e0ba1c_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:c7327e6e_b27f_4b1b_859d_159a34e0ba1c ;
+    rdfs:comment "Process realization using DeepSeek Coder V2 Lite Instruct model instance."@en .
+# Performance Quality
+abi:c7327e6e_b27f_4b1b_859d_159a34e0ba1c_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek Coder V2 Lite Instruct Performance"@en ;
+    abi:intelligenceIndex "8.4"^^xsd:decimal ;
+    abi:codingIndex "14.8"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:2d19c2d1_062d_436e_b2c2_3d3ecad34acc a abi:AIModelInstance ;
+    rdfs:label "DeepSeek-V2-Chat"@en ;
+    abi:modelName "DeepSeek-V2-Chat" ;
+    abi:providerName "DeepSeek" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:2d19c2d1_062d_436e_b2c2_3d3ecad34acc_Performance ;
+    abi:inputTokenCost "0.14"^^xsd:decimal ;
+    abi:outputTokenCost "0.28"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:2d19c2d1_062d_436e_b2c2_3d3ecad34acc_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "DeepSeek-V2-Chat TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:2d19c2d1_062d_436e_b2c2_3d3ecad34acc ;
+    rdfs:comment "Process realization using DeepSeek-V2-Chat model instance."@en .
+# Performance Quality
+abi:2d19c2d1_062d_436e_b2c2_3d3ecad34acc_Performance a abi:ModelAccuracy ;
+    rdfs:label "DeepSeek-V2-Chat Performance"@en ;
+    abi:intelligenceIndex "11.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+

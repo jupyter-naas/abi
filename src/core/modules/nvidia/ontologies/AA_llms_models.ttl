@@ -1,0 +1,256 @@
+# Artificial Analysis Model Data for Nvidia
+# Generated from: https://artificialanalysis.ai/
+# Endpoint: llms
+# Generated: 2025-08-11T16:55:38.011249
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:7393c56a_ec31_48e9_b804_c04f2d2cb641 a abi:AIModelInstance ;
+    rdfs:label "Llama 3.1 Nemotron Instruct 70B"@en ;
+    abi:modelName "Llama 3.1 Nemotron Instruct 70B" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:7393c56a_ec31_48e9_b804_c04f2d2cb641_Performance ;
+    abi:inputTokenCost "0.12"^^xsd:decimal ;
+    abi:outputTokenCost "0.3"^^xsd:decimal ;
+    abi:outputSpeed "40.589"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:7393c56a_ec31_48e9_b804_c04f2d2cb641_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama 3.1 Nemotron Instruct 70B TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:7393c56a_ec31_48e9_b804_c04f2d2cb641 ;
+    rdfs:comment "Process realization using Llama 3.1 Nemotron Instruct 70B model instance."@en .
+# Performance Quality
+abi:7393c56a_ec31_48e9_b804_c04f2d2cb641_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama 3.1 Nemotron Instruct 70B Performance"@en ;
+    abi:intelligenceIndex "26"^^xsd:decimal ;
+    abi:codingIndex "20.1"^^xsd:decimal ;
+    abi:mathIndex "49"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:cf095603_72b6_47f8_8ee1_09a42890f92a a abi:AIModelInstance ;
+    rdfs:label "Llama 3.1 Nemotron Ultra 253B v1 (Reasoning)"@en ;
+    abi:modelName "Llama 3.1 Nemotron Ultra 253B v1 (Reasoning)" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:cf095603_72b6_47f8_8ee1_09a42890f92a_Performance ;
+    abi:inputTokenCost "0.6"^^xsd:decimal ;
+    abi:outputTokenCost "1.8"^^xsd:decimal ;
+    abi:outputSpeed "41.753"^^xsd:decimal ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:cf095603_72b6_47f8_8ee1_09a42890f92a_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama 3.1 Nemotron Ultra 253B v1 (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:cf095603_72b6_47f8_8ee1_09a42890f92a ;
+    rdfs:comment "Process realization using Llama 3.1 Nemotron Ultra 253B v1 (Reasoning) model instance."@en .
+# Performance Quality
+abi:cf095603_72b6_47f8_8ee1_09a42890f92a_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama 3.1 Nemotron Ultra 253B v1 (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "46.4"^^xsd:decimal ;
+    abi:codingIndex "49.4"^^xsd:decimal ;
+    abi:mathIndex "84.9"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:e1cfa926_9e2b_4a0d_8c31_48366a5041c5 a abi:AIModelInstance ;
+    rdfs:label "Llama Nemotron Super 49B v1.5 (Reasoning)"@en ;
+    abi:modelName "Llama Nemotron Super 49B v1.5 (Reasoning)" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:CodeGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:e1cfa926_9e2b_4a0d_8c31_48366a5041c5_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:e1cfa926_9e2b_4a0d_8c31_48366a5041c5_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama Nemotron Super 49B v1.5 (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:e1cfa926_9e2b_4a0d_8c31_48366a5041c5 ;
+    rdfs:comment "Process realization using Llama Nemotron Super 49B v1.5 (Reasoning) model instance."@en .
+# Performance Quality
+abi:e1cfa926_9e2b_4a0d_8c31_48366a5041c5_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama Nemotron Super 49B v1.5 (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "52.4"^^xsd:decimal ;
+    abi:codingIndex "54.2"^^xsd:decimal ;
+    abi:mathIndex "92.2"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:1a8ba535_df18_459b_ad40_3199191296d7 a abi:AIModelInstance ;
+    rdfs:label "Llama 3.3 Nemotron Super 49B v1 (Reasoning)"@en ;
+    abi:modelName "Llama 3.3 Nemotron Super 49B v1 (Reasoning)" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:1a8ba535_df18_459b_ad40_3199191296d7_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:1a8ba535_df18_459b_ad40_3199191296d7_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama 3.3 Nemotron Super 49B v1 (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:1a8ba535_df18_459b_ad40_3199191296d7 ;
+    rdfs:comment "Process realization using Llama 3.3 Nemotron Super 49B v1 (Reasoning) model instance."@en .
+# Performance Quality
+abi:1a8ba535_df18_459b_ad40_3199191296d7_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama 3.3 Nemotron Super 49B v1 (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "40.5"^^xsd:decimal ;
+    abi:codingIndex "28"^^xsd:decimal ;
+    abi:mathIndex "77.1"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:c4c3b42f_e0f0_48ca_b6f9_b296e7697806 a abi:AIModelInstance ;
+    rdfs:label "Llama 3.3 Nemotron Super 49B v1"@en ;
+    abi:modelName "Llama 3.3 Nemotron Super 49B v1" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:c4c3b42f_e0f0_48ca_b6f9_b296e7697806_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:c4c3b42f_e0f0_48ca_b6f9_b296e7697806_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama 3.3 Nemotron Super 49B v1 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:c4c3b42f_e0f0_48ca_b6f9_b296e7697806 ;
+    rdfs:comment "Process realization using Llama 3.3 Nemotron Super 49B v1 model instance."@en .
+# Performance Quality
+abi:c4c3b42f_e0f0_48ca_b6f9_b296e7697806_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama 3.3 Nemotron Super 49B v1 Performance"@en ;
+    abi:intelligenceIndex "28.1"^^xsd:decimal ;
+    abi:codingIndex "25.5"^^xsd:decimal ;
+    abi:mathIndex "48.4"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:b1fa84f8_1ed3_4124_b403_4655dafa4267 a abi:AIModelInstance ;
+    rdfs:label "Llama 3.1 Nemotron Nano 4B v1.1 (Reasoning)"@en ;
+    abi:modelName "Llama 3.1 Nemotron Nano 4B v1.1 (Reasoning)" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:b1fa84f8_1ed3_4124_b403_4655dafa4267_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:b1fa84f8_1ed3_4124_b403_4655dafa4267_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama 3.1 Nemotron Nano 4B v1.1 (Reasoning) TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:b1fa84f8_1ed3_4124_b403_4655dafa4267 ;
+    rdfs:comment "Process realization using Llama 3.1 Nemotron Nano 4B v1.1 (Reasoning) model instance."@en .
+# Performance Quality
+abi:b1fa84f8_1ed3_4124_b403_4655dafa4267_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama 3.1 Nemotron Nano 4B v1.1 (Reasoning) Performance"@en ;
+    abi:intelligenceIndex "34.1"^^xsd:decimal ;
+    abi:codingIndex "29.7"^^xsd:decimal ;
+    abi:mathIndex "82.7"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+# AI Model Instance (Material Entity)
+abi:26c0b5df_efa7_470f_a65e_2d883329e493 a abi:AIModelInstance ;
+    rdfs:label "Llama Nemotron Super 49B v1.5"@en ;
+    abi:modelName "Llama Nemotron Super 49B v1.5" ;
+    abi:providerName "NVIDIA" ;
+    abi:hasCapability capability:TextGenerationCapability, capability:ReasoningCapability ;
+    abi:hasQuality abi:26c0b5df_efa7_470f_a65e_2d883329e493_Performance ;
+    rdfs:comment "AI model instance with benchmarked capabilities and performance data from Artificial Analysis"@en ;
+    abi:sourceAPI "https://artificialanalysis.ai/" .
+
+
+# AI Processes this model can realize
+
+abi:26c0b5df_efa7_470f_a65e_2d883329e493_TextGenerationProcess_Realization a abi:TextGenerationProcess ;
+    rdfs:label "Llama Nemotron Super 49B v1.5 TextGenerationProcess Realization"@en ;
+    abi:utilizesModel abi:26c0b5df_efa7_470f_a65e_2d883329e493 ;
+    rdfs:comment "Process realization using Llama Nemotron Super 49B v1.5 model instance."@en .
+# Performance Quality
+abi:26c0b5df_efa7_470f_a65e_2d883329e493_Performance a abi:ModelAccuracy ;
+    rdfs:label "Llama Nemotron Super 49B v1.5 Performance"@en ;
+    abi:intelligenceIndex "26.9"^^xsd:decimal ;
+    abi:codingIndex "26.4"^^xsd:decimal ;
+    abi:mathIndex "45.3"^^xsd:decimal ;
+    rdfs:comment "Performance metrics from Artificial Analysis benchmarks"@en .
+
+
