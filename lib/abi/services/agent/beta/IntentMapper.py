@@ -50,6 +50,7 @@ You: code a project
                 return intent
         return None
     
+    
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
         results = self.vector_store.similarity_search(openai_embeddings(intent), k=k)
         for result in results:
