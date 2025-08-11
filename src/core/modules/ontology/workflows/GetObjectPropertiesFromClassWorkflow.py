@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pydantic import Field
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
-from typing import Annotated
+from typing import Annotated, Optional
 from enum import Enum
 from rdflib import Graph, URIRef, RDF, OWL, RDFS
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
@@ -24,7 +24,7 @@ class GetObjectPropertiesFromClassWorkflowConfiguration(WorkflowConfiguration):
         ontology_file_path (str): Path to the ontology file
     """
     triple_store: ITripleStoreService
-    ontology_file_path: str = None
+    ontology_file_path: Optional[str] = None
 
 
 class GetObjectPropertiesFromClassWorkflowParameters(WorkflowParameters):
