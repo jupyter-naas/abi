@@ -18,17 +18,7 @@ def check_service(url, name):
     except Exception:
         return False
 
-def check_qwen_model():
-    """Check if Qwen model is available in Ollama"""
-    try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=2)
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            qwen_models = [model for model in models if 'qwen' in model.get('name', '').lower()]
-            return len(qwen_models) > 0, qwen_models
-        return False, []
-    except Exception:
-        return False, []
+
 
 def get_agent_count():
     """Get number of agents from knowledge graph"""
@@ -153,14 +143,6 @@ def run_startup_sequence():
     ollama_ok = check_service("http://localhost:11434/api/tags", "Ollama")
     log(f"{'✅' if ollama_ok else '❌'} Ollama")
     
-    # Check Qwen model specifically
-    qwen_ok, qwen_models = check_qwen_model()
-    if qwen_ok:
-        model_names = [model.get('name', '') for model in qwen_models]
-        log(f"✅ Qwen Models: {', '.join(model_names)}")
-    else:
-        log("❌ Qwen Models: Not found")
-    
     # Step 2: Load knowledge graph data (only if Oxigraph is available)
     log("[2/4] Loading knowledge graph...")
     if oxigraph_ok:
@@ -185,7 +167,7 @@ def run_startup_sequence():
     
     # Step 4: Final status and access URLs
     log("[4/4] System status:")
-    if oxigraph_ok and yasgui_ok and ollama_ok and qwen_ok:
+    if oxigraph_ok and yasgui_ok and ollama_ok:
         log("✅ All services running")
         log("✅ Knowledge graph loaded")
         log("✅ Local models available")
@@ -199,8 +181,6 @@ def run_startup_sequence():
             log("❌ Run: make dev-up")
         if not ollama_ok:
             log("❌ Run: ollama serve")
-        if not qwen_ok:
-            log("❌ Run: ollama pull qwen2.5:7b")
     
     log("🚀 Ready")
 
