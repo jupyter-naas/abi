@@ -1,0 +1,237 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+<http://naas.ai/ontology/abi/AgentRecommendationQueries> a owl:Ontology ;
+    dc:title "AI Agent Recommendation SPARQL Queries"@en ;
+    dc:description "Intent-based SPARQL queries for recommending AI agents based on user requirements"@en ;
+    dc11:contributor "ABI System" .
+
+#################################################################
+#    Business & Professional Content Queries
+#################################################################
+
+abi:findBusinessProposalAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_business_proposal_agents"@en ;
+    intentMapping:intentDescription "Find AI agents capable of creating business proposals, ranked by cost and intelligence" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:codingIndex ?codingIndex .
+          
+          # Filter for agents with good intelligence for business content
+          FILTER(?intelligenceIndex >= {{ min_intelligence_score }})
+          
+          # Optional cost filtering
+          {% if max_input_cost %}
+          FILTER(?inputCost <= {{ max_input_cost }})
+          {% endif %}
+        }
+        ORDER BY ?inputCost ?outputCost DESC(?intelligenceIndex)
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:minIntelligenceArg, abi:maxInputCostArg, abi:maxResultsArg .
+
+abi:findCodingAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_coding_agents"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in code generation and programming tasks" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?codingIndex ?intelligenceIndex
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Filter for agents with strong coding capabilities
+          FILTER(?codingIndex >= {{ min_coding_score }})
+          
+          # Optional programming language filtering (could be extended)
+          {% if programming_language %}
+          # Future: add capability matching for specific languages
+          {% endif %}
+        }
+        ORDER BY DESC(?codingIndex) ?inputCost
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:minCodingScoreArg, abi:maxResultsArg .
+
+abi:findMathAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_math_agents"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in mathematical reasoning and calculations" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?mathIndex ?intelligenceIndex
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Filter for agents with strong math capabilities
+          FILTER(?mathIndex >= {{ min_math_score }})
+        }
+        ORDER BY DESC(?mathIndex) ?inputCost
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:minMathScoreArg, abi:maxResultsArg .
+
+#################################################################
+#    General Purpose & Cost-Based Queries
+#################################################################
+
+abi:findBestValueAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_value_agents"@en ;
+    intentMapping:intentDescription "Find AI agents with the best value (intelligence per cost ratio)" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex 
+               ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?valueRatio)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Ensure we have valid cost data
+          FILTER(?inputCost > 0 && ?outputCost > 0 && ?intelligenceIndex > 0)
+          
+          # Optional minimum intelligence threshold
+          {% if min_intelligence_score %}
+          FILTER(?intelligenceIndex >= {{ min_intelligence_score }})
+          {% endif %}
+        }
+        ORDER BY DESC(?valueRatio)
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:minIntelligenceArg, abi:maxResultsArg .
+
+abi:findFastestAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_fastest_agents"@en ;
+    intentMapping:intentDescription "Find AI agents with the fastest response times" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?outputSpeed ?timeToFirstToken ?intelligenceIndex
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model abi:provider ?provider ;
+                 abi:outputSpeed ?outputSpeed ;
+                 abi:timeToFirstToken ?timeToFirstToken ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Filter for models with speed data
+          FILTER(?outputSpeed > 0)
+          
+          # Optional minimum intelligence threshold
+          {% if min_intelligence_score %}
+          FILTER(?intelligenceIndex >= {{ min_intelligence_score }})
+          {% endif %}
+        }
+        ORDER BY DESC(?outputSpeed) ?timeToFirstToken
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:minIntelligenceArg, abi:maxResultsArg .
+
+abi:findProviderAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_by_provider"@en ;
+    intentMapping:intentDescription "Find AI agents from a specific provider" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex ?mathIndex
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex .
+          
+          # Filter by provider
+          FILTER(CONTAINS(LCASE(?provider), LCASE("{{ provider_name }}")))
+        }
+        ORDER BY ?inputCost DESC(?intelligenceIndex)
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:providerNameArg, abi:maxResultsArg .
+
+#################################################################
+#    Query Arguments
+#################################################################
+
+abi:minIntelligenceArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "min_intelligence_score" ;
+    intentMapping:argumentDescription "Minimum intelligence index score (0-100)" ;
+    intentMapping:validationPattern "^[0-9]{1,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+abi:minCodingScoreArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "min_coding_score" ;
+    intentMapping:argumentDescription "Minimum coding index score (0-100)" ;
+    intentMapping:validationPattern "^[0-9]{1,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+abi:minMathScoreArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "min_math_score" ;
+    intentMapping:argumentDescription "Minimum math index score (0-100)" ;
+    intentMapping:validationPattern "^[0-9]{1,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+abi:maxInputCostArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "max_input_cost" ;
+    intentMapping:argumentDescription "Maximum input token cost per million tokens" ;
+    intentMapping:validationPattern "^[0-9]+(\\.[0-9]+)?$" ;
+    intentMapping:validationFormat "decimal" .
+
+abi:providerNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "provider_name" ;
+    intentMapping:argumentDescription "Name of the AI provider (e.g., 'Anthropic', 'Google')" ;
+    intentMapping:validationPattern "^[a-zA-Z0-9\\s-]{2,50}$" ;
+    intentMapping:validationFormat "provider_name" .
+
+abi:maxResultsArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "max_results" ;
+    intentMapping:argumentDescription "Maximum number of results to return" ;
+    intentMapping:validationPattern "^[1-9][0-9]?$" ;
+    intentMapping:validationFormat "integer" .

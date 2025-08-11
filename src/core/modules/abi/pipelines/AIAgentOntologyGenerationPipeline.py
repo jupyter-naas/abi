@@ -45,26 +45,34 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         self.__configuration = configuration
 
     def run(self, parameters: PipelineParameters) -> Graph:
+        """
+        Main pipeline execution with clear steps:
+        1. Load Artificial Analysis data
+        2. Group models by AI agent
+        3. Generate ontologies in timestamped datastore folders
+        4. Deploy current versions to module folders
+        5. Create audit trail and summary
+        """
         if not isinstance(parameters, AIAgentOntologyGenerationParameters):
             raise ValueError("Parameters must be of type AIAgentOntologyGenerationParameters")
         
-        # Init graph
+        # Initialize graph for results
         graph = Graph()
         
-        # Load latest Artificial Analysis data
+        # STEP 1: Load latest Artificial Analysis data
         aa_data = self._load_latest_aa_data()
         if not aa_data:
             raise ValueError("No Artificial Analysis data found")
         
-        # Process models and generate ontologies
-        generated_files = self._process_and_generate_ontologies(aa_data, parameters)
+        # STEP 2-5: Process and generate ontologies (includes deployment)
+        generated_files = self._execute_pipeline_steps(aa_data, parameters)
         
-        # Create summary triples in the graph
+        # STEP 6: Create summary triples
         pipeline_uri = ABI[f"AIAgentOntologyGeneration_{uuid.uuid4()}"]
         graph.add((pipeline_uri, ABI.hasGeneratedFiles, Literal(len(generated_files))))
         graph.add((pipeline_uri, ABI.hasTimestamp, Literal(datetime.now(timezone.utc).isoformat())))
         
-        # Store the graph in the ontology store
+        # Store results in triple store
         self.__configuration.triple_store.insert(graph)
         
         return graph
@@ -86,65 +94,124 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         with open(latest_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     
-    def _process_and_generate_ontologies(
+    def _execute_pipeline_steps(
         self, 
         aa_data: Dict[str, Any], 
         parameters: AIAgentOntologyGenerationParameters
     ) -> List[Path]:
-        """Process AA data and generate ontology files."""
-        # Ensure output directory exists
-        output_dir = Path(self.__configuration.datastore_path)
+        """
+        Execute the main pipeline steps:
+        STEP 2: Extract and group models by AI agent
+        STEP 3: Generate ontologies in timestamped datastore folders  
+        STEP 4: Deploy current versions to module folders
+        STEP 5: Create audit trail and summary
+        """
+        # STEP 2: Extract and group models by AI agent
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
+        output_dir = Path(self.__configuration.datastore_path) / timestamp
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Extract models from data (support both old 'llms' and new 'data' formats)
         models = aa_data.get('llms', []) or aa_data.get('data', [])
+        agent_models = self._group_models_by_agent(models)
         
-        # Group models by AI agent module
-        agent_models: Dict[str, List[Dict[str, Any]]] = self._group_models_by_agent(models)
-        
-        # Apply filters if specified
+        # Apply agent filter if specified
         if parameters.agent_filter:
             agent_models = {
                 agent: models for agent, models in agent_models.items()
                 if agent in parameters.agent_filter
             }
         
-        # Generate ontologies
+        # STEP 3-4: Generate and deploy ontologies for each agent
         generated_files = []
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
-        
         for agent_module, models in agent_models.items():
-            # Limit models per agent if configured
-            if len(models) > self.__configuration.max_models_per_agent:
-                models = models[:self.__configuration.max_models_per_agent]
-            
-            # Generate ontology content
-            ontology_content = self._generate_agent_ontology_file(agent_module, models)
-            
-            # Write to file with proper naming convention
-            agent_title = agent_module.replace('_', '').title()  # Convert gpt_oss to GptOss
-            filename = f"{timestamp}_{agent_title}Ontology.ttl"
-            
-            # Write to central datastore
-            output_file = output_dir / filename
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(ontology_content)
-            generated_files.append(output_file)
+            agent_files = self._process_single_agent(
+                agent_module, models, timestamp, output_dir
+            )
+            generated_files.extend(agent_files)
         
-        # Generate summary
+        # STEP 5: Create summary and audit trail
+        self._create_execution_summary(
+            timestamp, models, agent_models, generated_files, output_dir
+        )
+        
+        return generated_files
+    
+    def _process_single_agent(
+        self, 
+        agent_module: str, 
+        models: List[Dict[str, Any]], 
+        timestamp: str, 
+        output_dir: Path
+    ) -> List[Path]:
+        """Process a single AI agent: generate ontology content and deploy to multiple locations."""
+        # Limit models per agent if configured
+        if len(models) > self.__configuration.max_models_per_agent:
+            models = models[:self.__configuration.max_models_per_agent]
+        
+        # Generate ontology content
+        ontology_content = self._generate_agent_ontology_file(agent_module, models)
+        agent_title = agent_module.replace('_', '').title()
+        
+        # File paths
+        current_filename = f"{agent_title}Ontology.ttl"
+        audit_filename = f"{timestamp}_{agent_title}Ontology.ttl"
+        
+        generated_files = []
+        
+        # STEP 3A: Write current version to datastore (for deployment)
+        current_file = output_dir / current_filename
+        with open(current_file, 'w', encoding='utf-8') as f:
+            f.write(ontology_content)
+        generated_files.append(current_file)
+        
+        # STEP 3B: Write audit version to datastore (for history)
+        audit_file = output_dir / audit_filename
+        with open(audit_file, 'w', encoding='utf-8') as f:
+            f.write(ontology_content)
+        generated_files.append(audit_file)
+        
+        # STEP 4: Deploy current version to module folder
+        # From pipelines/ go up 3 levels to reach modules/
+        modules_dir = Path(__file__).parent.parent.parent  # Go up 3 levels to /Users/jrvmac/abi/src/core/modules
+        module_dir = modules_dir / agent_module / "ontologies"
+        
+        # Create module directory if it doesn't exist
+        module_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Deploy to module folder
+        module_file = module_dir / current_filename
+        with open(module_file, 'w', encoding='utf-8') as f:
+            f.write(ontology_content)
+        generated_files.append(module_file)
+        
+        return generated_files
+    
+    def _create_execution_summary(
+        self, 
+        timestamp: str, 
+        models: List[Dict[str, Any]], 
+        agent_models: Dict[str, List[Dict[str, Any]]], 
+        generated_files: List[Path], 
+        output_dir: Path
+    ) -> None:
+        """Create execution summary for audit trail."""
         summary_data = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "timestamp": timestamp,
             "total_models_processed": len(models),
             "agents_generated": len(agent_models),
+            "total_files_generated": len(generated_files),
             "agent_breakdown": {agent: len(models) for agent, models in agent_models.items()},
-            "generated_files": [str(f.relative_to(output_dir)) for f in generated_files]
+            "file_locations": {
+                "datastore_current": [str(f) for f in generated_files if "datastore" in str(f) and not f.name.startswith("2")],
+                "datastore_audit": [str(f) for f in generated_files if "datastore" in str(f) and f.name.startswith("2")],
+                "module_deployed": [str(f) for f in generated_files if "src/core/modules" in str(f)]
+            }
         }
         
         summary_file = output_dir / f"generation_summary_{timestamp}.json"
         with open(summary_file, 'w', encoding='utf-8') as f:
             json.dump(summary_data, f, indent=2)
-        
-        return generated_files
     
     def _group_models_by_agent(self, models: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """Group models by AI agent module based on model family."""
@@ -395,3 +462,45 @@ abi:{model_id} a abi:AIModelInstance ;
     def get_configuration(self) -> AIAgentOntologyGenerationConfiguration:
         """Get the pipeline configuration."""
         return self.__configuration
+
+
+# =============================================================================
+# PIPELINE EXECUTION SUMMARY
+# =============================================================================
+"""
+AI Agent Ontology Generation Pipeline
+
+OVERVIEW:
+This pipeline generates AI agent ontologies from Artificial Analysis data,
+creates proper audit trails, and deploys current versions to module folders.
+
+EXECUTION STEPS:
+1. Load Artificial Analysis data from datastore
+2. Extract and group models by AI agent family
+3. Generate ontology content for each agent
+4. Deploy to structured locations:
+   - Datastore: timestamped folders with current + audit versions
+   - Modules: current versions only for immediate use
+
+FILE STRUCTURE CREATED:
+📁 storage/datastore/core/modules/abi/AIAgentOntologyGenerationPipeline/
+├── 📁 YYYYMMDDTHHMMSS/
+│   ├── 📄 ClaudeOntology.ttl (current - for deployment)
+│   ├── 📄 YYYYMMDDTHHMMSS_ClaudeOntology.ttl (audit - for history)
+│   ├── 📄 ChatgptOntology.ttl (current - for deployment)
+│   ├── 📄 YYYYMMDDTHHMMSS_ChatgptOntology.ttl (audit - for history)
+│   └── 📄 generation_summary_YYYYMMDDTHHMMSS.json
+└── ...
+
+📁 src/core/modules/
+├── 📁 claude/ontologies/ClaudeOntology.ttl (deployed current version)
+├── 📁 chatgpt/ontologies/ChatgptOntology.ttl (deployed current version)
+└── ...
+
+BENEFITS:
+✅ Single pipeline handles everything (generation + deployment)
+✅ Complete audit trail with timestamped versions
+✅ Current versions always available in module folders
+✅ Clean separation of concerns with organized methods
+✅ Comprehensive execution summaries for monitoring
+"""
