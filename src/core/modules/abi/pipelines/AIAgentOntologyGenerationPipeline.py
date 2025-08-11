@@ -96,8 +96,8 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         output_dir = Path(self.__configuration.datastore_path)
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Extract models from data
-        models = aa_data.get('llms', [])
+        # Extract models from data (support both old 'llms' and new 'data' formats)
+        models = aa_data.get('llms', []) or aa_data.get('data', [])
         
         # Group models by AI agent module
         agent_models: Dict[str, List[Dict[str, Any]]] = self._group_models_by_agent(models)
