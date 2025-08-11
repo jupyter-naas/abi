@@ -1,0 +1,568 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Gemini AI Agent Ontology
+# Generated on: 20250811T204550
+# Models: 24
+
+# AI Agent Definition
+abi:GeminiAgent a abi:AIAgent ;
+    rdfs:label "Gemini AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Gemini family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: PALM-2
+abi:PALM_2 a abi:AIModelInstance ;
+    rdfs:label "PALM-2"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "palm-2"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:PALM_2 .
+# Model Instance: Gemini 2.5 Flash
+abi:Gemini_2_5_Flash a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-flash"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash .
+# Model Instance: Gemini 2.5 Pro
+abi:Gemini_2_5_Pro a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-pro"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Pro .
+# Model Instance: Gemini 2.5 Flash-Lite
+abi:Gemini_2_5_Flash_Lite a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash-Lite"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-flash-lite"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Lite .
+# Model Instance: Gemini 2.5 Flash-Lite (Reasoning)
+abi:Gemini_2_5_Flash_Lite_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash-Lite (Reasoning)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-flash-lite-reasoning"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Lite_Reasoning .
+# Model Instance: Gemini 2.5 Flash (Reasoning)
+abi:Gemini_2_5_Flash_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash (Reasoning)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-flash-reasoning"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Reasoning .
+# Model Instance: Gemini 2.0 Pro Experimental (Feb '25)
+abi:Gemini_2_0_Pro_Experimental_Feb_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Pro Experimental (Feb '25)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-pro-experimental-02-05"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Pro_Experimental_Feb_25 .
+# Model Instance: Gemini 2.0 Flash (experimental)
+abi:Gemini_2_0_Flash_experimental a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash (experimental)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-flash-experimental"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_experimental .
+# Model Instance: Gemini 1.5 Pro (Sep '24)
+abi:Gemini_1_5_Pro_Sep_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Pro (Sep '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-5-pro"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Pro_Sep_24 .
+# Model Instance: Gemini 2.0 Flash-Lite (Preview)
+abi:Gemini_2_0_Flash_Lite_Preview a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Preview)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-flash-lite-preview"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Lite_Preview .
+# Model Instance: Gemini 2.0 Flash (Feb '25)
+abi:Gemini_2_0_Flash_Feb_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash (Feb '25)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-flash"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Feb_25 .
+# Model Instance: Gemini 1.5 Flash (Sep '24)
+abi:Gemini_1_5_Flash_Sep_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash (Sep '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-5-flash"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Flash_Sep_24 .
+# Model Instance: Gemini 1.5 Flash-8B
+abi:Gemini_1_5_Flash_8B a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash-8B"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-5-flash-8b"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Flash_8B .
+# Model Instance: Gemini 2.0 Flash Thinking Experimental (Jan '25)
+abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Jan '25)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-flash-thinking-exp-0121"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 .
+# Model Instance: Gemini 1.5 Pro (May '24)
+abi:Gemini_1_5_Pro_May_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Pro (May '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-5-pro-may-2024"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Pro_May_24 .
+# Model Instance: Gemini 2.5 Flash Preview
+abi:Gemini_2_5_Flash_Preview a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash Preview"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-flash-04-2025"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Preview .
+# Model Instance: Gemini 2.5 Pro Preview (Mar' 25)
+abi:Gemini_2_5_Pro_Preview_Mar_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro Preview (Mar' 25)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-pro-03-25"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Pro_Preview_Mar_25 .
+# Model Instance: Gemini 1.0 Pro
+abi:Gemini_1_0_Pro a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.0 Pro"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-0-pro"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_0_Pro .
+# Model Instance: Gemini 1.5 Flash (May '24)
+abi:Gemini_1_5_Flash_May_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash (May '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-5-flash-may-2024"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Flash_May_24 .
+# Model Instance: Gemini 2.0 Flash Thinking Experimental (Dec '24)
+abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Dec '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-flash-thinking-exp-1219"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 .
+# Model Instance: Gemini 1.0 Ultra
+abi:Gemini_1_0_Ultra a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.0 Ultra"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-1-0-ultra"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_0_Ultra .
+# Model Instance: Gemini 2.5 Flash Preview (Reasoning)
+abi:Gemini_2_5_Flash_Preview_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash Preview (Reasoning)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-flash-reasoning-04-2025"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Preview_Reasoning .
+# Model Instance: Gemini 2.5 Pro Preview (May' 25)
+abi:Gemini_2_5_Pro_Preview_May_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro Preview (May' 25)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-5-pro-05-06"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Pro_Preview_May_25 .
+# Model Instance: Gemini 2.0 Flash-Lite (Feb '25)
+abi:Gemini_2_0_Flash_Lite_Feb_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Feb '25)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "gemini-2-0-flash-lite-001"@en ;
+    abi:provider "Google"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Lite_Feb_25 .

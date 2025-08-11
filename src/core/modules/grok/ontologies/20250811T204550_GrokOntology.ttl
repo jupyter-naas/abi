@@ -1,0 +1,200 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+
+# Grok AI Agent Ontology
+# Generated on: 20250811T204550
+# Models: 8
+
+# AI Agent Definition
+abi:GrokAgent a abi:AIAgent ;
+    rdfs:label "Grok AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Grok family models for various processes"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+# Model Instance: Grok-1
+abi:Grok_1 a abi:AIModelInstance ;
+    rdfs:label "Grok-1"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-1"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_1 .
+# Model Instance: Grok 3 Reasoning Beta
+abi:Grok_3_Reasoning_Beta a abi:AIModelInstance ;
+    rdfs:label "Grok 3 Reasoning Beta"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-3-reasoning"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3_Reasoning_Beta .
+# Model Instance: Grok 3
+abi:Grok_3 a abi:AIModelInstance ;
+    rdfs:label "Grok 3"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-3"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3 .
+# Model Instance: Grok 3 mini Reasoning (high)
+abi:Grok_3_mini_Reasoning_high a abi:AIModelInstance ;
+    rdfs:label "Grok 3 mini Reasoning (high)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-3-mini-reasoning"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3_mini_Reasoning_high .
+# Model Instance: Grok 3 mini Reasoning (Low)
+abi:Grok_3_mini_Reasoning_Low a abi:AIModelInstance ;
+    rdfs:label "Grok 3 mini Reasoning (Low)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-3-mini-reasoning-low"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3_mini_Reasoning_Low .
+# Model Instance: Grok 4
+abi:Grok_4 a abi:AIModelInstance ;
+    rdfs:label "Grok 4"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-4"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_4 .
+# Model Instance: Grok Beta
+abi:Grok_Beta a abi:AIModelInstance ;
+    rdfs:label "Grok Beta"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-beta"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_Beta .
+# Model Instance: Grok 2 (Dec '24)
+abi:Grok_2_Dec_24 a abi:AIModelInstance ;
+    rdfs:label "Grok 2 (Dec '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "grok-2-1212"@en ;
+    abi:provider "xAI"@en ;
+    abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_2_Dec_24 .
