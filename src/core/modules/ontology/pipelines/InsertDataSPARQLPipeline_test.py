@@ -6,7 +6,6 @@ from src.core.modules.ontology.pipelines.InsertDataSPARQLPipeline import (
     InsertDataSPARQLPipelineParameters,
 )
 from src import services
-from abi import logger
 
 @pytest.fixture
 def pipeline() -> InsertDataSPARQLPipeline:
