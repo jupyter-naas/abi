@@ -309,22 +309,22 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         creator = model.get('model_creator', {})
         creator_name = creator.get('name', 'Unknown')
         
-        # Pricing data
+        # Pricing data (correct field names from Artificial Analysis API)
         pricing = model.get('pricing', {})
-        input_cost = pricing.get('input_cost') or 0
-        output_cost = pricing.get('output_cost') or 0
+        input_cost = pricing.get('price_1m_input_tokens') or 0
+        output_cost = pricing.get('price_1m_output_tokens') or 0
+        blended_cost = pricing.get('price_1m_blended_3_to_1') or 0
         
-        # Performance data
-        performance = model.get('performance', {})
-        output_speed = performance.get('output_speed') or 0
-        ttft = performance.get('time_to_first_token') or 0
-        ttft_answer = performance.get('time_to_first_answer_token') or 0
+        # Performance data (direct fields from API)
+        output_speed = model.get('median_output_tokens_per_second') or 0
+        ttft = model.get('median_time_to_first_token_seconds') or 0
+        ttft_answer = model.get('median_time_to_first_answer_token') or 0
         
-        # Evaluation data
+        # Evaluation data (correct field names)
         evaluations = model.get('evaluations', {})
-        intelligence_index = evaluations.get('index') or 0
-        coding_index = evaluations.get('coding_index') or 0
-        math_index = evaluations.get('math_index') or 0
+        intelligence_index = evaluations.get('artificial_analysis_intelligence_index') or 0
+        coding_index = evaluations.get('artificial_analysis_coding_index') or 0
+        math_index = evaluations.get('artificial_analysis_math_index') or 0
         
         return f"""# Model Instance: {model_name}
 abi:{model_id} a abi:AIModelInstance ;
@@ -336,6 +336,7 @@ abi:{model_id} a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost {output_cost} ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost {blended_cost} ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed {output_speed} ;
     abi:outputSpeedUnit "tokens_per_second"@en ;

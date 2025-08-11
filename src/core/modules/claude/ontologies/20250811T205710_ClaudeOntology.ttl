@@ -5,7 +5,7 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
 
 # Claude AI Agent Ontology
-# Generated on: 20250811T205157
+# Generated on: 20250811T205710
 # Models: 17
 
 # AI Agent Definition
@@ -20,20 +20,21 @@ abi:Claude_4_Opus_Extended_Thinking a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-opus-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 30 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 22.603 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.367 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 89.851 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 55.3 ;
+    abi:codingIndex 51.7 ;
+    abi:mathIndex 86.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Opus_Extended_Thinking .
@@ -43,20 +44,21 @@ abi:Claude_4_Sonnet_Extended_Thinking a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-sonnet-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 57.567 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.956 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 35.698 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 58.8 ;
+    abi:codingIndex 52.8 ;
+    abi:mathIndex 88.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Sonnet_Extended_Thinking .
@@ -66,10 +68,11 @@ abi:Claude_4_1_Opus a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-1-opus"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 30 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -77,7 +80,7 @@ abi:Claude_4_1_Opus a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 49 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -89,20 +92,21 @@ abi:Claude_4_Opus a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-opus"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 30 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 21.962 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.447 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.447 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 46.6 ;
+    abi:codingIndex 47.5 ;
+    abi:mathIndex 75.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Opus .
@@ -112,20 +116,21 @@ abi:Claude_4_Sonnet a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 95.87 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.155 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.155 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 45.7 ;
+    abi:codingIndex 41.1 ;
+    abi:mathIndex 67 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Sonnet .
@@ -135,18 +140,19 @@ abi:Claude_4_1_Opus_Extended_Thinking a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-1-opus-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 30 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 30.169 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 2.705 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 68.998 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 61 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -158,20 +164,21 @@ abi:Claude_3_5_Sonnet_Oct_24 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-35-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 79.204 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.844 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.844 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 33.5 ;
+    abi:codingIndex 37.3 ;
+    abi:mathIndex 46.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_5_Sonnet_Oct_24 .
@@ -181,20 +188,21 @@ abi:Claude_3_5_Sonnet_June_24 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-35-sonnet-june-24"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 79.078 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.483 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.483 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 28.8 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:mathIndex 39.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_5_Sonnet_June_24 .
@@ -204,20 +212,21 @@ abi:Claude_3_Opus a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-opus"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 30 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 28.012 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.989 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.989 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 23.7 ;
+    abi:codingIndex 25.6 ;
+    abi:mathIndex 33.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_Opus .
@@ -227,20 +236,21 @@ abi:Claude_3_5_Haiku a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-5-haiku"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.8 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1.6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 65.769 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.56 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.56 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 23.3 ;
+    abi:codingIndex 29.4 ;
+    abi:mathIndex 37.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_5_Haiku .
@@ -250,10 +260,11 @@ abi:Claude_3_Sonnet a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -261,9 +272,9 @@ abi:Claude_3_Sonnet a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 16 ;
+    abi:codingIndex 20.2 ;
+    abi:mathIndex 23 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_Sonnet .
@@ -273,20 +284,21 @@ abi:Claude_3_Haiku a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-haiku"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.25 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.5 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 142.305 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.286 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.286 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 12.1 ;
+    abi:codingIndex 17 ;
+    abi:mathIndex 20.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_Haiku .
@@ -296,20 +308,21 @@ abi:Claude_Instant a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-instant"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.8 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1.2 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 66.639 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.533 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.533 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 1.7 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:mathIndex 13.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_Instant .
@@ -319,10 +332,11 @@ abi:Claude_2_1 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-21"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 8 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 24 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 12 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -330,9 +344,9 @@ abi:Claude_2_1 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 12.2 ;
+    abi:codingIndex 18.9 ;
+    abi:mathIndex 20.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_2_1 .
@@ -342,20 +356,21 @@ abi:Claude_3_7_Sonnet_Extended_Thinking a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-7-sonnet-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 85.599 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.588 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 14.497 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 47 ;
+    abi:codingIndex 43.8 ;
+    abi:mathIndex 71.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_7_Sonnet_Extended_Thinking .
@@ -365,20 +380,21 @@ abi:Claude_3_7_Sonnet_Standard a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-7-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 76.798 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.283 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.283 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 37.3 ;
+    abi:codingIndex 38.5 ;
+    abi:mathIndex 53.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_7_Sonnet_Standard .
@@ -388,10 +404,11 @@ abi:Claude_2_0 a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-2"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 8 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 24 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 12 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -399,8 +416,8 @@ abi:Claude_2_0 a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
+    abi:intelligenceIndex 11.1 ;
+    abi:codingIndex 18.3 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 

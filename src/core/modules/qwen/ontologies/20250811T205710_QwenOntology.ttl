@@ -5,7 +5,7 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
 
 # Qwen AI Agent Ontology
-# Generated on: 20250811T204550
+# Generated on: 20250811T205710
 # Models: 34
 
 # AI Agent Definition
@@ -20,20 +20,21 @@ abi:QwQ_32B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwq-32b"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.825 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.487 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 53.033 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.551 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 47.522 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 47.7 ;
+    abi:codingIndex 49.4 ;
+    abi:mathIndex 86.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:QwQ_32B .
@@ -43,20 +44,21 @@ abi:Qwen3_235B_A22B_2507_Non_reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct-2507"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1.225 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 40.19 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.229 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.229 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 50.7 ;
+    abi:codingIndex 44.2 ;
+    abi:mathIndex 84.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B_2507_Non_reasoning .
@@ -66,20 +68,21 @@ abi:Qwen3_235B_A22B_2507_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct-2507-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 8.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 2.625 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 60.681 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.219 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 34.178 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 63.6 ;
+    abi:codingIndex 60.6 ;
+    abi:mathIndex 96.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B_2507_Reasoning .
@@ -89,20 +92,21 @@ abi:Qwen3_30B_A3B_2507_Non_reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-2507"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 105.018 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.098 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.098 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 46.1 ;
+    abi:codingIndex 41 ;
+    abi:mathIndex 85.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B_2507_Non_reasoning .
@@ -112,20 +116,21 @@ abi:Qwen3_Coder_480B_A35B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-coder-480b-a35b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 1.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 7.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 49.721 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.577 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.577 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 45.2 ;
+    abi:codingIndex 47.2 ;
+    abi:mathIndex 70.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_Coder_480B_A35B .
@@ -135,20 +140,21 @@ abi:Qwen3_30B_A3B_2507_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-2507-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.75 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 111.105 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.196 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 19.197 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 53.2 ;
+    abi:codingIndex 52 ;
+    abi:mathIndex 94.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B_2507_Reasoning .
@@ -158,20 +164,21 @@ abi:Qwen3_Coder_30B_A3B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-coder-30b-a3b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.45 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.9 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 114.837 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.455 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.455 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 33.4 ;
+    abi:codingIndex 34 ;
+    abi:mathIndex 59.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_Coder_30B_A3B .
@@ -185,6 +192,7 @@ abi:Qwen_Chat_14B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -192,7 +200,7 @@ abi:Qwen_Chat_14B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 1.7 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -204,20 +212,21 @@ abi:Qwen2_5_Max a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-2-5-max"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 1.6 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 6.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 2.8 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 40.76 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.314 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.314 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 34.3 ;
+    abi:codingIndex 34.8 ;
+    abi:mathIndex 53.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Max .
@@ -231,16 +240,17 @@ abi:Qwen2_5_Instruct_72B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 58.16 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.232 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.232 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 29.2 ;
+    abi:codingIndex 27.2 ;
+    abi:mathIndex 50.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Instruct_72B .
@@ -250,20 +260,21 @@ abi:Qwen2_5_Coder_Instruct_32B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2-5-coder-32b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.135 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.18 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.146 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 52.712 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.509 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.509 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 25 ;
+    abi:codingIndex 28.3 ;
+    abi:mathIndex 44.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Coder_Instruct_32B .
@@ -273,20 +284,21 @@ abi:Qwen2_5_Turbo a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-turbo"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.05 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.2 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.087 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 89.338 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.086 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.086 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 22.1 ;
+    abi:codingIndex 15.8 ;
+    abi:mathIndex 46.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Turbo .
@@ -300,16 +312,17 @@ abi:Qwen2_Instruct_72B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 30.918 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.305 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.305 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 21.1 ;
+    abi:codingIndex 19.4 ;
+    abi:mathIndex 42.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_Instruct_72B .
@@ -319,20 +332,21 @@ abi:Qwen3_235B_A22B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 8.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 2.625 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 31.807 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.236 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 64.116 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 48.4 ;
+    abi:codingIndex 51.1 ;
+    abi:mathIndex 88.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B_Reasoning .
@@ -342,20 +356,21 @@ abi:Qwen3_30B_A3B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.75 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 85.824 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.065 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 24.369 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 42.3 ;
+    abi:codingIndex 39.5 ;
+    abi:mathIndex 85.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B_Reasoning .
@@ -365,20 +380,21 @@ abi:Qwen3_235B_A22B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1.225 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 34.011 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.161 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.161 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 33.3 ;
+    abi:codingIndex 32.1 ;
+    abi:mathIndex 61.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B .
@@ -388,20 +404,21 @@ abi:Qwen3_32B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-32b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 8.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 2.625 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 65.505 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.153 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 31.685 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 44.3 ;
+    abi:codingIndex 45 ;
+    abi:mathIndex 88.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_32B_Reasoning .
@@ -411,20 +428,21 @@ abi:Qwen3_4B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-4b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.42 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.188 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 106.643 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.048 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.048 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 23.8 ;
+    abi:codingIndex 20 ;
+    abi:mathIndex 52.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_4B .
@@ -434,20 +452,21 @@ abi:Qwen3_8B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-8b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.18 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.66 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 98.804 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.12 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 21.362 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 40.8 ;
+    abi:codingIndex 31.6 ;
+    abi:mathIndex 82.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_8B_Reasoning .
@@ -457,20 +476,21 @@ abi:Qwen3_8B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-8b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.18 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.7 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.31 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 100.054 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.013 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.013 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 25.4 ;
+    abi:codingIndex 18.5 ;
+    abi:mathIndex 53.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_8B .
@@ -480,20 +500,21 @@ abi:Qwen3_1_7B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-1.7b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.42 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.188 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 140.109 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.944 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 0.944 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 13.2 ;
+    abi:codingIndex 9.8 ;
+    abi:mathIndex 40.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_1_7B .
@@ -503,20 +524,21 @@ abi:Qwen3_0_6B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-0.6b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.42 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.188 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 230.666 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.049 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.049 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 4.5 ;
+    abi:codingIndex 5.7 ;
+    abi:mathIndex 26.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_0_6B .
@@ -526,20 +548,21 @@ abi:Qwen3_14B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-14b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.613 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 55.329 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.07 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.07 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 29.8 ;
+    abi:codingIndex 27.3 ;
+    abi:mathIndex 57.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_14B .
@@ -549,20 +572,21 @@ abi:Qwen3_4B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-4b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.26 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.398 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 104.934 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.063 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 20.123 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 36.4 ;
+    abi:codingIndex 25 ;
+    abi:mathIndex 79.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_4B_Reasoning .
@@ -572,20 +596,21 @@ abi:Qwen3_32B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-32b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1.225 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 65.58 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.156 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.156 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 29.8 ;
+    abi:codingIndex 28.4 ;
+    abi:mathIndex 58.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_32B .
@@ -595,20 +620,21 @@ abi:Qwen3_30B_A3B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 90.66 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.128 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.128 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 29.9 ;
+    abi:codingIndex 29.3 ;
+    abi:mathIndex 56.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B .
@@ -618,20 +644,21 @@ abi:Qwen3_14B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-14b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 4.2 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1.313 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 53.623 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.192 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 38.489 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 45.2 ;
+    abi:codingIndex 41.9 ;
+    abi:mathIndex 86.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_14B_Reasoning .
@@ -641,20 +668,21 @@ abi:Qwen3_1_7B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-1.7b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.26 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.398 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 137.957 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.053 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 15.55 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 26.9 ;
+    abi:codingIndex 17.5 ;
+    abi:mathIndex 70.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_1_7B_Reasoning .
@@ -664,20 +692,21 @@ abi:Qwen3_0_6B_Reasoning a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-0.6b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1.26 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.398 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 227.975 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.96 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 9.733 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 11.3 ;
+    abi:codingIndex 7.4 ;
+    abi:mathIndex 42.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_0_6B_Reasoning .
@@ -687,20 +716,21 @@ abi:QwQ_32B_Preview a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "QwQ-32B-Preview"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.66 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.69 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.667 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 47.735 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 0.603 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 42.501 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 31.5 ;
+    abi:codingIndex 18.7 ;
+    abi:mathIndex 68.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:QwQ_32B_Preview .
@@ -714,6 +744,7 @@ abi:Qwen2_5_Coder_Instruct_7B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -721,9 +752,9 @@ abi:Qwen2_5_Coder_Instruct_7B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 14.9 ;
+    abi:codingIndex 13.7 ;
+    abi:mathIndex 35.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Coder_Instruct_7B .
@@ -733,10 +764,11 @@ abi:Qwen2_5_Instruct_32B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2.5-32b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 0.095 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.146 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -744,9 +776,9 @@ abi:Qwen2_5_Instruct_32B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
+    abi:intelligenceIndex 26.1 ;
+    abi:codingIndex 23.8 ;
+    abi:mathIndex 45.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Instruct_32B .
@@ -760,14 +792,15 @@ abi:Qwen1_5_Chat_110B a abi:AIModelInstance ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 23.665 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.58 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.58 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 13.2 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
@@ -779,10 +812,11 @@ abi:Qwen_Chat_72B a abi:AIModelInstance ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-chat-72b"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:inputTokenCost 1 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 1 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 1 ;
     abi:blendedCostCurrency "USD"@en ;
     abi:outputSpeed 0 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
@@ -790,7 +824,7 @@ abi:Qwen_Chat_72B a abi:AIModelInstance ;
     abi:timeToFirstTokenUnit "seconds"@en ;
     abi:timeToFirstAnswerToken 0 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 10 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .

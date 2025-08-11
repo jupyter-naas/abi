@@ -4,128 +4,133 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
 
-# Perplexity AI Agent Ontology
-# Generated on: 20250811T204550
+# Reka AI Agent Ontology
+# Generated on: 20250811T205710
 # Models: 5
 
 # AI Agent Definition
-abi:PerplexityAgent a abi:AIAgent ;
-    rdfs:label "Perplexity AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Perplexity family models for various processes"@en ;
+abi:RekaAgent a abi:AIAgent ;
+    rdfs:label "Reka AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Reka family models for various processes"@en ;
     abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
 
-# Model Instance: R1 1776
-abi:R1_1776 a abi:AIModelInstance ;
-    rdfs:label "R1 1776"@en ;
+# Model Instance: Reka Flash 3
+abi:Reka_Flash_3 a abi:AIModelInstance ;
+    rdfs:label "Reka Flash 3"@en ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
-    abi:modelSlug "r1-1776"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:inputTokenCost 0 ;
+    abi:modelSlug "reka-flash-3"@en ;
+    abi:provider "Reka AI"@en ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 55.778 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.269 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 37.125 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 36.3 ;
+    abi:codingIndex 35.1 ;
+    abi:mathIndex 70.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+abi:RekaAgent abi:canUtilizeModel abi:Reka_Flash_3 .
+# Model Instance: Reka Flash (Sep '24)
+abi:Reka_Flash_Sep_24 a abi:AIModelInstance ;
+    rdfs:label "Reka Flash (Sep '24)"@en ;
+    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
+    abi:modelSlug "reka-flash"@en ;
+    abi:provider "Reka AI"@en ;
+    abi:inputTokenCost 0.2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.8 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 85.482 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 1.249 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 1.249 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 22.1 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
-abi:PerplexityAgent abi:canUtilizeModel abi:R1_1776 .
-# Model Instance: Sonar Pro
-abi:Sonar_Pro a abi:AIModelInstance ;
-    rdfs:label "Sonar Pro"@en ;
+abi:RekaAgent abi:canUtilizeModel abi:Reka_Flash_Sep_24 .
+# Model Instance: Reka Core
+abi:Reka_Core a abi:AIModelInstance ;
+    rdfs:label "Reka Core"@en ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
-    abi:modelSlug "sonar-pro"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:inputTokenCost 0 ;
+    abi:modelSlug "reka-core"@en ;
+    abi:provider "Reka AI"@en ;
+    abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 2 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 2 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 50.119 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.365 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.365 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 22.4 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar_Pro .
-# Model Instance: Sonar Reasoning
-abi:Sonar_Reasoning a abi:AIModelInstance ;
-    rdfs:label "Sonar Reasoning"@en ;
+abi:RekaAgent abi:canUtilizeModel abi:Reka_Core .
+# Model Instance: Reka Flash (Feb '24)
+abi:Reka_Flash_Feb_24 a abi:AIModelInstance ;
+    rdfs:label "Reka Flash (Feb '24)"@en ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
-    abi:modelSlug "sonar-reasoning"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:inputTokenCost 0 ;
+    abi:modelSlug "reka-flash-02-2024"@en ;
+    abi:provider "Reka AI"@en ;
+    abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 85.426 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.257 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.257 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 21.7 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar_Reasoning .
-# Model Instance: Sonar Reasoning Pro
-abi:Sonar_Reasoning_Pro a abi:AIModelInstance ;
-    rdfs:label "Sonar Reasoning Pro"@en ;
+abi:RekaAgent abi:canUtilizeModel abi:Reka_Flash_Feb_24 .
+# Model Instance: Reka Edge
+abi:Reka_Edge a abi:AIModelInstance ;
+    rdfs:label "Reka Edge"@en ;
     rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
-    abi:modelSlug "sonar-reasoning-pro"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:inputTokenCost 0 ;
+    abi:modelSlug "reka-edge"@en ;
+    abi:provider "Reka AI"@en ;
+    abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
+    abi:outputTokenCost 0.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.1 ;
     abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
+    abi:outputSpeed 85.858 ;
     abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
+    abi:timeToFirstToken 1.166 ;
     abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerToken 1.166 ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
+    abi:intelligenceIndex 21.5 ;
     abi:codingIndex 0 ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar_Reasoning_Pro .
-# Model Instance: Sonar
-abi:Sonar a abi:AIModelInstance ;
-    rdfs:label "Sonar"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
-    abi:modelSlug "sonar"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:inputTokenCost 0 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 0 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar .
+abi:RekaAgent abi:canUtilizeModel abi:Reka_Edge .
