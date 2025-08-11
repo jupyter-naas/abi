@@ -296,12 +296,6 @@ chat-naas-agent: deps
 
 chat-abi-agent: deps
 	@uv run python -m src.core.apps.startup_sequence.main
-	@echo ""
-	@if [ "$$AI_MODE" = "local" ]; then \
-		echo "🚀 ABI System ready to start..."; \
-	else \
-		echo "🚀 ABI System ready to start..."; \
-	fi
 	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps

@@ -52,6 +52,67 @@ def get_agent_count():
     except Exception:
         return 0
 
+def get_agent_breakdown():
+    """Get actual agent breakdown from knowledge graph"""
+    try:
+        query = """
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        SELECT DISTINCT ?label WHERE {
+            ?s a abi:AIAgent .
+            ?s rdfs:label ?label .
+        }
+        ORDER BY ?label
+        """
+        response = requests.post(
+            "http://localhost:7878/query",
+            data=query,
+            headers={'Content-Type': 'application/sparql-query'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            agents = [binding['label']['value'] for binding in result['results']['bindings']]
+            
+            # Group agents by main type for cleaner display
+            agent_groups = {}
+            for agent in agents:
+                if "ABI" in agent:
+                    group = "ABI Core"
+                elif "ChatGPT" in agent or "GPT" in agent:
+                    group = "ChatGPT"
+                elif "Claude" in agent:
+                    group = "Claude"
+                elif "Gemini" in agent:
+                    group = "Gemini"
+                elif "Mistral" in agent:
+                    group = "Mistral"
+                elif "Grok" in agent:
+                    group = "Grok"
+                elif "Llama" in agent:
+                    group = "Llama"
+                elif "DeepSeek" in agent:
+                    group = "DeepSeek"
+                elif "Gemma" in agent:
+                    group = "Gemma"
+                elif "Qwen" in agent:
+                    group = "Qwen"
+                elif "Perplexity" in agent:
+                    group = "Perplexity"
+                elif "DALL-E" in agent:
+                    group = "DALL-E"
+                else:
+                    group = "Other"
+                
+                if group not in agent_groups:
+                    agent_groups[group] = 0
+                agent_groups[group] += 1
+            
+            return agent_groups
+        return {}
+    except Exception:
+        return {}
+
 def get_triple_count():
     """Get total triple count"""
     try:
@@ -81,7 +142,7 @@ def run_startup_sequence():
     log("🧠 ABI System Starting up...")
     log("=" * 50)
     
-    # Check services
+    # Step 1: Check if services are available
     log("[1/4] Checking services...")
     oxigraph_ok = check_service("http://localhost:7878", "Oxigraph")
     log(f"Oxigraph: {'✅' if oxigraph_ok else '❌'}")
@@ -100,25 +161,29 @@ def run_startup_sequence():
     else:
         log("Qwen Models: ❌ Not found")
     
-    # Get knowledge graph stats
+    # Step 2: Load knowledge graph data (only if Oxigraph is available)
     log("[2/4] Loading knowledge graph...")
-    agent_count = get_agent_count()
-    log(f"AI Agents: {agent_count}")
+    if oxigraph_ok:
+        agent_count = get_agent_count()
+        log(f"AI Agents: {agent_count}")
+        
+        triple_count = get_triple_count()
+        log(f"Total Triples: {triple_count:,}")
+        
+        # Step 3: Show actual agent breakdown from data
+        log("[3/4] Agent breakdown:")
+        agent_groups = get_agent_breakdown()
+        if agent_groups:
+            for group, count in sorted(agent_groups.items()):
+                log(f"✅ {group}: {count} agents")
+        else:
+            log("⚠️  No agents found in knowledge graph")
+    else:
+        log("❌ Cannot load knowledge graph - Oxigraph not available")
+        agent_count = 0
+        triple_count = 0
     
-    triple_count = get_triple_count()
-    log(f"Total Triples: {triple_count:,}")
-    
-    # Show agent breakdown
-    log("[3/4] Agent breakdown:")
-    agents = [
-        "ABI Core", "ChatGPT", "Claude", "Gemini", "Mistral", 
-        "Grok", "Llama", "DeepSeek", "Gemma", "Qwen", 
-        "Perplexity", "Support"
-    ]
-    for agent in agents:
-        log(f"✅ {agent}")
-    
-    # Final status
+    # Step 4: Final status and access URLs
     log("[4/4] System status:")
     if oxigraph_ok and yasgui_ok and ollama_ok and qwen_ok:
         log("✅ All services running")
