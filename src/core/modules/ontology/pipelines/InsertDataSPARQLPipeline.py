@@ -43,6 +43,24 @@ class InsertDataSPARQLPipeline(Pipeline):
         super().__init__(configuration)
         self.__configuration = configuration
 
+    def get_sparql_from_text(self, parameters: InsertDataSPARQLPipelineParameters) -> str:
+        """Get the SPARQL INSERT DATA statement from the text.
+        
+        Args:
+            text (str): The text to extract the SPARQL INSERT DATA statement from
+            
+        Returns:
+            str: The SPARQL INSERT DATA statement
+        """
+        text = parameters.sparql_statement
+
+        # Clean the statement from the ```sparql and ```
+        text = text.split("```sparql")[-1].split("```")[0].strip()
+        if "INSERT DATA" in text:
+            logger.info(f"✅ SPARQL INSERT DATA statement found: {text}")
+            return text
+        return f"No SPARQL INSERT DATA statement found in statement: {parameters.sparql_statement}"
+
     def run(self, parameters: PipelineParameters) -> Graph:
         """Execute the SPARQL INSERT DATA statement.
         
@@ -68,7 +86,8 @@ class InsertDataSPARQLPipeline(Pipeline):
         
         # Execute the SPARQL INSERT DATA statement
         try:
-            graph.update(parameters.sparql_statement)
+            sparql_statement = self.get_sparql_from_text(parameters)
+            graph.update(sparql_statement)
             logger.info("✅ SPARQL INSERT DATA is valid.")
         except Exception as e:
             logger.error(f"❌ Failed to execute SPARQL INSERT DATA: {e}")
@@ -95,6 +114,12 @@ class InsertDataSPARQLPipeline(Pipeline):
                 description="Execute a SPARQL INSERT DATA statement to add triples to the triple store",
                 func=lambda **kwargs: self.run(InsertDataSPARQLPipelineParameters(**kwargs)),
                 args_schema=InsertDataSPARQLPipelineParameters
+            ),
+            StructuredTool(
+                name="extract_sparql_from_text",
+                description="Extract a SPARQL INSERT DATA statement from the text",
+                func=lambda **kwargs: self.get_sparql_from_text(InsertDataSPARQLPipelineParameters(**kwargs)),
+                args_schema=InsertDataSPARQLPipelineParameters
             )
         ]
 
@@ -120,3 +145,33 @@ class InsertDataSPARQLPipeline(Pipeline):
         if tags is None:
             tags = []
         return None
+
+if __name__ == "__main__":
+    from src import services
+
+    sparql_statement = """
+    PREFIX abi: <http://ontology.naas.ai/abi/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX cco: <https://www.commoncoreontologies.org/>
+    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+
+    INSERT DATA {
+        abi:john a cco:ont00001262, owl:NamedIndividual ;
+                    abi:name "John Doe" ;
+                    abi:age 30 ;
+                    abi:email "john.doe@example.com" .
+        
+        abi:jane a cco:ont00001262, owl:NamedIndividual ;
+                    abi:name "Jane Smith" ;
+                    abi:age 28 ;
+                    abi:email "jane.smith@example.com" .
+    }
+    """
+    pipeline = InsertDataSPARQLPipeline(InsertDataSPARQLPipelineConfiguration(
+        triple_store=services.triple_store_service
+    ))
+    # result = pipeline.get_sparql_from_text(InsertDataSPARQLPipelineParameters(sparql_statement=sparql_statement))
+    # logger.info(result)
+
+    result = pipeline.run(InsertDataSPARQLPipelineParameters(sparql_statement=sparql_statement))
+    logger.info(result)

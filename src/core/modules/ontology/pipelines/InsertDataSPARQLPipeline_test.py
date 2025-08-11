@@ -63,3 +63,19 @@ def test_insert_data_sparql_pipeline(pipeline: InsertDataSPARQLPipeline):
     results = services.triple_store_service.query(sparql_query)
     results_list = results_to_list(results)
     assert results_list is None, results_list
+
+def test_extract_sparql_from_text(pipeline: InsertDataSPARQLPipeline):
+    text = """
+    ```sparql
+    INSERT DATA {
+        <http://ontology.naas.ai/abi/john> <http://www.w3.org/2000/01/rdf-schema#label> "John Doe" .
+    }
+    ```
+    """
+    sparql_statement = pipeline.get_sparql_from_text(InsertDataSPARQLPipelineParameters(sparql_statement=text))
+    assert sparql_statement is not None, sparql_statement
+
+def test_extract_sparql_from_text_no_sparql(pipeline: InsertDataSPARQLPipeline):
+    text = "This is a text without a SPARQL INSERT DATA statement"
+    sparql_statement = pipeline.get_sparql_from_text(InsertDataSPARQLPipelineParameters(sparql_statement=text))
+    assert sparql_statement == "No SPARQL INSERT DATA statement found", sparql_statement
