@@ -1,0 +1,1025 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+<http://naas.ai/ontology/abi/AgentRecommendationQueries> a owl:Ontology ;
+    dc:title "AI Agent Recommendation SPARQL Queries"@en ;
+    dc:description "Intent-based SPARQL queries for recommending AI agents based on user requirements"@en ;
+    dc11:contributor "ABI System" .
+
+#################################################################
+#    BFO Process-Centric Queries (PR #506 Architecture)
+#################################################################
+
+intentMapping:findBusinessProposalAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_business_proposal_agents"@en ;
+    intentMapping:intentDescription "Find top 3 AI agents for business proposal creation with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX capability: <http://ontology.naas.ai/abi/capability/>
+        
+        SELECT ?agent ?agentLabel ?process ?processLabel ?model ?modelLabel ?provider ?inputCost ?outputCost ?intelligenceIndex ?isOpenSource
+               ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?processValueRatio)
+        WHERE {
+          # Find processes related to business proposal creation
+          ?process a abi:BusinessProposalCreationProcess ;
+                   rdfs:label ?processLabel ;
+                   abi:hasParticipant ?agent .
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          # Get model and cost information through process realization
+          OPTIONAL { 
+            ?process abi:utilizesModel ?model .
+            ?model rdfs:label ?modelLabel ;
+                   abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # Determine if model is open source based on provider patterns
+            BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                   CONTAINS(LCASE(?provider), "hugging") || 
+                   CONTAINS(LCASE(?provider), "mistral") ||
+                   CONTAINS(LCASE(?modelLabel), "llama") ||
+                   CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                   CONTAINS(LCASE(?modelLabel), "gemma"), 
+                   "Open Source", "Closed Source") AS ?isOpenSource)
+          }
+          
+          # Alternative: find agents with text generation capability for proposal creation
+          UNION {
+            ?agent a abi:AIAgent ;
+                   rdfs:label ?agentLabel ;
+                   abi:canUtilizeModel ?model .
+            
+            ?model rdfs:label ?modelLabel ;
+                   abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # Filter for high intelligence suitable for business content
+            FILTER(?intelligenceIndex >= 40)
+            
+            # Determine if model is open source
+            BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                   CONTAINS(LCASE(?provider), "hugging") || 
+                   CONTAINS(LCASE(?provider), "mistral") ||
+                   CONTAINS(LCASE(?modelLabel), "llama") ||
+                   CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                   CONTAINS(LCASE(?modelLabel), "gemma"), 
+                   "Open Source", "Closed Source") AS ?isOpenSource)
+            
+            BIND("Generic Business Content Process" AS ?processLabel)
+            BIND(abi:GenericBusinessProcess AS ?process)
+          }
+          
+          # Ensure valid cost data for ranking
+          FILTER(?inputCost > 0 && ?outputCost > 0)
+        }
+        ORDER BY DESC(?processValueRatio) ?inputCost
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:minIntelligenceArg .
+
+intentMapping:findCodingAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_coding_agents"@en ;
+    intentMapping:intentDescription "Find top 3 AI agents for code generation with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX capability: <http://ontology.naas.ai/abi/capability/>
+        
+        SELECT ?agent ?agentLabel ?process ?processLabel ?model ?modelLabel ?provider ?inputCost ?outputCost ?codingIndex ?intelligenceIndex ?isOpenSource
+               ((?codingIndex / (?inputCost + ?outputCost)) AS ?codingValueRatio)
+        WHERE {
+          # Find processes related to code generation
+          ?process a abi:CodeGenerationProcess ;
+                   rdfs:label ?processLabel ;
+                   abi:hasParticipant ?agent .
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          # Get model and metrics through process realization
+          OPTIONAL {
+            ?process abi:utilizesModel ?model .
+            ?model rdfs:label ?modelLabel ;
+                   abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:codingIndex ?codingIndex ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # Determine if model is open source
+            BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                   CONTAINS(LCASE(?provider), "hugging") || 
+                   CONTAINS(LCASE(?provider), "mistral") ||
+                   CONTAINS(LCASE(?modelLabel), "llama") ||
+                   CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                   CONTAINS(LCASE(?modelLabel), "gemma") ||
+                   CONTAINS(LCASE(?modelLabel), "codellama") ||
+                   CONTAINS(LCASE(?modelLabel), "starcoder"), 
+                   "Open Source", "Closed Source") AS ?isOpenSource)
+          }
+          
+          # Alternative: find agents with coding capability 
+          UNION {
+            ?agent a abi:AIAgent ;
+                   rdfs:label ?agentLabel ;
+                   abi:canUtilizeModel ?model .
+            
+            ?model rdfs:label ?modelLabel ;
+                   abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:codingIndex ?codingIndex ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # Filter for strong coding capabilities
+            FILTER(?codingIndex >= 30)
+            
+            # Determine if model is open source
+            BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                   CONTAINS(LCASE(?provider), "hugging") || 
+                   CONTAINS(LCASE(?provider), "mistral") ||
+                   CONTAINS(LCASE(?modelLabel), "llama") ||
+                   CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                   CONTAINS(LCASE(?modelLabel), "gemma") ||
+                   CONTAINS(LCASE(?modelLabel), "codellama") ||
+                   CONTAINS(LCASE(?modelLabel), "starcoder"), 
+                   "Open Source", "Closed Source") AS ?isOpenSource)
+            
+            BIND("Generic Coding Process" AS ?processLabel)
+            BIND(abi:GenericCodingProcess AS ?process)
+          }
+          
+          # Ensure valid data for ranking
+          FILTER(?inputCost > 0 && ?outputCost > 0 && ?codingIndex > 0)
+        }
+        ORDER BY DESC(?codingValueRatio) ?inputCost
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:minCodingScoreArg .
+
+intentMapping:findMathAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_math_agents"@en ;
+    intentMapping:intentDescription "Find top 3 AI agents for mathematical reasoning with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?modelLabel ?provider ?inputCost ?outputCost ?mathIndex ?intelligenceIndex ?isOpenSource
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model rdfs:label ?modelLabel ;
+                 abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Determine if model is open source
+          BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                 CONTAINS(LCASE(?provider), "hugging") || 
+                 CONTAINS(LCASE(?provider), "mistral") ||
+                 CONTAINS(LCASE(?modelLabel), "llama") ||
+                 CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                 CONTAINS(LCASE(?modelLabel), "gemma"), 
+                 "Open Source", "Closed Source") AS ?isOpenSource)
+          
+          # Filter for agents with strong math capabilities
+          FILTER(?mathIndex >= 25)
+        }
+        ORDER BY DESC(?mathIndex) ?inputCost
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:minMathScoreArg .
+
+#################################################################
+#    General Purpose & Cost-Based Queries
+#################################################################
+
+intentMapping:findBestValueAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_value_agents"@en ;
+    intentMapping:intentDescription "Find top 3 best value AI agents with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?modelLabel ?provider ?inputCost ?outputCost ?intelligenceIndex ?isOpenSource
+               ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?valueRatio)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model rdfs:label ?modelLabel ;
+                 abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Determine if model is open source
+          BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                 CONTAINS(LCASE(?provider), "hugging") || 
+                 CONTAINS(LCASE(?provider), "mistral") ||
+                 CONTAINS(LCASE(?modelLabel), "llama") ||
+                 CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                 CONTAINS(LCASE(?modelLabel), "gemma"), 
+                 "Open Source", "Closed Source") AS ?isOpenSource)
+          
+          # Ensure we have valid cost data and reasonable intelligence
+          FILTER(?inputCost > 0 && ?outputCost > 0 && ?intelligenceIndex >= 30)
+        }
+        ORDER BY DESC(?valueRatio)
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:minIntelligenceArg .
+
+intentMapping:findFastestAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_fastest_agents"@en ;
+    intentMapping:intentDescription "Find top 3 fastest AI agents with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?modelLabel ?provider ?outputSpeed ?timeToFirstToken ?intelligenceIndex ?isOpenSource
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          ?model rdfs:label ?modelLabel ;
+                 abi:provider ?provider ;
+                 abi:outputSpeed ?outputSpeed ;
+                 abi:timeToFirstToken ?timeToFirstToken ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Determine if model is open source
+          BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                 CONTAINS(LCASE(?provider), "hugging") || 
+                 CONTAINS(LCASE(?provider), "mistral") ||
+                 CONTAINS(LCASE(?modelLabel), "llama") ||
+                 CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                 CONTAINS(LCASE(?modelLabel), "gemma"), 
+                 "Open Source", "Closed Source") AS ?isOpenSource)
+          
+          # Filter for models with speed data
+          FILTER(?outputSpeed > 0)
+        }
+        ORDER BY DESC(?outputSpeed) ?timeToFirstToken
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:minIntelligenceArg .
+
+intentMapping:findCheapestAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_cheapest_agents"@en ;
+    intentMapping:intentDescription "Find top 3 cheapest AI agents with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?modelLabel ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex ?isOpenSource
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model rdfs:label ?modelLabel ;
+                 abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:codingIndex ?codingIndex .
+          
+          # Determine if model is open source
+          BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                 CONTAINS(LCASE(?provider), "hugging") || 
+                 CONTAINS(LCASE(?provider), "mistral") ||
+                 CONTAINS(LCASE(?modelLabel), "llama") ||
+                 CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                 CONTAINS(LCASE(?modelLabel), "gemma"), 
+                 "Open Source", "Closed Source") AS ?isOpenSource)
+          
+          # Filter for models with cost data
+          FILTER(?inputCost > 0)
+        }
+        ORDER BY ?inputCost ?outputCost DESC(?intelligenceIndex)
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:maxInputCostArg .
+
+intentMapping:findProviderAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_by_provider"@en ;
+    intentMapping:intentDescription "Find top 3 AI agents from a specific provider with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?modelLabel ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex ?mathIndex ?isOpenSource
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model rdfs:label ?modelLabel ;
+                 abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:outputTokenCost ?outputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex .
+          
+          # Determine if model is open source
+          BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                 CONTAINS(LCASE(?provider), "hugging") || 
+                 CONTAINS(LCASE(?provider), "mistral") ||
+                 CONTAINS(LCASE(?modelLabel), "llama") ||
+                 CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                 CONTAINS(LCASE(?modelLabel), "gemma"), 
+                 "Open Source", "Closed Source") AS ?isOpenSource)
+          
+          # Filter by provider if specified
+          FILTER(CONTAINS(LCASE(?provider), LCASE("{{ provider_name }}}")))
+        }
+        ORDER BY ?inputCost DESC(?intelligenceIndex)
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:providerNameArg .
+
+# Process Discovery Query - Core of PR #506 Vision
+intentMapping:findAgentsByProcessTypeQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_by_process_type"@en ;
+    intentMapping:intentDescription "Find AI agents that can participate in or realize specific types of processes, with cost and performance data" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        
+        SELECT ?agent ?agentLabel ?process ?processLabel ?processType ?model ?provider ?inputCost ?outputCost ?intelligenceIndex
+               ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?processEfficiency)
+        WHERE {
+          # Find processes of the specified type
+          ?process a ?processType ;
+                   rdfs:label ?processLabel ;
+                   abi:hasParticipant ?agent .
+          
+          # Filter by process type (e.g., BusinessProposalCreationProcess, CodeGenerationProcess)
+          FILTER(CONTAINS(LCASE(STR(?processType)), LCASE("{{ process_type }}")))
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          # Get model and performance data
+          OPTIONAL {
+            ?process abi:utilizesModel ?model .
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+          }
+          
+          # Alternative: find agents with suitable models for the process type
+          UNION {
+            ?agent a abi:AIAgent ;
+                   rdfs:label ?agentLabel ;
+                   abi:canUtilizeModel ?model .
+            
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # High intelligence threshold for complex processes
+            FILTER(?intelligenceIndex >= 50)
+            
+            BIND(CONCAT("Potential ", "{{ process_type }}", " Process") AS ?processLabel)
+            BIND(abi:PotentialProcess AS ?process)
+            BIND(?processType AS ?processType)
+          }
+          
+          # Ensure valid data
+          FILTER(?inputCost > 0 && ?outputCost > 0)
+        }
+        ORDER BY DESC(?processEfficiency) ?inputCost
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:processTypeArg .
+
+# Simple listing query to test basic functionality
+intentMapping:listAllAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_all_agents"@en ;
+    intentMapping:intentDescription "Query the knowledge graph to get the current list of all AI agents with their exact names and properties from the triple store" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+        }
+        ORDER BY ?agentLabel
+        LIMIT 3
+    """ .
+
+#################################################################
+#    BATCH 1: Business Decision Support Queries (10)
+#################################################################
+
+intentMapping:findBestForMeetingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_meeting"@en ;
+    intentMapping:intentDescription "Find top 3 AI agents for meeting transcription and summarization with open/closed source info" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?modelLabel ?provider ?inputCost ?intelligenceIndex ?isOpenSource
+               (?intelligenceIndex * 0.7 + (100 - ?inputCost) * 0.3 AS ?meetingScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model rdfs:label ?modelLabel ;
+                 abi:provider ?provider ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          # Determine if model is open source
+          BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
+                 CONTAINS(LCASE(?provider), "hugging") || 
+                 CONTAINS(LCASE(?provider), "mistral") ||
+                 CONTAINS(LCASE(?modelLabel), "llama") ||
+                 CONTAINS(LCASE(?modelLabel), "mixtral") ||
+                 CONTAINS(LCASE(?modelLabel), "gemma"), 
+                 "Open Source", "Closed Source") AS ?isOpenSource)
+          
+          FILTER(?intelligenceIndex >= 35 && ?inputCost <= 10)
+        }
+        ORDER BY DESC(?meetingScore)
+        LIMIT 3
+    """ ;
+    intentMapping:hasArgument intentMapping:maxCostArg .
+
+intentMapping:findBestForContractAnalysisQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_contract_analysis"@en ;
+    intentMapping:intentDescription "Find AI agents best suited for legal contract analysis and review" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?intelligenceIndex ?mathIndex ?inputCost
+               (?intelligenceIndex * 0.8 + ?mathIndex * 0.2 AS ?contractScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 50 && ?mathIndex >= 40)
+        }
+        ORDER BY DESC(?contractScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForCustomerServiceQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_customer_service"@en ;
+    intentMapping:intentDescription "Find cost-effective AI agents for customer service with good response times" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?outputSpeed ?timeToFirstToken ?inputCost ?intelligenceIndex
+               ((?outputSpeed * 0.4) + ((100 - ?inputCost) * 0.3) + (?intelligenceIndex * 0.3) AS ?serviceScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:outputSpeed ?outputSpeed ;
+                 abi:timeToFirstToken ?timeToFirstToken ;
+                 abi:inputTokenCost ?inputCost ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          FILTER(?outputSpeed > 10 && ?inputCost <= 5 && ?intelligenceIndex >= 25)
+        }
+        ORDER BY DESC(?serviceScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForMarketingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_marketing"@en ;
+    intentMapping:intentDescription "Find AI agents optimized for marketing content creation and campaigns" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?process ?model ?provider ?intelligenceIndex ?inputCost
+        WHERE {
+          ?process a abi:CreativeWritingProcess ;
+                   abi:hasParticipant ?agent ;
+                   abi:utilizesModel ?model .
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 40 && ?inputCost <= {{ max_marketing_budget }})
+        }
+        ORDER BY DESC(?intelligenceIndex) ?inputCost
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument intentMapping:maxMarketingBudgetArg, intentMapping:maxResultsArg .
+
+intentMapping:findBestForTechnicalWritingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_technical_writing"@en ;
+    intentMapping:intentDescription "Find AI agents best for technical documentation and API docs" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?intelligenceIndex ?inputCost
+               (?codingIndex * 0.6 + ?intelligenceIndex * 0.4 AS ?techWritingScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?codingIndex >= 40 && ?intelligenceIndex >= 40)
+        }
+        ORDER BY DESC(?techWritingScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForEmailsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_emails"@en ;
+    intentMapping:intentDescription "Find AI agents optimized for professional email composition and responses" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?intelligenceIndex ?outputSpeed ?inputCost
+               (?intelligenceIndex * 0.5 + ?outputSpeed * 0.3 + (50 - ?inputCost) * 0.2 AS ?emailScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:outputSpeed ?outputSpeed ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 30 && ?outputSpeed > 15 && ?inputCost <= 10)
+        }
+        ORDER BY DESC(?emailScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForPresentationsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_presentations"@en ;
+    intentMapping:intentDescription "Find AI agents best for creating business presentations and slide content" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?intelligenceIndex ?mathIndex ?inputCost
+               (?intelligenceIndex * 0.6 + ?mathIndex * 0.4 AS ?presentationScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 45 && ?mathIndex >= 35)
+        }
+        ORDER BY DESC(?presentationScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForReportsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_reports"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in business report generation and analysis" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?intelligenceIndex ?mathIndex ?inputCost
+               (?intelligenceIndex * 0.5 + ?mathIndex * 0.5 AS ?reportScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 50 && ?mathIndex >= 45)
+        }
+        ORDER BY DESC(?reportScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForBrainstormingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_brainstorming"@en ;
+    intentMapping:intentDescription "Find AI agents best for creative brainstorming and idea generation" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?process ?model ?provider ?intelligenceIndex ?outputSpeed ?inputCost
+        WHERE {
+          ?process a abi:CreativeWritingProcess ;
+                   abi:hasParticipant ?agent ;
+                   abi:utilizesModel ?model .
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:outputSpeed ?outputSpeed ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 35 && ?outputSpeed > 20)
+        }
+        ORDER BY DESC(?intelligenceIndex) DESC(?outputSpeed)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForProposalWritingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_proposal_writing"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in proposal writing and RFP responses" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?process ?model ?provider ?intelligenceIndex ?mathIndex ?inputCost
+               (?intelligenceIndex * 0.7 + ?mathIndex * 0.3 AS ?proposalScore)
+        WHERE {
+          ?process a abi:BusinessProposalCreationProcess ;
+                   abi:hasParticipant ?agent ;
+                   abi:utilizesModel ?model .
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?intelligenceIndex >= 55 && ?mathIndex >= 40)
+        }
+        ORDER BY DESC(?proposalScore)
+        LIMIT 3
+    """ .
+
+#################################################################
+#    BATCH 2: Development & Technical Queries (10)
+#################################################################
+
+intentMapping:findBestForCodeReviewQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_code_review"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in code review and quality analysis" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?process ?model ?provider ?codingIndex ?mathIndex ?inputCost
+               (?codingIndex * 0.7 + ?mathIndex * 0.3 AS ?codeReviewScore)
+        WHERE {
+          ?process a abi:CodeGenerationProcess ;
+                   abi:hasParticipant ?agent ;
+                   abi:utilizesModel ?model .
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?codingIndex >= 50)
+        }
+        ORDER BY DESC(?codeReviewScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForDebuggingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_debugging"@en ;
+    intentMapping:intentDescription "Find AI agents best at debugging and troubleshooting code issues" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?intelligenceIndex ?mathIndex ?inputCost
+               (?codingIndex * 0.5 + ?intelligenceIndex * 0.3 + ?mathIndex * 0.2 AS ?debugScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?codingIndex >= 45 && ?intelligenceIndex >= 40 && ?mathIndex >= 30)
+        }
+        ORDER BY DESC(?debugScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForArchitectureQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_architecture"@en ;
+    intentMapping:intentDescription "Find AI agents best for system architecture and design decisions" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?intelligenceIndex ?codingIndex ?mathIndex
+               (?intelligenceIndex * 0.5 + ?codingIndex * 0.3 + ?mathIndex * 0.2 AS ?architectureScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex .
+          
+          FILTER(?intelligenceIndex >= 55 && ?codingIndex >= 40 && ?mathIndex >= 35)
+        }
+        ORDER BY DESC(?architectureScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForTestingQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_testing"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in test case generation and testing strategies" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?mathIndex ?intelligenceIndex ?inputCost
+               (?codingIndex * 0.6 + ?mathIndex * 0.4 AS ?testingScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?codingIndex >= 45 && ?mathIndex >= 40)
+        }
+        ORDER BY DESC(?testingScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForRefactoringQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_refactoring"@en ;
+    intentMapping:intentDescription "Find AI agents best for code refactoring and optimization" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?intelligenceIndex ?mathIndex
+               (?codingIndex * 0.6 + ?intelligenceIndex * 0.4 AS ?refactoringScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex .
+          
+          FILTER(?codingIndex >= 50 && ?intelligenceIndex >= 45)
+        }
+        ORDER BY DESC(?refactoringScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForDatabaseQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_database"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in database design and SQL optimization" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?mathIndex ?intelligenceIndex
+               (?codingIndex * 0.4 + ?mathIndex * 0.6 AS ?databaseScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          FILTER(?codingIndex >= 40 && ?mathIndex >= 50)
+        }
+        ORDER BY DESC(?databaseScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForAPIDesignQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_api_design"@en ;
+    intentMapping:intentDescription "Find AI agents best for API design and RESTful architecture" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?intelligenceIndex ?mathIndex
+               (?codingIndex * 0.5 + ?intelligenceIndex * 0.5 AS ?apiScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex .
+          
+          FILTER(?codingIndex >= 45 && ?intelligenceIndex >= 50)
+        }
+        ORDER BY DESC(?apiScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForPerformanceQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_performance"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in performance optimization and profiling" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?mathIndex ?intelligenceIndex
+               (?codingIndex * 0.4 + ?mathIndex * 0.4 + ?intelligenceIndex * 0.2 AS ?performanceScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:mathIndex ?mathIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex .
+          
+          FILTER(?codingIndex >= 50 && ?mathIndex >= 45)
+        }
+        ORDER BY DESC(?performanceScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForSecurityQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_security"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in security analysis and vulnerability assessment" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?intelligenceIndex ?mathIndex
+               (?codingIndex * 0.4 + ?intelligenceIndex * 0.4 + ?mathIndex * 0.2 AS ?securityScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:mathIndex ?mathIndex .
+          
+          FILTER(?codingIndex >= 45 && ?intelligenceIndex >= 55)
+        }
+        ORDER BY DESC(?securityScore)
+        LIMIT 3
+    """ .
+
+intentMapping:findBestForDocumentationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_best_for_documentation"@en ;
+    intentMapping:intentDescription "Find AI agents specialized in technical documentation and code comments" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?codingIndex ?intelligenceIndex ?inputCost
+               (?codingIndex * 0.4 + ?intelligenceIndex * 0.6 AS ?docScore)
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel ;
+                 abi:canUtilizeModel ?model .
+          
+          ?model abi:provider ?provider ;
+                 abi:codingIndex ?codingIndex ;
+                 abi:intelligenceIndex ?intelligenceIndex ;
+                 abi:inputTokenCost ?inputCost .
+          
+          FILTER(?codingIndex >= 35 && ?intelligenceIndex >= 45)
+        }
+        ORDER BY DESC(?docScore) ?inputCost
+        LIMIT 3
+    """ .
+
+#################################################################
+#    Query Arguments
+#################################################################
+
+intentMapping:minIntelligenceArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "min_intelligence_score" ;
+    intentMapping:argumentDescription "Minimum intelligence index score (0-100)" ;
+    intentMapping:validationPattern "^[0-9]{1,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:minCodingScoreArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "min_coding_score" ;
+    intentMapping:argumentDescription "Minimum coding index score (0-100)" ;
+    intentMapping:validationPattern "^[0-9]{1,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:minMathScoreArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "min_math_score" ;
+    intentMapping:argumentDescription "Minimum math index score (0-100)" ;
+    intentMapping:validationPattern "^[0-9]{1,3}$" ;
+    intentMapping:validationFormat "integer" .
+
+intentMapping:maxInputCostArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "max_input_cost" ;
+    intentMapping:argumentDescription "Maximum input token cost per million tokens" ;
+    intentMapping:validationPattern "^[0-9]+(\\.[0-9]+)?$" ;
+    intentMapping:validationFormat "decimal" .
+
+intentMapping:providerNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "provider_name" ;
+    intentMapping:argumentDescription "Name of the AI provider (e.g., 'Anthropic', 'Google')" ;
+    intentMapping:validationPattern "^[a-zA-Z0-9\\s-]{2,50}$" ;
+    intentMapping:validationFormat "provider_name" .
+
+intentMapping:processTypeArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "process_type" ;
+    intentMapping:argumentDescription "Type of process to search for (e.g., 'BusinessProposal', 'CodeGeneration', 'TruthSeeking')" ;
+    intentMapping:validationPattern "^[a-zA-Z0-9\\s-]{2,50}$" ;
+    intentMapping:validationFormat "process_type" .
+
+intentMapping:maxCostArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "max_cost_per_1m_tokens" ;
+    intentMapping:argumentDescription "Maximum cost per 1M tokens" ;
+    intentMapping:validationPattern "^[0-9]+(\\.[0-9]+)?$" ;
+    intentMapping:validationFormat "decimal" .
+
+intentMapping:maxMarketingBudgetArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "max_marketing_budget" ;
+    intentMapping:argumentDescription "Maximum marketing budget per 1M tokens" ;
+    intentMapping:validationPattern "^[0-9]+(\\.[0-9]+)?$" ;
+    intentMapping:validationFormat "decimal" .
+
+intentMapping:maxResultsArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "max_results" ;
+    intentMapping:argumentDescription "Maximum number of results to return" ;
+    intentMapping:validationPattern "^[1-9][0-9]?$" ;
+    intentMapping:validationFormat "integer" .
