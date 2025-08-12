@@ -3,16 +3,19 @@
 
 ## **🎯 VISION STATEMENT**
 
-The initial approach focused on creating a sophisticated multi-agent system that could intelligently route user requests to specialized AI agents based on static capabilities and pre-defined routing rules. The core concept was "**process-centric routing**" - moving beyond "I want Claude" to "I need ethical analysis."
+The initial approach addressed a fundamental problem in multi-agent AI systems: the burden placed on users to understand which specific AI model to use for particular tasks. Rather than requiring users to know that "Claude excels at ethical reasoning" or "Mistral performs well for code generation," the system aimed to enable process-centric requests where users could specify their analytical needs and receive appropriate agent recommendations.
+
+This vision represented a shift from brand-based agent selection to capability-based routing. The underlying hypothesis was that users think in terms of cognitive processes ("I need ethical analysis") rather than specific AI models ("I want Claude"), and that a system designed around this natural cognitive pattern would provide superior user experience and decision outcomes.
 
 ## **🏗️ ARCHITECTURAL FOUNDATION**
 
 ### **Basic Formal Ontology (BFO) 7 Buckets Framework**
 
-The entire system was designed around Barry Smith's BFO 7 categories using the mnemonic:
-> *"What and who are the materials, how-they-are their qualities, why they can do something are realizable, how-it-happens is the process, when and where give time and space, and how-we-know is the information."*
+The architectural foundation rested on Basic Formal Ontology's systematic categorization of entities, which provided a principled approach to organizing AI agent capabilities, performance characteristics, and operational constraints. This choice reflected a commitment to ontological rigor rather than ad-hoc categorization schemes that might prove difficult to maintain or extend.
 
-This provided the philosophical foundation for organizing:
+The BFO framework organizes all entities into seven fundamental categories, captured in the mnemonic: *"What and who are the materials, how-they-are their qualities, why they can do something are realizable, how-it-happens is the process, when and where give time and space, and how-we-know is the information."*
+
+This systematic approach provided a stable foundation for representing diverse aspects of AI agent ecosystems:
 - **Material Entities**: AI Models (GPT-4o, Claude, Gemini, Grok, Mistral, Llama, Perplexity)
 - **Qualities**: Performance metrics (speed, cost, intelligence scores)
 - **Realizable Entities**: Capabilities (coding, reasoning, creativity)
