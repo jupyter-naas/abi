@@ -13,66 +13,117 @@
     dc11:contributor "ABI System" .
 
 #################################################################
-#    Business & Professional Content Queries
+#    BFO Process-Centric Queries (PR #506 Architecture)
 #################################################################
 
 intentMapping:findBusinessProposalAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_business_proposal_agents"@en ;
-    intentMapping:intentDescription "Query the knowledge graph to find AI agents with cost and intelligence data specifically for business proposal creation, ranked by actual pricing from the triple store" ;
+    intentMapping:intentDescription "Find AI agents that can participate in business proposal creation processes, ranked by cost-effectiveness" ;
     intentMapping:sparqlTemplate """
         PREFIX abi: <http://naas.ai/ontology/abi#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX capability: <http://ontology.naas.ai/abi/capability/>
         
-        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex
+        SELECT ?agent ?agentLabel ?process ?processLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex 
+               ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?processValueRatio)
         WHERE {
+          # Find processes related to business proposal creation
+          ?process a abi:BusinessProposalCreationProcess ;
+                   rdfs:label ?processLabel ;
+                   abi:hasParticipant ?agent .
+          
           ?agent a abi:AIAgent ;
                  rdfs:label ?agentLabel .
           
-          OPTIONAL { 
-            ?agent abi:canUtilizeModel ?model .
-            ?model abi:provider ?provider .
-            ?model abi:inputTokenCost ?inputCost .
-            ?model abi:outputTokenCost ?outputCost .
-            ?model abi:intelligenceIndex ?intelligenceIndex .
-            ?model abi:codingIndex ?codingIndex .
+          # Get model and cost information through process realization
+          OPTIONAL {
+            ?process abi:utilizesModel ?model .
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
           }
           
-          # Filter for agents with reasonable intelligence for business content (if available)
-          FILTER(!bound(?intelligenceIndex) || ?intelligenceIndex >= {{ min_intelligence_score }})
+          # Alternative: find agents with text generation capability for proposal creation
+          UNION {
+            ?agent a abi:AIAgent ;
+                   rdfs:label ?agentLabel ;
+                   abi:canUtilizeModel ?model .
+            
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # Filter for high intelligence suitable for business content
+            FILTER(?intelligenceIndex >= {{ min_intelligence_score }})
+            
+            BIND("Generic Business Content Process" AS ?processLabel)
+            BIND(abi:GenericBusinessProcess AS ?process)
+          }
+          
+          # Ensure valid cost data for ranking
+          FILTER(?inputCost > 0 && ?outputCost > 0)
         }
-        ORDER BY ?inputCost ?outputCost DESC(?intelligenceIndex)
+        ORDER BY DESC(?processValueRatio) ?inputCost
         LIMIT {{ max_results }}
     """ ;
-    intentMapping:hasArgument intentMapping:minIntelligenceArg, intentMapping:maxInputCostArg, intentMapping:maxResultsArg .
+    intentMapping:hasArgument intentMapping:minIntelligenceArg, intentMapping:maxResultsArg .
 
 intentMapping:findCodingAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_coding_agents"@en ;
-    intentMapping:intentDescription "Find AI agents specialized in code generation and programming tasks" ;
+    intentMapping:intentDescription "Find AI agents that can participate in code generation processes, ranked by coding capability and cost" ;
     intentMapping:sparqlTemplate """
         PREFIX abi: <http://naas.ai/ontology/abi#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX capability: <http://ontology.naas.ai/abi/capability/>
         
-        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?codingIndex ?intelligenceIndex
+        SELECT ?agent ?agentLabel ?process ?processLabel ?model ?provider ?inputCost ?outputCost ?codingIndex ?intelligenceIndex
+               ((?codingIndex / (?inputCost + ?outputCost)) AS ?codingValueRatio)
         WHERE {
+          # Find processes related to code generation
+          ?process a abi:CodeGenerationProcess ;
+                   rdfs:label ?processLabel ;
+                   abi:hasParticipant ?agent .
+          
           ?agent a abi:AIAgent ;
-                 rdfs:label ?agentLabel ;
-                 abi:canUtilizeModel ?model .
-          ?model abi:provider ?provider .
+                 rdfs:label ?agentLabel .
           
-          OPTIONAL { ?model abi:inputTokenCost ?inputCost }
-          OPTIONAL { ?model abi:outputTokenCost ?outputCost }
-          OPTIONAL { ?model abi:codingIndex ?codingIndex }
-          OPTIONAL { ?model abi:intelligenceIndex ?intelligenceIndex }
+          # Get model and metrics through process realization
+          OPTIONAL {
+            ?process abi:utilizesModel ?model .
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:codingIndex ?codingIndex ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+          }
           
-          # Filter for agents with strong coding capabilities (if available)
-          FILTER(!bound(?codingIndex) || ?codingIndex >= {{ min_coding_score }})
+          # Alternative: find agents with coding capability 
+          UNION {
+            ?agent a abi:AIAgent ;
+                   rdfs:label ?agentLabel ;
+                   abi:canUtilizeModel ?model .
+            
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:codingIndex ?codingIndex ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # Filter for strong coding capabilities
+            FILTER(?codingIndex >= {{ min_coding_score }})
+            
+            BIND("Generic Coding Process" AS ?processLabel)
+            BIND(abi:GenericCodingProcess AS ?process)
+          }
           
-          # Optional programming language filtering (could be extended)
-          {% if programming_language %}
-          # Future: add capability matching for specific languages
-          {% endif %}
+          # Ensure valid data for ranking
+          FILTER(?inputCost > 0 && ?outputCost > 0 && ?codingIndex > 0)
         }
-        ORDER BY ?inputCost DESC(?codingIndex)
+        ORDER BY DESC(?codingValueRatio) ?inputCost
         LIMIT {{ max_results }}
     """ ;
     intentMapping:hasArgument intentMapping:minCodingScoreArg, intentMapping:maxResultsArg .
@@ -235,7 +286,66 @@ intentMapping:findProviderAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     """ ;
     intentMapping:hasArgument intentMapping:providerNameArg, intentMapping:maxResultsArg .
 
-# Simple listing query to test basic functionality
+# Process Discovery Query - Core of PR #506 Vision
+intentMapping:findAgentsByProcessTypeQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_by_process_type"@en ;
+    intentMapping:intentDescription "Find AI agents that can participate in or realize specific types of processes, with cost and performance data" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        
+        SELECT ?agent ?agentLabel ?process ?processLabel ?processType ?model ?provider ?inputCost ?outputCost ?intelligenceIndex
+               ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?processEfficiency)
+        WHERE {
+          # Find processes of the specified type
+          ?process a ?processType ;
+                   rdfs:label ?processLabel ;
+                   abi:hasParticipant ?agent .
+          
+          # Filter by process type (e.g., BusinessProposalCreationProcess, CodeGenerationProcess)
+          FILTER(CONTAINS(LCASE(STR(?processType)), LCASE("{{ process_type }}")))
+          
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          # Get model and performance data
+          OPTIONAL {
+            ?process abi:utilizesModel ?model .
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+          }
+          
+          # Alternative: find agents with suitable models for the process type
+          UNION {
+            ?agent a abi:AIAgent ;
+                   rdfs:label ?agentLabel ;
+                   abi:canUtilizeModel ?model .
+            
+            ?model abi:provider ?provider ;
+                   abi:inputTokenCost ?inputCost ;
+                   abi:outputTokenCost ?outputCost ;
+                   abi:intelligenceIndex ?intelligenceIndex .
+            
+            # High intelligence threshold for complex processes
+            FILTER(?intelligenceIndex >= 50)
+            
+            BIND(CONCAT("Potential ", "{{ process_type }}", " Process") AS ?processLabel)
+            BIND(abi:PotentialProcess AS ?process)
+            BIND(?processType AS ?processType)
+          }
+          
+          # Ensure valid data
+          FILTER(?inputCost > 0 && ?outputCost > 0)
+        }
+        ORDER BY DESC(?processEfficiency) ?inputCost
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument intentMapping:processTypeArg, intentMapping:maxResultsArg .
+
+# Simple listing query to test basic functionality  
 intentMapping:listAllAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "list_all_agents"@en ;
     intentMapping:intentDescription "Query the knowledge graph to get the current list of all AI agents with their exact names and properties from the triple store" ;
@@ -286,6 +396,12 @@ intentMapping:providerNameArg a intentMapping:QueryArgument ;
     intentMapping:argumentDescription "Name of the AI provider (e.g., 'Anthropic', 'Google')" ;
     intentMapping:validationPattern "^[a-zA-Z0-9\\s-]{2,50}$" ;
     intentMapping:validationFormat "provider_name" .
+
+intentMapping:processTypeArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "process_type" ;
+    intentMapping:argumentDescription "Type of process to search for (e.g., 'BusinessProposal', 'CodeGeneration', 'TruthSeeking')" ;
+    intentMapping:validationPattern "^[a-zA-Z0-9\\s-]{2,50}$" ;
+    intentMapping:validationFormat "process_type" .
 
 intentMapping:maxResultsArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "max_results" ;
