@@ -2,12 +2,19 @@
 
 ## What is a Module?
 
-A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are now organized into two categories:
+A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are organized into three categories:
 
 1. **Core Modules**: Located in `src/core/modules/` - These are essential modules that provide the core functionality of the ABI system.
 2. **Custom Modules**: Located in `src/custom/modules/` - These are user-created modules that extend the system with additional capabilities.
+3. **Marketplace Modules**: Located in `src/marketplace/modules/` - These are community-shared modules available for selective activation.
 
-This separation makes the system architecture easier to understand and maintain, with a clear distinction between core functionality and custom extensions.
+This three-tier separation provides a clean architecture with distinct purposes: core system functionality, private extensions, and shared community resources.
+
+### Module Directory Purposes
+
+- **Core Modules** (`src/core/modules/`): Foundation modules that provide essential ABI functionality. These should not be modified directly.
+- **Custom Modules** (`src/custom/modules/`): Your private modules and customizations. Perfect for organization-specific agents and workflows.
+- **Marketplace Modules** (`src/marketplace/modules/`): Community-shared modules. All are disabled by default (`.disabled` suffix) for safety. Enable selectively as needed.
 
 Modules provide a way to organize and structure your code in a modular fashion, making it easier to maintain, extend, and reuse functionality. They can contain various components such as:
 
@@ -24,21 +31,21 @@ Modules provide a way to organize and structure your code in a modular fashion, 
 
 The ABI system automatically discovers and loads modules at runtime. Here's how the process works:
 
-1. The system scans both the `src/core/modules/` and `src/custom/modules/` directories for subdirectories
+1. The system scans `src/core/modules/`, `src/custom/modules/`, and `src/marketplace/modules/` directories for subdirectories
 2. Each subdirectory (except `__pycache__` and those containing "disabled" in their name) is considered a module
 3. The module is imported using Python's import system
 4. An `IModule` instance is created for the module
 5. The module's components (agents, workflows, pipelines) are loaded
 6. The loaded module is added to the system's registry
 
-This automatic loading mechanism means that you can add new functionality to the system simply by creating a new module directory with the appropriate structure in either the core or custom modules directory.
+This automatic loading mechanism means that you can add new functionality to the system simply by creating a new module directory with the appropriate structure in any of the three module directories.
 
 ### Module Structure
 
 A typical module has the following directory structure:
 
 ```
-src/[core|custom]/modules/your_module_name/
+src/[core|custom|marketplace]/modules/your_module_name/
 ├── agents/                  # Contains AI agents
 │   └── YourAgent.py         # An agent implementation
 ├── integrations/            # Contains integration implementations
@@ -64,10 +71,13 @@ To disable a module without removing it from the codebase, simply add "disabled"
 
 ```bash
 # For core modules
-mv src/core/modules/your_module_name src/core/modules/your_module_name_disabled
+mv src/core/modules/your_module_name src/core/modules/your_module_name.disabled
 
 # For custom modules
-mv src/custom/modules/your_module_name src/custom/modules/your_module_name_disabled
+mv src/custom/modules/your_module_name src/custom/modules/your_module_name.disabled
+
+# For marketplace modules
+mv src/marketplace/modules/your_module_name src/marketplace/modules/your_module_name.disabled
 ```
 
 The system will automatically skip loading modules with "disabled" in their name.
@@ -80,7 +90,7 @@ The system will automatically skip loading modules with "disabled" in their name
 
 ## Best Practices
 
-1. **Choose the right location**: Place essential system functionality in core modules and extensions in custom modules
+1. **Choose the right location**: Place essential system functionality in core modules, your private extensions in custom modules, and shared community modules in marketplace
 2. **Keep modules focused**: Each module should have a clear, specific purpose
 3. **Maintain independence**: Minimize dependencies between modules
 4. **Document your components**: Provide clear documentation for your agents, workflows, and pipelines
@@ -91,7 +101,7 @@ The system will automatically skip loading modules with "disabled" in their name
 
 If your module is not being loaded correctly, check the following:
 
-1. Ensure your module directory is directly under either `src/core/modules/` or `src/custom/modules/`
+1. Ensure your module directory is directly under `src/core/modules/`, `src/custom/modules/`, or `src/marketplace/modules/`
 2. Verify that your module name doesn't contain "disabled"
 3. Check that your agents have a `create_agent()` function
 4. Ensure your workflows and pipelines follow the correct class structure
