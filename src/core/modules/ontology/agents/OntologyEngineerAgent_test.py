@@ -1,30 +1,34 @@
+import pytest
+
 from src.core.modules.ontology.agents.OntologyEngineerAgent import create_agent
-from pprint import pprint
 
-agent = create_agent()
+@pytest.fixture
+def agent():
+    return create_agent()
 
-statement = """latest news on France today:
-Major Wildfire in Southern France (Aude Region)
-A devastating wildfire—France’s largest in decades—has been brought under control after sweeping through over 16,000 hectares (160 km²), an area larger than Paris 
-Reuters
-France 24
-AP News
-.
+def test_question_about_bfo_ontology(agent):
+    intent = "What's an Organization?"
+    result = agent.invoke(intent)
+    assert result is not None, result
+    assert "BFO_0000040" or  "material entity" in result, result
 
-The blaze struck southern France's wine country, resulting in one death, at least 13 injuries (including 11 firefighters), destruction of 36 homes, and thousands of displaced residents accommodated in emergency shelters 
-AP News
-+1
-.
+def test_text_to_ontology_transformation(agent):
+    intent = "Map to ontology: 'Florent Ravenel is working for Naas.ai'"
+    result = agent.invoke(intent)
+    assert result is not None, result
+    assert "Florent Ravenel is working for Naas.ai" in result, result
+    assert "```sparql" in result, result
+    assert "INSERT DATA" in result, result
 
-Firefighters remain on high alert amid concerns that the upcoming heatwave—with temperatures expected to exceed 30 °C—could spark flare-ups 
-AP News
-.
-
-Authorities have linked the disaster to climate change, calling it the worst fire since 1949, with serious damage to vineyards and livelihoods in the Corbières region 
-AP News
-+1
-.
-"""
-
-result = agent.invoke(statement)
-pprint(result)
+def test_add_to_triplestore_confirmation(agent):
+    intent = """Add to triplestore the following SPARQL statement:
+    ```sparql
+    INSERT DATA {
+    <http://ontology.naas.ai/abi/69a231b9-e87a-4503-8f80-a530ed8eaa4b> <http://www.w3.org/2000/01/rdf-schema#label> "Naas.ai" .
+    }
+    ```
+    """
+    result = agent.invoke(intent)
+    assert result is not None, result
+    assert "I am going to add the following SPARQL statement to the triplestore" in result, result
+    assert "Are you sure you want to add this SPARQL statement to the triplestore?" in result, result
