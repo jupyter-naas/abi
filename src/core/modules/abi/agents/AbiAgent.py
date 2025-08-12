@@ -245,8 +245,6 @@ def create_agent(
     tools: list = []
 
     agents: list = []
-    # from src.__modules__ import get_modules
-    # modules = get_modules()
     for module in modules:
         if module.module_path != "src.core.modules.abi":
             logger.debug(f"Inspecting module: {module.module_path}")
