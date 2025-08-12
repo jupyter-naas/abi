@@ -8,8 +8,8 @@ The ArXiv Agent module enables easy interaction with ArXiv's scientific paper re
 
 ## 3. System Components
 
-### 3.1 ArXiv Assistant
-An intelligent assistant that helps users discover, organize, and analyze research papers. The assistant integrates all the module's capabilities into a conversational interface.
+### 3.1 ArXiv Agent
+An intelligent agent that helps users discover, organize, and analyze research papers. The agent integrates all the module's capabilities into a conversational interface.
 
 ### 3.2 ArXiv Integration
 Connects to the ArXiv API to search for papers and retrieve detailed metadata.
@@ -30,9 +30,9 @@ Enables powerful querying capabilities against your stored papers:
 
 ## 4. Directory Structure
 
-src/custom/modules/arxiv_agent/
+src/marketplace/modules/arxiv/
 - agents/
-  • ArXivAgent.py - Assistant implementation
+  • ArXivAssistant.py - Agent implementation
 - integrations/
   • ArXivIntegration.py - ArXiv API connection
 - ontologies/

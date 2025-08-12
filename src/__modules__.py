@@ -5,7 +5,7 @@ import importlib
 import os
 from pathlib import Path
 
-MODULE_PATH = ["src/core/modules", "src/custom/modules"]
+MODULE_PATH = ["src/core/modules", "src/custom/modules", "src/marketplace/modules"]
 
 __modules: List[IModule] = []
 __loaded: bool = False
