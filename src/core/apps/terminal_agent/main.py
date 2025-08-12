@@ -291,7 +291,7 @@ def run_agent(agent: Agent):
     save_to_conversation("")  # Empty line
     
     # Set Abi as active agent after greeting
-    current_active_agent = "Abi"
+    current_active_agent = agent.name
     
     # Available agents for mention suggestions (cloud + local)
     available_agents = [
