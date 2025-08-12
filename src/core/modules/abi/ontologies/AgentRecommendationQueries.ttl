@@ -18,7 +18,7 @@
 
 abi:findBusinessProposalAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_business_proposal_agents"@en ;
-    intentMapping:intentDescription "Find AI agents capable of creating business proposals, ranked by cost and intelligence" ;
+    intentMapping:intentDescription "Query the knowledge graph to find AI agents with cost and intelligence data specifically for business proposal creation, ranked by actual pricing from the triple store" ;
     intentMapping:sparqlTemplate """
         PREFIX abi: <http://naas.ai/ontology/abi#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -26,14 +26,16 @@ abi:findBusinessProposalAgentsQuery a intentMapping:TemplatableSparqlQuery ;
         SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex
         WHERE {
           ?agent a abi:AIAgent ;
-                 rdfs:label ?agentLabel ;
-                 abi:canUtilizeModel ?model .
-          ?model abi:provider ?provider .
+                 rdfs:label ?agentLabel .
           
-          OPTIONAL { ?model abi:inputTokenCost ?inputCost }
-          OPTIONAL { ?model abi:outputTokenCost ?outputCost }
-          OPTIONAL { ?model abi:intelligenceIndex ?intelligenceIndex }
-          OPTIONAL { ?model abi:codingIndex ?codingIndex }
+          OPTIONAL { 
+            ?agent abi:canUtilizeModel ?model .
+            ?model abi:provider ?provider .
+            ?model abi:inputTokenCost ?inputCost .
+            ?model abi:outputTokenCost ?outputCost .
+            ?model abi:intelligenceIndex ?intelligenceIndex .
+            ?model abi:codingIndex ?codingIndex .
+          }
           
           # Filter for agents with reasonable intelligence for business content (if available)
           FILTER(!bound(?intelligenceIndex) || ?intelligenceIndex >= {{ min_intelligence_score }})
@@ -176,22 +178,43 @@ abi:findProviderAgentsQuery a intentMapping:TemplatableSparqlQuery ;
         SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex ?mathIndex
         WHERE {
           ?agent a abi:AIAgent ;
-                 rdfs:label ?agentLabel ;
-                 abi:canUtilizeModel ?model .
-          ?model abi:provider ?provider ;
-                 abi:inputTokenCost ?inputCost ;
-                 abi:outputTokenCost ?outputCost ;
-                 abi:intelligenceIndex ?intelligenceIndex ;
-                 abi:codingIndex ?codingIndex ;
-                 abi:mathIndex ?mathIndex .
+                 rdfs:label ?agentLabel .
           
-          # Filter by provider
-          FILTER(CONTAINS(LCASE(?provider), LCASE("{{ provider_name }}")))
+          OPTIONAL { 
+            ?agent abi:canUtilizeModel ?model .
+            ?model abi:provider ?provider .
+            ?model abi:inputTokenCost ?inputCost .
+            ?model abi:outputTokenCost ?outputCost .
+            ?model abi:intelligenceIndex ?intelligenceIndex .
+            ?model abi:codingIndex ?codingIndex .
+            ?model abi:mathIndex ?mathIndex .
+          }
+          
+          # Filter by provider if specified
+          FILTER(!bound(?provider) || CONTAINS(LCASE(?provider), LCASE("{{ provider_name }}")))
         }
         ORDER BY ?inputCost DESC(?intelligenceIndex)
         LIMIT {{ max_results }}
     """ ;
     intentMapping:hasArgument abi:providerNameArg, abi:maxResultsArg .
+
+# Simple listing query to test basic functionality
+abi:listAllAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "list_all_agents"@en ;
+    intentMapping:intentDescription "Query the knowledge graph to get the current list of all AI agents with their exact names and properties from the triple store" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+        }
+        ORDER BY ?agentLabel
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:maxResultsArg .
 
 #################################################################
 #    Query Arguments
