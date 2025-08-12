@@ -58,9 +58,6 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id=0)
     
     tools: list = []
-    
-
-    
     agents: list = []
     intents: list = [
         Intent(
