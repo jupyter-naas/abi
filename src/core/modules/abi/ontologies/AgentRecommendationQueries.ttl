@@ -72,7 +72,7 @@ abi:findCodingAgentsQuery a intentMapping:TemplatableSparqlQuery ;
           # Future: add capability matching for specific languages
           {% endif %}
         }
-        ORDER BY DESC(?codingIndex) ?inputCost
+        ORDER BY ?inputCost DESC(?codingIndex)
         LIMIT {{ max_results }}
     """ ;
     intentMapping:hasArgument abi:minCodingScoreArg, abi:maxResultsArg .
@@ -109,7 +109,7 @@ abi:findMathAgentsQuery a intentMapping:TemplatableSparqlQuery ;
 
 abi:findBestValueAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_best_value_agents"@en ;
-    intentMapping:intentDescription "Find AI agents with the best value (intelligence per cost ratio)" ;
+    intentMapping:intentDescription "Find AI agents with the best value (intelligence per cost ratio with minimum quality threshold)" ;
     intentMapping:sparqlTemplate """
         PREFIX abi: <http://naas.ai/ontology/abi#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -118,15 +118,18 @@ abi:findBestValueAgentsQuery a intentMapping:TemplatableSparqlQuery ;
                ((?intelligenceIndex / (?inputCost + ?outputCost)) AS ?valueRatio)
         WHERE {
           ?agent a abi:AIAgent ;
-                 rdfs:label ?agentLabel ;
-                 abi:canUtilizeModel ?model .
-          ?model abi:provider ?provider ;
-                 abi:inputTokenCost ?inputCost ;
-                 abi:outputTokenCost ?outputCost ;
-                 abi:intelligenceIndex ?intelligenceIndex .
+                 rdfs:label ?agentLabel .
           
-          # Ensure we have valid cost data
-          FILTER(?inputCost > 0 && ?outputCost > 0 && ?intelligenceIndex > 0)
+          OPTIONAL { 
+            ?agent abi:canUtilizeModel ?model .
+            ?model abi:provider ?provider .
+            ?model abi:inputTokenCost ?inputCost .
+            ?model abi:outputTokenCost ?outputCost .
+            ?model abi:intelligenceIndex ?intelligenceIndex .
+          }
+          
+          # Ensure we have valid cost data and reasonable intelligence
+          FILTER(?inputCost > 0 && ?outputCost > 0 && ?intelligenceIndex >= 30)
           
           # Optional minimum intelligence threshold
           {% if min_intelligence_score %}
@@ -167,6 +170,40 @@ abi:findFastestAgentsQuery a intentMapping:TemplatableSparqlQuery ;
         LIMIT {{ max_results }}
     """ ;
     intentMapping:hasArgument abi:minIntelligenceArg, abi:maxResultsArg .
+
+abi:findCheapestAgentsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_cheapest_agents"@en ;
+    intentMapping:intentDescription "Find the most cost-effective AI agents ranked by lowest input cost" ;
+    intentMapping:sparqlTemplate """
+        PREFIX abi: <http://naas.ai/ontology/abi#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?agent ?agentLabel ?model ?provider ?inputCost ?outputCost ?intelligenceIndex ?codingIndex
+        WHERE {
+          ?agent a abi:AIAgent ;
+                 rdfs:label ?agentLabel .
+          
+          OPTIONAL { 
+            ?agent abi:canUtilizeModel ?model .
+            ?model abi:provider ?provider .
+            ?model abi:inputTokenCost ?inputCost .
+            ?model abi:outputTokenCost ?outputCost .
+            ?model abi:intelligenceIndex ?intelligenceIndex .
+            ?model abi:codingIndex ?codingIndex .
+          }
+          
+          # Filter for models with cost data
+          FILTER(?inputCost > 0)
+          
+          # Optional maximum cost threshold
+          {% if max_input_cost %}
+          FILTER(?inputCost <= {{ max_input_cost }})
+          {% endif %}
+        }
+        ORDER BY ?inputCost ?outputCost DESC(?intelligenceIndex)
+        LIMIT {{ max_results }}
+    """ ;
+    intentMapping:hasArgument abi:maxInputCostArg, abi:maxResultsArg .
 
 abi:findProviderAgentsQuery a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "find_agents_by_provider"@en ;
