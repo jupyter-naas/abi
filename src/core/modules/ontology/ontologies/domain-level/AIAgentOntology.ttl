@@ -719,6 +719,13 @@ abi:CodeGenerationProcess a owl:Class ;
     skos:definition "A process in which an AI system generates computer code, algorithms, and software solutions based on specifications."@en ;
     skos:example "Programming algorithms, software development, debugging code, system design implementation."@en .
 
+###  http://ontology.naas.ai/abi/BusinessProposalCreationProcess
+abi:BusinessProposalCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Business Proposal Creation Process"@en ;
+    skos:definition "A process in which an AI system creates comprehensive business proposals including requirements analysis, content structuring, persuasive writing, and professional formatting."@en ;
+    skos:example "Creating RFP responses, generating project proposals, developing service offerings, writing business plans."@en .
+
 
 
 
@@ -767,6 +774,18 @@ abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
     abi:isDocumentedBy abi:CodeGenerationSpecification ;
     rdfs:comment "Mistral agent's code generation process utilizing Mistral-Large-2411 model instance for mathematical reasoning and technical expertise."@en .
 
+### Business Proposal Creation Process Example
+abi:ClaudeBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Claude Business Proposal Creation Process"@en ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasParticipant abi:ClaudeAgent ;
+    abi:utilizesModel abi:claude_3_5_sonnet_20241022 ;
+    abi:hasTemporalRegion abi:BusinessProposalSession ;
+    abi:occursIn abi:AnthropicDataCenter ;
+    abi:hasQuality abi:BusinessProposalQuality ;
+    abi:isDocumentedBy abi:BusinessProposalSpecification ;
+    rdfs:comment "Claude agent's business proposal creation process utilizing Claude-3.5-Sonnet for professional content generation with constitutional AI safety."@en .
+
 
 
 #################################################################
@@ -785,6 +804,10 @@ abi:TruthSeekingSession a abi:InferenceSession ;
 abi:CodeGenerationSession a abi:InferenceSession ;
     rdfs:label "Code Generation Session"@en ;
     rdfs:comment "Temporal region during which code generation occurs."@en .
+
+abi:BusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Business Proposal Session"@en ;
+    rdfs:comment "Temporal region during which business proposal creation occurs."@en .
 
 
 
