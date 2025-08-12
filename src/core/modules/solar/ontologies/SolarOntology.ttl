@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Solar AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 5
+<http://naas.ai/ontology/abi/SolarOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Solar AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Solar AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:SolarAgent a abi:AIAgent ;
     rdfs:label "Solar AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Solar family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Solar models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: Solar Pro 2
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:SolarBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Solar Business Proposal Process"@en ;
+    abi:hasParticipant abi:SolarAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:SolarBusinessProposalSession ;
+    abi:hasQuality abi:SolarBusinessProposalQuality .
+
+abi:SolarCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Solar Creative Writing Process"@en ;
+    abi:hasParticipant abi:SolarAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:SolarCreativeWritingSession ;
+    abi:hasQuality abi:SolarCreativeWritingQuality .
+
+abi:SolarCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Solar Code Generation Process"@en ;
+    abi:hasParticipant abi:SolarAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:SolarCodeGenerationSession ;
+    abi:hasQuality abi:SolarCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:SolarBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Solar Business Proposal Session"@en .
+
+abi:SolarCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Solar Creative Writing Session"@en .
+
+abi:SolarCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Solar Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Solar Pro 2
+#################################################################
+
 abi:Solar_Pro_2 a abi:AIModelInstance ;
     rdfs:label "Solar Pro 2"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "solar-pro-2"@en ;
     abi:provider "Upstage"@en ;
-    abi:inputTokenCost 0.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Solar_Pro_2 abi:inputTokenCost 0.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,17 +90,32 @@ abi:Solar_Pro_2 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 33.2 ;
     abi:codingIndex 33.6 ;
-    abi:mathIndex 64.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 64.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2 .
-# Model Instance: Solar Pro 2 (Reasoning)
+abi:SolarBusinessProposalProcess abi:utilizesModel abi:Solar_Pro_2 .
+abi:SolarCreativeWritingProcess abi:utilizesModel abi:Solar_Pro_2 .
+abi:SolarCodeGenerationProcess abi:utilizesModel abi:Solar_Pro_2 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Solar Pro 2 (Reasoning)
+#################################################################
+
 abi:Solar_Pro_2_Reasoning a abi:AIModelInstance ;
     rdfs:label "Solar Pro 2 (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "solar-pro-2-reasoning"@en ;
     abi:provider "Upstage"@en ;
-    abi:inputTokenCost 0.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Solar_Pro_2_Reasoning abi:inputTokenCost 0.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -58,17 +129,32 @@ abi:Solar_Pro_2_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 43.3 ;
     abi:codingIndex 45.9 ;
-    abi:mathIndex 82.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 82.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2_Reasoning .
-# Model Instance: Solar Mini
+abi:SolarBusinessProposalProcess abi:utilizesModel abi:Solar_Pro_2_Reasoning .
+abi:SolarCreativeWritingProcess abi:utilizesModel abi:Solar_Pro_2_Reasoning .
+abi:SolarCodeGenerationProcess abi:utilizesModel abi:Solar_Pro_2_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Solar Mini
+#################################################################
+
 abi:Solar_Mini a abi:AIModelInstance ;
     rdfs:label "Solar Mini"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "solar-mini"@en ;
     abi:provider "Upstage"@en ;
-    abi:inputTokenCost 0.15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Solar_Mini abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -82,17 +168,32 @@ abi:Solar_Mini a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 21.9 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:SolarAgent abi:canUtilizeModel abi:Solar_Mini .
-# Model Instance: Solar Pro 2 (Preview)
+abi:SolarBusinessProposalProcess abi:utilizesModel abi:Solar_Mini .
+abi:SolarCreativeWritingProcess abi:utilizesModel abi:Solar_Mini .
+abi:SolarCodeGenerationProcess abi:utilizesModel abi:Solar_Mini .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Solar Pro 2 (Preview)
+#################################################################
+
 abi:Solar_Pro_2_Preview a abi:AIModelInstance ;
     rdfs:label "Solar Pro 2 (Preview)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "solar-pro-2-preview"@en ;
     abi:provider "Upstage"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Solar_Pro_2_Preview abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -106,17 +207,32 @@ abi:Solar_Pro_2_Preview a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 33.6 ;
     abi:codingIndex 32.9 ;
-    abi:mathIndex 58.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 58.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2_Preview .
-# Model Instance: Solar Pro 2 (Preview) (Reasoning)
+abi:SolarBusinessProposalProcess abi:utilizesModel abi:Solar_Pro_2_Preview .
+abi:SolarCreativeWritingProcess abi:utilizesModel abi:Solar_Pro_2_Preview .
+abi:SolarCodeGenerationProcess abi:utilizesModel abi:Solar_Pro_2_Preview .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Solar Pro 2 (Preview) (Reasoning)
+#################################################################
+
 abi:Solar_Pro_2_Preview_Reasoning a abi:AIModelInstance ;
     rdfs:label "Solar Pro 2 (Preview) (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "solar-pro-2-preview-reasoning"@en ;
     abi:provider "Upstage"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Solar_Pro_2_Preview_Reasoning abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -130,7 +246,13 @@ abi:Solar_Pro_2_Preview_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 40.1 ;
     abi:codingIndex 31.3 ;
-    abi:mathIndex 78.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 78.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:SolarAgent abi:canUtilizeModel abi:Solar_Pro_2_Preview_Reasoning .
+abi:SolarBusinessProposalProcess abi:utilizesModel abi:Solar_Pro_2_Preview_Reasoning .
+abi:SolarCreativeWritingProcess abi:utilizesModel abi:Solar_Pro_2_Preview_Reasoning .
+abi:SolarCodeGenerationProcess abi:utilizesModel abi:Solar_Pro_2_Preview_Reasoning .

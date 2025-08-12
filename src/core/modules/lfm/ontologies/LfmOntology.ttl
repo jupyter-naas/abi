@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Lfm AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 1
+<http://naas.ai/ontology/abi/LfmOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Lfm AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Lfm AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:LfmAgent a abi:AIAgent ;
     rdfs:label "Lfm AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Lfm family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Lfm models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: LFM 40B
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:LfmBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Lfm Business Proposal Process"@en ;
+    abi:hasParticipant abi:LfmAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:LfmBusinessProposalSession ;
+    abi:hasQuality abi:LfmBusinessProposalQuality .
+
+abi:LfmCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Lfm Creative Writing Process"@en ;
+    abi:hasParticipant abi:LfmAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:LfmCreativeWritingSession ;
+    abi:hasQuality abi:LfmCreativeWritingQuality .
+
+abi:LfmCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Lfm Code Generation Process"@en ;
+    abi:hasParticipant abi:LfmAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:LfmCodeGenerationSession ;
+    abi:hasQuality abi:LfmCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:LfmBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Lfm Business Proposal Session"@en .
+
+abi:LfmCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Lfm Creative Writing Session"@en .
+
+abi:LfmCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Lfm Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - LFM 40B
+#################################################################
+
 abi:LFM_40B a abi:AIModelInstance ;
     rdfs:label "LFM 40B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "lfm-40b"@en ;
     abi:provider "Liquid AI"@en ;
-    abi:inputTokenCost 0.15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:LFM_40B abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,7 +90,13 @@ abi:LFM_40B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 9.7 ;
     abi:codingIndex 8.3 ;
-    abi:mathIndex 25.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 25.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:LfmAgent abi:canUtilizeModel abi:LFM_40B .
+abi:LfmBusinessProposalProcess abi:utilizesModel abi:LFM_40B .
+abi:LfmCreativeWritingProcess abi:utilizesModel abi:LFM_40B .
+abi:LfmCodeGenerationProcess abi:utilizesModel abi:LFM_40B .
