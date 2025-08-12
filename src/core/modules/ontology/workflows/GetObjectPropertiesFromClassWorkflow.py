@@ -343,6 +343,6 @@ if __name__ == "__main__":
     workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration(
         triple_store=services.triple_store_service
     ))
-    class_uri = "https://www.commoncoreontologies.org/ont00000443"
+    class_uri = "http://purl.obolibrary.org/obo/BFO_0000015"
     result = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
     logger.info(result)
