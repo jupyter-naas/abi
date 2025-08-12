@@ -1,9 +1,12 @@
 # AI Model Capability Extraction Report
+*Detailed Analysis - Supporting [ABI Ontological Evolution](./README.md)*
+
+> **Note**: This report represents detailed capability analysis that informed our Initial Approach. Current capabilities are now dynamically generated via [AIAgentOntologyGenerationPipeline](./02_Current_State.md#aiagentontologygenerationpipeline) using real-time Artificial Analysis data.
 
 ## Summary
-- **Models Analyzed**: 7
-- **Total Capabilities Extracted**: 293
-- **Processes Derived**: 31
+- **Models Analyzed**: 7 (Static analysis - now superseded by dynamic pipeline)
+- **Total Capabilities Extracted**: 293 (Historical baseline)
+- **Processes Derived**: 31 (Foundation for current BFO process mapping)
 
 ## Capabilities by Model
 

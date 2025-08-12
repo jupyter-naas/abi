@@ -1,4 +1,7 @@
 # BFO Ontological AI Network Design
+*Core Architectural Framework - Supporting [ABI Ontological Evolution](./README.md)*
+
+> **Note**: This document represents the foundational architectural vision that led to ABI's current implementation. For complete strategic context, see the [Initial Approach](./01_Initial_Approach.md) → [Current State](./02_Current_State.md) → [Target State](./03_Target_State.md) evolution.
 
 ## **🎯 VISION: Process-Centric AI Routing**
 
