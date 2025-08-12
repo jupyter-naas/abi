@@ -332,11 +332,38 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         return None
     
     def _generate_agent_ontology_file(self, agent_module: str, models: List[Dict[str, Any]]) -> str:
-        """Generate complete ontology file for an AI agent and its models."""
+        """Generate BFO-structured ontology from Artificial Analysis JSON.
+        
+        JSON MAPPING TO BFO 7 BUCKETS:
+        
+        Bucket 1 (Material Entities): 
+        - JSON 'name' → abi:AIModelInstance 
+        - JSON 'model_creator.name' → abi:provider
+        
+        Bucket 2 (Qualities):
+        - JSON 'pricing.*' → abi:*TokenCost properties
+        - JSON 'median_*' → abi:outputSpeed, timeToFirstToken
+        - JSON 'evaluations.*' → abi:intelligenceIndex, codingIndex, mathIndex
+        
+        Bucket 3 (Realizable Entities):
+        - Imported from CapabilityOntology → capability:TextGenerationCapability, etc.
+        
+        Bucket 4 (Processes):
+        - Generated process instances → abi:BusinessProposalCreationProcess, etc.
+        
+        Bucket 5 (Temporal Regions):
+        - Generated session instances → abi:InferenceSession
+        
+        Bucket 6 (Spatial Regions):
+        - Inherited from AIAgentOntology → abi:DataCenterLocation
+        
+        Bucket 7 (Information Content):
+        - JSON 'sourceAPI' → abi:sourceAPI property
+        """
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
         agent_title = agent_module.replace('_', '').title()
         
-        # Generate ontology content with proper imports and BFO grounding
+        # Generate ontology content following BFO 7 buckets structure
         ontology_content = f"""@prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -345,28 +372,25 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 
-# {agent_title} AI Agent Ontology - CRITICAL: Imports BFO Process Network
 <http://naas.ai/ontology/abi/{agent_title}Ontology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
-    dc:title "{agent_title} AI Agent Dynamic Ontology"@en ;
-    dc:description "Generated ontology linking {agent_title} agents to BFO processes and capabilities"@en ;
-    dc:creator "ABI Ontology Generation Pipeline"@en ;
+    dc:title "{agent_title} AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for {agent_title} AI models and processes"@en ;
     dc:created "{timestamp}"@en .
-
-# {agent_title} AI Agent Ontology
-# Generated on: {timestamp}
-# Models: {len(models)}
-# IMPORTANT: This ontology imports AIAgentOntology.ttl for BFO process definitions
 
 """
         
-        # Add AI Agent definition with BFO process mappings
+        # BFO Bucket 1: Material Entity (WHAT/WHO) - The AI Agent
         agent_uri = f"abi:{agent_title}Agent"
-        ontology_content += f"""# AI Agent Definition with BFO Process Participation
+        ontology_content += f"""
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 {agent_uri} a abi:AIAgent ;
     rdfs:label "{agent_title} AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing {agent_title} family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing {agent_title} models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
 """
         
@@ -382,96 +406,92 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         return ontology_content
     
     def _generate_process_mappings(self, agent_title: str, agent_uri: str) -> str:
-        """Generate BFO process instances that connect agents to specific processes.
-        
-        This is CRITICAL for the PR #506 process-centric architecture.
-        Each agent needs specific process instances to be discoverable by process-based SPARQL queries.
-        """
+        """Generate BFO process instances following the 7 buckets framework."""
         process_content = f"""
 #################################################################
-#    BFO Process Instances - Agent Process Participation
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
-# Business Proposal Creation Process for {agent_title}
 abi:{agent_title}BusinessProposalProcess a abi:BusinessProposalCreationProcess ;
-    rdfs:label "{agent_title} Business Proposal Creation Process"@en ;
+    rdfs:label "{agent_title} Business Proposal Process"@en ;
     abi:hasParticipant {agent_uri} ;
     abi:realizesCapability capability:TextGenerationCapability ;
     abi:hasTemporalRegion abi:{agent_title}BusinessProposalSession ;
-    abi:hasQuality abi:{agent_title}BusinessProposalQuality ;
-    rdfs:comment "{agent_title} agent's business proposal creation process with professional content generation capabilities"@en .
+    abi:hasQuality abi:{agent_title}BusinessProposalQuality .
 
-# Creative Writing Process for {agent_title}  
 abi:{agent_title}CreativeWritingProcess a abi:CreativeWritingProcess ;
     rdfs:label "{agent_title} Creative Writing Process"@en ;
     abi:hasParticipant {agent_uri} ;
     abi:realizesCapability capability:TextGenerationCapability ;
     abi:hasTemporalRegion abi:{agent_title}CreativeWritingSession ;
-    abi:hasQuality abi:{agent_title}CreativeWritingQuality ;
-    rdfs:comment "{agent_title} agent's creative writing process for generating imaginative and engaging content"@en .
+    abi:hasQuality abi:{agent_title}CreativeWritingQuality .
 
-# Code Generation Process for {agent_title} (if applicable)
 abi:{agent_title}CodeGenerationProcess a abi:CodeGenerationProcess ;
     rdfs:label "{agent_title} Code Generation Process"@en ;
     abi:hasParticipant {agent_uri} ;
     abi:realizesCapability capability:CodeGenerationCapability ;
     abi:hasTemporalRegion abi:{agent_title}CodeGenerationSession ;
-    abi:hasQuality abi:{agent_title}CodeGenerationQuality ;
-    rdfs:comment "{agent_title} agent's code generation process for programming and algorithm development"@en .
+    abi:hasQuality abi:{agent_title}CodeGenerationQuality .
 
-# Supporting Temporal Regions
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
 abi:{agent_title}BusinessProposalSession a abi:InferenceSession ;
-    rdfs:label "{agent_title} Business Proposal Session"@en ;
-    rdfs:comment "Temporal region during which {agent_title} agent performs business proposal creation"@en .
+    rdfs:label "{agent_title} Business Proposal Session"@en .
 
 abi:{agent_title}CreativeWritingSession a abi:InferenceSession ;
-    rdfs:label "{agent_title} Creative Writing Session"@en ;
-    rdfs:comment "Temporal region during which {agent_title} agent performs creative writing"@en .
+    rdfs:label "{agent_title} Creative Writing Session"@en .
 
 abi:{agent_title}CodeGenerationSession a abi:InferenceSession ;
-    rdfs:label "{agent_title} Code Generation Session"@en ;
-    rdfs:comment "Temporal region during which {agent_title} agent performs code generation"@en .
+    rdfs:label "{agent_title} Code Generation Session"@en .
 
 """
         return process_content
     
     def _generate_model_instance(self, model: Dict[str, Any], agent_uri: str, index: int) -> str:
-        """Generate ontology content for a single model instance."""
-        # Extract model data
+        """Generate BFO-structured model instance from Artificial Analysis JSON."""
+        
+        # JSON → BFO Bucket 1: Material Entity extraction
         model_name = model.get('name', 'Unknown Model')
         model_slug = model.get('slug', 'unknown')
         model_id = self._generate_uri_safe_id(model_name)
-        
         creator = model.get('model_creator', {})
         creator_name = creator.get('name', 'Unknown')
         
-        # Pricing data (correct field names from Artificial Analysis API)
+        # JSON → BFO Bucket 2: Qualities extraction
         pricing = model.get('pricing', {})
         input_cost = pricing.get('price_1m_input_tokens') or 0
         output_cost = pricing.get('price_1m_output_tokens') or 0
         blended_cost = pricing.get('price_1m_blended_3_to_1') or 0
         
-        # Performance data (direct fields from API)
         output_speed = model.get('median_output_tokens_per_second') or 0
         ttft = model.get('median_time_to_first_token_seconds') or 0
         ttft_answer = model.get('median_time_to_first_answer_token') or 0
         
-        # Evaluation data (correct field names)
         evaluations = model.get('evaluations', {})
         intelligence_index = evaluations.get('artificial_analysis_intelligence_index') or 0
         coding_index = evaluations.get('artificial_analysis_coding_index') or 0
         math_index = evaluations.get('artificial_analysis_math_index') or 0
         
-        # Extract agent title for process mapping
         agent_title = agent_uri.replace('abi:', '').replace('Agent', '')
         
-        return f"""# Model Instance: {model_name}
+        return f"""
+#################################################################
+#    BFO Bucket 1: Material Entity - {model_name}
+#################################################################
+
 abi:{model_id} a abi:AIModelInstance ;
     rdfs:label "{model_name}"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "{model_slug}"@en ;
     abi:provider "{creator_name}"@en ;
-    abi:inputTokenCost {input_cost} ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:{model_id} abi:inputTokenCost {input_cost} ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost {output_cost} ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -485,13 +505,13 @@ abi:{model_id} a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex {intelligence_index} ;
     abi:codingIndex {coding_index} ;
-    abi:mathIndex {math_index} ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex {math_index} .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 {agent_uri} abi:canUtilizeModel abi:{model_id} .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:{agent_title}BusinessProposalProcess abi:utilizesModel abi:{model_id} .
 abi:{agent_title}CreativeWritingProcess abi:utilizesModel abi:{model_id} .
 abi:{agent_title}CodeGenerationProcess abi:utilizesModel abi:{model_id} ."""
