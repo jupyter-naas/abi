@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Mistral AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 28
+<http://naas.ai/ontology/abi/MistralOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Mistral AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Mistral AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:MistralAgent a abi:AIAgent ;
     rdfs:label "Mistral AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Mistral family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Mistral models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: Ministral 8B
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:MistralBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Mistral Business Proposal Process"@en ;
+    abi:hasParticipant abi:MistralAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:MistralBusinessProposalSession ;
+    abi:hasQuality abi:MistralBusinessProposalQuality .
+
+abi:MistralCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Mistral Creative Writing Process"@en ;
+    abi:hasParticipant abi:MistralAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:MistralCreativeWritingSession ;
+    abi:hasQuality abi:MistralCreativeWritingQuality .
+
+abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Mistral Code Generation Process"@en ;
+    abi:hasParticipant abi:MistralAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:MistralCodeGenerationSession ;
+    abi:hasQuality abi:MistralCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:MistralBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Mistral Business Proposal Session"@en .
+
+abi:MistralCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Mistral Creative Writing Session"@en .
+
+abi:MistralCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Mistral Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Ministral 8B
+#################################################################
+
 abi:Ministral_8B a abi:AIModelInstance ;
     rdfs:label "Ministral 8B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "ministral-8b"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Ministral_8B abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,17 +90,32 @@ abi:Ministral_8B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 10.4 ;
     abi:codingIndex 11.3 ;
-    abi:mathIndex 30.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 30.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Ministral_8B .
-# Model Instance: Ministral 3B
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Ministral_8B .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Ministral_8B .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Ministral_8B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Ministral 3B
+#################################################################
+
 abi:Ministral_3B a abi:AIModelInstance ;
     rdfs:label "Ministral 3B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "ministral-3b"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.04 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Ministral_3B abi:inputTokenCost 0.04 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.04 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -58,17 +129,32 @@ abi:Ministral_3B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 7.5 ;
     abi:codingIndex 8.1 ;
-    abi:mathIndex 26.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 26.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Ministral_3B .
-# Model Instance: Mistral Medium 3
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Ministral_3B .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Ministral_3B .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Ministral_3B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Medium 3
+#################################################################
+
 abi:Mistral_Medium_3 a abi:AIModelInstance ;
     rdfs:label "Mistral Medium 3"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-medium-3"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.4 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Medium_3 abi:inputTokenCost 0.4 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -82,17 +168,32 @@ abi:Mistral_Medium_3 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 38.6 ;
     abi:codingIndex 36.5 ;
-    abi:mathIndex 67.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 67.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Medium_3 .
-# Model Instance: Mistral Small 3.2
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Medium_3 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Medium_3 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Medium_3 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Small 3.2
+#################################################################
+
 abi:Mistral_Small_3_2 a abi:AIModelInstance ;
     rdfs:label "Mistral Small 3.2"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-small-3-2"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Small_3_2 abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -106,17 +207,32 @@ abi:Mistral_Small_3_2 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 31.8 ;
     abi:codingIndex 26.9 ;
-    abi:mathIndex 60.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 60.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Small_3_2 .
-# Model Instance: Magistral Small
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Small_3_2 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Small_3_2 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Small_3_2 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Magistral Small
+#################################################################
+
 abi:Magistral_Small a abi:AIModelInstance ;
     rdfs:label "Magistral Small"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "magistral-small"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Magistral_Small abi:inputTokenCost 0.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -130,17 +246,32 @@ abi:Magistral_Small a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 36 ;
     abi:codingIndex 37.8 ;
-    abi:mathIndex 83.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 83.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Magistral_Small .
-# Model Instance: Devstral Small (Jul '25)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Magistral_Small .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Magistral_Small .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Magistral_Small .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Devstral Small (Jul '25)
+#################################################################
+
 abi:Devstral_Small_Jul_25 a abi:AIModelInstance ;
     rdfs:label "Devstral Small (Jul '25)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "devstral-small"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Devstral_Small_Jul_25 abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -154,17 +285,32 @@ abi:Devstral_Small_Jul_25 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 20.5 ;
     abi:codingIndex 24.9 ;
-    abi:mathIndex 31.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 31.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Devstral_Small_Jul_25 .
-# Model Instance: Devstral Medium
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Devstral_Small_Jul_25 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Devstral_Small_Jul_25 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Devstral_Small_Jul_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Devstral Medium
+#################################################################
+
 abi:Devstral_Medium a abi:AIModelInstance ;
     rdfs:label "Devstral Medium"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "devstral-medium"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.4 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Devstral_Medium abi:inputTokenCost 0.4 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -178,17 +324,32 @@ abi:Devstral_Medium a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 31.3 ;
     abi:codingIndex 31.5 ;
-    abi:mathIndex 38.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 38.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Devstral_Medium .
-# Model Instance: Magistral Medium
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Devstral_Medium .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Devstral_Medium .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Devstral_Medium .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Magistral Medium
+#################################################################
+
 abi:Magistral_Medium a abi:AIModelInstance ;
     rdfs:label "Magistral Medium"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "magistral-medium"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Magistral_Medium abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 5 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -202,17 +363,32 @@ abi:Magistral_Medium a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 37.6 ;
     abi:codingIndex 41.2 ;
-    abi:mathIndex 80.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 80.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Magistral_Medium .
-# Model Instance: Codestral (Jan '25)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Magistral_Medium .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Magistral_Medium .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Magistral_Medium .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Codestral (Jan '25)
+#################################################################
+
 abi:Codestral_Jan_25 a abi:AIModelInstance ;
     rdfs:label "Codestral (Jan '25)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "codestral"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Codestral_Jan_25 abi:inputTokenCost 0.3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.9 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -226,17 +402,32 @@ abi:Codestral_Jan_25 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 15.9 ;
     abi:codingIndex 24.5 ;
-    abi:mathIndex 32.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 32.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Codestral_Jan_25 .
-# Model Instance: DeepHermes 3 - Mistral 24B Preview
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Codestral_Jan_25 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Codestral_Jan_25 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Codestral_Jan_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - DeepHermes 3 - Mistral 24B Preview
+#################################################################
+
 abi:DeepHermes_3_Mistral_24B_Preview a abi:AIModelInstance ;
     rdfs:label "DeepHermes 3 - Mistral 24B Preview"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "deephermes-3-mistral-24b-preview"@en ;
     abi:provider "Nous Research"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:DeepHermes_3_Mistral_24B_Preview abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -250,17 +441,32 @@ abi:DeepHermes_3_Mistral_24B_Preview a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 18.4 ;
     abi:codingIndex 21.1 ;
-    abi:mathIndex 32.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 32.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:DeepHermes_3_Mistral_24B_Preview .
-# Model Instance: Mistral Large 2 (Nov '24)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:DeepHermes_3_Mistral_24B_Preview .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:DeepHermes_3_Mistral_24B_Preview .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:DeepHermes_3_Mistral_24B_Preview .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Large 2 (Nov '24)
+#################################################################
+
 abi:Mistral_Large_2_Nov_24 a abi:AIModelInstance ;
     rdfs:label "Mistral Large 2 (Nov '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-large-2"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Large_2_Nov_24 abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -274,17 +480,32 @@ abi:Mistral_Large_2_Nov_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 27 ;
     abi:codingIndex 29.2 ;
-    abi:mathIndex 42.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 42.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Large_2_Nov_24 .
-# Model Instance: Mistral Large 2 (Jul '24)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Large_2_Nov_24 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Large_2_Nov_24 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Large_2_Nov_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Large 2 (Jul '24)
+#################################################################
+
 abi:Mistral_Large_2_Jul_24 a abi:AIModelInstance ;
     rdfs:label "Mistral Large 2 (Jul '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-large-2407"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Large_2_Jul_24 abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -298,17 +519,32 @@ abi:Mistral_Large_2_Jul_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 25.2 ;
     abi:codingIndex 26.9 ;
-    abi:mathIndex 40.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 40.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Large_2_Jul_24 .
-# Model Instance: Pixtral Large
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Large_2_Jul_24 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Large_2_Jul_24 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Large_2_Jul_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Pixtral Large
+#################################################################
+
 abi:Pixtral_Large a abi:AIModelInstance ;
     rdfs:label "Pixtral Large"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "pixtral-large-2411"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Pixtral_Large abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -322,17 +558,32 @@ abi:Pixtral_Large a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 26.1 ;
     abi:codingIndex 27.6 ;
-    abi:mathIndex 39.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 39.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Pixtral_Large .
-# Model Instance: Mistral Small 3
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Pixtral_Large .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Pixtral_Large .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Pixtral_Large .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Small 3
+#################################################################
+
 abi:Mistral_Small_3 a abi:AIModelInstance ;
     rdfs:label "Mistral Small 3"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-small-3"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Small_3 abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -346,17 +597,32 @@ abi:Mistral_Small_3 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 23.9 ;
     abi:codingIndex 24.4 ;
-    abi:mathIndex 39.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 39.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Small_3 .
-# Model Instance: Mistral Small (Sep '24)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Small_3 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Small_3 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Small_3 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Small (Sep '24)
+#################################################################
+
 abi:Mistral_Small_Sep_24 a abi:AIModelInstance ;
     rdfs:label "Mistral Small (Sep '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-small"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Small_Sep_24 abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -370,17 +636,32 @@ abi:Mistral_Small_Sep_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 15.7 ;
     abi:codingIndex 14.8 ;
-    abi:mathIndex 31.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 31.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Small_Sep_24 .
-# Model Instance: Mixtral 8x22B Instruct
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Small_Sep_24 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Small_Sep_24 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Small_Sep_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mixtral 8x22B Instruct
+#################################################################
+
 abi:Mixtral_8x22B_Instruct a abi:AIModelInstance ;
     rdfs:label "Mixtral 8x22B Instruct"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-8x22b-instruct"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mixtral_8x22B_Instruct abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -394,17 +675,32 @@ abi:Mixtral_8x22B_Instruct a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 14.4 ;
     abi:codingIndex 16.8 ;
-    abi:mathIndex 27.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 27.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mixtral_8x22B_Instruct .
-# Model Instance: Mistral Small (Feb '24)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mixtral_8x22B_Instruct .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mixtral_8x22B_Instruct .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mixtral_8x22B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Small (Feb '24)
+#################################################################
+
 abi:Mistral_Small_Feb_24 a abi:AIModelInstance ;
     rdfs:label "Mistral Small (Feb '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-small-2402"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Small_Feb_24 abi:inputTokenCost 1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -418,17 +714,32 @@ abi:Mistral_Small_Feb_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 11 ;
     abi:codingIndex 12.3 ;
-    abi:mathIndex 28.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 28.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Small_Feb_24 .
-# Model Instance: Mistral Large (Feb '24)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Small_Feb_24 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Small_Feb_24 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Small_Feb_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Large (Feb '24)
+#################################################################
+
 abi:Mistral_Large_Feb_24 a abi:AIModelInstance ;
     rdfs:label "Mistral Large (Feb '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-large"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 4 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Large_Feb_24 abi:inputTokenCost 4 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 12 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -442,17 +753,32 @@ abi:Mistral_Large_Feb_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 14.6 ;
     abi:codingIndex 19.3 ;
-    abi:mathIndex 26.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 26.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Large_Feb_24 .
-# Model Instance: Pixtral 12B (2409)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Large_Feb_24 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Large_Feb_24 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Large_Feb_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Pixtral 12B (2409)
+#################################################################
+
 abi:Pixtral_12B_2409 a abi:AIModelInstance ;
     rdfs:label "Pixtral 12B (2409)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "pixtral"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Pixtral_12B_2409 abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -466,17 +792,32 @@ abi:Pixtral_12B_2409 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 11.4 ;
     abi:codingIndex 12.5 ;
-    abi:mathIndex 22.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 22.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Pixtral_12B_2409 .
-# Model Instance: Mistral NeMo
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Pixtral_12B_2409 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Pixtral_12B_2409 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Pixtral_12B_2409 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral NeMo
+#################################################################
+
 abi:Mistral_NeMo a abi:AIModelInstance ;
     rdfs:label "Mistral NeMo"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-nemo"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_NeMo abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -490,17 +831,32 @@ abi:Mistral_NeMo a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 7.5 ;
     abi:codingIndex 8.1 ;
-    abi:mathIndex 19.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 19.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_NeMo .
-# Model Instance: Mixtral 8x7B Instruct
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_NeMo .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_NeMo .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_NeMo .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mixtral 8x7B Instruct
+#################################################################
+
 abi:Mixtral_8x7B_Instruct a abi:AIModelInstance ;
     rdfs:label "Mixtral 8x7B Instruct"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mixtral-8x7b-instruct"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mixtral_8x7B_Instruct abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.7 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -514,17 +870,32 @@ abi:Mixtral_8x7B_Instruct a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 4.8 ;
     abi:codingIndex 4.7 ;
-    abi:mathIndex 15 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 15 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mixtral_8x7B_Instruct .
-# Model Instance: Codestral-Mamba
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mixtral_8x7B_Instruct .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mixtral_8x7B_Instruct .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mixtral_8x7B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Codestral-Mamba
+#################################################################
+
 abi:Codestral_Mamba a abi:AIModelInstance ;
     rdfs:label "Codestral-Mamba"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "codestral-mamba"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Codestral_Mamba abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -538,17 +909,32 @@ abi:Codestral_Mamba a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 1.6 ;
     abi:codingIndex 12.1 ;
-    abi:mathIndex 12 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 12 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Codestral_Mamba .
-# Model Instance: Mistral 7B Instruct
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Codestral_Mamba .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Codestral_Mamba .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Codestral_Mamba .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral 7B Instruct
+#################################################################
+
 abi:Mistral_7B_Instruct a abi:AIModelInstance ;
     rdfs:label "Mistral 7B Instruct"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-7b-instruct"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.25 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_7B_Instruct abi:inputTokenCost 0.25 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -562,17 +948,32 @@ abi:Mistral_7B_Instruct a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 1 ;
     abi:codingIndex 3.5 ;
-    abi:mathIndex 6.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 6.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_7B_Instruct .
-# Model Instance: Codestral (May '24)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_7B_Instruct .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_7B_Instruct .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_7B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Codestral (May '24)
+#################################################################
+
 abi:Codestral_May_24 a abi:AIModelInstance ;
     rdfs:label "Codestral (May '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "codestral-2405"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Codestral_May_24 abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -586,17 +987,32 @@ abi:Codestral_May_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 8.4 ;
     abi:codingIndex 21.5 ;
-    abi:mathIndex 17.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 17.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Codestral_May_24 .
-# Model Instance: Mistral Saba
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Codestral_May_24 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Codestral_May_24 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Codestral_May_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Saba
+#################################################################
+
 abi:Mistral_Saba a abi:AIModelInstance ;
     rdfs:label "Mistral Saba"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-saba"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Saba abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -610,17 +1026,32 @@ abi:Mistral_Saba a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 22.6 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 40.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 40.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Saba .
-# Model Instance: Mistral Small 3.1
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Saba .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Saba .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Saba .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Small 3.1
+#################################################################
+
 abi:Mistral_Small_3_1 a abi:AIModelInstance ;
     rdfs:label "Mistral Small 3.1"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-small-3-1"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Small_3_1 abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -634,17 +1065,32 @@ abi:Mistral_Small_3_1 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 26.4 ;
     abi:codingIndex 23.8 ;
-    abi:mathIndex 40 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 40 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Small_3_1 .
-# Model Instance: Devstral Small (May '25)
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Small_3_1 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Small_3_1 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Small_3_1 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Devstral Small (May '25)
+#################################################################
+
 abi:Devstral_Small_May_25 a abi:AIModelInstance ;
     rdfs:label "Devstral Small (May '25)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "devstral-small-2505"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Devstral_Small_May_25 abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -658,17 +1104,32 @@ abi:Devstral_Small_May_25 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 22.7 ;
     abi:codingIndex 25.2 ;
-    abi:mathIndex 37.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 37.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Devstral_Small_May_25 .
-# Model Instance: Mistral Medium
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Devstral_Small_May_25 .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Devstral_Small_May_25 .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Devstral_Small_May_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Mistral Medium
+#################################################################
+
 abi:Mistral_Medium a abi:AIModelInstance ;
     rdfs:label "Mistral Medium"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "mistral-medium"@en ;
     abi:provider "Mistral"@en ;
-    abi:inputTokenCost 2.75 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Mistral_Medium abi:inputTokenCost 2.75 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 8.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -682,7 +1143,13 @@ abi:Mistral_Medium a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 10.9 ;
     abi:codingIndex 10.9 ;
-    abi:mathIndex 22.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 22.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:MistralAgent abi:canUtilizeModel abi:Mistral_Medium .
+abi:MistralBusinessProposalProcess abi:utilizesModel abi:Mistral_Medium .
+abi:MistralCreativeWritingProcess abi:utilizesModel abi:Mistral_Medium .
+abi:MistralCodeGenerationProcess abi:utilizesModel abi:Mistral_Medium .

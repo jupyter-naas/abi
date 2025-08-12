@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Yi AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 1
+<http://naas.ai/ontology/abi/YiOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Yi AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Yi AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:YiAgent a abi:AIAgent ;
     rdfs:label "Yi AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Yi family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Yi models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: Yi-Large
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:YiBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Yi Business Proposal Process"@en ;
+    abi:hasParticipant abi:YiAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:YiBusinessProposalSession ;
+    abi:hasQuality abi:YiBusinessProposalQuality .
+
+abi:YiCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Yi Creative Writing Process"@en ;
+    abi:hasParticipant abi:YiAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:YiCreativeWritingSession ;
+    abi:hasQuality abi:YiCreativeWritingQuality .
+
+abi:YiCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Yi Code Generation Process"@en ;
+    abi:hasParticipant abi:YiAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:YiCodeGenerationSession ;
+    abi:hasQuality abi:YiCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:YiBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Yi Business Proposal Session"@en .
+
+abi:YiCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Yi Creative Writing Session"@en .
+
+abi:YiCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Yi Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Yi-Large
+#################################################################
+
 abi:Yi_Large a abi:AIModelInstance ;
     rdfs:label "Yi-Large"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "yi-large"@en ;
     abi:provider "01.AI"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Yi_Large abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,7 +90,13 @@ abi:Yi_Large a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 16.2 ;
     abi:codingIndex 14.8 ;
-    abi:mathIndex 31.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 31.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:YiAgent abi:canUtilizeModel abi:Yi_Large .
+abi:YiBusinessProposalProcess abi:utilizesModel abi:Yi_Large .
+abi:YiCreativeWritingProcess abi:utilizesModel abi:Yi_Large .
+abi:YiCodeGenerationProcess abi:utilizesModel abi:Yi_Large .

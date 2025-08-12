@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Dbrx AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 1
+<http://naas.ai/ontology/abi/DbrxOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Dbrx AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Dbrx AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:DbrxAgent a abi:AIAgent ;
     rdfs:label "Dbrx AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Dbrx family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Dbrx models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: DBRX Instruct
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:DbrxBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Dbrx Business Proposal Process"@en ;
+    abi:hasParticipant abi:DbrxAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:DbrxBusinessProposalSession ;
+    abi:hasQuality abi:DbrxBusinessProposalQuality .
+
+abi:DbrxCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Dbrx Creative Writing Process"@en ;
+    abi:hasParticipant abi:DbrxAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:DbrxCreativeWritingSession ;
+    abi:hasQuality abi:DbrxCreativeWritingQuality .
+
+abi:DbrxCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Dbrx Code Generation Process"@en ;
+    abi:hasParticipant abi:DbrxAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:DbrxCodeGenerationSession ;
+    abi:hasQuality abi:DbrxCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:DbrxBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Dbrx Business Proposal Session"@en .
+
+abi:DbrxCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Dbrx Creative Writing Session"@en .
+
+abi:DbrxCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Dbrx Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - DBRX Instruct
+#################################################################
+
 abi:DBRX_Instruct a abi:AIModelInstance ;
     rdfs:label "DBRX Instruct"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "dbrx"@en ;
     abi:provider "Databricks"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:DBRX_Instruct abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,7 +90,13 @@ abi:DBRX_Instruct a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 7.7 ;
     abi:codingIndex 10.6 ;
-    abi:mathIndex 15.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 15.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:DbrxAgent abi:canUtilizeModel abi:DBRX_Instruct .
+abi:DbrxBusinessProposalProcess abi:utilizesModel abi:DBRX_Instruct .
+abi:DbrxCreativeWritingProcess abi:utilizesModel abi:DBRX_Instruct .
+abi:DbrxCodeGenerationProcess abi:utilizesModel abi:DBRX_Instruct .

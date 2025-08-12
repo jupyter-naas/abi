@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Cohere AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 5
+<http://naas.ai/ontology/abi/CohereOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Cohere AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Cohere AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:CohereAgent a abi:AIAgent ;
     rdfs:label "Cohere AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Cohere family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Cohere models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: Command A
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:CohereBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Cohere Business Proposal Process"@en ;
+    abi:hasParticipant abi:CohereAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:CohereBusinessProposalSession ;
+    abi:hasQuality abi:CohereBusinessProposalQuality .
+
+abi:CohereCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Cohere Creative Writing Process"@en ;
+    abi:hasParticipant abi:CohereAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:CohereCreativeWritingSession ;
+    abi:hasQuality abi:CohereCreativeWritingQuality .
+
+abi:CohereCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Cohere Code Generation Process"@en ;
+    abi:hasParticipant abi:CohereAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:CohereCodeGenerationSession ;
+    abi:hasQuality abi:CohereCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:CohereBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Cohere Business Proposal Session"@en .
+
+abi:CohereCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Cohere Creative Writing Session"@en .
+
+abi:CohereCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Cohere Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Command A
+#################################################################
+
 abi:Command_A a abi:AIModelInstance ;
     rdfs:label "Command A"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "command-a"@en ;
     abi:provider "Cohere"@en ;
-    abi:inputTokenCost 2.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Command_A abi:inputTokenCost 2.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 10 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,17 +90,32 @@ abi:Command_A a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 31.6 ;
     abi:codingIndex 28.4 ;
-    abi:mathIndex 45.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 45.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:CohereAgent abi:canUtilizeModel abi:Command_A .
-# Model Instance: Command-R+ (Aug '24)
+abi:CohereBusinessProposalProcess abi:utilizesModel abi:Command_A .
+abi:CohereCreativeWritingProcess abi:utilizesModel abi:Command_A .
+abi:CohereCodeGenerationProcess abi:utilizesModel abi:Command_A .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Command-R+ (Aug '24)
+#################################################################
+
 abi:Command_R+_Aug_24 a abi:AIModelInstance ;
     rdfs:label "Command-R+ (Aug '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "command-r-plus"@en ;
     abi:provider "Cohere"@en ;
-    abi:inputTokenCost 2.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Command_R+_Aug_24 abi:inputTokenCost 2.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 10 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -58,17 +129,32 @@ abi:Command_R+_Aug_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 9.5 ;
     abi:codingIndex 11.6 ;
-    abi:mathIndex 20.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 20.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:CohereAgent abi:canUtilizeModel abi:Command_R+_Aug_24 .
-# Model Instance: Command-R+ (Apr '24)
+abi:CohereBusinessProposalProcess abi:utilizesModel abi:Command_R+_Aug_24 .
+abi:CohereCreativeWritingProcess abi:utilizesModel abi:Command_R+_Aug_24 .
+abi:CohereCodeGenerationProcess abi:utilizesModel abi:Command_R+_Aug_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Command-R+ (Apr '24)
+#################################################################
+
 abi:Command_R+_Apr_24 a abi:AIModelInstance ;
     rdfs:label "Command-R+ (Apr '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "command-r-plus-04-2024"@en ;
     abi:provider "Cohere"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Command_R+_Apr_24 abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -82,17 +168,32 @@ abi:Command_R+_Apr_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 7.8 ;
     abi:codingIndex 12 ;
-    abi:mathIndex 14.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 14.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:CohereAgent abi:canUtilizeModel abi:Command_R+_Apr_24 .
-# Model Instance: Command-R (Aug '24)
+abi:CohereBusinessProposalProcess abi:utilizesModel abi:Command_R+_Apr_24 .
+abi:CohereCreativeWritingProcess abi:utilizesModel abi:Command_R+_Apr_24 .
+abi:CohereCodeGenerationProcess abi:utilizesModel abi:Command_R+_Apr_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Command-R (Aug '24)
+#################################################################
+
 abi:Command_R_Aug_24 a abi:AIModelInstance ;
     rdfs:label "Command-R (Aug '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "command-r"@en ;
     abi:provider "Cohere"@en ;
-    abi:inputTokenCost 0.15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Command_R_Aug_24 abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -106,17 +207,32 @@ abi:Command_R_Aug_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 2.5 ;
     abi:codingIndex 6.6 ;
-    abi:mathIndex 7.6 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 7.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:CohereAgent abi:canUtilizeModel abi:Command_R_Aug_24 .
-# Model Instance: Command-R (Mar '24)
+abi:CohereBusinessProposalProcess abi:utilizesModel abi:Command_R_Aug_24 .
+abi:CohereCreativeWritingProcess abi:utilizesModel abi:Command_R_Aug_24 .
+abi:CohereCodeGenerationProcess abi:utilizesModel abi:Command_R_Aug_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Command-R (Mar '24)
+#################################################################
+
 abi:Command_R_Mar_24 a abi:AIModelInstance ;
     rdfs:label "Command-R (Mar '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "command-r-03-2024"@en ;
     abi:provider "Cohere"@en ;
-    abi:inputTokenCost 0.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Command_R_Mar_24 abi:inputTokenCost 0.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -130,7 +246,13 @@ abi:Command_R_Mar_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 2.4 ;
     abi:codingIndex 5.5 ;
-    abi:mathIndex 8.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 8.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:CohereAgent abi:canUtilizeModel abi:Command_R_Mar_24 .
+abi:CohereBusinessProposalProcess abi:utilizesModel abi:Command_R_Mar_24 .
+abi:CohereCreativeWritingProcess abi:utilizesModel abi:Command_R_Mar_24 .
+abi:CohereCodeGenerationProcess abi:utilizesModel abi:Command_R_Mar_24 .

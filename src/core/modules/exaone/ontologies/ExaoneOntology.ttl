@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Exaone AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 2
+<http://naas.ai/ontology/abi/ExaoneOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Exaone AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Exaone AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:ExaoneAgent a abi:AIAgent ;
     rdfs:label "Exaone AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Exaone family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Exaone models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: EXAONE 4.0 32B
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:ExaoneBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Exaone Business Proposal Process"@en ;
+    abi:hasParticipant abi:ExaoneAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:ExaoneBusinessProposalSession ;
+    abi:hasQuality abi:ExaoneBusinessProposalQuality .
+
+abi:ExaoneCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Exaone Creative Writing Process"@en ;
+    abi:hasParticipant abi:ExaoneAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:ExaoneCreativeWritingSession ;
+    abi:hasQuality abi:ExaoneCreativeWritingQuality .
+
+abi:ExaoneCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Exaone Code Generation Process"@en ;
+    abi:hasParticipant abi:ExaoneAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:ExaoneCodeGenerationSession ;
+    abi:hasQuality abi:ExaoneCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:ExaoneBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Exaone Business Proposal Session"@en .
+
+abi:ExaoneCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Exaone Creative Writing Session"@en .
+
+abi:ExaoneCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Exaone Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - EXAONE 4.0 32B
+#################################################################
+
 abi:EXAONE_4_0_32B a abi:AIModelInstance ;
     rdfs:label "EXAONE 4.0 32B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "exaone-4-0-32b"@en ;
     abi:provider "LG AI Research"@en ;
-    abi:inputTokenCost 0.6 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:EXAONE_4_0_32B abi:inputTokenCost 0.6 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,17 +90,32 @@ abi:EXAONE_4_0_32B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 40.1 ;
     abi:codingIndex 36.2 ;
-    abi:mathIndex 70.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 70.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:ExaoneAgent abi:canUtilizeModel abi:EXAONE_4_0_32B .
-# Model Instance: EXAONE 4.0 32B (Reasoning)
+abi:ExaoneBusinessProposalProcess abi:utilizesModel abi:EXAONE_4_0_32B .
+abi:ExaoneCreativeWritingProcess abi:utilizesModel abi:EXAONE_4_0_32B .
+abi:ExaoneCodeGenerationProcess abi:utilizesModel abi:EXAONE_4_0_32B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - EXAONE 4.0 32B (Reasoning)
+#################################################################
+
 abi:EXAONE_4_0_32B_Reasoning a abi:AIModelInstance ;
     rdfs:label "EXAONE 4.0 32B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "exaone-4-0-32b-reasoning"@en ;
     abi:provider "LG AI Research"@en ;
-    abi:inputTokenCost 0.6 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:EXAONE_4_0_32B_Reasoning abi:inputTokenCost 0.6 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -58,7 +129,13 @@ abi:EXAONE_4_0_32B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 50.7 ;
     abi:codingIndex 54.5 ;
-    abi:mathIndex 91 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 91 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:ExaoneAgent abi:canUtilizeModel abi:EXAONE_4_0_32B_Reasoning .
+abi:ExaoneBusinessProposalProcess abi:utilizesModel abi:EXAONE_4_0_32B_Reasoning .
+abi:ExaoneCreativeWritingProcess abi:utilizesModel abi:EXAONE_4_0_32B_Reasoning .
+abi:ExaoneCodeGenerationProcess abi:utilizesModel abi:EXAONE_4_0_32B_Reasoning .

@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Reka AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 5
+<http://naas.ai/ontology/abi/RekaOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Reka AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Reka AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:RekaAgent a abi:AIAgent ;
     rdfs:label "Reka AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Reka family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Reka models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: Reka Flash 3
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:RekaBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Reka Business Proposal Process"@en ;
+    abi:hasParticipant abi:RekaAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:RekaBusinessProposalSession ;
+    abi:hasQuality abi:RekaBusinessProposalQuality .
+
+abi:RekaCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Reka Creative Writing Process"@en ;
+    abi:hasParticipant abi:RekaAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:RekaCreativeWritingSession ;
+    abi:hasQuality abi:RekaCreativeWritingQuality .
+
+abi:RekaCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Reka Code Generation Process"@en ;
+    abi:hasParticipant abi:RekaAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:RekaCodeGenerationSession ;
+    abi:hasQuality abi:RekaCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:RekaBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Reka Business Proposal Session"@en .
+
+abi:RekaCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Reka Creative Writing Session"@en .
+
+abi:RekaCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Reka Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Reka Flash 3
+#################################################################
+
 abi:Reka_Flash_3 a abi:AIModelInstance ;
     rdfs:label "Reka Flash 3"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "reka-flash-3"@en ;
     abi:provider "Reka AI"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Reka_Flash_3 abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,17 +90,32 @@ abi:Reka_Flash_3 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 36.3 ;
     abi:codingIndex 35.1 ;
-    abi:mathIndex 70.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 70.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:RekaAgent abi:canUtilizeModel abi:Reka_Flash_3 .
-# Model Instance: Reka Flash (Sep '24)
+abi:RekaBusinessProposalProcess abi:utilizesModel abi:Reka_Flash_3 .
+abi:RekaCreativeWritingProcess abi:utilizesModel abi:Reka_Flash_3 .
+abi:RekaCodeGenerationProcess abi:utilizesModel abi:Reka_Flash_3 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Reka Flash (Sep '24)
+#################################################################
+
 abi:Reka_Flash_Sep_24 a abi:AIModelInstance ;
     rdfs:label "Reka Flash (Sep '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "reka-flash"@en ;
     abi:provider "Reka AI"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Reka_Flash_Sep_24 abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -58,17 +129,32 @@ abi:Reka_Flash_Sep_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 22.1 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:RekaAgent abi:canUtilizeModel abi:Reka_Flash_Sep_24 .
-# Model Instance: Reka Core
+abi:RekaBusinessProposalProcess abi:utilizesModel abi:Reka_Flash_Sep_24 .
+abi:RekaCreativeWritingProcess abi:utilizesModel abi:Reka_Flash_Sep_24 .
+abi:RekaCodeGenerationProcess abi:utilizesModel abi:Reka_Flash_Sep_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Reka Core
+#################################################################
+
 abi:Reka_Core a abi:AIModelInstance ;
     rdfs:label "Reka Core"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "reka-core"@en ;
     abi:provider "Reka AI"@en ;
-    abi:inputTokenCost 2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Reka_Core abi:inputTokenCost 2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -82,17 +168,32 @@ abi:Reka_Core a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 22.4 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:RekaAgent abi:canUtilizeModel abi:Reka_Core .
-# Model Instance: Reka Flash (Feb '24)
+abi:RekaBusinessProposalProcess abi:utilizesModel abi:Reka_Core .
+abi:RekaCreativeWritingProcess abi:utilizesModel abi:Reka_Core .
+abi:RekaCodeGenerationProcess abi:utilizesModel abi:Reka_Core .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Reka Flash (Feb '24)
+#################################################################
+
 abi:Reka_Flash_Feb_24 a abi:AIModelInstance ;
     rdfs:label "Reka Flash (Feb '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "reka-flash-02-2024"@en ;
     abi:provider "Reka AI"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Reka_Flash_Feb_24 abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -106,17 +207,32 @@ abi:Reka_Flash_Feb_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 21.7 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:RekaAgent abi:canUtilizeModel abi:Reka_Flash_Feb_24 .
-# Model Instance: Reka Edge
+abi:RekaBusinessProposalProcess abi:utilizesModel abi:Reka_Flash_Feb_24 .
+abi:RekaCreativeWritingProcess abi:utilizesModel abi:Reka_Flash_Feb_24 .
+abi:RekaCodeGenerationProcess abi:utilizesModel abi:Reka_Flash_Feb_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Reka Edge
+#################################################################
+
 abi:Reka_Edge a abi:AIModelInstance ;
     rdfs:label "Reka Edge"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "reka-edge"@en ;
     abi:provider "Reka AI"@en ;
-    abi:inputTokenCost 0.1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Reka_Edge abi:inputTokenCost 0.1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -130,7 +246,13 @@ abi:Reka_Edge a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 21.5 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:RekaAgent abi:canUtilizeModel abi:Reka_Edge .
+abi:RekaBusinessProposalProcess abi:utilizesModel abi:Reka_Edge .
+abi:RekaCreativeWritingProcess abi:utilizesModel abi:Reka_Edge .
+abi:RekaCodeGenerationProcess abi:utilizesModel abi:Reka_Edge .
