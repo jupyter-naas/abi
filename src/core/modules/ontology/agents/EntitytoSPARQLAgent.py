@@ -12,7 +12,154 @@ from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from langgraph.types import Command
 from pydantic import SecretStr
 from src import secret
+from datetime import datetime
 
+NAME = "Entity_to_SPARQL"
+DESCRIPTION = "A agent that extracts entities from text and transform them into SPARQL INSERT DATA statements."
+MODEL = "o3-mini"
+TEMPERATURE = None
+SYSTEM_PROMPT = """
+# ROLE: 
+You are an expert Ontology Engineer specialized in extracting entities from text and transforming them into SPARQL INSERT DATA statements using the BFO (Basic Formal Ontology) framework.
+
+# OBJECTIVE: 
+Transform extracted entities and their relationships into well-structured, semantically accurate SPARQL INSERT DATA statements with clear explanations for non-technical users.
+
+# CONTEXT:
+You will receive prompts from different agents containing:
+- Initial text for entity extraction
+- List of entities mapped to BFO Ontology classes
+- List of object properties defining relationships between entity classes
+
+# TASK:
+Present a comprehensive analysis that includes:
+1. Original text acknowledgment
+2. Detailed entity extraction explanation with BFO reasoning
+3. Relationship analysis and justification
+4. Complete SPARQL INSERT DATA statement with annotations
+
+# OPERATING GUIDELINES:
+
+## 1. ORIGINAL TEXT PRESENTATION
+Start your response by acknowledging the source material:
+```
+## Entity Extraction Analysis
+
+I am analyzing the following original text to extract ontological entities:
+
+```text
+{original_text}
+```
+```
+
+## 2. ENTITY EXTRACTION EXPLANATION
+Provide a detailed explanation of extracted entities:
+```
+## Extracted Entities
+
+Based on the BFO ontological framework, I have identified the following entities:
+
+### Continuants (Entities that persist through time)
+- **[Entity Name]** → `[BFO Class Label]` (`[BFO URI]`)
+  - **Reasoning**: [Clear explanation of why this entity belongs to this BFO class]
+  - **Ontological Significance**: [What this classification means in the context]
+
+### Occurrents (Processes, events, or temporal regions)
+- **[Entity Name]** → `[BFO Class Label]` (`[BFO URI]`)
+  - **Reasoning**: [Clear explanation of why this entity belongs to this BFO class]
+  - **Temporal Characteristics**: [How this entity unfolds in time]
+
+### Relationships Identified
+- **[Relationship Type]**: [Entity A] → [Entity B]
+  - **Justification**: [Why this relationship exists based on the text and BFO principles]
+```
+
+## 3. SPARQL STATEMENT PRESENTATION
+Present the SPARQL statement with comprehensive annotations:
+```
+## SPARQL INSERT DATA Statement
+
+The following SPARQL statement creates the ontological representation of the extracted entities:
+
+```sparql
+# Namespace Prefixes
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bfo: <http://purl.obolibrary.org/obo/>
+PREFIX abi: <http://ontology.naas.ai/abi/>
+
+INSERT DATA {
+    # [Entity Type]: [Entity Description]
+    abi:[entity-uuid] rdf:type bfo:[BFO_CLASS] ;
+                      rdfs:label "[Entity Label]" ;
+                      rdfs:comment "[Detailed description of the entity]" .
+    
+    # Relationships between entities
+    abi:[entity1-uuid] bfo:[relationship-property] abi:[entity2-uuid] .
+}
+```
+
+### Statement Explanation:
+- **Entity Types**: Each entity is classified using appropriate BFO classes
+- **Labels**: Human-readable names for each entity
+- **Comments**: Detailed descriptions providing context and meaning
+- **Relationships**: Semantic connections between entities based on BFO object properties
+```
+
+## 4. FORMATTING REQUIREMENTS
+- Use clear markdown headers (##, ###) for section organization
+- Employ consistent bullet points and numbering
+- Include code blocks with appropriate syntax highlighting
+- Use **bold** for entity names and important concepts
+- Use `backticks` for technical terms and URIs
+- Provide line breaks between sections for readability
+
+## 5. LANGUAGE AND TONE
+- Use clear, accessible language suitable for non-ontologists
+- Explain technical concepts in plain English
+- Provide context for BFO classifications
+- Be precise but not overly technical
+- Include reasoning for each classification decision
+
+# CONSTRAINTS:
+- NEVER create new entities not present in the provided list
+- ALWAYS use the exact URIs provided for each entity
+- MUST provide clear reasoning for each BFO classification
+- MUST include comprehensive comments in the SPARQL statement
+- MUST explain relationships between entities when they exist
+- MUST maintain consistency between explanations and SPARQL code
+- MUST use proper SPARQL syntax with all required prefixes
+- MUST ensure all statements are semantically valid according to BFO principles
+"""
+
+def create_agent(
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
+) -> Agent:
+    # Set model
+    model = ChatOpenAI(
+        model=MODEL, 
+        temperature=TEMPERATURE, 
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+    )
+
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+
+    # Use provided shared state or create new one
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState()
+
+    return EntitytoSPARQLAgent(
+        name=NAME,
+        description=DESCRIPTION,
+        chat_model=model,
+        tools=[],
+        agents=[],
+        memory=MemorySaver(),
+        state=agent_shared_state,
+        configuration=agent_configuration,
+    )
 
 class EntityExtractionState(MessagesState):
     """State class for entity extraction conversations.
@@ -27,14 +174,44 @@ class EntityExtractionState(MessagesState):
     entities: list[dict[str, Any]]
     object_properties: list[dict[str, Any]]
 
+class EntitytoSPARQLAgent(Agent):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        chat_model: BaseChatModel,
+        tools: list[Union[Tool, "Agent"]] = [],
+        agents: list["Agent"] = [],
+        memory: BaseCheckpointSaver = MemorySaver(),
+        state: AgentSharedState = AgentSharedState(),
+        configuration: AgentConfiguration = AgentConfiguration(),
+        event_queue: Queue | None = None,
+    ):
+        super().__init__(
+            name, 
+            description, 
+            chat_model, 
+            tools, 
+            agents, 
+            memory, 
+            state, 
+            configuration, 
+            event_queue
+          )
+        
+        self.datastore_path = f"datastore/ontology/entities_to_sparql/{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+    def entity_extract(
+        self, 
+        state: EntityExtractionState
+    ) -> Command:
+        """
+        This node is used to extract the entities from the last message.
+        """
 
-NAME = "Entity_to_SPARQL"
-DESCRIPTION = "A agent that extracts entities from the last message and transform them into SPARQL INSERT DATA statements."
-MODEL = "o3-mini"
-TEMPERATURE = None
-SYSTEM_PROMPT = """
+        system_prompt = """
 # ROLE: 
-# You are a BFO Ontology Expert in entity extraction. 
+You are a BFO Ontology Expert in entity extraction. 
 
 # OBJECTIVE: 
 Extract entities from the message and return a structured JSON representing the BFO representation of the entities.
@@ -51,26 +228,6 @@ The current date is {{current_date}}.
 
 # OPERATING GUIDELINES:
 1. Extract all entities from the message using BFO ontology. 
-These entities will be used as labels of your new instances.
-
-Remember to identify entities not explicitly defined like:
-- 'i' representing a person
--'today', 'yesterday', 'tomorrow', 'this week', 'this month', 'this year' representing a temporal region.
-
-If you identify a process (occurrent), create a label representing the event and identify the continuants and occurrents that are related to the process.
-Remember a process:
-- realizes a realizable entity
-- has participant that is either:
-  - a specifically dependent continuant
-  - a generically dependent continuant 
-  - an independent continuant that is not a spatial region
-- concretizes a generically dependent continuant
-- occurs in:
-  - a site
-  - a material entity
-- occupies temporal region
-- occupies spatiotemporal region
-
 Use the following BFO definition of class 'entity' and its 2 main subclasses:
 ```turtle	
 <http://purl.obolibrary.org/obo/BFO_0000001> rdf:type owl:Class ;
@@ -533,82 +690,55 @@ If you find you missed entities, you can add it again in the message.
 ]
 ```
 
-Constraints:
+# CONSTRAINTS:
 - You must return a JSON without any other text or comment.
 - You must be exhaustive in your search for entities.
 - You must use BFO Ontology as your knowledge base for the mapping.
 - You must try to find the most specific class for each entity.
 - You must transform all dates to temporal instants type date or datetime.
+
+- Remember to identify entities not explicitly defined like:
+  - 'i' representing a person
+  - 'today', 'yesterday', 'tomorrow', 'this week', 'this month', 'this year' representing a temporal region.
+
+- Process Entities (BFO_0000015) MUST be carefully identified and analyzed:
+  1. A process MUST be recognized as an occurrent with ALL of these critical relationships:
+  - MUST realize one or more realizable entities (e.g. functions, roles, dispositions)
+  - MUST have at least one participant that is either:
+    - a specifically dependent continuant (e.g. qualities, realizable entities)
+    - a generically dependent continuant (e.g. information entities)
+    - an independent continuant that is not a spatial region (e.g. material entities)
+  - MUST concretize at least one generically dependent continuant
+  - MUST occur in either:
+    - a specific site (e.g. anatomical location)
+    - a material entity (e.g. physical object)
+  - MUST occupy a defined temporal region
+  - MUST occupy a defined spatiotemporal region
+
+  2. For each process identified:
+  - You MUST create a descriptive label that captures the complete event
+  - You MUST identify and link ALL continuants and occurrents involved
+  - You MUST establish and document ALL relationships between entities
+  - You MUST validate that all required relationships are present
+  - You MUST ensure temporal and spatial aspects are properly captured
 """
+        from datetime import datetime
 
-
-def create_agent(
-    agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
-    # Use provided configuration or create default one
-    from datetime import datetime
-
-    system_prompt = SYSTEM_PROMPT.replace("{{current_date}}", datetime.now().strftime("%Y-%m-%d HH:MM:SS"))
-
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=system_prompt)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    tools: list = []
-
-    return EntitytoSPARQLAgent(
-        name=NAME,
-        description=DESCRIPTION,
-        chat_model=model,
-        tools=tools,
-        agents=[],
-        memory=MemorySaver(),
-        state=agent_shared_state,
-        configuration=agent_configuration,
-    )
-
-class EntitytoSPARQLAgent(Agent):
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        chat_model: BaseChatModel,
-        tools: list[Union[Tool, "Agent"]] = [],
-        agents: list["Agent"] = [],
-        memory: BaseCheckpointSaver = MemorySaver(),
-        state: AgentSharedState = AgentSharedState(),
-        configuration: AgentConfiguration = AgentConfiguration(),
-        event_queue: Queue | None = None,
-    ):
-        super().__init__(name, description, chat_model, tools, agents, memory, state, configuration, event_queue)
-        
-    def call_model(
-        self, 
-        state: EntityExtractionState
-    ):
-        messages = state["messages"]
-        if self._system_prompt:
-            messages = [
-                SystemMessage(content=self._system_prompt),
-            ] + messages
-
-        response: BaseMessage = self._chat_model_with_tools.invoke(messages)
-
+        system_prompt = system_prompt.replace("{{current_date}}", datetime.now().strftime("%Y-%m-%d"))
+        messages = [SystemMessage(content=system_prompt)] + [message for message in state["messages"] if not isinstance(message, SystemMessage)]
+        response: BaseMessage = self._chat_model.invoke(messages)
         return Command(update={"messages": [response]})
     
-    def prep_data(self, state: EntityExtractionState) -> Command:
+    def prep_data(
+      self, 
+      state: EntityExtractionState
+    ) -> Command:
+        """
+        This node is used to prepare the data for the SPARQL generation.
+        It extracts the entities from the last message and transform them into SPARQL INSERT DATA statements.
+        """
         from abi.utils.JSON import extract_json_from_completion
-        from src.utils.Storage import save_json
+        from src.utils.Storage import save_json, save_text
         import uuid
         from src import services
         from src.core.modules.ontology.workflows.GetObjectPropertiesFromClassWorkflow import (
@@ -616,6 +746,7 @@ class EntitytoSPARQLAgent(Agent):
             GetObjectPropertiesFromClassWorkflowConfiguration,
             GetObjectPropertiesFromClassWorkflowParameters
         )
+
         workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration(
             triple_store=services.triple_store_service
         ))
@@ -627,6 +758,7 @@ class EntitytoSPARQLAgent(Agent):
         object_properties = {}
         entities = extract_json_from_completion(last_message_content)
         for e in entities:
+            # Create a unique URI for the entity
             e["uri"] = "http://ontology.naas.ai/abi/" + str(uuid.uuid4())
             class_uri = e.get("class_uri")
             
@@ -636,22 +768,24 @@ class EntitytoSPARQLAgent(Agent):
                     oprop = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
                     if len(oprop.get("object_properties", [])) > 0:
                         object_properties[class_uri] = oprop
-        
-        data = {
-            "message": state["messages"][0].content,
-            "entities": entities,
-            "object_properties": list(object_properties.values())
-        }
-        save_json(data, "datastore/ontology/extract_entities", "message.json")
+
+        # Save data to storage
+        save_text(state["messages"][0].content, self.datastore_path, "init_text.txt", copy=False)
+        save_json(entities, self.datastore_path, "entities.json", copy=False)
+        save_json(object_properties, self.datastore_path, "object_properties.json", copy=False)
         
         # Store entities and object_properties in state instead of AI message
         return Command(update={
             "entities": entities,
             "object_properties": list(object_properties.values())
         })
-    
-    def create_sparql(self, state: EntityExtractionState) -> Command:
-        """Generate SPARQL INSERT DATA statements from extracted entities and their relationships.
+
+    def create_sparql(
+        self, 
+        state: EntityExtractionState
+    ) -> Command:
+        """
+        This node is used to generate SPARQL INSERT DATA statements from extracted entities and their relationships.
         
         Uses a language model to transform the extracted entities and object properties
         into proper SPARQL INSERT DATA statements that can be executed against a triple store.
@@ -662,9 +796,11 @@ class EntitytoSPARQLAgent(Agent):
         Returns:
             Command: Command to end the workflow with the generated SPARQL statement
         """
+        from src.utils.Storage import save_text
+
         # Create system message for SPARQL generation
         system_prompt = """# ROLE:
-You are a SPARQL expert specializing in generating INSERT DATA statements from entity extraction results.
+You are a Ontology Engineer expert specializing in generating SPARQL INSERT DATA statements from entity extraction results.
 
 # OBJECTIVE:
 Transform the provided entities and their object properties into a valid SPARQL INSERT DATA statement that creates RDF triples representing the entities and their relationships.
@@ -691,6 +827,7 @@ Generate a SPARQL INSERT DATA statement that:
 5. Analyze the original message and entity relationships to determine which object properties to apply
 6. Only create relationships that are logically supported by the entities and the original message
 7. Use proper RDF syntax with angle brackets for URIs and quotes for literals
+8. When referencing ABI entities, use the prefix notation 'abi:' followed by the UUID, not 'abi/'
 
 # EXAMPLE FORMAT:
 ```sparql
@@ -734,21 +871,43 @@ INSERT DATA {
 
         # Generate SPARQL using the model
         response: BaseMessage = self._chat_model.invoke(messages)
+
+        # Save SPARQL statement to storage
+        save_text(response.content, self.datastore_path, "insert_data.sparql", copy=False)
         
         # Return the generated SPARQL statement
         return Command(goto="__end__", update={"messages": [AIMessage(content=response.content)]})
-         
+    
+    def call_model(
+        self, 
+        state: EntityExtractionState
+    ) -> Command:
+        """
+        This node is used to call the model to extract the entities from the last message.
+        """
+        messages = state["messages"]
+        if self._system_prompt:
+            messages = [
+                SystemMessage(content=self._system_prompt),
+            ] + messages
+
+        response: BaseMessage = self._chat_model_with_tools.invoke(messages)
+
+        return Command(update={"messages": [response]})
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(EntityExtractionState)
-
-        graph.add_node(self.call_model)
-        graph.add_edge(START, "call_model")
         
+        graph.add_node(self.entity_extract)
+        graph.add_edge(START, "entity_extract")
+
         graph.add_node(self.prep_data)
-        graph.add_edge("call_model", "prep_data")
+        graph.add_edge("entity_extract", "prep_data")
 
         graph.add_node(self.create_sparql)
         graph.add_edge("prep_data", "create_sparql")
+
+        graph.add_node(self.call_model)
+        graph.add_edge("create_sparql", "call_model")
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
