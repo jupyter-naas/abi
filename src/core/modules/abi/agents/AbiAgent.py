@@ -162,6 +162,10 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **Route to ontology_agent**: Organizational structure, internal policies, employee data
 - **Patterns**: Specific company/internal information requests
 
+### Knowledge Graph Exploration (Weight: 0.68)
+- **Route to knowledge_graph_explorer**: Visual data exploration, SPARQL querying, ontology browsing
+- **Patterns**: "show me the data", "knowledge graph", "semantic database", "sparql query", "explore ontology", "browse entities", "voir ton kg"
+
 ### Platform Operations (Weight: 0.45)
 - **Route to naas_agent**: Platform management, configuration, technical operations
 
@@ -244,6 +248,66 @@ def create_agent(
 
     tools: list = []
 
+    # Add Knowledge Graph Explorer tool
+    def open_knowledge_graph_explorer() -> str:
+        """Open the ABI Knowledge Graph Explorer interface for semantic data exploration."""
+        return """Here's our knowledge graph explorer:
+
+[Open Explorer](http://localhost:7878/explorer/)
+
+You can browse the data and run queries there."""
+
+    from langchain_core.tools import StructuredTool
+    
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    knowledge_graph_tool = StructuredTool(
+        name="open_knowledge_graph_explorer",
+        description="Open the ABI Knowledge Graph Explorer for semantic data exploration, SPARQL queries, and ontology browsing",
+        func=open_knowledge_graph_explorer,
+        args_schema=EmptySchema
+    )
+    
+    tools.append(knowledge_graph_tool)
+
+    # Get agent recommendation tools from intentmapping
+    from src.core.modules.intentmapping import get_tools
+    agent_recommendation_tools = [
+        "find_business_proposal_agents",
+        "find_coding_agents", 
+        "find_math_agents",
+        "find_best_value_agents",
+        "find_fastest_agents",
+        "find_cheapest_agents",
+        "find_agents_by_provider",
+        "find_agents_by_process_type",
+        "list_all_agents",
+        "find_best_for_meeting",
+        "find_best_for_contract_analysis",
+        "find_best_for_customer_service",
+        "find_best_for_marketing",
+        "find_best_for_technical_writing",
+        "find_best_for_emails",
+        "find_best_for_presentations",
+        "find_best_for_reports",
+        "find_best_for_brainstorming",
+        "find_best_for_proposal_writing",
+        "find_best_for_code_review",
+        "find_best_for_debugging",
+        "find_best_for_architecture",
+        "find_best_for_testing",
+        "find_best_for_refactoring",
+        "find_best_for_database",
+        "find_best_for_api_design",
+        "find_best_for_performance",
+        "find_best_for_security",
+        "find_best_for_documentation"
+    ]
+    tools.extend(get_tools(agent_recommendation_tools))
+
     agents: list = []
     for module in modules:
         if module.module_path != "src.core.modules.abi":
@@ -295,6 +359,21 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="call_model"),
+        
+        # Knowledge Graph Explorer intents
+        Intent(intent_type=IntentType.TOOL, intent_value="show knowledge graph explorer", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="semantic knowledge graph", intent_target="open_knowledge_graph_explorer"), 
+        Intent(intent_type=IntentType.TOOL, intent_value="show the data", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="make a sparql query", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="explore the database", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="knowledge graph", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="sparql", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="explore ontology", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="browse entities", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="voir ton kg", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
+        Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
     ] + (
         # xAI Grok Agent intents (only add if agent is available)
         [

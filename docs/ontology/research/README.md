@@ -128,17 +128,10 @@ The target state positions ABI to become:
 
 ## **📖 SUPPORTING DOCUMENTATION**
 
-### **Technical Architecture**
-- **[BFO AI Network Design](./BFO_AI_Network_Design.md)**: Original architectural vision
-- **[Capability Analysis Report](./Capability_Analysis_Report.md)**: Detailed capability extraction from 7 AI models
+### **Core Architecture Framework**
+- **[BFO AI Network Design](./BFO_AI_Network_Design.md)**: Foundational architectural vision using Basic Formal Ontology principles
 
-### **Research Foundation**
-- **[Capability Driven Process Summary](./Capability_Driven_Process_Summary.md)**: Process-capability relationship analysis
-- **[BFO README Template](./BFO_README_Template.md)**: Standardized BFO documentation format
-
-### **Implementation Guides**
-- **[Process Verification Summary](./Process_Verification_Summary.md)**: Validation methodologies
-- **[Granular Process Verification Guide](./Granular_Process_Verification_Guide.md)**: Detailed verification procedures
+*Note: The research folder has been streamlined to focus on the core architectural documents. Previous detailed analysis documents (capability extraction, process verification, granular mapping) have been consolidated into the main evolution documents above, where their key insights and methodologies are preserved within the strategic narrative.*
 
 ## **🔧 FOR DEVELOPERS**
 
