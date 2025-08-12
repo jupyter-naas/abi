@@ -257,6 +257,7 @@ Use the following BFO definition of class 'entity' and its 2 main subclasses:
 ```
 
 2. Map entities to the BFO Ontology subclasses of 'Continuants' and 'Occurrents' classes.
+Try to be as precise as possible finding the right BFO class for the entity.
 If you find you missed entities, you can add it again in the message.
 "Continuants":
 ```turtle
@@ -838,8 +839,7 @@ PREFIX abi: <http://ontology.naas.ai/abi/>
 
 INSERT DATA {
     abi:entity1 rdf:type bfo:BFO_0000030 ;
-                rdfs:label "Entity Label" ;
-                rdfs:comment "Entity comment" .
+                rdfs:label "Entity Label" .
     
     abi:entity2 rdf:type bfo:BFO_0000015 ;
                 rdfs:label "Process Label" .
@@ -854,6 +854,7 @@ INSERT DATA {
 - Use proper SPARQL syntax
 - Ensure all URIs are properly formatted
 - Only create relationships that are semantically meaningful based on the entities and original message
+- You MUST not return "comment" in the SPARQL statement.
 """
 
         # Prepare the input data for the model
