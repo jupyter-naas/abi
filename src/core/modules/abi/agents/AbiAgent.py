@@ -11,6 +11,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
+from src import modules
+
+# We need to preload modules to force the lazyloading of agents (to avoid race condition)
+for module in modules:
+    pass
+
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 DESCRIPTION = "Coordinates and manages specialized agents."
@@ -239,13 +245,16 @@ def create_agent(
     tools: list = []
 
     agents: list = []
-    from src.__modules__ import get_modules
-    modules = get_modules()
+    # from src.__modules__ import get_modules
+    # modules = get_modules()
     for module in modules:
         if module.module_path != "src.core.modules.abi":
+            logger.debug(f"Inspecting module: {module.module_path}")
+            logger.debug(f"Agents: {module.agents}")
             for agent in module.agents:
                 if agent is not None:
                     agents.append(agent)
+                    logger.debug(f"Agent loaded: {agent.name}")
                 else:
                     logger.warning(f"Skipping None agent in module: {module.module_path}")
 
@@ -262,6 +271,8 @@ def create_agent(
     qwen_agent = next((agent for agent in agents if agent.name == "Qwen"), None)
     deepseek_agent = next((agent for agent in agents if agent.name == "DeepSeek"), None)
     gemma_agent = next((agent for agent in agents if agent.name == "Gemma"), None)
+
+
 
     intents: list = [
         Intent(
@@ -436,6 +447,8 @@ def create_agent(
             Intent(intent_type=IntentType.AGENT, intent_value="private chat", intent_target=gemma_agent.name),
         ] if gemma_agent else []
     )
+    
+    logger.debug(f"Intents: {intents}")
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
