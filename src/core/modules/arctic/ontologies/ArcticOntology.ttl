@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Arctic AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 1
+<http://naas.ai/ontology/abi/ArcticOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Arctic AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Arctic AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:ArcticAgent a abi:AIAgent ;
     rdfs:label "Arctic AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Arctic family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Arctic models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: Arctic Instruct
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:ArcticBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Arctic Business Proposal Process"@en ;
+    abi:hasParticipant abi:ArcticAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:ArcticBusinessProposalSession ;
+    abi:hasQuality abi:ArcticBusinessProposalQuality .
+
+abi:ArcticCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Arctic Creative Writing Process"@en ;
+    abi:hasParticipant abi:ArcticAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:ArcticCreativeWritingSession ;
+    abi:hasQuality abi:ArcticCreativeWritingQuality .
+
+abi:ArcticCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Arctic Code Generation Process"@en ;
+    abi:hasParticipant abi:ArcticAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:ArcticCodeGenerationSession ;
+    abi:hasQuality abi:ArcticCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:ArcticBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Arctic Business Proposal Session"@en .
+
+abi:ArcticCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Arctic Creative Writing Session"@en .
+
+abi:ArcticCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Arctic Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Arctic Instruct
+#################################################################
+
 abi:Arctic_Instruct a abi:AIModelInstance ;
     rdfs:label "Arctic Instruct"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "arctic-instruct"@en ;
     abi:provider "Snowflake"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Arctic_Instruct abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,7 +90,13 @@ abi:Arctic_Instruct a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 10 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:ArcticAgent abi:canUtilizeModel abi:Arctic_Instruct .
+abi:ArcticBusinessProposalProcess abi:utilizesModel abi:Arctic_Instruct .
+abi:ArcticCreativeWritingProcess abi:utilizesModel abi:Arctic_Instruct .
+abi:ArcticCodeGenerationProcess abi:utilizesModel abi:Arctic_Instruct .

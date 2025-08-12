@@ -1,26 +1,82 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
 
-# Qwen AI Agent Ontology
-# Generated on: 20250811T214515
-# Models: 34
+<http://naas.ai/ontology/abi/QwenOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Qwen AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Qwen AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# AI Agent Definition
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:QwenAgent a abi:AIAgent ;
     rdfs:label "Qwen AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Qwen family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Qwen models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
-# Model Instance: QwQ 32B
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:QwenBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Qwen Business Proposal Process"@en ;
+    abi:hasParticipant abi:QwenAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:QwenBusinessProposalSession ;
+    abi:hasQuality abi:QwenBusinessProposalQuality .
+
+abi:QwenCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Qwen Creative Writing Process"@en ;
+    abi:hasParticipant abi:QwenAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:QwenCreativeWritingSession ;
+    abi:hasQuality abi:QwenCreativeWritingQuality .
+
+abi:QwenCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Qwen Code Generation Process"@en ;
+    abi:hasParticipant abi:QwenAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:QwenCodeGenerationSession ;
+    abi:hasQuality abi:QwenCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:QwenBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Qwen Business Proposal Session"@en .
+
+abi:QwenCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Qwen Creative Writing Session"@en .
+
+abi:QwenCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Qwen Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - QwQ 32B
+#################################################################
+
 abi:QwQ_32B a abi:AIModelInstance ;
     rdfs:label "QwQ 32B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwq-32b"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.35 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:QwQ_32B abi:inputTokenCost 0.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.825 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -34,17 +90,32 @@ abi:QwQ_32B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 47.7 ;
     abi:codingIndex 49.4 ;
-    abi:mathIndex 86.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 86.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:QwQ_32B .
-# Model Instance: Qwen3 235B A22B 2507 (Non-reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:QwQ_32B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:QwQ_32B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:QwQ_32B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 235B A22B 2507 (Non-reasoning)
+#################################################################
+
 abi:Qwen3_235B_A22B_2507_Non_reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 235B A22B 2507 (Non-reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct-2507"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_235B_A22B_2507_Non_reasoning abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -58,17 +129,32 @@ abi:Qwen3_235B_A22B_2507_Non_reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 50.7 ;
     abi:codingIndex 44.2 ;
-    abi:mathIndex 84.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 84.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B_2507_Non_reasoning .
-# Model Instance: Qwen3 235B A22B 2507 (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_235B_A22B_2507_Non_reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_235B_A22B_2507_Non_reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_235B_A22B_2507_Non_reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 235B A22B 2507 (Reasoning)
+#################################################################
+
 abi:Qwen3_235B_A22B_2507_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 235B A22B 2507 (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct-2507-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_235B_A22B_2507_Reasoning abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 8.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -82,17 +168,32 @@ abi:Qwen3_235B_A22B_2507_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 63.6 ;
     abi:codingIndex 60.6 ;
-    abi:mathIndex 96.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 96.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B_2507_Reasoning .
-# Model Instance: Qwen3 30B A3B 2507 (Non-reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_235B_A22B_2507_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_235B_A22B_2507_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_235B_A22B_2507_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 30B A3B 2507 (Non-reasoning)
+#################################################################
+
 abi:Qwen3_30B_A3B_2507_Non_reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 30B A3B 2507 (Non-reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-2507"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_30B_A3B_2507_Non_reasoning abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -106,17 +207,32 @@ abi:Qwen3_30B_A3B_2507_Non_reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 46.1 ;
     abi:codingIndex 41 ;
-    abi:mathIndex 85.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 85.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B_2507_Non_reasoning .
-# Model Instance: Qwen3 Coder 480B A35B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_30B_A3B_2507_Non_reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_30B_A3B_2507_Non_reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_30B_A3B_2507_Non_reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 Coder 480B A35B
+#################################################################
+
 abi:Qwen3_Coder_480B_A35B a abi:AIModelInstance ;
     rdfs:label "Qwen3 Coder 480B A35B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-coder-480b-a35b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 1.5 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_Coder_480B_A35B abi:inputTokenCost 1.5 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 7.5 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -130,17 +246,32 @@ abi:Qwen3_Coder_480B_A35B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 45.2 ;
     abi:codingIndex 47.2 ;
-    abi:mathIndex 70.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 70.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_Coder_480B_A35B .
-# Model Instance: Qwen3 30B A3B 2507 (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_Coder_480B_A35B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_Coder_480B_A35B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_Coder_480B_A35B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 30B A3B 2507 (Reasoning)
+#################################################################
+
 abi:Qwen3_30B_A3B_2507_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 30B A3B 2507 (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-2507-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_30B_A3B_2507_Reasoning abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -154,17 +285,32 @@ abi:Qwen3_30B_A3B_2507_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 53.2 ;
     abi:codingIndex 52 ;
-    abi:mathIndex 94.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 94.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B_2507_Reasoning .
-# Model Instance: Qwen3 Coder 30B A3B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_30B_A3B_2507_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_30B_A3B_2507_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_30B_A3B_2507_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 Coder 30B A3B
+#################################################################
+
 abi:Qwen3_Coder_30B_A3B a abi:AIModelInstance ;
     rdfs:label "Qwen3 Coder 30B A3B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-coder-30b-a3b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.45 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_Coder_30B_A3B abi:inputTokenCost 0.45 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -178,17 +324,32 @@ abi:Qwen3_Coder_30B_A3B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 33.4 ;
     abi:codingIndex 34 ;
-    abi:mathIndex 59.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 59.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_Coder_30B_A3B .
-# Model Instance: Qwen Chat 14B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_Coder_30B_A3B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_Coder_30B_A3B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_Coder_30B_A3B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen Chat 14B
+#################################################################
+
 abi:Qwen_Chat_14B a abi:AIModelInstance ;
     rdfs:label "Qwen Chat 14B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-chat-14b"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen_Chat_14B abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -202,17 +363,32 @@ abi:Qwen_Chat_14B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 1.7 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen_Chat_14B .
-# Model Instance: Qwen2.5 Max
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen_Chat_14B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen_Chat_14B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen_Chat_14B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2.5 Max
+#################################################################
+
 abi:Qwen2_5_Max a abi:AIModelInstance ;
     rdfs:label "Qwen2.5 Max"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-2-5-max"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 1.6 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_5_Max abi:inputTokenCost 1.6 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 6.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -226,17 +402,32 @@ abi:Qwen2_5_Max a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 34.3 ;
     abi:codingIndex 34.8 ;
-    abi:mathIndex 53.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 53.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Max .
-# Model Instance: Qwen2.5 Instruct 72B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_5_Max .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_5_Max .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_5_Max .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2.5 Instruct 72B
+#################################################################
+
 abi:Qwen2_5_Instruct_72B a abi:AIModelInstance ;
     rdfs:label "Qwen2.5 Instruct 72B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2-5-72b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_5_Instruct_72B abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -250,17 +441,32 @@ abi:Qwen2_5_Instruct_72B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 29.2 ;
     abi:codingIndex 27.2 ;
-    abi:mathIndex 50.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 50.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Instruct_72B .
-# Model Instance: Qwen2.5 Coder Instruct 32B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_5_Instruct_72B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_5_Instruct_72B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_5_Instruct_72B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2.5 Coder Instruct 32B
+#################################################################
+
 abi:Qwen2_5_Coder_Instruct_32B a abi:AIModelInstance ;
     rdfs:label "Qwen2.5 Coder Instruct 32B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2-5-coder-32b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.135 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_5_Coder_Instruct_32B abi:inputTokenCost 0.135 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.18 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -274,17 +480,32 @@ abi:Qwen2_5_Coder_Instruct_32B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 25 ;
     abi:codingIndex 28.3 ;
-    abi:mathIndex 44.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 44.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Coder_Instruct_32B .
-# Model Instance: Qwen2.5 Turbo
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_5_Coder_Instruct_32B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_5_Coder_Instruct_32B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_5_Coder_Instruct_32B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2.5 Turbo
+#################################################################
+
 abi:Qwen2_5_Turbo a abi:AIModelInstance ;
     rdfs:label "Qwen2.5 Turbo"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-turbo"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.05 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_5_Turbo abi:inputTokenCost 0.05 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.2 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -298,17 +519,32 @@ abi:Qwen2_5_Turbo a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 22.1 ;
     abi:codingIndex 15.8 ;
-    abi:mathIndex 46.3 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 46.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Turbo .
-# Model Instance: Qwen2 Instruct 72B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_5_Turbo .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_5_Turbo .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_5_Turbo .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2 Instruct 72B
+#################################################################
+
 abi:Qwen2_Instruct_72B a abi:AIModelInstance ;
     rdfs:label "Qwen2 Instruct 72B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2-72b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_Instruct_72B abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -322,17 +558,32 @@ abi:Qwen2_Instruct_72B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 21.1 ;
     abi:codingIndex 19.4 ;
-    abi:mathIndex 42.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 42.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_Instruct_72B .
-# Model Instance: Qwen3 235B A22B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_Instruct_72B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_Instruct_72B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_Instruct_72B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 235B A22B (Reasoning)
+#################################################################
+
 abi:Qwen3_235B_A22B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 235B A22B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_235B_A22B_Reasoning abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 8.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -346,17 +597,32 @@ abi:Qwen3_235B_A22B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 48.4 ;
     abi:codingIndex 51.1 ;
-    abi:mathIndex 88.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 88.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B_Reasoning .
-# Model Instance: Qwen3 30B A3B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_235B_A22B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_235B_A22B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_235B_A22B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 30B A3B (Reasoning)
+#################################################################
+
 abi:Qwen3_30B_A3B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 30B A3B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_30B_A3B_Reasoning abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -370,17 +636,32 @@ abi:Qwen3_30B_A3B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 42.3 ;
     abi:codingIndex 39.5 ;
-    abi:mathIndex 85.6 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 85.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B_Reasoning .
-# Model Instance: Qwen3 235B A22B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_30B_A3B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_30B_A3B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_30B_A3B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 235B A22B
+#################################################################
+
 abi:Qwen3_235B_A22B a abi:AIModelInstance ;
     rdfs:label "Qwen3 235B A22B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-235b-a22b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_235B_A22B abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -394,17 +675,32 @@ abi:Qwen3_235B_A22B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 33.3 ;
     abi:codingIndex 32.1 ;
-    abi:mathIndex 61.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 61.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_235B_A22B .
-# Model Instance: Qwen3 32B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_235B_A22B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_235B_A22B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_235B_A22B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 32B (Reasoning)
+#################################################################
+
 abi:Qwen3_32B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 32B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-32b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_32B_Reasoning abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 8.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -418,17 +714,32 @@ abi:Qwen3_32B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 44.3 ;
     abi:codingIndex 45 ;
-    abi:mathIndex 88.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 88.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_32B_Reasoning .
-# Model Instance: Qwen3 4B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_32B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_32B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_32B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 4B
+#################################################################
+
 abi:Qwen3_4B a abi:AIModelInstance ;
     rdfs:label "Qwen3 4B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-4b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.11 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_4B abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.42 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -442,17 +753,32 @@ abi:Qwen3_4B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 23.8 ;
     abi:codingIndex 20 ;
-    abi:mathIndex 52.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 52.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_4B .
-# Model Instance: Qwen3 8B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_4B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_4B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_4B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 8B (Reasoning)
+#################################################################
+
 abi:Qwen3_8B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 8B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-8b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.18 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_8B_Reasoning abi:inputTokenCost 0.18 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -466,17 +792,32 @@ abi:Qwen3_8B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 40.8 ;
     abi:codingIndex 31.6 ;
-    abi:mathIndex 82.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 82.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_8B_Reasoning .
-# Model Instance: Qwen3 8B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_8B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_8B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_8B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 8B
+#################################################################
+
 abi:Qwen3_8B a abi:AIModelInstance ;
     rdfs:label "Qwen3 8B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-8b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.18 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_8B abi:inputTokenCost 0.18 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.7 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -490,17 +831,32 @@ abi:Qwen3_8B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 25.4 ;
     abi:codingIndex 18.5 ;
-    abi:mathIndex 53.6 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 53.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_8B .
-# Model Instance: Qwen3 1.7B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_8B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_8B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_8B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 1.7B
+#################################################################
+
 abi:Qwen3_1_7B a abi:AIModelInstance ;
     rdfs:label "Qwen3 1.7B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-1.7b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.11 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_1_7B abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.42 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -514,17 +870,32 @@ abi:Qwen3_1_7B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 13.2 ;
     abi:codingIndex 9.8 ;
-    abi:mathIndex 40.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 40.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_1_7B .
-# Model Instance: Qwen3 0.6B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_1_7B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_1_7B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_1_7B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 0.6B
+#################################################################
+
 abi:Qwen3_0_6B a abi:AIModelInstance ;
     rdfs:label "Qwen3 0.6B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-0.6b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.11 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_0_6B abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.42 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -538,17 +909,32 @@ abi:Qwen3_0_6B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 4.5 ;
     abi:codingIndex 5.7 ;
-    abi:mathIndex 26.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 26.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_0_6B .
-# Model Instance: Qwen3 14B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_0_6B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_0_6B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_0_6B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 14B
+#################################################################
+
 abi:Qwen3_14B a abi:AIModelInstance ;
     rdfs:label "Qwen3 14B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-14b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.35 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_14B abi:inputTokenCost 0.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -562,17 +948,32 @@ abi:Qwen3_14B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 29.8 ;
     abi:codingIndex 27.3 ;
-    abi:mathIndex 57.6 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 57.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_14B .
-# Model Instance: Qwen3 4B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_14B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_14B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_14B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 4B (Reasoning)
+#################################################################
+
 abi:Qwen3_4B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 4B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-4b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.11 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_4B_Reasoning abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.26 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -586,17 +987,32 @@ abi:Qwen3_4B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 36.4 ;
     abi:codingIndex 25 ;
-    abi:mathIndex 79.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 79.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_4B_Reasoning .
-# Model Instance: Qwen3 32B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_4B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_4B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_4B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 32B
+#################################################################
+
 abi:Qwen3_32B a abi:AIModelInstance ;
     rdfs:label "Qwen3 32B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-32b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.7 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_32B abi:inputTokenCost 0.7 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -610,17 +1026,32 @@ abi:Qwen3_32B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 29.8 ;
     abi:codingIndex 28.4 ;
-    abi:mathIndex 58.6 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 58.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_32B .
-# Model Instance: Qwen3 30B A3B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_32B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_32B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_32B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 30B A3B
+#################################################################
+
 abi:Qwen3_30B_A3B a abi:AIModelInstance ;
     rdfs:label "Qwen3 30B A3B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-30b-a3b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.2 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_30B_A3B abi:inputTokenCost 0.2 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.8 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -634,17 +1065,32 @@ abi:Qwen3_30B_A3B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 29.9 ;
     abi:codingIndex 29.3 ;
-    abi:mathIndex 56.1 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 56.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_30B_A3B .
-# Model Instance: Qwen3 14B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_30B_A3B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_30B_A3B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_30B_A3B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 14B (Reasoning)
+#################################################################
+
 abi:Qwen3_14B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 14B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-14b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.35 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_14B_Reasoning abi:inputTokenCost 0.35 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 4.2 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -658,17 +1104,32 @@ abi:Qwen3_14B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 45.2 ;
     abi:codingIndex 41.9 ;
-    abi:mathIndex 86.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 86.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_14B_Reasoning .
-# Model Instance: Qwen3 1.7B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_14B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_14B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_14B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 1.7B (Reasoning)
+#################################################################
+
 abi:Qwen3_1_7B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 1.7B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-1.7b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.11 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_1_7B_Reasoning abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.26 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -682,17 +1143,32 @@ abi:Qwen3_1_7B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 26.9 ;
     abi:codingIndex 17.5 ;
-    abi:mathIndex 70.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 70.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_1_7B_Reasoning .
-# Model Instance: Qwen3 0.6B (Reasoning)
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_1_7B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_1_7B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_1_7B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen3 0.6B (Reasoning)
+#################################################################
+
 abi:Qwen3_0_6B_Reasoning a abi:AIModelInstance ;
     rdfs:label "Qwen3 0.6B (Reasoning)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen3-0.6b-instruct-reasoning"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.11 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen3_0_6B_Reasoning abi:inputTokenCost 0.11 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.26 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -706,17 +1182,32 @@ abi:Qwen3_0_6B_Reasoning a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 11.3 ;
     abi:codingIndex 7.4 ;
-    abi:mathIndex 42.5 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 42.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen3_0_6B_Reasoning .
-# Model Instance: QwQ 32B-Preview
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen3_0_6B_Reasoning .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen3_0_6B_Reasoning .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen3_0_6B_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - QwQ 32B-Preview
+#################################################################
+
 abi:QwQ_32B_Preview a abi:AIModelInstance ;
     rdfs:label "QwQ 32B-Preview"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "QwQ-32B-Preview"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.66 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:QwQ_32B_Preview abi:inputTokenCost 0.66 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.69 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -730,17 +1221,32 @@ abi:QwQ_32B_Preview a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 31.5 ;
     abi:codingIndex 18.7 ;
-    abi:mathIndex 68.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 68.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:QwQ_32B_Preview .
-# Model Instance: Qwen2.5 Coder Instruct 7B 
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:QwQ_32B_Preview .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:QwQ_32B_Preview .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:QwQ_32B_Preview .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2.5 Coder Instruct 7B 
+#################################################################
+
 abi:Qwen2_5_Coder_Instruct_7B a abi:AIModelInstance ;
     rdfs:label "Qwen2.5 Coder Instruct 7B "@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2-5-coder-7b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_5_Coder_Instruct_7B abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -754,17 +1260,32 @@ abi:Qwen2_5_Coder_Instruct_7B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 14.9 ;
     abi:codingIndex 13.7 ;
-    abi:mathIndex 35.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 35.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Coder_Instruct_7B .
-# Model Instance: Qwen2.5 Instruct 32B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_5_Coder_Instruct_7B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_5_Coder_Instruct_7B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_5_Coder_Instruct_7B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen2.5 Instruct 32B
+#################################################################
+
 abi:Qwen2_5_Instruct_32B a abi:AIModelInstance ;
     rdfs:label "Qwen2.5 Instruct 32B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen2.5-32b-instruct"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0.095 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen2_5_Instruct_32B abi:inputTokenCost 0.095 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.3 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -778,17 +1299,32 @@ abi:Qwen2_5_Instruct_32B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 26.1 ;
     abi:codingIndex 23.8 ;
-    abi:mathIndex 45.8 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 45.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen2_5_Instruct_32B .
-# Model Instance: Qwen1.5 Chat 110B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen2_5_Instruct_32B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen2_5_Instruct_32B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen2_5_Instruct_32B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen1.5 Chat 110B
+#################################################################
+
 abi:Qwen1_5_Chat_110B a abi:AIModelInstance ;
     rdfs:label "Qwen1.5 Chat 110B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen1.5-110b-chat"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 0 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen1_5_Chat_110B abi:inputTokenCost 0 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -802,17 +1338,32 @@ abi:Qwen1_5_Chat_110B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 13.2 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen1_5_Chat_110B .
-# Model Instance: Qwen Chat 72B
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen1_5_Chat_110B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen1_5_Chat_110B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen1_5_Chat_110B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Qwen Chat 72B
+#################################################################
+
 abi:Qwen_Chat_72B a abi:AIModelInstance ;
     rdfs:label "Qwen Chat 72B"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "qwen-chat-72b"@en ;
     abi:provider "Alibaba"@en ;
-    abi:inputTokenCost 1 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Qwen_Chat_72B abi:inputTokenCost 1 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -826,7 +1377,13 @@ abi:Qwen_Chat_72B a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 10 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
 
 abi:QwenAgent abi:canUtilizeModel abi:Qwen_Chat_72B .
+abi:QwenBusinessProposalProcess abi:utilizesModel abi:Qwen_Chat_72B .
+abi:QwenCreativeWritingProcess abi:utilizesModel abi:Qwen_Chat_72B .
+abi:QwenCodeGenerationProcess abi:utilizesModel abi:Qwen_Chat_72B .

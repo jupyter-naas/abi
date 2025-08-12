@@ -6,77 +6,77 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 
-# Claude AI Agent Ontology - CRITICAL: Imports BFO Process Network
 <http://naas.ai/ontology/abi/ClaudeOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
-    dc:title "Claude AI Agent Dynamic Ontology"@en ;
-    dc:description "Generated ontology linking Claude agents to BFO processes and capabilities"@en ;
-    dc:creator "ABI Ontology Generation Pipeline"@en ;
-    dc:created "20250812T100306"@en .
+    dc:title "Claude AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Claude AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
 
-# Claude AI Agent Ontology
-# Generated on: 20250812T100306
-# Models: 17
-# IMPORTANT: This ontology imports AIAgentOntology.ttl for BFO process definitions
 
-# AI Agent Definition with BFO Process Participation
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
 abi:ClaudeAgent a abi:AIAgent ;
     rdfs:label "Claude AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Claude family models for various processes"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+    rdfs:comment "AI Agent capable of utilizing Claude models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
 
 
 #################################################################
-#    BFO Process Instances - Agent Process Participation
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
-# Business Proposal Creation Process for Claude
 abi:ClaudeBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
-    rdfs:label "Claude Business Proposal Creation Process"@en ;
+    rdfs:label "Claude Business Proposal Process"@en ;
     abi:hasParticipant abi:ClaudeAgent ;
     abi:realizesCapability capability:TextGenerationCapability ;
     abi:hasTemporalRegion abi:ClaudeBusinessProposalSession ;
-    abi:hasQuality abi:ClaudeBusinessProposalQuality ;
-    rdfs:comment "Claude agent's business proposal creation process with professional content generation capabilities"@en .
+    abi:hasQuality abi:ClaudeBusinessProposalQuality .
 
-# Creative Writing Process for Claude  
 abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
     rdfs:label "Claude Creative Writing Process"@en ;
     abi:hasParticipant abi:ClaudeAgent ;
     abi:realizesCapability capability:TextGenerationCapability ;
     abi:hasTemporalRegion abi:ClaudeCreativeWritingSession ;
-    abi:hasQuality abi:ClaudeCreativeWritingQuality ;
-    rdfs:comment "Claude agent's creative writing process for generating imaginative and engaging content"@en .
+    abi:hasQuality abi:ClaudeCreativeWritingQuality .
 
-# Code Generation Process for Claude (if applicable)
 abi:ClaudeCodeGenerationProcess a abi:CodeGenerationProcess ;
     rdfs:label "Claude Code Generation Process"@en ;
     abi:hasParticipant abi:ClaudeAgent ;
     abi:realizesCapability capability:CodeGenerationCapability ;
     abi:hasTemporalRegion abi:ClaudeCodeGenerationSession ;
-    abi:hasQuality abi:ClaudeCodeGenerationQuality ;
-    rdfs:comment "Claude agent's code generation process for programming and algorithm development"@en .
+    abi:hasQuality abi:ClaudeCodeGenerationQuality .
 
-# Supporting Temporal Regions
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
 abi:ClaudeBusinessProposalSession a abi:InferenceSession ;
-    rdfs:label "Claude Business Proposal Session"@en ;
-    rdfs:comment "Temporal region during which Claude agent performs business proposal creation"@en .
+    rdfs:label "Claude Business Proposal Session"@en .
 
 abi:ClaudeCreativeWritingSession a abi:InferenceSession ;
-    rdfs:label "Claude Creative Writing Session"@en ;
-    rdfs:comment "Temporal region during which Claude agent performs creative writing"@en .
+    rdfs:label "Claude Creative Writing Session"@en .
 
 abi:ClaudeCodeGenerationSession a abi:InferenceSession ;
-    rdfs:label "Claude Code Generation Session"@en ;
-    rdfs:comment "Temporal region during which Claude agent performs code generation"@en .
+    rdfs:label "Claude Code Generation Session"@en .
 
-# Model Instance: Claude 4 Opus (Extended Thinking)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 4 Opus (Extended Thinking)
+#################################################################
+
 abi:Claude_4_Opus_Extended_Thinking a abi:AIModelInstance ;
     rdfs:label "Claude 4 Opus (Extended Thinking)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-opus-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_4_Opus_Extended_Thinking abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -90,23 +90,32 @@ abi:Claude_4_Opus_Extended_Thinking a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 55.3 ;
     abi:codingIndex 51.7 ;
-    abi:mathIndex 86.9 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 86.9 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Opus_Extended_Thinking .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_4_Opus_Extended_Thinking .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_4_Opus_Extended_Thinking .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_4_Opus_Extended_Thinking .
-# Model Instance: Claude 4 Sonnet (Extended Thinking)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 4 Sonnet (Extended Thinking)
+#################################################################
+
 abi:Claude_4_Sonnet_Extended_Thinking a abi:AIModelInstance ;
     rdfs:label "Claude 4 Sonnet (Extended Thinking)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-sonnet-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_4_Sonnet_Extended_Thinking abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -120,23 +129,32 @@ abi:Claude_4_Sonnet_Extended_Thinking a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 58.8 ;
     abi:codingIndex 52.8 ;
-    abi:mathIndex 88.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 88.2 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Sonnet_Extended_Thinking .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_4_Sonnet_Extended_Thinking .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_4_Sonnet_Extended_Thinking .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_4_Sonnet_Extended_Thinking .
-# Model Instance: Claude 4.1 Opus
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 4.1 Opus
+#################################################################
+
 abi:Claude_4_1_Opus a abi:AIModelInstance ;
     rdfs:label "Claude 4.1 Opus"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-1-opus"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_4_1_Opus abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -150,23 +168,32 @@ abi:Claude_4_1_Opus a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 49 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_1_Opus .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_4_1_Opus .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_4_1_Opus .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_4_1_Opus .
-# Model Instance: Claude 4 Opus
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 4 Opus
+#################################################################
+
 abi:Claude_4_Opus a abi:AIModelInstance ;
     rdfs:label "Claude 4 Opus"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-opus"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_4_Opus abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -180,23 +207,32 @@ abi:Claude_4_Opus a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 46.6 ;
     abi:codingIndex 47.5 ;
-    abi:mathIndex 75.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 75.2 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Opus .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_4_Opus .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_4_Opus .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_4_Opus .
-# Model Instance: Claude 4 Sonnet
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 4 Sonnet
+#################################################################
+
 abi:Claude_4_Sonnet a abi:AIModelInstance ;
     rdfs:label "Claude 4 Sonnet"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_4_Sonnet abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -210,23 +246,32 @@ abi:Claude_4_Sonnet a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 45.7 ;
     abi:codingIndex 41.1 ;
-    abi:mathIndex 67 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 67 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_Sonnet .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_4_Sonnet .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_4_Sonnet .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_4_Sonnet .
-# Model Instance: Claude 4.1 Opus (Extended Thinking)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 4.1 Opus (Extended Thinking)
+#################################################################
+
 abi:Claude_4_1_Opus_Extended_Thinking a abi:AIModelInstance ;
     rdfs:label "Claude 4.1 Opus (Extended Thinking)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-4-1-opus-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_4_1_Opus_Extended_Thinking abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -240,23 +285,32 @@ abi:Claude_4_1_Opus_Extended_Thinking a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 61 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_4_1_Opus_Extended_Thinking .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_4_1_Opus_Extended_Thinking .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_4_1_Opus_Extended_Thinking .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_4_1_Opus_Extended_Thinking .
-# Model Instance: Claude 3.5 Sonnet (Oct '24)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3.5 Sonnet (Oct '24)
+#################################################################
+
 abi:Claude_3_5_Sonnet_Oct_24 a abi:AIModelInstance ;
     rdfs:label "Claude 3.5 Sonnet (Oct '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-35-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_5_Sonnet_Oct_24 abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -270,23 +324,32 @@ abi:Claude_3_5_Sonnet_Oct_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 33.5 ;
     abi:codingIndex 37.3 ;
-    abi:mathIndex 46.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 46.4 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_5_Sonnet_Oct_24 .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_5_Sonnet_Oct_24 .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_5_Sonnet_Oct_24 .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_5_Sonnet_Oct_24 .
-# Model Instance: Claude 3.5 Sonnet (June '24)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3.5 Sonnet (June '24)
+#################################################################
+
 abi:Claude_3_5_Sonnet_June_24 a abi:AIModelInstance ;
     rdfs:label "Claude 3.5 Sonnet (June '24)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-35-sonnet-june-24"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_5_Sonnet_June_24 abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -300,23 +363,32 @@ abi:Claude_3_5_Sonnet_June_24 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 28.8 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 39.6 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 39.6 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_5_Sonnet_June_24 .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_5_Sonnet_June_24 .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_5_Sonnet_June_24 .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_5_Sonnet_June_24 .
-# Model Instance: Claude 3 Opus
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3 Opus
+#################################################################
+
 abi:Claude_3_Opus a abi:AIModelInstance ;
     rdfs:label "Claude 3 Opus"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-opus"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 15 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_Opus abi:inputTokenCost 15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 75 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -330,23 +402,32 @@ abi:Claude_3_Opus a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 23.7 ;
     abi:codingIndex 25.6 ;
-    abi:mathIndex 33.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 33.7 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_Opus .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_Opus .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_Opus .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_Opus .
-# Model Instance: Claude 3.5 Haiku
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3.5 Haiku
+#################################################################
+
 abi:Claude_3_5_Haiku a abi:AIModelInstance ;
     rdfs:label "Claude 3.5 Haiku"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-5-haiku"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_5_Haiku abi:inputTokenCost 0.8 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -360,23 +441,32 @@ abi:Claude_3_5_Haiku a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 23.3 ;
     abi:codingIndex 29.4 ;
-    abi:mathIndex 37.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 37.7 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_5_Haiku .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_5_Haiku .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_5_Haiku .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_5_Haiku .
-# Model Instance: Claude 3 Sonnet
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3 Sonnet
+#################################################################
+
 abi:Claude_3_Sonnet a abi:AIModelInstance ;
     rdfs:label "Claude 3 Sonnet"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_Sonnet abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -390,23 +480,32 @@ abi:Claude_3_Sonnet a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 16 ;
     abi:codingIndex 20.2 ;
-    abi:mathIndex 23 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 23 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_Sonnet .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_Sonnet .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_Sonnet .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_Sonnet .
-# Model Instance: Claude 3 Haiku
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3 Haiku
+#################################################################
+
 abi:Claude_3_Haiku a abi:AIModelInstance ;
     rdfs:label "Claude 3 Haiku"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-haiku"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0.25 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_Haiku abi:inputTokenCost 0.25 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 1.25 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -420,23 +519,32 @@ abi:Claude_3_Haiku a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 12.1 ;
     abi:codingIndex 17 ;
-    abi:mathIndex 20.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 20.2 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_Haiku .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_Haiku .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_Haiku .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_Haiku .
-# Model Instance: Claude Instant
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude Instant
+#################################################################
+
 abi:Claude_Instant a abi:AIModelInstance ;
     rdfs:label "Claude Instant"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-instant"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 0.8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_Instant abi:inputTokenCost 0.8 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 2.4 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -450,23 +558,32 @@ abi:Claude_Instant a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 1.7 ;
     abi:codingIndex 0 ;
-    abi:mathIndex 13.2 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 13.2 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_Instant .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_Instant .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_Instant .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_Instant .
-# Model Instance: Claude 2.1
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 2.1
+#################################################################
+
 abi:Claude_2_1 a abi:AIModelInstance ;
     rdfs:label "Claude 2.1"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-21"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_2_1 abi:inputTokenCost 8 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 24 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -480,23 +597,32 @@ abi:Claude_2_1 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 12.2 ;
     abi:codingIndex 18.9 ;
-    abi:mathIndex 20.4 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 20.4 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_2_1 .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_2_1 .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_2_1 .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_2_1 .
-# Model Instance: Claude 3.7 Sonnet (Extended Thinking)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3.7 Sonnet (Extended Thinking)
+#################################################################
+
 abi:Claude_3_7_Sonnet_Extended_Thinking a abi:AIModelInstance ;
     rdfs:label "Claude 3.7 Sonnet (Extended Thinking)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-7-sonnet-thinking"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_7_Sonnet_Extended_Thinking abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -510,23 +636,32 @@ abi:Claude_3_7_Sonnet_Extended_Thinking a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 47 ;
     abi:codingIndex 43.8 ;
-    abi:mathIndex 71.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 71.7 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_7_Sonnet_Extended_Thinking .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_7_Sonnet_Extended_Thinking .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_7_Sonnet_Extended_Thinking .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_7_Sonnet_Extended_Thinking .
-# Model Instance: Claude 3.7 Sonnet (Standard)
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 3.7 Sonnet (Standard)
+#################################################################
+
 abi:Claude_3_7_Sonnet_Standard a abi:AIModelInstance ;
     rdfs:label "Claude 3.7 Sonnet (Standard)"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-3-7-sonnet"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 3 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_3_7_Sonnet_Standard abi:inputTokenCost 3 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 15 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -540,23 +675,32 @@ abi:Claude_3_7_Sonnet_Standard a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 37.3 ;
     abi:codingIndex 38.5 ;
-    abi:mathIndex 53.7 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 53.7 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_3_7_Sonnet_Standard .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_3_7_Sonnet_Standard .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_3_7_Sonnet_Standard .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_3_7_Sonnet_Standard .
-# Model Instance: Claude 2.0
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Claude 2.0
+#################################################################
+
 abi:Claude_2_0 a abi:AIModelInstance ;
     rdfs:label "Claude 2.0"@en ;
-    rdfs:comment "AI model instance with specific capabilities and performance characteristics"@en ;
     abi:modelSlug "claude-2"@en ;
     abi:provider "Anthropic"@en ;
-    abi:inputTokenCost 8 ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Claude_2_0 abi:inputTokenCost 8 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 24 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -570,13 +714,13 @@ abi:Claude_2_0 a abi:AIModelInstance ;
     abi:timeToFirstAnswerTokenUnit "seconds"@en ;
     abi:intelligenceIndex 11.1 ;
     abi:codingIndex 18.3 ;
-    abi:mathIndex 0 ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:mathIndex 0 .
 
-# Agent-Model Relationships
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
 abi:ClaudeAgent abi:canUtilizeModel abi:Claude_2_0 .
-
-# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
 abi:ClaudeBusinessProposalProcess abi:utilizesModel abi:Claude_2_0 .
 abi:ClaudeCreativeWritingProcess abi:utilizesModel abi:Claude_2_0 .
 abi:ClaudeCodeGenerationProcess abi:utilizesModel abi:Claude_2_0 .
