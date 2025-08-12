@@ -336,22 +336,33 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
         agent_title = agent_module.replace('_', '').title()
         
-        # Generate ontology content
+        # Generate ontology content with proper imports and BFO grounding
         ontology_content = f"""@prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+# {agent_title} AI Agent Ontology - CRITICAL: Imports BFO Process Network
+<http://naas.ai/ontology/abi/{agent_title}Ontology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "{agent_title} AI Agent Dynamic Ontology"@en ;
+    dc:description "Generated ontology linking {agent_title} agents to BFO processes and capabilities"@en ;
+    dc:creator "ABI Ontology Generation Pipeline"@en ;
+    dc:created "{timestamp}"@en .
 
 # {agent_title} AI Agent Ontology
 # Generated on: {timestamp}
 # Models: {len(models)}
+# IMPORTANT: This ontology imports AIAgentOntology.ttl for BFO process definitions
 
 """
         
-        # Add AI Agent definition
+        # Add AI Agent definition with BFO process mappings
         agent_uri = f"abi:{agent_title}Agent"
-        ontology_content += f"""# AI Agent Definition
+        ontology_content += f"""# AI Agent Definition with BFO Process Participation
 {agent_uri} a abi:AIAgent ;
     rdfs:label "{agent_title} AI Agent"@en ;
     rdfs:comment "AI Agent capable of utilizing {agent_title} family models for various processes"@en ;
@@ -359,12 +370,70 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
 
 """
         
+        # Add BFO Process Instances for this agent
+        process_mappings = self._generate_process_mappings(agent_title, agent_uri)
+        ontology_content += process_mappings
+        
         # Add models
         for i, model in enumerate(models):
             model_content = self._generate_model_instance(model, agent_uri, i)
             ontology_content += model_content + "\n"
         
         return ontology_content
+    
+    def _generate_process_mappings(self, agent_title: str, agent_uri: str) -> str:
+        """Generate BFO process instances that connect agents to specific processes.
+        
+        This is CRITICAL for the PR #506 process-centric architecture.
+        Each agent needs specific process instances to be discoverable by process-based SPARQL queries.
+        """
+        process_content = f"""
+#################################################################
+#    BFO Process Instances - Agent Process Participation
+#################################################################
+
+# Business Proposal Creation Process for {agent_title}
+abi:{agent_title}BusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "{agent_title} Business Proposal Creation Process"@en ;
+    abi:hasParticipant {agent_uri} ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:{agent_title}BusinessProposalSession ;
+    abi:hasQuality abi:{agent_title}BusinessProposalQuality ;
+    rdfs:comment "{agent_title} agent's business proposal creation process with professional content generation capabilities"@en .
+
+# Creative Writing Process for {agent_title}  
+abi:{agent_title}CreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "{agent_title} Creative Writing Process"@en ;
+    abi:hasParticipant {agent_uri} ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:{agent_title}CreativeWritingSession ;
+    abi:hasQuality abi:{agent_title}CreativeWritingQuality ;
+    rdfs:comment "{agent_title} agent's creative writing process for generating imaginative and engaging content"@en .
+
+# Code Generation Process for {agent_title} (if applicable)
+abi:{agent_title}CodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "{agent_title} Code Generation Process"@en ;
+    abi:hasParticipant {agent_uri} ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:{agent_title}CodeGenerationSession ;
+    abi:hasQuality abi:{agent_title}CodeGenerationQuality ;
+    rdfs:comment "{agent_title} agent's code generation process for programming and algorithm development"@en .
+
+# Supporting Temporal Regions
+abi:{agent_title}BusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "{agent_title} Business Proposal Session"@en ;
+    rdfs:comment "Temporal region during which {agent_title} agent performs business proposal creation"@en .
+
+abi:{agent_title}CreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "{agent_title} Creative Writing Session"@en ;
+    rdfs:comment "Temporal region during which {agent_title} agent performs creative writing"@en .
+
+abi:{agent_title}CodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "{agent_title} Code Generation Session"@en ;
+    rdfs:comment "Temporal region during which {agent_title} agent performs code generation"@en .
+
+"""
+        return process_content
     
     def _generate_model_instance(self, model: Dict[str, Any], agent_uri: str, index: int) -> str:
         """Generate ontology content for a single model instance."""
@@ -393,6 +462,9 @@ class AIAgentOntologyGenerationPipeline(Pipeline):
         coding_index = evaluations.get('artificial_analysis_coding_index') or 0
         math_index = evaluations.get('artificial_analysis_math_index') or 0
         
+        # Extract agent title for process mapping
+        agent_title = agent_uri.replace('abi:', '').replace('Agent', '')
+        
         return f"""# Model Instance: {model_name}
 abi:{model_id} a abi:AIModelInstance ;
     rdfs:label "{model_name}"@en ;
@@ -416,7 +488,13 @@ abi:{model_id} a abi:AIModelInstance ;
     abi:mathIndex {math_index} ;
     abi:sourceAPI "artificial_analysis"@en .
 
-{agent_uri} abi:canUtilizeModel abi:{model_id} ."""
+# Agent-Model Relationships
+{agent_uri} abi:canUtilizeModel abi:{model_id} .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:{agent_title}BusinessProposalProcess abi:utilizesModel abi:{model_id} .
+abi:{agent_title}CreativeWritingProcess abi:utilizesModel abi:{model_id} .
+abi:{agent_title}CodeGenerationProcess abi:utilizesModel abi:{model_id} ."""
     
     def _generate_uri_safe_id(self, text: str) -> str:
         """Generate URI-safe identifier from text."""
