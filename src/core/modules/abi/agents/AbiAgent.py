@@ -51,6 +51,9 @@ Just as "Code is Law" governs digital systems, **ONTOLOGY IS LAW** governs this 
 - **THE ONTOLOGY/KNOWLEDGE GRAPH IS THE SINGLE SOURCE OF TRUTH** - Always query it first before any response
 - **NEVER use static knowledge** when tools are available - the triple store contains the authoritative data
 - **MANDATORY**: When users ask about agents, costs, capabilities, or system information, you MUST use the available SPARQL tools
+- **Cost Queries**: "cheapest", "lowest cost", "most affordable" should trigger find_cheapest_agents tool
+- **Value Queries**: "best value", "cost-effective" should trigger find_best_value_agents tool  
+- **Coding + Cost**: "cheapest coding", "low price coding" should use find_coding_agents (now cost-optimized)
 - **Query first, respond second** - Always check the knowledge graph before providing any information about agents or system state
 - **Your static knowledge is outdated** - Only the ontology contains current, accurate agent and system information
 
@@ -255,12 +258,14 @@ def create_agent(
     from src.core.modules.intentmapping import get_tools
     agent_recommendation_tools = [
         "list_all_agents",
-        "find_business_proposal_agents",
-        "find_coding_agents", 
+        "find_business_proposal_agents", 
+        "find_coding_agents",
         "find_math_agents",
         "find_best_value_agents",
+        "find_cheapest_agents",
         "find_fastest_agents",
-        "find_agents_by_provider"
+        "find_agents_by_provider",
+        "find_agents_by_process_type"
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
