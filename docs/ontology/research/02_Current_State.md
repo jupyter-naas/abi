@@ -7,23 +7,39 @@ The current state represents a quantum leap from static routing to **true ontolo
 
 ## **⚡ CORE TRANSFORMATION**
 
-### **From Static to Dynamic**
+The evolution from our initial approach represents a fundamental architectural shift in how AI agent capabilities are discovered, represented, and utilized for routing decisions. This transformation addresses the core limitation of static systems: the inability to adapt to rapidly changing AI model performance and market conditions.
+
+### **From Static to Dynamic Data Integration**
+
+The initial implementation relied on manually maintained performance metrics and capability mappings, creating a maintenance burden and risking stale data. The current system eliminates this dependency through real-time integration with authoritative sources.
+
 - ❌ **Before**: Hardcoded intelligence scores and capabilities
 - ✅ **Now**: Real-time data from Artificial Analysis API
 - ❌ **Before**: Manual ontology updates
 - ✅ **Now**: Automated pipeline generation every update cycle
 
-### **From Code-Based to Triple Store-Based**
+This shift ensures that routing decisions reflect current market conditions rather than historical snapshots, particularly important given the rapid evolution of AI model capabilities and pricing.
+
+### **From Code-Based to Triple Store-Based Architecture**
+
+The architectural transformation from procedural routing logic to ontology-driven querying represents a move toward true semantic reasoning. Rather than encoding routing decisions in application code, the system now derives recommendations through SPARQL queries against a knowledge graph.
+
 - ❌ **Before**: Python dictionaries for routing logic
 - ✅ **Now**: SPARQL queries against Oxigraph knowledge graph
 - ❌ **Before**: Static routing weights
 - ✅ **Now**: Dynamic cost-value optimization algorithms
 
+This approach provides several advantages: routing logic becomes declarative rather than procedural, new agent types can be added without code changes, and complex optimization criteria can be expressed as SPARQL queries rather than hardcoded algorithms.
+
 ## **🏗️ CURRENT ARCHITECTURE**
 
 ### **1. Data Integration Layer**
 
+The foundation of the current system rests on automated integration with external data sources that provide authoritative information about AI model performance, capabilities, and pricing. This layer ensures that the knowledge graph reflects current market conditions rather than static assumptions.
+
 #### **Artificial Analysis API Integration**
+
+The system integrates with Artificial Analysis, which provides standardized benchmarks and performance metrics for AI models across multiple providers. This integration provides the empirical foundation for routing decisions, replacing the manually maintained performance data from the initial approach.
 ```python
 # Real-time AI model data pipeline
 {
@@ -48,15 +64,23 @@ The current state represents a quantum leap from static routing to **true ontolo
 ```
 
 #### **Automated Data Refresh**
+
+The data refresh mechanism operates on-demand rather than on a fixed schedule, allowing the system to incorporate the latest model performance data when needed without unnecessary API calls. This design balances data freshness with resource efficiency.
+
 - **Frequency**: On-demand via `ArtificialAnalysisWorkflow`
 - **Storage**: Timestamped JSON files in `storage/datastore/core/modules/abi/`
 - **Format**: UTC timestamp prefix (YYYYMMDDTHHMMSS)
 - **Coverage**: Top 50 AI models globally
 
+The timestamped storage approach creates a complete audit trail of data changes over time, enabling analysis of model performance trends and providing rollback capabilities if needed.
+
 ### **2. Ontology Generation Pipeline**
 
+The ontology generation layer represents the core innovation of the current system: the automated transformation of external API data into BFO-compliant ontological structures. This process ensures that the knowledge graph maintains both semantic consistency and empirical accuracy.
+
 #### **AIAgentOntologyGenerationPipeline**
-The crown jewel of our current implementation - a sophisticated pipeline that transforms raw API data into BFO-compliant ontologies:
+
+The pipeline implements a systematic transformation process that maps external data to Basic Formal Ontology categories while maintaining the audit trail and versioning requirements of enterprise systems. This automation eliminates the manual ontology maintenance burden that characterized the initial approach.
 
 ```python
 # Pipeline execution flow
@@ -68,7 +92,8 @@ STEP 5: Create audit trail and execution summary
 ```
 
 #### **BFO 7 Buckets Mapping**
-The pipeline now correctly maps API data to BFO categories:
+
+The mapping process ensures that external API data conforms to Basic Formal Ontology's systematic categorization scheme. This approach provides semantic consistency while preserving the empirical content of the original data. The mapping follows established BFO patterns for representing material entities, qualities, processes, and temporal relationships.
 
 ```turtle
 # Bucket 1 (Material Entities): JSON 'name' → abi:AIModelInstance
@@ -110,8 +135,11 @@ abi:ChatGPTBusinessProposalSession a abi:InferenceSession ;
 
 ### **3. SPARQL-Based Agent Recommendation**
 
-#### **30+ Intelligent Queries**
-Our system now features sophisticated SPARQL queries that return exactly 3 model options with open/closed source classification:
+The agent recommendation layer implements the practical application of ontology-driven routing through SPARQL queries that execute against the knowledge graph. This approach transforms user requests into semantic queries that can leverage the full expressiveness of the ontological representation.
+
+#### **Query-Based Recommendation Engine**
+
+The system implements over 30 specialized SPARQL queries designed to address common business and technical use cases. Each query returns exactly three recommendations to provide users with choices while avoiding decision paralysis. The queries incorporate cost optimization, performance metrics, and licensing considerations to support informed decision-making.
 
 ```sparql
 # Example: Business proposal agents with cost optimization
@@ -127,7 +155,7 @@ WHERE {
          abi:inputTokenCost ?inputCost ;
          abi:intelligenceIndex ?intelligenceIndex .
   
-  # Smart open source detection
+  # Open source detection
   BIND(IF(CONTAINS(LCASE(?provider), "meta") || 
          CONTAINS(LCASE(?modelLabel), "llama") ||
          CONTAINS(LCASE(?modelLabel), "gemma"), 
@@ -142,16 +170,16 @@ LIMIT 3
 2. **Business Decision Support** (10): Meeting, contract analysis, customer service, marketing, presentations, etc.
 3. **Development & Technical** (10): Code review, debugging, architecture, testing, refactoring, etc.
 
-#### **Smart Features**
-- **Consistent 3-Result Limit**: Always returns exactly 3 options
-- **Open Source Detection**: Intelligent classification of model licensing
-- **Cost-Value Optimization**: Dynamic scoring algorithms
+#### **Features**
+- **Consistent 3-Result Limit**: Returns exactly 3 options
+- **Open Source Detection**: Classification of model licensing
+- **Cost-Value Optimization**: Scoring algorithms
 - **Process-Centric Logic**: BFO process relationships drive recommendations
 
 ### **4. AbiAgent System Integration**
 
 #### **"ONTOLOGY IS LAW" Enforcement**
-The system prompt now rigorously enforces dynamic querying:
+System prompt enforces dynamic querying:
 
 ```markdown
 ## **ONTOLOGY IS LAW**
@@ -163,7 +191,7 @@ The system prompt now rigorously enforces dynamic querying:
 ```
 
 #### **Tool Integration**
-The AbiAgent now dynamically loads SPARQL-based tools:
+AbiAgent loads SPARQL-based tools:
 
 ```python
 # Dynamic tool loading from intentmapping
@@ -184,7 +212,7 @@ tools.extend(get_tools(agent_recommendation_tools))
 ### **5. Universal Capability Ontology**
 
 #### **Barry Smith & John Beverley Foundation**
-Our capability ontology is grounded in rigorous academic research:
+Capability ontology based on academic research:
 
 ```turtle
 capability:Capability a owl:Class ;
@@ -205,11 +233,11 @@ capability:CodeGenerationCapability a owl:Class ;
 ### **6. Triple Store Integration**
 
 #### **Oxigraph Knowledge Graph**
-- **Technology**: High-performance Rust-based triple store
+- **Technology**: Rust-based triple store
 - **Deployment**: Docker container with persistent volume
-- **Access**: Direct HTTP queries for optimal performance
+- **Access**: Direct HTTP queries
 - **Data Volume**: 50,000+ triples from model ontologies
-- **Query Interface**: Standards-compliant SPARQL 1.1
+- **Query Interface**: SPARQL 1.1
 
 #### **Knowledge Graph Population**
 ```python
@@ -259,7 +287,7 @@ LIMIT 3
 ### **Multi-Modal Optimization**
 
 #### **Process-Centric Selection**
-The system can now intelligently combine agents for complex workflows:
+System combines agents for complex workflows:
 
 ```sparql
 # Find agents by process participation
@@ -330,21 +358,21 @@ User Responses
 - **BFO Compliance**: All ontologies follow BFO 7 buckets structure
 - **Data Validation**: Pipeline validates API responses before processing
 - **Error Handling**: Graceful degradation when external APIs unavailable
-- **Testing Coverage**: Comprehensive unit tests for all components
+- **Testing Coverage**: Unit tests for all components
 
-## **🌟 BREAKTHROUGH ACHIEVEMENTS**
+## **🌟 ACHIEVEMENTS**
 
-### **True Ontology-Driven Routing**
-We've achieved the original vision: users can ask "find cheapest coding agents" and receive real-time, cost-optimized recommendations derived from a living knowledge graph.
+### **Ontology-Driven Routing**
+Users can ask "find cheapest coding agents" and receive real-time, cost-optimized recommendations from knowledge graph.
 
 ### **Dynamic Data Integration**
-No more stale hardcoded metrics. Every recommendation is based on current market data from the authoritative Artificial Analysis platform.
+Every recommendation based on current market data from Artificial Analysis platform.
 
-### **Enterprise-Grade Automation**
-The entire system - from data refresh to ontology generation to agent deployment - runs without human intervention.
+### **Enterprise Automation**
+System runs from data refresh to ontology generation to agent deployment without human intervention.
 
-### **Academic Rigor**
-Our ontologies follow established BFO patterns and are grounded in peer-reviewed capability theory research.
+### **Academic Foundation**
+Ontologies follow BFO patterns and capability theory research.
 
 ## **🚧 CURRENT LIMITATIONS**
 
@@ -354,7 +382,7 @@ Our ontologies follow established BFO patterns and are grounded in peer-reviewed
 - **Provider Completeness**: Not all AI providers included in current dataset
 
 ### **Performance Constraints**
-- **SPARQL Complexity**: Complex queries can be slower than simple lookups
+- **SPARQL Complexity**: Complex queries slower than simple lookups
 - **Batch Processing**: Ontology generation is batch-based, not real-time
 - **Memory Usage**: Large ontologies require significant triple store memory
 
@@ -413,7 +441,7 @@ Our ontologies follow established BFO patterns and are grounded in peer-reviewed
 
 ## **🚀 STRATEGIC POSITION**
 
-The current state represents a **mature, production-ready ontology-driven AI routing system**. We have successfully:
+Current state represents a production-ready ontology-driven AI routing system that has:
 
 1. **Implemented True "Ontology is Law"**: The knowledge graph is now the authoritative source
 2. **Achieved Dynamic Data Integration**: Real-time market data drives all decisions
