@@ -1,4 +1,7 @@
 # Granular BFO Process Mapping Verification Guide
+*Detailed Verification Procedures - Supporting [ABI Ontological Evolution](./README.md)*
+
+> **Note**: This guide was created for manual verification during our [Initial Approach](./01_Initial_Approach.md). Current systems use automated validation within the [AIAgentOntologyGenerationPipeline](./02_Current_State.md#aiagentontologygenerationpipeline) and continuous SPARQL query validation.
 
 ## **🎯 GRANULAR PROCESS BREAKDOWN DELIVERED**
 

@@ -1,4 +1,7 @@
 # BFO Process Mapping Verification Summary
+*Validation Methodologies - Supporting [ABI Ontological Evolution](./README.md)*
+
+> **Note**: These verification methods were developed for our [Initial Approach](./01_Initial_Approach.md) static implementation. Current verification is automated via the [AIAgentOntologyGenerationPipeline](./02_Current_State.md#aiagentontologygenerationpipeline) with built-in validation and audit trails.
 
 ## **📊 EXCEL EXPORT GENERATED**
 
