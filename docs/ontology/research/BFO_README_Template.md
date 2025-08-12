@@ -1,4 +1,7 @@
 # BFO-Based AI Model README Template
+*Standardized Documentation Framework - Supporting [ABI Ontological Evolution](./README.md)*
+
+> **Note**: This template guided the creation of our initial static documentation. Current model documentation is now automatically generated via [AIAgentOntologyGenerationPipeline](./02_Current_State.md#aiagentontologygenerationpipeline) using real-time data and BFO-compliant structures.
 
 ## **🧠 BFO 7 Buckets Framework**
 
