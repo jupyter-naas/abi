@@ -1,18 +1,74 @@
 @prefix abi: <http://naas.ai/ontology/abi#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+# Chatgpt AI Agent Ontology - CRITICAL: Imports BFO Process Network
+<http://naas.ai/ontology/abi/ChatgptOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Chatgpt AI Agent Dynamic Ontology"@en ;
+    dc:description "Generated ontology linking Chatgpt agents to BFO processes and capabilities"@en ;
+    dc:creator "ABI Ontology Generation Pipeline"@en ;
+    dc:created "20250812T100306"@en .
 
 # Chatgpt AI Agent Ontology
-# Generated on: 20250811T214515
+# Generated on: 20250812T100306
 # Models: 33
+# IMPORTANT: This ontology imports AIAgentOntology.ttl for BFO process definitions
 
-# AI Agent Definition
+# AI Agent Definition with BFO Process Participation
 abi:ChatgptAgent a abi:AIAgent ;
     rdfs:label "Chatgpt AI Agent"@en ;
     rdfs:comment "AI Agent capable of utilizing Chatgpt family models for various processes"@en ;
     abi:hasSpecializedRole "Multi-purpose AI processing and reasoning"@en .
+
+
+#################################################################
+#    BFO Process Instances - Agent Process Participation
+#################################################################
+
+# Business Proposal Creation Process for Chatgpt
+abi:ChatgptBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Chatgpt Business Proposal Creation Process"@en ;
+    abi:hasParticipant abi:ChatgptAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:ChatgptBusinessProposalSession ;
+    abi:hasQuality abi:ChatgptBusinessProposalQuality ;
+    rdfs:comment "Chatgpt agent's business proposal creation process with professional content generation capabilities"@en .
+
+# Creative Writing Process for Chatgpt  
+abi:ChatgptCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Chatgpt Creative Writing Process"@en ;
+    abi:hasParticipant abi:ChatgptAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:ChatgptCreativeWritingSession ;
+    abi:hasQuality abi:ChatgptCreativeWritingQuality ;
+    rdfs:comment "Chatgpt agent's creative writing process for generating imaginative and engaging content"@en .
+
+# Code Generation Process for Chatgpt (if applicable)
+abi:ChatgptCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Chatgpt Code Generation Process"@en ;
+    abi:hasParticipant abi:ChatgptAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:ChatgptCodeGenerationSession ;
+    abi:hasQuality abi:ChatgptCodeGenerationQuality ;
+    rdfs:comment "Chatgpt agent's code generation process for programming and algorithm development"@en .
+
+# Supporting Temporal Regions
+abi:ChatgptBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Chatgpt Business Proposal Session"@en ;
+    rdfs:comment "Temporal region during which Chatgpt agent performs business proposal creation"@en .
+
+abi:ChatgptCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Chatgpt Creative Writing Session"@en ;
+    rdfs:comment "Temporal region during which Chatgpt agent performs creative writing"@en .
+
+abi:ChatgptCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Chatgpt Code Generation Session"@en ;
+    rdfs:comment "Temporal region during which Chatgpt agent performs code generation"@en .
 
 # Model Instance: GPT-4o mini
 abi:GPT_4o_mini a abi:AIModelInstance ;
@@ -37,7 +93,13 @@ abi:GPT_4o_mini a abi:AIModelInstance ;
     abi:mathIndex 45.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_mini .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_mini .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_mini .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_mini .
 # Model Instance: GPT-5 (low)
 abi:GPT_5_low a abi:AIModelInstance ;
     rdfs:label "GPT-5 (low)"@en ;
@@ -61,7 +123,13 @@ abi:GPT_5_low a abi:AIModelInstance ;
     abi:mathIndex 90.9 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_5_low .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_5_low .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_5_low .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_5_low .
 # Model Instance: o3
 abi:o3 a abi:AIModelInstance ;
     rdfs:label "o3"@en ;
@@ -85,7 +153,13 @@ abi:o3 a abi:AIModelInstance ;
     abi:mathIndex 94.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o3 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o3 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o3 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o3 .
 # Model Instance: o3-mini
 abi:o3_mini a abi:AIModelInstance ;
     rdfs:label "o3-mini"@en ;
@@ -109,7 +183,13 @@ abi:o3_mini a abi:AIModelInstance ;
     abi:mathIndex 87.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o3_mini .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o3_mini .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o3_mini .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o3_mini .
 # Model Instance: o4-mini (high)
 abi:o4_mini_high a abi:AIModelInstance ;
     rdfs:label "o4-mini (high)"@en ;
@@ -133,7 +213,13 @@ abi:o4_mini_high a abi:AIModelInstance ;
     abi:mathIndex 96.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o4_mini_high .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o4_mini_high .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o4_mini_high .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o4_mini_high .
 # Model Instance: gpt-oss-20B
 abi:gpt_oss_20B a abi:AIModelInstance ;
     rdfs:label "gpt-oss-20B"@en ;
@@ -157,7 +243,13 @@ abi:gpt_oss_20B a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:gpt_oss_20B .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:gpt_oss_20B .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:gpt_oss_20B .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:gpt_oss_20B .
 # Model Instance: o3-mini (high)
 abi:o3_mini_high a abi:AIModelInstance ;
     rdfs:label "o3-mini (high)"@en ;
@@ -181,7 +273,13 @@ abi:o3_mini_high a abi:AIModelInstance ;
     abi:mathIndex 92.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o3_mini_high .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o3_mini_high .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o3_mini_high .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o3_mini_high .
 # Model Instance: GPT-4.1
 abi:GPT_4_1 a abi:AIModelInstance ;
     rdfs:label "GPT-4.1"@en ;
@@ -205,7 +303,13 @@ abi:GPT_4_1 a abi:AIModelInstance ;
     abi:mathIndex 67.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4_1 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4_1 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4_1 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4_1 .
 # Model Instance: GPT-4.1 nano
 abi:GPT_4_1_nano a abi:AIModelInstance ;
     rdfs:label "GPT-4.1 nano"@en ;
@@ -229,7 +333,13 @@ abi:GPT_4_1_nano a abi:AIModelInstance ;
     abi:mathIndex 54.2 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4_1_nano .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4_1_nano .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4_1_nano .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4_1_nano .
 # Model Instance: GPT-5 nano
 abi:GPT_5_nano a abi:AIModelInstance ;
     rdfs:label "GPT-5 nano"@en ;
@@ -253,7 +363,13 @@ abi:GPT_5_nano a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_5_nano .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_5_nano .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_5_nano .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_5_nano .
 # Model Instance: GPT-4.1 mini
 abi:GPT_4_1_mini a abi:AIModelInstance ;
     rdfs:label "GPT-4.1 mini"@en ;
@@ -277,7 +393,13 @@ abi:GPT_4_1_mini a abi:AIModelInstance ;
     abi:mathIndex 67.8 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4_1_mini .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4_1_mini .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4_1_mini .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4_1_mini .
 # Model Instance: o3-pro
 abi:o3_pro a abi:AIModelInstance ;
     rdfs:label "o3-pro"@en ;
@@ -301,7 +423,13 @@ abi:o3_pro a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o3_pro .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o3_pro .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o3_pro .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o3_pro .
 # Model Instance: GPT-5 (medium)
 abi:GPT_5_medium a abi:AIModelInstance ;
     rdfs:label "GPT-5 (medium)"@en ;
@@ -325,7 +453,13 @@ abi:GPT_5_medium a abi:AIModelInstance ;
     abi:mathIndex 95.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_5_medium .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_5_medium .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_5_medium .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_5_medium .
 # Model Instance: GPT-4o (ChatGPT)
 abi:GPT_4o_ChatGPT a abi:AIModelInstance ;
     rdfs:label "GPT-4o (ChatGPT)"@en ;
@@ -349,7 +483,13 @@ abi:GPT_4o_ChatGPT a abi:AIModelInstance ;
     abi:mathIndex 45 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_ChatGPT .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_ChatGPT .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_ChatGPT .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_ChatGPT .
 # Model Instance: GPT-5 (minimal)
 abi:GPT_5_minimal a abi:AIModelInstance ;
     rdfs:label "GPT-5 (minimal)"@en ;
@@ -373,7 +513,13 @@ abi:GPT_5_minimal a abi:AIModelInstance ;
     abi:mathIndex 61.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_5_minimal .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_5_minimal .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_5_minimal .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_5_minimal .
 # Model Instance: gpt-oss-120B
 abi:gpt_oss_120B a abi:AIModelInstance ;
     rdfs:label "gpt-oss-120B"@en ;
@@ -397,7 +543,13 @@ abi:gpt_oss_120B a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:gpt_oss_120B .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:gpt_oss_120B .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:gpt_oss_120B .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:gpt_oss_120B .
 # Model Instance: GPT-5 mini
 abi:GPT_5_mini a abi:AIModelInstance ;
     rdfs:label "GPT-5 mini"@en ;
@@ -421,7 +573,13 @@ abi:GPT_5_mini a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_5_mini .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_5_mini .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_5_mini .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_5_mini .
 # Model Instance: GPT-5 (high)
 abi:GPT_5_high a abi:AIModelInstance ;
     rdfs:label "GPT-5 (high)"@en ;
@@ -445,7 +603,13 @@ abi:GPT_5_high a abi:AIModelInstance ;
     abi:mathIndex 97.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_5_high .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_5_high .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_5_high .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_5_high .
 # Model Instance: o1
 abi:o1 a abi:AIModelInstance ;
     rdfs:label "o1"@en ;
@@ -469,7 +633,13 @@ abi:o1 a abi:AIModelInstance ;
     abi:mathIndex 84.7 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o1 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o1 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o1 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o1 .
 # Model Instance: o1-preview
 abi:o1_preview a abi:AIModelInstance ;
     rdfs:label "o1-preview"@en ;
@@ -493,7 +663,13 @@ abi:o1_preview a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o1_preview .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o1_preview .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o1_preview .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o1_preview .
 # Model Instance: o1-mini
 abi:o1_mini a abi:AIModelInstance ;
     rdfs:label "o1-mini"@en ;
@@ -517,7 +693,13 @@ abi:o1_mini a abi:AIModelInstance ;
     abi:mathIndex 77.4 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o1_mini .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o1_mini .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o1_mini .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o1_mini .
 # Model Instance: GPT-4o (Aug '24)
 abi:GPT_4o_Aug_24 a abi:AIModelInstance ;
     rdfs:label "GPT-4o (Aug '24)"@en ;
@@ -541,7 +723,13 @@ abi:GPT_4o_Aug_24 a abi:AIModelInstance ;
     abi:mathIndex 45.6 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_Aug_24 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_Aug_24 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_Aug_24 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_Aug_24 .
 # Model Instance: GPT-4o (May '24)
 abi:GPT_4o_May_24 a abi:AIModelInstance ;
     rdfs:label "GPT-4o (May '24)"@en ;
@@ -565,7 +753,13 @@ abi:GPT_4o_May_24 a abi:AIModelInstance ;
     abi:mathIndex 45.1 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_May_24 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_May_24 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_May_24 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_May_24 .
 # Model Instance: GPT-4 Turbo
 abi:GPT_4_Turbo a abi:AIModelInstance ;
     rdfs:label "GPT-4 Turbo"@en ;
@@ -589,7 +783,13 @@ abi:GPT_4_Turbo a abi:AIModelInstance ;
     abi:mathIndex 44.3 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4_Turbo .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4_Turbo .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4_Turbo .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4_Turbo .
 # Model Instance: GPT-4o (Nov '24)
 abi:GPT_4o_Nov_24 a abi:AIModelInstance ;
     rdfs:label "GPT-4o (Nov '24)"@en ;
@@ -613,7 +813,13 @@ abi:GPT_4o_Nov_24 a abi:AIModelInstance ;
     abi:mathIndex 45.5 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_Nov_24 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_Nov_24 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_Nov_24 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_Nov_24 .
 # Model Instance: GPT-3.5 Turbo
 abi:GPT_3_5_Turbo a abi:AIModelInstance ;
     rdfs:label "GPT-3.5 Turbo"@en ;
@@ -637,7 +843,13 @@ abi:GPT_3_5_Turbo a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_3_5_Turbo .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_3_5_Turbo .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_3_5_Turbo .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_3_5_Turbo .
 # Model Instance: GPT-4
 abi:GPT_4 a abi:AIModelInstance ;
     rdfs:label "GPT-4"@en ;
@@ -661,7 +873,13 @@ abi:GPT_4 a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4 .
 # Model Instance: GPT-4.5 (Preview)
 abi:GPT_4_5_Preview a abi:AIModelInstance ;
     rdfs:label "GPT-4.5 (Preview)"@en ;
@@ -685,7 +903,13 @@ abi:GPT_4_5_Preview a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4_5_Preview .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4_5_Preview .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4_5_Preview .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4_5_Preview .
 # Model Instance: GPT-4o mini Realtime (Dec '24)
 abi:GPT_4o_mini_Realtime_Dec_24 a abi:AIModelInstance ;
     rdfs:label "GPT-4o mini Realtime (Dec '24)"@en ;
@@ -709,7 +933,13 @@ abi:GPT_4o_mini_Realtime_Dec_24 a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_mini_Realtime_Dec_24 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_mini_Realtime_Dec_24 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_mini_Realtime_Dec_24 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_mini_Realtime_Dec_24 .
 # Model Instance: o1-pro
 abi:o1_pro a abi:AIModelInstance ;
     rdfs:label "o1-pro"@en ;
@@ -733,7 +963,13 @@ abi:o1_pro a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:o1_pro .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:o1_pro .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:o1_pro .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:o1_pro .
 # Model Instance: GPT-4o Realtime (Dec '24)
 abi:GPT_4o_Realtime_Dec_24 a abi:AIModelInstance ;
     rdfs:label "GPT-4o Realtime (Dec '24)"@en ;
@@ -757,7 +993,13 @@ abi:GPT_4o_Realtime_Dec_24 a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_Realtime_Dec_24 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_Realtime_Dec_24 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_Realtime_Dec_24 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_Realtime_Dec_24 .
 # Model Instance: GPT-4o (March 2025, chatgpt-4o-latest)
 abi:GPT_4o_March_2025,_chatgpt_4o_latest a abi:AIModelInstance ;
     rdfs:label "GPT-4o (March 2025, chatgpt-4o-latest)"@en ;
@@ -781,7 +1023,13 @@ abi:GPT_4o_March_2025,_chatgpt_4o_latest a abi:AIModelInstance ;
     abi:mathIndex 61 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
 # Model Instance: GPT-3.5 Turbo (0613)
 abi:GPT_3_5_Turbo_0613 a abi:AIModelInstance ;
     rdfs:label "GPT-3.5 Turbo (0613)"@en ;
@@ -805,4 +1053,10 @@ abi:GPT_3_5_Turbo_0613 a abi:AIModelInstance ;
     abi:mathIndex 0 ;
     abi:sourceAPI "artificial_analysis"@en .
 
+# Agent-Model Relationships
 abi:ChatgptAgent abi:canUtilizeModel abi:GPT_3_5_Turbo_0613 .
+
+# Process-Model Relationships (CRITICAL for PR #506 process-centric queries)
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_3_5_Turbo_0613 .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_3_5_Turbo_0613 .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_3_5_Turbo_0613 .
