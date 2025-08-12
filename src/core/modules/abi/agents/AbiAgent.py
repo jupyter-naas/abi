@@ -10,7 +10,6 @@ from fastapi import APIRouter
 from typing import Optional
 from enum import Enum
 from abi import logger
-from src import services
 
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
