@@ -771,7 +771,8 @@ If you find you missed entities, you can add it again in the message.
                         object_properties[class_uri] = oprop
 
         # Save data to storage
-        save_text(state["messages"][0].content, self.datastore_path, "init_text.txt", copy=False)
+        last_last_message_content_str = str(state["messages"][-2].content)
+        save_text(last_last_message_content_str, self.datastore_path, "init_text.txt", copy=False)
         save_json(entities, self.datastore_path, "entities.json", copy=False)
         save_json(object_properties, self.datastore_path, "object_properties.json", copy=False)
         
@@ -874,14 +875,15 @@ INSERT DATA {
         response: BaseMessage = self._chat_model.invoke(messages)
 
         # Save SPARQL statement to storage
-        save_text(response.content, self.datastore_path, "insert_data.sparql", copy=False)
+        response_content_str = str(response.content) if response.content else ""
+        save_text(response_content_str, self.datastore_path, "insert_data.sparql", copy=False)
         
         # Return the generated SPARQL statement
-        return Command(goto="__end__", update={"messages": [AIMessage(content=response.content)]})
+        return Command(update={"messages": [AIMessage(content=response.content)]})
     
     def call_model(
         self, 
-        state: EntityExtractionState
+        state: EntityExtractionState  # type: ignore[override]
     ) -> Command:
         """
         This node is used to call the model to extract the entities from the last message.
@@ -894,7 +896,7 @@ INSERT DATA {
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
 
-        return Command(update={"messages": [response]})
+        return Command(goto="__end__", update={"messages": [response]})
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(EntityExtractionState)
