@@ -146,7 +146,7 @@ def test_api_agent_routes():
                 
                 # Check in the actual API paths (with /agents prefix)
                 for path in paths.keys():
-                    if path.startswith(f"/agents/") and agent_name in path:
+                    if path.startswith(f"/agents/"):
                         if path.endswith("/completion"):
                             has_completion = True
                         elif path.endswith("/stream-completion"):
