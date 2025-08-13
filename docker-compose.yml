@@ -21,7 +21,62 @@ services:
     env_file:
       - .env
     command: ["uv", "run"]
+    depends_on:
+      oxigraph:
+        condition: service_healthy
+    networks:
+      - abi-network
+    profiles:
+      - container  # Only used when explicitly running in container mode
+
+  oxigraph:
+    image: oxigraph/oxigraph:latest
+    expose:
+      - 7878
+    volumes:
+      - oxigraph_data:/data
+    command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
+    networks:
+      - abi-network
+    profiles:
+      - dev
+      - prod
+
+  oxigraph-proxy:
+    image: nginx:alpine
+    ports:
+      - 7878:80
+    volumes:
+      - ./src/core/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./src/core/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
+    depends_on:
+      - oxigraph
+    networks:
+      - abi-network
+    profiles:
+      - dev
+      - prod
+
+  yasgui:
+    image: erikap/yasgui:latest
+    platform: linux/amd64  # Force x86_64 for compatibility
+    ports:
+      - 3000:80
+    environment:
+      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:7878/query
+    depends_on:
+      - oxigraph
+    networks:
+      - abi-network
+    profiles:
+      - dev
+      - prod
 
 volumes:
   cargo-cache:
   venv_cache:
+  oxigraph_data:
+
+networks:
+  abi-network:
+    driver: bridge
