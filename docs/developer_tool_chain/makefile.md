@@ -30,7 +30,7 @@
     - [build.linux.x86\_64](#buildlinuxx86_64)
   - [Agents](#agents)
     - [chat-naas-agent](#chat-naas-agent)
-    - [chat-supervisor-agent](#chat-supervisor-agent)
+    - [chat-abi-agent](#chat-abi-agent)
     - [chat-ontology-agent](#chat-ontology-agent)
     - [chat-support-agent](#chat-support-agent)
   - [Docker Compose](#docker-compose)
@@ -273,15 +273,15 @@ make chat-naas-agent
 
 **When to use it:** When you want to interact with the Naas agent through the terminal.
 
-### chat-supervisor-agent
+### chat-abi-agent
 
 ```bash
-make chat-supervisor-agent
+make chat-abi-agent
 ```
 
-**What it does:** Starts the Supervisor agent in terminal mode.
+**What it does:** Starts the Abi agent in terminal mode.
 
-**When to use it:** When you want to interact with the Supervisor agent through the terminal. This is the default target.
+**When to use it:** When you want to interact with the Abi agent through the terminal. This is the default target.
 
 ### chat-ontology-agent
 

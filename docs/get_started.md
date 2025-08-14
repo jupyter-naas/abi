@@ -125,7 +125,7 @@ cp config.yaml.example config.yaml
 Now, the project is installed and configured, you can start chatting with the core agent by running the following command:
 
 ```bash
-make chat-supervisor-agent
+make chat-abi-agent
 ```
 
 This command will:
@@ -133,7 +133,7 @@ This command will:
 2. Initialize your .env configuration 
 3. Start the Oxigraph triple store automatically (via Docker)
 4. Initialize your knowledge graph
-5. Run the supervisor agent
+5. Run the Abi agent
 
 It can take a few minutes the first time you run it as it needs to download and start the Oxigraph Docker container (though Oxigraph starts much faster than alternatives).
 
