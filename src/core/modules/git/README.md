@@ -1,73 +1,118 @@
 # Git Module
 
-## Description
+## Overview
+
+### Description
 
 The Git Module provides AI-powered tools for Git workflow automation, specifically focused on pull request management and description generation. It integrates with the ABI framework to automate common Git development tasks.
 
-Key Features:
+This module enables:
 - Automated pull request description generation
 - Git diff analysis and branch information extraction
 - Clipboard integration for easy PR description sharing
 - Integration with ABI framework's agent system
+- Git workflow automation and repository management
 
-## TL;DR
+### Requirements
 
-Generate a pull request description from your branch:
+No external API keys required - the module uses local Git operations and OpenAI integration from the ABI framework.
+
+### TL;DR
+
+To get started with the Git module:
+
+1. Ensure you're in a Git repository with an origin/main remote
+2. Make changes and commit them to a feature branch
+
+Start generating pull request descriptions using this command:
 ```bash
 make pull-request-description
 ```
-
-## Overview
 
 ### Structure
 
 ```
 src/core/modules/git/
-└── agents/                                        # Git automation agents
-    ├── PullRequestDescriptionAgent.py            # PR description generator
-    └── README.md                                 # This documentation
+
+├── agents/                                       
+│   └── PullRequestDescriptionAgent.py              
+└── README.md                       
 ```
 
-### Core Components
+## Core Components
+Concise list of available components with capabilities.
 
-- **PullRequestDescriptionAgent**: AI agent that analyzes git diffs and generates structured pull request descriptions
-- **Git Integration**: Tools for accessing git diff, branch information, and file operations
-- **Clipboard Support**: Automatic copying of generated descriptions to clipboard
+### Agents
 
-## Agents
+#### Pull Request Description Agent
 
-### Pull Request Description Agent
+An AI agent that automatically generates pull request descriptions from git diffs. Analyzes branch changes, extracts branch name and diff information, creates structured PR descriptions with issue references, and handles file storage with clipboard integration.
 
-An AI agent that automatically generates pull request descriptions from git diffs:
+**Capabilities:**
+- Git diff analysis against origin/main
+- Automated PR description generation
+- Branch name and issue number extraction
+- File storage and clipboard integration
 
-1. **Git Analysis**: Extracts branch name and diff information
-2. **Content Generation**: Creates structured PR descriptions with issue references
-3. **File Storage**: Saves description to `storage/datastore/git/pull_request_description.md`
-4. **Clipboard Integration**: Copies description to system clipboard for easy pasting
+**Command:**
+```bash
+make pull-request-description
+```
+
+**Use Cases:**
+- Automated pull request documentation
+- Git workflow automation
+- Developer productivity enhancement
+- Consistent PR description formatting
+
+#### Testing
+Run tests for the Pull Request Description Agent:
+```bash
+uv run python -m pytest src/core/modules/git/agents/PullRequestDescriptionAgent_test.py
+```
+
+### Integrations
+
+#### Git Integration
+
+The Git Integration provides tools for Git operations, diff analysis, and file storage capabilities.
+
+**Functions:**
+- `git_diff()`: Retrieves current branch name and diff against origin/main
+- `store_pull_request_description(description)`: Saves description to storage
+- `store_pull_request_description_to_clipboard()`: Copies description to clipboard
+
+##### Configuration
 
 ```python
-from src.core.modules.git.agents.PullRequestDescriptionAgent import create_agent
-
-# Create agent
-agent = create_agent()
-
-# Agent automatically:
-# 1. Gets git diff and branch info
-# 2. Generates PR description
-# 3. Saves to file and clipboard
+# Git integration is automatically configured
+# No additional setup required - uses local Git commands
 ```
 
-## Tools
+#### Run
+Execute Git integration functions through the agent:
+```bash
+make pull-request-description
+```
 
-### Git Diff Tool
-- **Function**: `git_diff()`
-- **Purpose**: Retrieves current branch name and diff against origin/main
-- **Output**: Formatted string with branch name and diff content
-- **Exclusions**: Automatically excludes `uv.lock` from diff
+### Models
+Currently no specific models are implemented. The module uses the OpenAI integration from the ABI framework.
 
-### Description Storage Tools
-- **`store_pull_request_description(description)`**: Saves description to `storage/datastore/git/pull_request_description.md`
-- **`store_pull_request_description_to_clipboard()`**: Copies description from file to clipboard
+### Ontologies
+
+#### Git Ontology
+
+Currently no specific ontology is implemented for the Git module.
+
+#### Git Sparql Queries
+
+Currently no SPARQL queries are implemented for the Git module.
+
+### Pipelines
+Currently no specific pipelines are implemented. The module operates through direct agent execution.
+
+### Workflows
+Currently no specific workflows are implemented. The module operates through the Pull Request Description Agent workflow.
 
 ## Usage Examples
 
@@ -123,15 +168,17 @@ The project includes pre-commit hooks that run quality checks:
 
 ## Dependencies
 
-### Core Dependencies
-- **abi**: Core ABI framework for agent system
-- **langchain-openai**: OpenAI integration for AI model access
-- **pyperclip**: Cross-platform clipboard operations
-- **subprocess**: Git command execution
+### Python Libraries
+- `abi.integration`: Base integration framework
+- `abi.services.agent`: Agent framework
+- `langchain_core`: Tool integration for AI agents
+- `langchain_openai`: LangChain OpenAI integration
+- `pyperclip`: Cross-platform clipboard operations
+- `subprocess`: Git command execution
 
-### System Requirements
-- **Git**: Must be in a git repository with origin/main remote
-- **Python 3.10+**: Required for ABI framework compatibility
+### Modules
+
+- `git`: System Git integration for repository operations
 
 ## Workflow
 
