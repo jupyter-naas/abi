@@ -6,9 +6,17 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState, 
     MemorySaver,
 )
-from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
 from abi import logger
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.gemma.models.gemma3_4b import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"Gemma model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 
 NAME = "Gemma"
 DESCRIPTION = "Local Gemma3 4B model via Ollama - lightweight, fast alternative to cloud Gemini"
@@ -103,6 +111,12 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="general question", intent_target=NAME),
         Intent(intent_type=IntentType.AGENT, intent_value="everyday task", intent_target=NAME),
     ]
+    
+    # Return None if model dependencies are not available
+    if not MODEL_AVAILABLE:
+        logger.warning(f"Cannot create {NAME} agent: model dependencies not available")
+        return None
+    
     return GemmaAgent(
         name=NAME,
         description=DESCRIPTION,

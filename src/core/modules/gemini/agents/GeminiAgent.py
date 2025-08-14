@@ -7,10 +7,18 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from src.core.modules.gemini.models.google_gemini_2_5_flash import model
 from typing import Optional
 from enum import Enum
 from abi import logger
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.gemini.models.google_gemini_2_5_flash import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"Gemini model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 import os
 from datetime import datetime
 
@@ -182,6 +190,12 @@ def create_agent(
             intent_target="I can help with advanced reasoning, code analysis, mathematical computations, creative writing, research, and multimodal understanding of text, images, audio, and video.",
         ),
     ]
+    
+    # Return None if model dependencies are not available
+    if not MODEL_AVAILABLE:
+        logger.warning(f"Cannot create {NAME} agent: model dependencies not available")
+        return None
+    
     return GoogleGemini2FlashAgent(
         name=NAME,
         description=DESCRIPTION,

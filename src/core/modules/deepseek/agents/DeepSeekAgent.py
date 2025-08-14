@@ -6,9 +6,17 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
     MemorySaver,
 )
-from src.core.modules.deepseek.models.deepseek_r1_8b import model
 from typing import Optional
 from abi import logger
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.deepseek.models.deepseek_r1_8b import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"DeepSeek model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 
 NAME = "DeepSeek"
 DESCRIPTION = "Local DeepSeek R1 8B model via Ollama - advanced reasoning, mathematics, and problem-solving"
@@ -98,6 +106,12 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="complex problem", intent_target=NAME),
         Intent(intent_type=IntentType.AGENT, intent_value="research question", intent_target=NAME),
     ]
+    
+    # Return None if model dependencies are not available
+    if not MODEL_AVAILABLE:
+        logger.warning(f"Cannot create {NAME} agent: model dependencies not available")
+        return None
+    
     return DeepSeekAgent(
         name=NAME,
         description=DESCRIPTION,

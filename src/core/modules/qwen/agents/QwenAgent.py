@@ -6,9 +6,17 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
     MemorySaver,
 )
-from src.core.modules.qwen.models.qwen3_8b import model
 from typing import Optional
 from abi import logger
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.qwen.models.qwen3_8b import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"Qwen model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 
 NAME = "Qwen"
 DESCRIPTION = "Local Qwen3 8B model via Ollama - privacy-focused AI for coding, reasoning, and multilingual tasks"
@@ -78,6 +86,12 @@ def create_agent(
         Intent(intent_type=IntentType.AGENT, intent_value="local reasoning", intent_target=NAME),
         Intent(intent_type=IntentType.AGENT, intent_value="private analysis", intent_target=NAME),
     ]
+    
+    # Return None if model dependencies are not available
+    if not MODEL_AVAILABLE:
+        logger.warning(f"Cannot create {NAME} agent: model dependencies not available")
+        return None
+    
     return QwenAgent(
         name=NAME,
         description=DESCRIPTION,

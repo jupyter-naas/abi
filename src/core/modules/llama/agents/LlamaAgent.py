@@ -7,10 +7,18 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from src.core.modules.llama.models.llama_3_3_70b import model
 from typing import Optional
 from enum import Enum
 from abi import logger
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.llama.models.llama_3_3_70b import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"Llama model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 
 NAME = "Llama"
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5EgCMe365ZQGnnMEOzO_9uQyXnB8zQc4W7Q&s"
