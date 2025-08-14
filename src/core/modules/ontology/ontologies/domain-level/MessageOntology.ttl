@@ -63,14 +63,7 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 #    Object Properties
 #################################################################
 
-###  http://ontology.naas.ai/messaging#hasContent
-<http://ontology.naas.ai/messaging#hasContent> rdf:type owl:ObjectProperty ;
-                                               rdfs:domain <http://ontology.naas.ai/messaging#Message> ;
-                                               rdfs:range <http://ontology.naas.ai/messaging#MessageContent> ;
-                                               dc11:identifier "001-MSG" ;
-                                               rdfs:label "has content"@en ;
-                                               skos:definition "b has content c =Def b is a message & c is message content & c is the information content entity that b bears"@en ;
-                                               skos:example "An email message has content the textual information being communicated; a voice message has content the semantic payload being transmitted"@en .
+
 
 
 
@@ -142,22 +135,22 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 
 ###  http://ontology.naas.ai/messaging#hasContentLength
 <http://ontology.naas.ai/messaging#hasContentLength> rdf:type owl:DatatypeProperty ;
-                                                     rdfs:domain <http://ontology.naas.ai/messaging#MessageContent> ;
+                                                     rdfs:domain <http://ontology.naas.ai/messaging#Message> ;
                                                      rdfs:range xsd:nonNegativeInteger ;
                                                      dc11:identifier "007-MSG" ;
                                                      rdfs:label "has content length"@en ;
-                                                     skos:definition "c has content length n =Def c is message content & n is a non-negative integer representing the size measurement of c"@en ;
-                                                     skos:example "A text message content has content length 160 characters; an email content has content length 1024 bytes"@en .
+                                                     skos:definition "m has content length n =Def m is a message & n is a non-negative integer representing the size measurement of m when concretized"@en ;
+                                                     skos:example "A text message has content length 160 characters; an email message has content length 1024 bytes"@en .
 
 
-###  http://ontology.naas.ai/messaging#hasTextualContent
-<http://ontology.naas.ai/messaging#hasTextualContent> rdf:type owl:DatatypeProperty ;
-                                                      rdfs:domain <http://ontology.naas.ai/messaging#MessageContent> ;
-                                                      rdfs:range xsd:string ;
-                                                      dc11:identifier "008-MSG" ;
-                                                      rdfs:label "has textual content"@en ;
-                                                      skos:definition "c has textual content s =Def c is message content & s is a string & s is the textual representation of the information that c bears"@en ;
-                                                      skos:example "An email content has textual content 'Hello World'; a chat message content has textual content 'See you tomorrow'"@en .
+###  http://ontology.naas.ai/messaging#hasTextualRepresentation
+<http://ontology.naas.ai/messaging#hasTextualRepresentation> rdf:type owl:DatatypeProperty ;
+                                                            rdfs:domain <http://ontology.naas.ai/messaging#Message> ;
+                                                            rdfs:range xsd:string ;
+                                                            dc11:identifier "008-MSG" ;
+                                                            rdfs:label "has textual representation"@en ;
+                                                            skos:definition "m has textual representation s =Def m is a message & s is a string & s is the textual representation of m when concretized in text form"@en ;
+                                                            skos:example "An email message has textual representation 'Hello World'; a chat message has textual representation 'See you tomorrow'"@en .
 
 
 ###  http://ontology.naas.ai/messaging#hasTimestamp
@@ -181,23 +174,17 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 <http://ontology.naas.ai/messaging#Message> rdf:type owl:Class ;
                                             rdfs:subClassOf bfo:0000031 ,
                                                             [ rdf:type owl:Restriction ;
-                                                              owl:onProperty <http://ontology.naas.ai/messaging#hasContent> ;
-                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageContent>
+                                                              owl:onProperty bfo:0000084 ;
+                                                              owl:minCardinality "2"^^xsd:nonNegativeInteger
                                                             ] ;
                                             dc11:identifier "010-MSG" ;
                                             rdfs:label "message"@en ;
-                                            skos:definition "b is a message =Def b is a generically dependent continuant that bears information content intended for transmission between agents"@en ;
-                                            skos:example "An email message; a text message; a voice message; a video message"@en ;
-                                            skos:scopeNote "Messages depend on some material substrate for their existence but can be copied across different substrates while maintaining their identity."@en .
+                                            skos:definition "b is a message =Def b is a generically dependent continuant that is concretized by at least two copies, where at least one copy is generated by an agent with the intention of having at least one other agent notice the GDC"@en ;
+                                            skos:example "An email message copied from sender's outbox to recipient's inbox; a spoken utterance that generates sound waves received by a listener; a text message transmitted between devices"@en ;
+                                            skos:scopeNote "Messages are distinguished from other GDCs by their intentional communicative purpose and requirement for multiple concretizations. Random strings without communicative intent do not qualify as messages under this definition."@en .
 
 
-###  http://ontology.naas.ai/messaging#MessageContent
-<http://ontology.naas.ai/messaging#MessageContent> rdf:type owl:Class ;
-                                                   rdfs:subClassOf bfo:0000031 ;
-                                                   dc11:identifier "011-MSG" ;
-                                                   rdfs:label "message content"@en ;
-                                                   skos:definition "b is message content =Def b is a generically dependent continuant that is the information content entity constituting the semantic payload of a message"@en ;
-                                                   skos:example "The textual content of an email; the semantic content of a spoken message; the informational payload of a data packet"@en .
+
 
 
 ###  http://ontology.naas.ai/messaging#MessageReceiverRole
@@ -278,10 +265,6 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 ] .
 
 
-[ rdf:type owl:AllDisjointClasses ;
-  owl:members ( <http://ontology.naas.ai/messaging#Message>
-                <http://ontology.naas.ai/messaging#MessageContent>
-              )
-] .
+
 
 
