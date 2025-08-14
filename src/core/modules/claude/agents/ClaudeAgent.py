@@ -7,10 +7,18 @@ from abi.services.agent.IntentAgent import (
     MemorySaver,
 )
 from fastapi import APIRouter
-from src.core.modules.claude.models.claude_3_5_sonnet import model
 from typing import Optional
 from enum import Enum
 from abi import logger
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.claude.models.claude_3_5_sonnet import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"Claude model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 
 NAME = "Claude"
 AVATAR_URL = "https://assets.anthropic.com/m/0edc05fa8e30f2f9/original/Anthropic_Glyph_Black.svg"
@@ -46,8 +54,8 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     # Check if model is available
-    if model is None:
-        logger.error("Claude model not available - missing Anthropic API key")
+    if not MODEL_AVAILABLE:
+        logger.warning(f"Cannot create {NAME} agent: model dependencies not available")
         return None
     
     # Set configuration
@@ -73,6 +81,10 @@ def create_agent(
             intent_target="I can help with complex reasoning, critical thinking, analysis, creative writing, technical explanations, research, and providing balanced perspectives on various topics.",
         ),
     ]
+    
+    # At this point, we know model is not None due to MODEL_AVAILABLE check
+    assert model is not None
+    
     return ClaudeAgent(
         name=NAME,
         description=DESCRIPTION,

@@ -8,9 +8,17 @@ from abi.services.agent.IntentAgent import (
 )
 from fastapi import APIRouter
 from abi import logger
-from src.core.modules.__templates__.models.template_model import model
 from typing import Optional
 from enum import Enum
+
+# Try to import model, fall back gracefully if dependencies missing
+try:
+    from src.core.modules.__templates__.models.template_model import model
+    MODEL_AVAILABLE = model is not None
+except ImportError as e:
+    logger.warning(f"Template model dependencies not available: {e}")
+    model = None
+    MODEL_AVAILABLE = False
 
 NAME = "Template"
 DESCRIPTION = "Example template agent to demonstrate agent creation."
@@ -103,6 +111,12 @@ def create_agent(
             intent_target="Pizza is my favorite food",
         ),
     ]
+    
+    # Return None if model dependencies are not available
+    if not MODEL_AVAILABLE:
+        logger.warning(f"Cannot create {NAME} agent: model dependencies not available")
+        return None
+    
     return TemplateAgent(
         name=NAME,
         description=DESCRIPTION,
