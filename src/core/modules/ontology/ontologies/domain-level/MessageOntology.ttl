@@ -193,7 +193,7 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                         owl:disjointWith <http://ontology.naas.ai/messaging#MessageSenderRole> ;
                                                         dc11:identifier "012-MSG" ;
                                                         rdfs:label "message receiver role"@en ;
-                                                        skos:definition "b is a message receiver role =Def b is a role that inheres in an agent & b is realized by processes in which that agent receives and processes transmitted information content"@en ;
+                                                        skos:definition "b is a message receiver role =Def b is a role that inheres in an agent & b is realized by processes in which that agent participates as the recipient of transmitted information content"@en ;
                                                         skos:example "The role of being an email recipient; the role of being a chat participant who receives messages; the role of being a listener in a conversation"@en .
 
 
@@ -212,7 +212,7 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                                              <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
                                                             dc11:identifier "013-MSG" ;
                                                             rdfs:label "message reception process"@en ;
-                                                            skos:definition "p is a message reception process =Def p is a process in which an agent with a message receiver role participates, and p has some message as input that the agent obtains and interprets"@en ;
+                                                            skos:definition "p is a message reception process =Def p is a process that realizes a message receiver role and has some message as input, where the role inheres in an agent that participates in p"@en ;
                                                             skos:example "The process of receiving an email; the process of hearing a spoken message; the process of reading a text message"@en .
 
 
@@ -221,7 +221,7 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                       rdfs:subClassOf bfo:0000023 ;
                                                       dc11:identifier "014-MSG" ;
                                                       rdfs:label "message sender role"@en ;
-                                                      skos:definition "b is a message sender role =Def b is a role that inheres in an agent & b is realized by processes in which that agent transmits information content to other agents"@en ;
+                                                      skos:definition "b is a message sender role =Def b is a role that inheres in an agent & b is realized by processes in which that agent participates as the transmitter of information content to other agents"@en ;
                                                       skos:example "The role of being an email sender; the role of being a broadcaster; the role of being a speaker in a conversation"@en .
 
 
@@ -239,7 +239,7 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                                owl:disjointWith <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
                                                                dc11:identifier "015-MSG" ;
                                                                rdfs:label "message transmission process"@en ;
-                                                               skos:definition "p is a message transmission process =Def p is a process in which an agent with a message sender role participates, and p has some message as output that the agent transmits to agents with receiver roles"@en ;
+                                                               skos:definition "p is a message transmission process =Def p is a process that realizes a message sender role and has some message as output, where the role inheres in an agent that participates in p"@en ;
                                                                skos:example "The process of sending an email; the process of transmitting a radio signal; the process of speaking a message"@en .
 
 
