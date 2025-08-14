@@ -81,24 +81,56 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 
 ###  http://ontology.naas.ai/messaging#receives
 <http://ontology.naas.ai/messaging#receives> rdf:type owl:ObjectProperty ;
-                                             rdfs:domain <http://ontology.naas.ai/messaging#MessageReceptionProcess> ;
+                                             rdfs:domain [ rdf:type owl:Class ;
+                                                          owl:intersectionOf ( bfo:0000040
+                                                                             [ rdf:type owl:Restriction ;
+                                                                               owl:onProperty bfo:0000196 ;
+                                                                               owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceiverRole>
+                                                                             ]
+                                                                           )
+                                                        ] ;
                                              rdfs:range <http://ontology.naas.ai/messaging#Message> ;
                                              dc11:identifier "004-MSG" ;
                                              rdfs:label "receives"@en ;
-                                             skos:definition "p receives m =Def p is a message reception process & m is a message & m is the message that p obtains and processes"@en ;
-                                             skos:example "A message reception process receives an email message; a message reception process receives a voice message"@en .
+                                             skos:definition "a receives m =Def a is an agent & a has some message receiver role & m is a message & a obtains m through participating in a message reception process"@en ;
+                                             skos:example "An email recipient receives an email message; a chat participant receives a text message"@en .
 
 
 ###  http://ontology.naas.ai/messaging#transmits
-<http://ontology.naas.ai/messaging#transmits> rdf:type owl:ObjectProperty ,
-                                                       owl:FunctionalProperty ;
-                                              rdfs:domain <http://ontology.naas.ai/messaging#MessageTransmissionProcess> ;
+<http://ontology.naas.ai/messaging#transmits> rdf:type owl:ObjectProperty ;
+                                              rdfs:domain [ rdf:type owl:Class ;
+                                                           owl:intersectionOf ( bfo:0000040
+                                                                              [ rdf:type owl:Restriction ;
+                                                                                owl:onProperty bfo:0000196 ;
+                                                                                owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageSenderRole>
+                                                                              ]
+                                                                            )
+                                                         ] ;
                                               rdfs:range <http://ontology.naas.ai/messaging#Message> ;
                                               dc11:identifier "005-MSG" ;
                                               rdfs:label "transmits"@en ;
-                                              skos:definition "p transmits m =Def p is a message transmission process & m is a message & m is the unique message that p sends"@en ;
-                                              skos:example "A message transmission process transmits an email; a message transmission process transmits a text message"@en ;
-                                              skos:scopeNote "Each transmission process transmits exactly one message, though the same message may be transmitted by multiple processes."@en .
+                                              skos:definition "a transmits m =Def a is an agent & a has some message sender role & m is a message & a sends m through participating in a message transmission process"@en ;
+                                              skos:example "An email sender transmits an email; a broadcaster transmits a radio message"@en .
+
+
+###  http://ontology.naas.ai/messaging#hasMessageInput
+<http://ontology.naas.ai/messaging#hasMessageInput> rdf:type owl:ObjectProperty ;
+                                                    rdfs:domain <http://ontology.naas.ai/messaging#MessageReceptionProcess> ;
+                                                    rdfs:range <http://ontology.naas.ai/messaging#Message> ;
+                                                    dc11:identifier "020-MSG" ;
+                                                    rdfs:label "has message input"@en ;
+                                                    skos:definition "p has message input m =Def p is a message reception process & m is a message & m is the message that serves as input to p"@en ;
+                                                    skos:example "A message reception process has message input the received email; a listening process has message input the spoken message"@en .
+
+
+###  http://ontology.naas.ai/messaging#hasMessageOutput
+<http://ontology.naas.ai/messaging#hasMessageOutput> rdf:type owl:ObjectProperty ;
+                                                     rdfs:domain <http://ontology.naas.ai/messaging#MessageTransmissionProcess> ;
+                                                     rdfs:range <http://ontology.naas.ai/messaging#Message> ;
+                                                     dc11:identifier "021-MSG" ;
+                                                     rdfs:label "has message output"@en ;
+                                                     skos:definition "p has message output m =Def p is a message transmission process & m is a message & m is the message that p produces as output"@en ;
+                                                     skos:example "A message transmission process has message output the sent email; a broadcasting process has message output the transmitted signal"@en .
 
 
 ###  http://ontology.naas.ai/messaging#triggeredBy
@@ -193,14 +225,14 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                               owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceiverRole>
                                                             ] ,
                                                                             [ rdf:type owl:Restriction ;
-                                                                              owl:onProperty <http://ontology.naas.ai/messaging#receives> ;
-                                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
-                                                                            ] ;
+                                                              owl:onProperty <http://ontology.naas.ai/messaging#hasMessageInput> ;
+                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
+                                                            ] ;
                                                             owl:disjointWith <http://ontology.naas.ai/messaging#MessageTransmissionProcess> ,
                                                                              <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
                                                             dc11:identifier "013-MSG" ;
                                                             rdfs:label "message reception process"@en ;
-                                                            skos:definition "p is a message reception process =Def p is a process in which an agent realizes a message receiver role by obtaining and interpreting a transmitted message"@en ;
+                                                            skos:definition "p is a message reception process =Def p is a process in which an agent with a message receiver role participates, and p has some message as input that the agent obtains and interprets"@en ;
                                                             skos:example "The process of receiving an email; the process of hearing a spoken message; the process of reading a text message"@en .
 
 
@@ -221,13 +253,13 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                                  owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageSenderRole>
                                                                ] ,
                                                                                [ rdf:type owl:Restriction ;
-                                                                                 owl:onProperty <http://ontology.naas.ai/messaging#transmits> ;
-                                                                                 owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
-                                                                               ] ;
+                                                                 owl:onProperty <http://ontology.naas.ai/messaging#hasMessageOutput> ;
+                                                                 owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
+                                                               ] ;
                                                                owl:disjointWith <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
                                                                dc11:identifier "015-MSG" ;
                                                                rdfs:label "message transmission process"@en ;
-                                                               skos:definition "p is a message transmission process =Def p is a process in which an agent realizes a message sender role by transmitting a message to one or more agents with message receiver roles"@en ;
+                                                               skos:definition "p is a message transmission process =Def p is a process in which an agent with a message sender role participates, and p has some message as output that the agent transmits to agents with receiver roles"@en ;
                                                                skos:example "The process of sending an email; the process of transmitting a radio signal; the process of speaking a message"@en .
 
 
