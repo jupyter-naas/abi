@@ -56,6 +56,7 @@ class IModule(ABC):
 
     def __load_agents(self):
         # Load agents
+        self.agents = []
         agents_path = os.path.join(self.module_path, "agents")
         if os.path.exists(agents_path):
             loaded_agent_names = set()
