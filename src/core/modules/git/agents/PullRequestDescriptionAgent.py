@@ -4,7 +4,15 @@ def create_agent():
     from langchain_openai import ChatOpenAI
     from langchain_core.tools import tool
     import subprocess
-    import pyperclip
+    
+    # Try to import pyperclip, fall back gracefully in CI environments
+    try:
+        import pyperclip
+        PYPERCLIP_AVAILABLE = True
+    except ImportError:
+        PYPERCLIP_AVAILABLE = False
+        import logging
+        logging.warning("pyperclip not available - clipboard operations will be disabled")
 
     model = ChatOpenAI(
         model="gpt-4o", temperature=0, api_key=secret.get("OPENAI_API_KEY")
@@ -39,8 +47,12 @@ def create_agent():
         """
         with open("pull_request_description.md", "r") as f:
             description = f.read()
-        pyperclip.copy(description)
-        return "Pull request description stored in the clipboard"
+        
+        if PYPERCLIP_AVAILABLE:
+            pyperclip.copy(description)
+            return "Pull request description stored in the clipboard"
+        else:
+            return "Pull request description saved to file (clipboard not available in this environment)"
 
     class PullRequestDescriptionAgent(Agent):
         pass
