@@ -133,14 +133,7 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                      skos:example "A message transmission process has message output the sent email; a broadcasting process has message output the transmitted signal"@en .
 
 
-###  http://ontology.naas.ai/messaging#triggeredBy
-<http://ontology.naas.ai/messaging#triggeredBy> rdf:type owl:ObjectProperty ;
-                                                rdfs:domain <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
-                                                rdfs:range <http://ontology.naas.ai/messaging#MessageReceptionProcess> ;
-                                                dc11:identifier "006-MSG" ;
-                                                rdfs:label "triggered by"@en ;
-                                                skos:definition "p triggered by r =Def p is a response generation process & r is a message reception process & r is the causal antecedent that initiates p"@en ;
-                                                skos:example "A response generation process triggered by receiving an email; an automated reply process triggered by message reception"@en .
+
 
 
 #################################################################
@@ -265,16 +258,12 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 
 ###  http://ontology.naas.ai/messaging#ResponseGenerationProcess
 <http://ontology.naas.ai/messaging#ResponseGenerationProcess> rdf:type owl:Class ;
-                                                              rdfs:subClassOf bfo:0000015 ,
-                                                                              [ rdf:type owl:Restriction ;
-                                                                                owl:onProperty <http://ontology.naas.ai/messaging#triggeredBy> ;
-                                                                                owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceptionProcess>
-                                                                              ] ;
+                                                              rdfs:subClassOf bfo:0000015 ;
                                                               dc11:identifier "016-MSG" ;
                                                               rdfs:label "response generation process"@en ;
-                                                              skos:definition "p is a response generation process =Def p is a process in which an agent generates a response as a consequence of a message reception process"@en ;
+                                                              skos:definition "p is a response generation process =Def p is a process in which an agent generates a response message, typically following a message reception process via the BFO precedes relation"@en ;
                                                               skos:example "The process of composing a reply email; the process of generating an automated response; the process of responding in a conversation"@en ;
-                                                              skos:scopeNote "Response generation processes are causally dependent on preceding message reception processes."@en .
+                                                              skos:scopeNote "Response generation processes typically follow message reception processes in temporal sequence. Use bfo:precedes to model the temporal relationship between reception and response generation processes."@en .
 
 
 #################################################################
