@@ -1,4 +1,19 @@
-# MCP Server Testing Guide
+# MCP Integration
+
+## Overview
+
+The Model Context Protocol (MCP) integration enables ABI agents to be exposed as tools in external applications like Claude Desktop, VS Code, and other MCP-compatible clients. This creates a seamless bridge between ABI's agent ecosystem and popular development and productivity tools.
+
+## Architecture
+
+The MCP integration consists of:
+
+- **MCP Server** (`mcp_server.py`): Lightweight server that exposes ABI agents as MCP tools
+- **Dynamic Agent Discovery**: Automatically discovers available agents from the ABI API
+- **Multiple Transport Support**: STDIO for local integrations, HTTP for remote deployments
+- **Authentication**: Secure API key-based authentication with ABI backend
+
+## Setup Guide
 
 ## Prerequisites
 
@@ -12,9 +27,9 @@ ABI_API_KEY=your_api_key_here
 uv sync
 ```
 
-## Testing Methods
+## Deployment Methods
 
-### 1. Local Development Testing
+### 1. Local Development Deployment
 
 #### Step 1: Start the API
 ```bash
@@ -23,28 +38,16 @@ uv run api
 ```
 The API will be available at `http://localhost:9879`
 
-#### Step 2: Test Agent Discovery
+#### Step 2: Run MCP Server (STDIO mode for Claude Desktop)
 ```bash
 # In terminal 2
-uv run python test_mcp_server.py
+uv run python mcp_server.py
 ```
 
-This will:
-- ✅ Check API health
-- ✅ Fetch OpenAPI specification
-- ✅ List all discovered agents
-- ✅ Test calling an agent (if API key is set)
-
-#### Step 3: Run MCP Server (STDIO mode for Claude Desktop)
+#### Step 3: Run MCP Server (HTTP mode)
 ```bash
 # In terminal 2
-uv run python abi_mcp_server.py
-```
-
-#### Step 4: Run MCP Server (HTTP mode)
-```bash
-# In terminal 2
-MCP_TRANSPORT=http uv run python abi_mcp_server.py
+MCP_TRANSPORT=http uv run python mcp_server.py
 ```
 
 Then test the HTTP endpoint:
@@ -53,11 +56,11 @@ Then test the HTTP endpoint:
 curl http://localhost:3000/
 ```
 
-### 2. Production Testing
+### 2. Production Deployment
 
-After deployment via GitHub Actions:
+For production environments, the MCP server can be deployed alongside your ABI API:
 
-#### Test the deployed API
+#### Verify the deployed API
 ```bash
 # Check API health
 curl https://abi-api.default.space.naas.ai/health
@@ -66,7 +69,7 @@ curl https://abi-api.default.space.naas.ai/health
 curl https://abi-api.default.space.naas.ai/openapi.json | jq '.paths | keys[] | select(contains("/agents/"))'
 ```
 
-#### Test the deployed MCP server
+#### Verify the deployed MCP server
 ```bash
 # Check if MCP server is running
 curl https://abi-mcp-server.default.space.naas.ai/
@@ -82,7 +85,7 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
   "mcpServers": {
     "abi-local": {
       "command": "python",
-      "args": ["/path/to/abi_mcp_server.py"],
+      "args": ["/path/to/mcp_server.py"],
       "env": {
         "ABI_API_KEY": "your_api_key_here"
       }
@@ -106,7 +109,24 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
 }
 ```
 
-## Validation Checklist
+## Testing & Validation
+
+### Automated Testing
+
+Run the comprehensive test suite to validate your MCP integration:
+
+```bash
+uv run python mcp_server_test.py
+```
+
+This will validate:
+- ✅ API connectivity and health
+- ✅ OpenAPI specification access
+- ✅ Agent discovery and registration
+- ✅ MCP server functionality
+- ✅ Agent execution (if API key provided)
+
+### Manual Validation Checklist
 
 - [ ] API is running and healthy
 - [ ] OpenAPI spec contains agent endpoints
@@ -115,6 +135,38 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
 - [ ] MCP server works in HTTP mode
 - [ ] Agent calls work with valid API key
 - [ ] Claude Desktop can connect to MCP server
+
+## Best Practices
+
+### Security
+- **API Key Management**: Store API keys securely using environment variables or secret management systems
+- **Network Security**: Use HTTPS for production deployments
+- **Access Control**: Limit MCP server access to authorized clients only
+
+### Performance
+- **Connection Pooling**: The MCP server maintains efficient connections to the ABI API
+- **Caching**: Agent discovery is cached to reduce API calls
+- **Timeout Management**: Proper timeout handling for long-running agent operations
+
+### Monitoring
+- **Health Checks**: Monitor both API and MCP server health
+- **Logging**: Enable structured logging for troubleshooting
+- **Metrics**: Track agent usage and performance metrics
+
+## Supported MCP Clients
+
+The ABI MCP integration works with any MCP-compatible client:
+
+- **Claude Desktop**: Native integration for AI assistance
+- **VS Code**: Via MCP extensions for development workflows  
+- **Custom Applications**: Any application implementing the MCP protocol
+
+## Architecture Benefits
+
+- **Dynamic Discovery**: Automatically exposes new agents without configuration changes
+- **Lightweight**: Minimal overhead with HTTP-based agent communication
+- **Scalable**: Supports multiple concurrent MCP client connections
+- **Transport Flexible**: STDIO for local use, HTTP for distributed deployments
 
 ## Troubleshooting
 
@@ -141,7 +193,7 @@ uv run api
 
 ## Expected Output
 
-When running `test_mcp_server.py` with a working API:
+When running `mcp_server_test.py` with a working API:
 
 ```
 🚀 MCP Server Validation Tests
