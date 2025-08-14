@@ -15,10 +15,10 @@ API_KEY = os.environ.get("ABI_API_KEY", "")
 
 async def test_api_health() -> bool:
     """Test if the API is healthy"""
-    print(f"🔍 Testing API health at {API_BASE}/health...")
+    print(f"🔍 Testing API health at {API_BASE}...")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{API_BASE}/health")
+            response = await client.get(f"{API_BASE}/openapi.json")
             if response.status_code == 200:
                 print("✅ API is healthy")
                 return True
@@ -155,8 +155,8 @@ async def main():
     print("\n" + "=" * 50)
     print("✅ Validation complete!")
     print("\nNext steps:")
-    print("1. Start MCP server locally: python abi_mcp_server.py")
-    print("2. For HTTP mode: MCP_TRANSPORT=http python abi_mcp_server.py")
+    print("1. Start MCP server locally: python mcp_server.py")
+    print("2. For HTTP mode: MCP_TRANSPORT=http python mcp_server.py")
     print("3. For Claude Desktop integration, add to MCP settings")
 
 if __name__ == "__main__":
