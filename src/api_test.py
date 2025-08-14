@@ -101,6 +101,7 @@ def test_api_agent_routes():
         print(f"\n📦 Loaded modules and their agents:")
         for module in loaded_modules:
             print(f"Module: {module.module_import_path}")
+            print(f"Agents: {module.agents}")
             for agent in module.agents:
                 # Skip None agents (when API keys are missing)
                 if agent is not None:
