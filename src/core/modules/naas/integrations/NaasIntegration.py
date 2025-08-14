@@ -396,9 +396,7 @@ class NaasIntegration(Integration):
             field_masks.append("is_public")
 
         ontology["field_mask"] = {"paths": field_masks}
-
         payload = {"ontology": ontology}
-
         return self._make_request("PATCH", f"/ontology/{ontology_id}", payload)
 
     def delete_ontology(self, workspace_id: str, ontology_id: str) -> Dict:
@@ -719,14 +717,23 @@ class NaasIntegration(Integration):
         object_name: str,
         visibility: str = "public",
         content_disposition: str = "inline",
-        password: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        naas_storage: ObjectStorageService = (
-            ObjectStorageFactory.ObjectStorageServiceNaas(
-                self.__configuration.api_key,
-                workspace_id=workspace_id,
-                storage_name=storage_name,
-            )
+        password: Optional[str|None] = None,
+        version: Optional[str|None] = None,
+        return_url: bool = False
+    ) -> Dict:
+        # Init
+        asset: dict = {}
+        
+        naas_storage : ObjectStorageService = ObjectStorageFactory.ObjectStorageServiceNaas(
+            self.__configuration.api_key,
+            workspace_id=workspace_id,
+            storage_name=storage_name
+        )
+        
+        naas_storage.put_object(
+            prefix=prefix,
+            key=object_name,
+            content=data
         )
 
         naas_storage.put_object(prefix=prefix, key=object_name, content=data)
@@ -740,12 +747,13 @@ class NaasIntegration(Integration):
                 "visibility": visibility,
                 "content_disposition": content_disposition,
                 "password": password,
-            },
+                "object_version": version
+            }
         }
         # Check if an asset already exists.
         try:
             url = f"https://api.naas.ai/workspace/{workspace_id}/asset/"
-            response = requests.post(url, headers=self.headers, json=request_data)
+            response = requests.post(url, headers=self.headers, data=json.dumps(request_data))
             asset = response.json()
             logger.debug(f"Asset created: {asset}")
             error_message = pydash.get(asset, "error.message")
@@ -754,7 +762,16 @@ class NaasIntegration(Integration):
                 asset = self.get_asset(workspace_id, asset_id)
         except Exception as e:
             logger.error(f"Error uploading asset: {e}")
-            asset = {}
+
+        if return_url:
+            if asset is None:
+                logger.error("❌ Failed to upload asset to Naas")
+            asset_url = asset.get("asset", {}).get("url")
+            if not asset_url:
+                logger.error("❌ Asset URL not found in response")
+            if str(asset_url).endswith("/"):
+                asset_url = asset_url[:-1]
+            return {"asset_url": asset_url}
         return asset
 
     def update_asset(self, workspace_id: str, asset_id: str, data: Dict) -> Dict:

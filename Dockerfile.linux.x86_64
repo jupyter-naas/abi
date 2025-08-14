@@ -17,7 +17,7 @@ ADD --chown=abi:abi ./src/ /app/src
 ADD --chown=abi:abi ./uv.lock /app/uv.lock
 ADD --chown=abi:abi ./pyproject.toml /app/pyproject.toml
 ADD --chown=abi:abi ./README.md /app/README.md
-ADD --chown=abi:abi ./marketplace/ /app/marketplace
+# Marketplace is now in src/marketplace/ - no separate copy needed
 ADD --chown=abi:abi ./.git /app/.git
 
 # Get version from git tags or use a fallback

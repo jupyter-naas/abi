@@ -16,7 +16,7 @@ The Marketplace serves as a central repository for reusable components that:
 
 ## How It Works
 
-The Marketplace is structured as a directory (`marketplace/`) containing self-contained modules that follow the standard ABI module architecture. Each module in the Marketplace is like an "atom" - a fundamental, independent building block that:
+The Marketplace is structured as a directory (`src/marketplace/`) containing self-contained modules that follow the standard ABI module architecture. Each module in the Marketplace is like an "atom" - a fundamental, independent building block that:
 
 1. Is entirely self-contained and doesn't rely on other custom components
 2. Has clear documentation and example usage
