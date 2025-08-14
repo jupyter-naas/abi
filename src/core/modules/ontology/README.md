@@ -75,16 +75,6 @@ src/core/modules/ontology/
 └── README.md                       
 ```
 
-Additional ontology services in `lib/abi/services/ontology/`:
-```
-lib/abi/services/ontology/
-├── OntologyPorts.py                # Service interfaces
-├── OntologyService.py              # Core ontology service
-└── adaptors/                       
-    └── secondary/
-        └── OntologyService_SecondaryAdaptor_NERPort.py  # NER implementation
-```
-
 ## Core Components
 
 The ontology module provides comprehensive tools for semantic knowledge management and ontology engineering.
