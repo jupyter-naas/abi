@@ -73,26 +73,10 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
                                                skos:example "An email message has content the textual information being communicated; a voice message has content the semantic payload being transmitted"@en .
 
 
-###  http://ontology.naas.ai/messaging#hasParticipant
-<http://ontology.naas.ai/messaging#hasParticipant> rdf:type owl:ObjectProperty ;
-                                                   rdfs:subPropertyOf bfo:0000057 ;
-                                                   rdfs:domain bfo:0000015 ;
-                                                   rdfs:range bfo:0000002 ;
-                                                   dc11:identifier "002-MSG" ;
-                                                   rdfs:label "has participant"@en ;
-                                                   skos:definition "p has participant c =Def p is a process & c is a continuant & c participates in p"@en ;
-                                                   skos:example "A message transmission process has participant the sending agent; a message reception process has participant the receiving agent"@en .
 
 
-###  http://ontology.naas.ai/messaging#realizes
-<http://ontology.naas.ai/messaging#realizes> rdf:type owl:ObjectProperty ; #realizes should come from bfo-core.ttl
-                                             rdfs:subPropertyOf bfo:0000055 ;
-                                             rdfs:domain bfo:0000015 ;
-                                             rdfs:range bfo:0000017 ;
-                                             dc11:identifier "003-MSG" ;
-                                             rdfs:label "realizes"@en ;
-                                             skos:definition "p realizes r =Def p is a process & r is a realizable entity & r is realized in p"@en ;
-                                             skos:example "A message transmission process realizes a message sender role; a message reception process realizes a message receiver role"@en .
+
+
 
 
 ###  http://ontology.naas.ai/messaging#receives
@@ -205,9 +189,9 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 <http://ontology.naas.ai/messaging#MessageReceptionProcess> rdf:type owl:Class ;
                                                             rdfs:subClassOf bfo:0000015 ,
                                                                             [ rdf:type owl:Restriction ;
-                                                                              owl:onProperty <http://ontology.naas.ai/messaging#realizes> ;
-                                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceiverRole>
-                                                                            ] ,
+                                                              owl:onProperty bfo:0000055 ;
+                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceiverRole>
+                                                            ] ,
                                                                             [ rdf:type owl:Restriction ;
                                                                               owl:onProperty <http://ontology.naas.ai/messaging#receives> ;
                                                                               owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
@@ -233,9 +217,9 @@ skos:scopeNote rdf:type owl:AnnotationProperty .
 <http://ontology.naas.ai/messaging#MessageTransmissionProcess> rdf:type owl:Class ;
                                                                rdfs:subClassOf bfo:0000015 ,
                                                                                [ rdf:type owl:Restriction ;
-                                                                                 owl:onProperty <http://ontology.naas.ai/messaging#realizes> ;
-                                                                                 owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageSenderRole>
-                                                                               ] ,
+                                                                 owl:onProperty bfo:0000055 ;
+                                                                 owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageSenderRole>
+                                                               ] ,
                                                                                [ rdf:type owl:Restriction ;
                                                                                  owl:onProperty <http://ontology.naas.ai/messaging#transmits> ;
                                                                                  owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
