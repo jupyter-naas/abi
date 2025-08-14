@@ -138,7 +138,7 @@ mcp-http: deps
 
 mcp-test: deps
 	@echo "🔍 Running MCP Server validation tests..."
-	uv run python test_mcp_server.py
+	uv run python mcp_server_test.py
 
 api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
