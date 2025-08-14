@@ -6,8 +6,6 @@
 > An organizational multi-agent system that uses ontologies to unify data, AI models, and workflows. 
 ⭐ **Star and follow to stay updated!**
 
-<img src="./assets/abi-flywheel.png">
-
 ## Overview
 
 The **ABI** (Agentic Brain Infrastructure) project is a Python-based AI Operating System designed to serve as the core infrastructure for building an Agentic AI Ontology Engine. This system empowers organizations to integrate, manage, and scale AI-driven operations with multiple AI models (LLMs, SLMs, and other AI models), focusing on ontology, agent-driven workflows, and analytics. 

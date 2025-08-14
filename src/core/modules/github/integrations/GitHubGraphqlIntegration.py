@@ -7,11 +7,9 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, Any, Optional, Union
 
-LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
-
 
 @dataclass
-class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):
+class GitHubGraphqlIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Github GraphQL integration.
 
     Attributes:
@@ -23,15 +21,15 @@ class GithubGraphqlIntegrationConfiguration(IntegrationConfiguration):
     api_url: str = "https://api.github.com/graphql"
 
 
-class GithubGraphqlIntegration(Integration):
+class GitHubGraphqlIntegration(Integration):
     """Github GraphQL API integration class.
 
     This integration provides methods to interact with Github's GraphQL API endpoints.
     """
 
-    __configuration: GithubGraphqlIntegrationConfiguration
+    __configuration: GitHubGraphqlIntegrationConfiguration
 
-    def __init__(self, configuration: GithubGraphqlIntegrationConfiguration):
+    def __init__(self, configuration: GitHubGraphqlIntegrationConfiguration):
         """Initialize Github GraphQL client with access token."""
         super().__init__(configuration)
         self.__configuration = configuration
@@ -445,11 +443,11 @@ class GithubGraphqlIntegration(Integration):
         return add_result
 
 
-def as_tools(configuration: GithubGraphqlIntegrationConfiguration):
+def as_tools(configuration: GitHubGraphqlIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
 
-    integration = GithubGraphqlIntegration(configuration)
+    integration = GitHubGraphqlIntegration(configuration)
 
     class GetProjectNodeIdSchema(BaseModel):
         organization: str = Field(..., description="The organization login name")

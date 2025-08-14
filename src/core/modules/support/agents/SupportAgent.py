@@ -6,19 +6,9 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     MemorySaver,
 )
-from src import secret
-from ..integrations.GithubGraphqlIntegration import (
-    GithubGraphqlIntegrationConfiguration,
-)
-from ..integrations.GithubIntegration import (
-    GithubIntegrationConfiguration,
-)
-from ..workflows.GitHubSupportWorkflows import (
-    GitHubSupportWorkflows,
-    GitHubSupportWorkflowsConfiguration,
-)
 from typing import Optional
 from enum import Enum
+from src import secret
 from pydantic import SecretStr
 from abi import logger
 
@@ -72,26 +62,7 @@ def create_agent(
         temperature=TEMPERATURE, 
         api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
-    tools: list = []
 
-    if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):
-        github_integration_config = GithubIntegrationConfiguration(
-            access_token=github_access_token
-        )
-        github_graphql_integration_config = GithubGraphqlIntegrationConfiguration(
-            access_token=github_access_token
-        )
-
-        # Add GetIssuesWorkflow tool
-        get_issues_workflow = GitHubSupportWorkflows(
-            GitHubSupportWorkflowsConfiguration(
-                github_integration_config=github_integration_config,
-                github_graphql_integration_config=github_graphql_integration_config,
-            )
-        )
-        tools += get_issues_workflow.as_tools()
-    else:
-        logger.warning("No Github access token found, skipping Github integration")
     # Use provided configuration or create default one
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
@@ -100,7 +71,49 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
-    return SupportAssistant(
+    tools: list = []
+    from src.core.modules.github.integrations.GitHubGraphqlIntegration import (
+        GitHubGraphqlIntegrationConfiguration,
+    )
+    from src.core.modules.github.integrations.GitHubIntegration import (
+        GitHubIntegrationConfiguration,
+    )
+    from src.core.modules.support.workflows.ReportBugWorkflow import (
+        ReportBugWorkflow,
+        ReportBugWorkflowConfiguration,
+    )
+    from src.core.modules.support.workflows.FeatureRequestWorkflow import (
+        FeatureRequestWorkflow,
+        FeatureRequestWorkflowConfiguration,
+    )
+    if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):
+        github_integration_config = GitHubIntegrationConfiguration(
+            access_token=github_access_token
+        )
+        github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
+            access_token=github_access_token
+        )
+
+        # Add ReportBugWorkflow tool
+        report_bug_workflow = ReportBugWorkflow(
+            ReportBugWorkflowConfiguration(
+                github_integration_config=github_integration_config,
+                github_graphql_integration_config=github_graphql_integration_config,
+            )
+        )
+        tools += report_bug_workflow.as_tools()
+
+        # Add FeatureRequestWorkflow tool
+        feature_request_workflow = FeatureRequestWorkflow(
+            FeatureRequestWorkflowConfiguration(
+                github_integration_config=github_integration_config,
+                github_graphql_integration_config=github_graphql_integration_config,
+            )
+        )
+        tools += feature_request_workflow.as_tools()
+    else:
+        logger.warning("No Github access token found, skipping Github integration")
+    return SupportAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -111,7 +124,7 @@ def create_agent(
     )
 
 
-class SupportAssistant(Agent):
+class SupportAgent(Agent):
     def as_api(
         self,
         router: APIRouter,

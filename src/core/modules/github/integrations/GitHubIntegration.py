@@ -8,11 +8,9 @@ import requests
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
-LOGO_URL = "https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png"
-
 
 @dataclass
-class GithubIntegrationConfiguration(IntegrationConfiguration):
+class GitHubIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for Github integration.
 
     Attributes:
@@ -24,15 +22,15 @@ class GithubIntegrationConfiguration(IntegrationConfiguration):
     base_url: str = "https://api.github.com"
 
 
-class GithubIntegration(Integration):
+class GitHubIntegration(Integration):
     """Github API integration client.
 
     This integration provides methods to interact with Github's API endpoints.
     """
 
-    __configuration: GithubIntegrationConfiguration
+    __configuration: GitHubIntegrationConfiguration
 
-    def __init__(self, configuration: GithubIntegrationConfiguration):
+    def __init__(self, configuration: GitHubIntegrationConfiguration):
         """Initialize Github client with access token."""
         self.__configuration = configuration
 
@@ -834,10 +832,10 @@ class GithubIntegration(Integration):
         )
 
 
-def as_tools(configuration: GithubIntegrationConfiguration):
+def as_tools(configuration: GitHubIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
 
-    integration: GithubIntegration = GithubIntegration(configuration)
+    integration: GitHubIntegration = GitHubIntegration(configuration)
 
     class GetUserDetailsSchema(BaseModel):
         username: str = Field(
