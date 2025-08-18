@@ -109,3 +109,6 @@ storage/vectorstore/*
 !storage/*/example/**/*.jpeg
 !storage/*/example/**/*.webp
 !storage/*/example/**/*.heic
+
+
+*.pid
