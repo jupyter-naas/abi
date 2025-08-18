@@ -1,5 +1,6 @@
 # Standard library imports for type hints
 from typing import Callable, Literal, Any, Union, Sequence, Generator
+import os
 
 # LangChain Core imports for base components
 from langchain_core.language_models import BaseChatModel
@@ -44,19 +45,80 @@ from queue import Queue, Empty
 import pydash as pd
 import re
 
+
+def create_checkpointer() -> BaseCheckpointSaver:
+    """Create a checkpointer based on environment configuration.
+    
+    Returns a PostgreSQL-backed checkpointer if POSTGRES_URL is set,
+    otherwise returns an in-memory checkpointer.
+    """
+    postgres_url = os.getenv("POSTGRES_URL")
+    
+    if postgres_url:
+        try:
+            from langgraph.checkpoint.postgres import PostgresSaver
+            from psycopg import Connection
+            from psycopg.rows import dict_row
+            import time
+            logger.info(f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}")
+            
+            # Try connection with retries (PostgreSQL might still be starting)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Create connection with proper configuration (matching from_conn_string)
+                    conn = Connection.connect(
+                        postgres_url,
+                        autocommit=True,
+                        prepare_threshold=0,
+                        row_factory=dict_row
+                    )
+                    checkpointer = PostgresSaver(conn)
+                    
+                    # Setup tables if they don't exist
+                    checkpointer.setup()
+                    logger.info("PostgreSQL checkpointer tables initialized")
+                    
+                    return checkpointer
+                    
+                except Exception as conn_error:
+                    if attempt < max_retries - 1:
+                        logger.info(f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds...")
+                        time.sleep(2)
+                    else:
+                        raise conn_error
+                        
+        except ImportError:
+            logger.warning("PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory.")
+            return MemorySaver()
+        except Exception as e:
+            # Provide more helpful error messages
+            error_msg = str(e)
+            if "nodename nor servname provided" in error_msg:
+                logger.error(f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}")
+                logger.info("Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL")
+            else:
+                logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
+            logger.info("Falling back to in-memory checkpointer")
+            return MemorySaver()
+    else:
+        logger.info("Using in-memory checkpointer (set POSTGRES_URL for persistent memory)")
+        return MemorySaver()
+
 class AgentSharedState:
-    __thread_id: int
+    _thread_id: str
     _current_active_agent: Optional[str]
 
-    def __init__(self, thread_id: int = 1, current_active_agent: Optional[str] = None):
+    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None):
+        assert isinstance(thread_id, str)
         self._thread_id = thread_id
         self._current_active_agent = current_active_agent
 
     @property
-    def thread_id(self) -> int:
+    def thread_id(self) -> str:
         return self._thread_id
 
-    def set_thread_id(self, thread_id: int):
+    def set_thread_id(self, thread_id: str):
         self._thread_id = thread_id
     
     @property 
@@ -118,7 +180,7 @@ class Agent(Expose):
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
-        __thread_id (int): Identifier for the current conversation thread
+        __thread_id (str): Identifier for the current conversation thread
         __app (CompiledStateGraph): The compiled workflow graph
         __workflow (StateGraph): The workflow definition graph
         __on_tool_usage (Callable[[AnyMessage], None]): Callback triggered when a tool is used
@@ -174,7 +236,7 @@ class Agent(Expose):
         chat_model: BaseChatModel,
         tools: list[Union[Tool, "Agent"]] = [],
         agents: list["Agent"] = [],
-        memory: BaseCheckpointSaver = MemorySaver(),
+        memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
@@ -186,7 +248,7 @@ class Agent(Expose):
                 Should support tool binding.
             tools (list[Tool]): List of tools to make available to the agent.
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
-                Defaults to an in-memory saver.
+                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
         self._name = name
         self._description = description
@@ -224,7 +286,13 @@ class Agent(Expose):
         # TODO: Make sure the Agent does not call the version without tools.
         self._chat_model = chat_model
         self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
-        self._checkpointer = memory
+        
+        # Use provided memory or create based on environment
+        if memory is None:
+            self._checkpointer = create_checkpointer()
+        else:
+            self._checkpointer = memory
+            
         self._state = state
 
         self._configuration = configuration
@@ -580,7 +648,7 @@ class Agent(Expose):
         conversation thread. Any subsequent invocations will be processed as part of a
         new conversation context.
         """
-        self._state.set_thread_id(self._state.thread_id + 1)
+        self._state.set_thread_id(str(int(self._state.thread_id) + 1))
 
     def __tool_function(self, prompt: str) -> str:
         response = self.invoke(prompt)
@@ -649,7 +717,7 @@ class Agent(Expose):
 
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
-            thread_id: int = Field(
+            thread_id: str = Field(
                 ..., description="The thread ID to use for the conversation"
             )
 

@@ -4,7 +4,7 @@ from abi.services.agent.IntentAgent import (
     IntentType, 
     AgentConfiguration, 
     AgentSharedState, 
-    MemorySaver,
+    
 )
 from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
@@ -69,7 +69,7 @@ def create_agent(
             system_prompt=SYSTEM_PROMPT,
         )
     if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
+        agent_shared_state = AgentSharedState(thread_id="0")
 
     # Define Gemma-specific intents
     intents = [
@@ -110,7 +110,7 @@ def create_agent(
         intents=intents,
         configuration=agent_configuration,
         state=agent_shared_state,
-        memory=MemorySaver(),
+        memory=None,
     )
 
 class GemmaAgent(IntentAgent):

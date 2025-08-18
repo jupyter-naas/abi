@@ -3,7 +3,7 @@ from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
-    MemorySaver,
+    
 )
 from src import secret
 from fastapi import APIRouter
@@ -61,7 +61,7 @@ def create_agent(
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
     if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
+        agent_shared_state = AgentSharedState(thread_id="0")
 
     # Add tools
     hubspot_access_token = secret.get("HUBSPOT_ACCESS_TOKEN")
@@ -89,7 +89,7 @@ def create_agent(
         agents=agents,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver(),
+        memory=None,
     )
 
 
