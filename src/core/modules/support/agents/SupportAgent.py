@@ -4,7 +4,7 @@ from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
-    MemorySaver,
+    
 )
 from typing import Optional
 from enum import Enum
@@ -120,7 +120,7 @@ def create_agent(
         tools=tools,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver(),
+        memory=None,
     )
 
 
