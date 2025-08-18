@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 from pydantic import Field
 from rdflib import Graph, URIRef
 from abi.utils.Graph import ABI, URI_REGEX
@@ -25,10 +25,11 @@ class UpdateWebsitePipelineParameters(PipelineParameters):
         description="URI of the website. It must start with 'http://ontology.naas.ai/abi/'.",
         pattern=URI_REGEX
     )]
-    owner_uris: Annotated[Optional[List[str]], Field(
+    owner_uri: Annotated[Optional[str], Field(
         None,
-        description="Owners URI from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443"
-    )]
+        description="Owner URI from class: https://www.commoncoreontologies.org/ont00001262 or https://www.commoncoreontologies.org/ont00000443.",
+        pattern=URI_REGEX
+    )] = None
 
 class UpdateWebsitePipeline(Pipeline):
     """Pipeline for updating a Website in the ontology."""
@@ -54,15 +55,11 @@ class UpdateWebsitePipeline(Pipeline):
             )
 
         # Add owners URI if provided
-        if parameters.owner_uris:
-            for owner_uri in parameters.owner_uris:
-                if owner_uri.startswith("http://ontology.naas.ai/abi/"):
-                    graph.add((website_uri, ABI.isWebsiteOf, URIRef(owner_uri)))
-                    graph.add((URIRef(owner_uri), ABI.hasWebsite, website_uri))
-                else:
-                    raise ValueError(
-                        f"Invalid Owner URI: {owner_uri}. It must start with 'http://ontology.naas.ai/abi/'."
-                    )
+        if parameters.owner_uri:
+            check_owner_uri = list(graph.triples((website_uri, ABI.isWebsiteOf, URIRef(parameters.owner_uri))))
+            if len(check_owner_uri) == 0:
+                graph.add((website_uri, ABI.isWebsiteOf, URIRef(parameters.owner_uri)))
+                graph.add((URIRef(parameters.owner_uri), ABI.hasWebsite, website_uri))
 
         # Save the graph
         self.__configuration.triple_store.insert(graph)

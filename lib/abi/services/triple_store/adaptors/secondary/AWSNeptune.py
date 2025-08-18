@@ -73,16 +73,22 @@ from rdflib import Graph, URIRef
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from io import StringIO
 import rdflib
-from typing import Tuple, Any, overload
-import paramiko
-from sshtunnel import SSHTunnelForwarder
+from typing import Tuple, Any, overload, TYPE_CHECKING
 import tempfile
 import socket
 
+# Import SSH dependencies only when needed for type checking
+if TYPE_CHECKING:
+    from sshtunnel import SSHTunnelForwarder
+
 from rdflib.plugins.sparql.results.xmlresults import XMLResultParser
+from rdflib.plugins.sparql.results.rdfresults import RDFResultParser
+from rdflib.query import ResultParser
 from rdflib.query import ResultRow
 from rdflib.term import Identifier
 from rdflib.namespace import _NAMESPACE_PREFIXES_RDFLIB, _NAMESPACE_PREFIXES_CORE
+
+from SPARQLWrapper import SPARQLWrapper
 
 from enum import Enum
 
@@ -183,7 +189,7 @@ class AWSNeptune(ITripleStorePort):
     credentials: botocore.credentials.Credentials
 
     # SSH tunnel to the Bastion host
-    tunnel: SSHTunnelForwarder
+    tunnel: 'SSHTunnelForwarder'
 
     default_graph_name: URIRef
 
@@ -478,6 +484,7 @@ class AWSNeptune(ITripleStorePort):
             o: Identifier | None = row.get("o")
 
             assert s is not None and p is not None and o is not None
+            
 
             graph.add((s, p, o))
 
@@ -558,8 +565,23 @@ class AWSNeptune(ITripleStorePort):
             ... ''', QueryMode.UPDATE)
         """
         response = self.submit_query({query_mode.value: query})
+        
+        # Detect if SELECT, ASK or CONSTRUCT, DESCRIBE
+        sparql = SPARQLWrapper(self.neptune_sparql_url)
+        sparql.setQuery(query)
+    
+        
+        parser : ResultParser | None = None
+        
+        if sparql.queryType in ["SELECT", "ASK"]:
+            parser = XMLResultParser()
+        elif sparql.queryType in ["CONSTRUCT", "DESCRIBE"]:
+            parser = RDFResultParser()
+        else:
+            raise ValueError(f"Unsupported query type: {sparql.queryType}")
+        
         try:
-            result = XMLResultParser().parse(StringIO(response.text))
+            result = parser.parse(StringIO(response.text))
             return result
         except Exception as e:
             print(response.text)
@@ -669,6 +691,9 @@ class AWSNeptune(ITripleStorePort):
         # Build the INSERT DATA statement
         triples = []
         for s, p, o in graph:
+            # Skip if any term is a blank node
+            if isinstance(s, rdflib.BNode) or isinstance(p, rdflib.BNode) or isinstance(o, rdflib.BNode):
+                continue
             # Convert each term to N3 format
             s_str = s.n3()
             p_str = p.n3()
@@ -981,6 +1006,15 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         assert isinstance(bastion_user, str)
         assert isinstance(bastion_private_key, str)
 
+        # Import SSH dependencies when actually needed
+        try:
+            import paramiko
+        except ImportError as e:
+            raise ImportError(
+                "SSH tunnel support requires optional dependencies. "
+                "Install them with: pip install 'abi[ssh]' or install paramiko and sshtunnel separately"
+            ) from e
+            
         self.bastion_host = bastion_host
         self.bastion_port = bastion_port
         self.bastion_user = bastion_user
@@ -1029,7 +1063,7 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
 
         socket.getaddrinfo = new_getaddrinfo
 
-    def __create_ssh_tunnel(self) -> SSHTunnelForwarder:
+    def __create_ssh_tunnel(self):
         """
         Create and start an SSH tunnel to the Neptune database.
 
@@ -1066,6 +1100,8 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
             >>> tunnel = neptune_ssh._AWSNeptuneSSHTunnel__create_ssh_tunnel()
             >>> print(f"Tunnel running on local port: {tunnel.local_bind_port}")
         """
+        from sshtunnel import SSHTunnelForwarder
+        
         assert self.neptune_sparql_endpoint is not None
         assert self.neptune_port is not None
 

@@ -22,6 +22,15 @@ jobs:
 
       - name: Run checks
         run: make check
+
+      - name: Run API tests
+        env:
+          ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          NAAS_API_KEY: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          AI_MODE: cloud
+
+        run: make test-api
   container-scan:
     runs-on: ubuntu-latest
     steps:

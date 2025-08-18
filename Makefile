@@ -21,17 +21,14 @@ uv:
 	@ uv python find 3.10 > /dev/null || (uv python install 3.10 && uv python pin 3.10)
 
 .env:
-	@if [ ! -f .env ]; then \
-		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
-		cp .env.example .env; \
-		echo "✅ .env file initialized with .env.example"; \
-	fi
+	@# .env will be created dynamically by CLI during first boot
 
 .venv:
 	@ uv sync --all-extras
 
-.venv/lib/python3.10/site-packages/abi: deps
-	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+python_version=$(shell cat .python-version)
+.venv/lib/python$(python_version)/site-packages/abi: deps
+	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi 
 
 
 install: dep
@@ -51,14 +48,20 @@ lock: deps
 
 path=tests/
 test:  deps
-	@ uv run python -m pytest -n 4 .
+	@ uv run python -m pytest .
 
 test-abi: deps
-	@ uv run python -m pytest -n 4 lib
+	@ uv run python -m pytest lib
+
+test-api: deps
+	@ uv run python -m pytest src/api_test.py -v -s
+
+hello:
+	@echo 'hello' | make
 
 q=''
 ftest: deps
-	@ uv run python -m pytest -n 4 $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
@@ -67,7 +70,7 @@ fmt: deps
 # Linting, Static Analysis, Security
 #########################
 
-check: deps .venv/lib/python3.10/site-packages/abi check-core check-custom
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom
 
 check-core: deps
 	@echo ""
@@ -125,6 +128,18 @@ trivy-container-scan: build
 api: deps
 	uv run src/api.py
 
+mcp: deps
+	@echo "🚀 Starting MCP Server (STDIO mode for Claude Desktop)..."
+	uv run mcp-server
+
+mcp-http: deps
+	@echo "🌐 Starting MCP Server (SSE mode on port 8000)..."
+	MCP_TRANSPORT=sse uv run mcp-server
+
+mcp-test: deps
+	@echo "🔍 Running MCP Server validation tests..."
+	uv run python mcp_server_test.py
+
 api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
@@ -136,8 +151,29 @@ api-dev: deps
 sparql-terminal: deps
 	@ uv run python -m src.core.apps.sparql_terminal.main	
 
+oxigraph-admin: deps
+	@ uv run python -m src.core.apps.oxigraph_admin.main
+
+oxigraph-explorer:
+	@echo "🚀 Opening Knowledge Graph Explorer..."
+	@echo "📍 Visit: http://localhost:7878/explorer/"
+	@echo "✨ Features:"
+	@echo "   • Interactive overview dashboard"
+	@echo "   • Full-featured YasGUI SPARQL editor"
+	@echo "   • Pre-built query library with explanations"
+	@command -v open >/dev/null 2>&1 && open "http://localhost:7878/explorer/" || echo "Open the URL manually in your browser"
+
+
 dvc-login: deps
 	@ uv run run python scripts/setup_dvc.py | sh
+
+datastore-pull: deps
+	@ echo "Pulling datastore..."
+	@ uv run --no-dev python scripts/datastore_pull.py | sh
+
+datastore-push: deps datastore-pull
+	@ echo "Pushing datastore..."
+	@ uv run --no-dev python scripts/datastore_push.py | sh
 
 storage-pull: deps
 	@ echo "Pulling storage..."
@@ -145,7 +181,7 @@ storage-pull: deps
 
 storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_push.py | sh'
 
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
@@ -159,6 +195,22 @@ triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
 
+triplestore-export-excel: deps
+	@ echo "Exporting triplestore to Excel..."
+	@ uv run python scripts/export_triplestore_excel.py
+
+triplestore-export-turtle: deps
+	@ echo "Exporting triplestore to turtle..."
+	@ uv run python scripts/export_triplestore_turtle.py
+
+docs-ontology: deps
+	@ echo "Generating ontology documentation..."
+	@ uv run python scripts/generate_docs.py
+
+publish-remote-agents: deps
+	@ echo "Publishing remote agents..."
+	@ uv run python scripts/publish_remote_agents.py
+
 clean:
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
@@ -167,6 +219,7 @@ clean:
 	docker compose down
 	docker compose rm -f
 	rm -rf src/core/modules/common/integrations/siteanalyzer/target
+	rm -f dagster.pid dagster.log
 
 help:
 	@echo "ABI Project Makefile Help"
@@ -181,7 +234,13 @@ help:
 	@echo "DEVELOPMENT:"
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
+	@echo "  mcp                      Start MCP server in STDIO mode for Claude Desktop integration"
+	@echo "  mcp-http                 Start MCP server in HTTP mode on port 3000"
+	@echo "  mcp-test                 Run MCP server validation tests"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
+	@echo "  oxigraph-admin           Open Oxigraph administrative interface for monitoring and management"
+	@echo "  oxigraph-explorer        Open unified Knowledge Graph Explorer with iframe integration"
+	@echo ""
 	@echo ""
 	@echo "TESTING:"
 	@echo "  test                     Run all Python tests using pytest"
@@ -193,6 +252,8 @@ help:
 	@echo "  triplestore-prod-remove  Remove the production triplestore data"
 	@echo "  triplestore-prod-override Override the production triplestore with local data"
 	@echo "  triplestore-prod-pull    Pull triplestore data from production"
+	@echo "  docs-ontology            Generate ontology documentation"
+	@echo "  publish-remote-agents    Publish remote agents"
 	@echo ""
 	@echo "BUILDING:"
 	@echo "  build                    Build the Docker image (alias for build.linux.x86_64)"
@@ -200,15 +261,38 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-supervisor-agent    Start the Supervisor agent in terminal mode (default target)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (default target)"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
+	@echo ""
+	@echo "LOCAL AGENTS (Ollama):"
+	@echo "  chat-qwen-agent          Start Qwen3 8B agent (local, multilingual, coding)"
+	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (local, reasoning, math)"
+	@echo "  chat-gemma-agent         Start Gemma3 4B agent (local, lightweight, fast)"
+	@echo ""
+	@echo "DOCKER COMPOSE:"
+	@echo "  oxigraph-up              Start Oxigraph container"
+	@echo "  oxigraph-down            Stop Oxigraph container"
+	@echo "  oxigraph-status          Check Oxigraph container status"
+	@echo "  dev-up                   Start all development services (Oxigraph, Dagster)"
+	@echo "  dev-down                 Stop all development services"
+	@echo "  container-up             Start ABI in container mode (if needed)"
+	@echo "  container-down           Stop ABI container"
+	@echo ""
+	@echo "DAGSTER (DATA ORCHESTRATION):"
+	@echo "  dagster-dev              Start Dagster development server (foreground)"
+	@echo "  dagster-up               Start Dagster in background"
+	@echo "  dagster-down             Stop background Dagster"
+	@echo "  dagster-logs             View Dagster logs"
+	@echo "  dagster-ui               Start Dagster web interface only"
+	@echo "  dagster-status           Check Dagster assets status"
+	@echo "  dagster-materialize      Materialize all Dagster assets"
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
 	@echo ""
 	@echo "DEFAULT:"
-	@echo "  The default target is help (running 'make' with no arguments displays this help menu)"
+	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
 
 # Docker Build Commands
 # -------------------
@@ -235,8 +319,8 @@ build.linux.x86_64: deps
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
-chat-supervisor-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
+chat-abi-agent: deps
+	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
 chat-ontology-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
@@ -244,15 +328,109 @@ chat-ontology-agent: deps
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
+# Local Ollama-based agents for privacy-focused interactions
+chat-qwen-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent QwenAgent
+
+chat-deepseek-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent DeepSeekAgent
+
+chat-gemma-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
+
 pull-request-description: deps
 	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
-.DEFAULT_GOAL := default
 
-agent=SupervisorAgent
+console: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli
+
+.DEFAULT_GOAL := chat-abi-agent
+
+agent=AbiAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+# Docker Compose Commands
+# -----------------------
+# These commands manage Docker containers for development
+
+oxigraph-up:
+	@docker-compose --profile dev up -d oxigraph
+	@echo "✓ Oxigraph started on http://localhost:7878"
+
+oxigraph-down:
+	@docker-compose --profile dev stop oxigraph
+	@echo "✓ Oxigraph stopped"
+
+oxigraph-status:
+	@echo "Oxigraph status:"
+	@docker-compose --profile dev ps oxigraph
+
+dev-up:
+	@docker-compose --profile dev up -d
+	@echo "✓ Development containers started"
+	@make dagster-up
+	@echo ""
+	@echo "🌟 Development environment ready!"
+	@echo "📍 Oxigraph: http://localhost:7878"
+	@echo "📍 Dagster:  http://localhost:3000"
+
+dev-down:
+	@make dagster-down
+	@docker-compose --profile dev down
+	@echo "✓ All development services stopped"
+
+container-up:
+	@docker-compose --profile container up -d
+	@echo "✓ ABI container started"
+
+container-down:
+	@docker-compose --profile container down
+	@echo "✓ ABI container stopped"
+
+dagster-dev: deps
+	@echo "🚀 Starting Dagster development server..."
+	@uv run dagster dev
+
+dagster-up: deps
+	@echo "🚀 Starting Dagster in background..."
+	# @uv run dagster dev --port 3000 > dagster.log 2>&1 & echo $$! > dagster.pid
+	@uv run $(shell python scripts/generate_dagster_command.py)
+	@sleep 2
+	@echo "✓ Dagster started on http://localhost:3000"
+	@echo "📝 Logs: tail -f dagster.log"
+	@echo "📝 PID: $$(cat dagster.pid)"
+
+dagster-down:
+	@echo "🛑 Stopping Dagster..."
+	@ps -a | grep dagster | grep 'python' | awk '{print $$1}' | xargs kill -9
+	# @if [ -f dagster.pid ]; then \
+	# 	kill $$(cat dagster.pid) 2>/dev/null || true; \
+	# 	rm -f dagster.pid; \
+	# 	echo "✓ Dagster stopped"; \
+	# else \
+	# 	echo "⚠️  Dagster PID file not found"; \
+	# fi
+
+dagster-logs:
+	@echo "📄 Showing Dagster logs..."
+	@tail -f dagster.log
+
+dagster-ui: deps
+	@echo "🌐 Opening Dagster web interface..."
+	@echo "📍 Visit: http://localhost:3000"
+	@command -v open >/dev/null 2>&1 && open "http://localhost:3000" || echo "Open the URL manually in your browser"
+	@uv run dagster-webserver
+
+dagster-status: deps
+	@echo "📊 Checking Dagster asset status..."
+	@uv run dagster asset list
+
+dagster-materialize: deps
+	@echo "⚙️ Materializing all Dagster assets..."
+	@uv run dagster asset materialize --all
+
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status dev-up dev-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize

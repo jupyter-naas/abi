@@ -19,21 +19,32 @@
 #     ((None, URIRef(ex + "hasOpenData"), None), OntologyEvent.INSERT, handle_new_dataset),
 # ]
 
+import os
 from src import services, secret
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from abi import logger
 
 
+def is_production_mode():
+    """Check if the application is running in production mode"""
+    return os.environ.get("ENV") != "dev"
+
+
 def create_class_ontology_yaml():
+    """Create class ontology YAML trigger - only active in production"""
+    if not is_production_mode():
+        logger.debug("Skipping class ontology YAML trigger - not in production mode")
+        return None
+        
     from src.core.modules.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
     from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow import (
-        ConvertOntologyGraphToYamlConfiguration,
+        ConvertOntologyGraphToYamlWorkflowConfiguration,
     )
     from src.core.modules.ontology.workflows.CreateClassOntologyYamlWorkflow import (
         CreateClassOntologyYamlWorkflow,
-        CreateClassOntologyYamlConfiguration,
+        CreateClassOntologyYamlWorkflowConfiguration,
     )
 
     # Get secrets
@@ -46,29 +57,35 @@ def create_class_ontology_yaml():
     naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
 
     # Configure ConvertOntologyGraphToYaml workflow
-    convert_ontology_graph_config = ConvertOntologyGraphToYamlConfiguration(
+    convert_ontology_graph_config = ConvertOntologyGraphToYamlWorkflowConfiguration(
         naas_integration_config
     )
     workflow = CreateClassOntologyYamlWorkflow(
-        CreateClassOntologyYamlConfiguration(
+        CreateClassOntologyYamlWorkflowConfiguration(
             services.triple_store_service, convert_ontology_graph_config
         )
     )
 
     # Subscribe to the trigger
+    logger.info("Activating class ontology YAML trigger in production mode")
     return ((None, None, None), OntologyEvent.INSERT, workflow.trigger, True)
 
 
 def create_individual_ontology_yaml():
+    """Create individual ontology YAML trigger - only active in production"""
+    if not is_production_mode():
+        logger.debug("Skipping individual ontology YAML trigger - not in production mode")
+        return None
+        
     from src.core.modules.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
     from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow import (
-        ConvertOntologyGraphToYamlConfiguration,
+        ConvertOntologyGraphToYamlWorkflowConfiguration,
     )
     from src.core.modules.ontology.workflows.CreateIndividualOntologyYamlWorkflow import (
         CreateIndividualOntologyYamlWorkflow,
-        CreateIndividualOntologyYamlConfiguration,
+        CreateIndividualOntologyYamlWorkflowConfiguration,
     )
 
     # Get secrets
@@ -81,20 +98,26 @@ def create_individual_ontology_yaml():
     naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
 
     # Configure ConvertOntologyGraphToYaml workflow
-    convert_ontology_graph_config = ConvertOntologyGraphToYamlConfiguration(
+    convert_ontology_graph_config = ConvertOntologyGraphToYamlWorkflowConfiguration(
         naas_integration_config
     )
     workflow = CreateIndividualOntologyYamlWorkflow(
-        CreateIndividualOntologyYamlConfiguration(
+        CreateIndividualOntologyYamlWorkflowConfiguration(
             services.triple_store_service, convert_ontology_graph_config
         )
     )
 
     # Subscribe to the trigger
+    logger.info("Activating individual ontology YAML trigger in production mode")
     return ((None, None, None), OntologyEvent.INSERT, workflow.trigger, True)
 
 
-triggers = [
-    create_class_ontology_yaml(),
-    create_individual_ontology_yaml(),
-]
+# Filter out None values from triggers (when not in production mode)
+# Skip triggers in test environment to avoid SSH tunnel initialization
+if os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TESTING") == "true":
+    triggers = []  # Skip all triggers during testing
+else:
+    triggers = [trigger for trigger in [
+        create_class_ontology_yaml(),
+        create_individual_ontology_yaml(),
+    ] if trigger is not None]

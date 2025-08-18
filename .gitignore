@@ -8,6 +8,7 @@
 venv/
 ENV/
 env/
+uv.lock
 
 # Config
 config.yaml
@@ -33,6 +34,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pytype
 
 # IDEs and editors
 .idea/
