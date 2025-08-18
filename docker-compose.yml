@@ -18,16 +18,41 @@ services:
       - venv_cache:/app/.venv
     environment:
       - PYTHONPATH=/app
+      - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
     env_file:
       - .env
     command: ["uv", "run"]
     depends_on:
       oxigraph:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - abi-network
     profiles:
       - container  # Only used when explicitly running in container mode
+  
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: abi_user
+      POSTGRES_PASSWORD: abi_password
+      POSTGRES_DB: abi_memory
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U abi_user -d abi_memory"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - abi-network
+    profiles:
+      - dev
+      - prod
+      - container
 
   oxigraph:
     image: oxigraph/oxigraph:latest
@@ -76,6 +101,7 @@ volumes:
   cargo-cache:
   venv_cache:
   oxigraph_data:
+  postgres_data:
 
 networks:
   abi-network:

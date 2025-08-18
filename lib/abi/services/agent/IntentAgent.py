@@ -25,9 +25,8 @@ from queue import Queue
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.memory import MemorySaver
 
-from .Agent import Agent, AgentSharedState, AgentConfiguration
+from .Agent import Agent, AgentSharedState, AgentConfiguration, create_checkpointer
 from .beta.IntentMapper import IntentMapper, Intent, IntentType
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
@@ -86,7 +85,7 @@ class IntentAgent(Agent):
         tools: list[Union[Tool, "Agent"]] = [],
         agents: list["Agent"] = [],
         intents: list[Intent] = [],
-        memory: BaseCheckpointSaver = MemorySaver(),
+        memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
@@ -108,20 +107,29 @@ class IntentAgent(Agent):
                 Defaults to [].
             intents (list[Intent], optional): List of intents for mapping user messages.
                 Defaults to [].
-            memory (BaseCheckpointSaver, optional): Checkpoint saver for conversation state.
-                Defaults to MemorySaver().
+            memory (BaseCheckpointSaver | None, optional): Checkpoint saver for conversation state.
+                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
+                Defaults to None.
             state (AgentSharedState, optional): Shared state configuration.
                 Defaults to AgentSharedState().
             configuration (AgentConfiguration, optional): Agent configuration settings.
                 Defaults to AgentConfiguration().
             event_queue (Queue | None, optional): Queue for handling events.
                 Defaults to None.
+            threshold (float, optional): Minimum score threshold for intent matching.
+                Defaults to 0.85.
+            threshold_neighbor (float, optional): Maximum score difference for similar intents.
+                Defaults to 0.05.
         """
         # We set class specific properties before calling the super constructor because it will call the build_graph method.
         self._intents = intents
         self._intent_mapper = IntentMapper(self._intents)
         self._threshold = threshold
         self._threshold_neighbor = threshold_neighbor
+
+        # Handle memory configuration (same pattern as base Agent class)
+        if memory is None:
+            memory = create_checkpointer()
 
         super().__init__(
             name=name,

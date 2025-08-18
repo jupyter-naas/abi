@@ -38,47 +38,49 @@ def append_to_dotenv(key, value):
     with open(".env", "a") as f:
         f.write(f"{key}={value}\n")
 
-def ensure_oxigraph_running():
-    """Ensure Oxigraph container is running for development."""
+def ensure_dev_services_running():
+    """Ensure all development services (Oxigraph, PostgreSQL, etc.) are running."""
     import subprocess
     
     oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
     
-    # Check if Oxigraph is accessible
-    oxigraph_running = False
+    # Check if Oxigraph is accessible (indicates dev services are running)
+    services_running = False
     try:
         r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
         if r.status_code == 200:
-            oxigraph_running = True
+            services_running = True
     except:
         pass
     
-    if not oxigraph_running:
-        console.print("Starting Oxigraph triple store...", style="bright_cyan")
+    if not services_running:
+        console.print("Starting development services (Oxigraph, PostgreSQL, YasGUI)...", style="bright_cyan")
         try:
-            # Start Oxigraph using docker-compose
+            # Start all dev services using make dev-up
             subprocess.run(
-                ["docker-compose", "--profile", "dev", "up", "-d", "oxigraph"],
-                capture_output=True,
+                ["make", "dev-up"],
                 check=True
             )
             
-            # Wait for Oxigraph to be ready
-            max_attempts = 20  # Oxigraph starts very quickly
+            # Wait for services to be ready
+            max_attempts = 30  # PostgreSQL + Oxigraph may take longer
             for attempt in range(max_attempts):
                 try:
                     r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
                     if r.status_code == 200:
-                        console.print("✓ Oxigraph is ready!", style="bright_green")
+                        console.print("✓ Development services are ready!", style="bright_green")
+                        console.print("✓ Oxigraph (Knowledge Graph): http://localhost:7878", style="dim")
+                        console.print("✓ PostgreSQL (Agent Memory): localhost:5432", style="dim")
+                        console.print("✓ YasGUI (SPARQL Editor): http://localhost:3000", style="dim")
                         break
                 except:
                     pass
-                time.sleep(1)
+                time.sleep(2)
                 if attempt == max_attempts - 1:
-                    console.print("⚠️ Oxigraph is taking longer than expected to start", style="yellow")
+                    console.print("⚠️ Development services are taking longer than expected to start", style="yellow")
         except subprocess.CalledProcessError as e:
-            console.print("⚠️ Could not start Oxigraph. Make sure Docker is running.", style="yellow")
-            console.print("You can start it manually with: docker-compose --profile dev up -d oxigraph", style="dim")
+            console.print("⚠️ Could not start development services. Make sure Docker is running.", style="yellow")
+            console.print("You can start them manually with: make dev-up", style="dim")
 
 def ensure_ollama_running():
     dv = dotenv_values()
@@ -201,6 +203,15 @@ def define_oxigraph_url():
     oxigraph_url = "http://localhost:7878"
     append_to_dotenv("OXIGRAPH_URL", oxigraph_url)
 
+def define_postgres_url():
+    if "POSTGRES_URL" in dv:
+        return
+    
+    # Default to local PostgreSQL for agent memory persistence
+    # Use localhost since CLI runs outside containers
+    postgres_url = "postgresql://abi_user:abi_password@localhost:5432/abi_memory"
+    append_to_dotenv("POSTGRES_URL", postgres_url)
+
 def define_cloud_api_keys():
     if "AI_MODE" not in dv or dv["AI_MODE"] == "local":
         return
@@ -226,6 +237,7 @@ checks = [
     define_naas_api_key,
     define_abi_api_key,
     define_oxigraph_url,
+    define_postgres_url,
     define_cloud_api_keys,
 ]
     
@@ -240,8 +252,8 @@ def main():
     
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
     
-    # Ensure Oxigraph is running in development
-    ensure_oxigraph_running()
+    # Ensure all development services are running (Oxigraph, PostgreSQL, etc.)
+    ensure_dev_services_running()
     
     from src.core.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("AbiAgent")
