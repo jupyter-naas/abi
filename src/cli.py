@@ -36,7 +36,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def append_to_dotenv(key, value):
     with open(".env", "a") as f:
-        f.write(f"{key}={value}\n")
+        f.write(f"\n{key}={value}\n")
 
 def ensure_oxigraph_running():
     """Ensure Oxigraph container is running for development."""
