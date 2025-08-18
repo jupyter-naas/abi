@@ -1,0 +1,999 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+<http://naas.ai/ontology/abi/GeminiOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Gemini AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Gemini AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
+abi:GeminiAgent a abi:AIAgent ;
+    rdfs:label "Gemini AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Gemini models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
+
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:GeminiBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Gemini Business Proposal Process"@en ;
+    abi:hasParticipant abi:GeminiAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:GeminiBusinessProposalSession ;
+    abi:hasQuality abi:GeminiBusinessProposalQuality .
+
+abi:GeminiCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Gemini Creative Writing Process"@en ;
+    abi:hasParticipant abi:GeminiAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:GeminiCreativeWritingSession ;
+    abi:hasQuality abi:GeminiCreativeWritingQuality .
+
+abi:GeminiCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Gemini Code Generation Process"@en ;
+    abi:hasParticipant abi:GeminiAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:GeminiCodeGenerationSession ;
+    abi:hasQuality abi:GeminiCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:GeminiBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Gemini Business Proposal Session"@en .
+
+abi:GeminiCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Gemini Creative Writing Session"@en .
+
+abi:GeminiCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Gemini Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - PALM-2
+#################################################################
+
+abi:PALM_2 a abi:AIModelInstance ;
+    rdfs:label "PALM-2"@en ;
+    abi:modelSlug "palm-2"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:PALM_2 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 9 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:PALM_2 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:PALM_2 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:PALM_2 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:PALM_2 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Flash
+#################################################################
+
+abi:Gemini_2_5_Flash a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash"@en ;
+    abi:modelSlug "gemini-2-5-flash"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Flash abi:inputTokenCost 0.3 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 2.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.85 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 272.7 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.289 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.289 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 47.3 ;
+    abi:codingIndex 39.3 ;
+    abi:mathIndex 71.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Flash .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Flash .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Flash .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Pro
+#################################################################
+
+abi:Gemini_2_5_Pro a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro"@en ;
+    abi:modelSlug "gemini-2-5-pro"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Pro abi:inputTokenCost 1.25 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 10 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.438 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 147.882 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 38.62 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 38.62 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 64.6 ;
+    abi:codingIndex 61.5 ;
+    abi:mathIndex 92.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Pro .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Pro .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Pro .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Pro .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Flash-Lite
+#################################################################
+
+abi:Gemini_2_5_Flash_Lite a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash-Lite"@en ;
+    abi:modelSlug "gemini-2-5-flash-lite"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Flash_Lite abi:inputTokenCost 0.1 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.4 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 337.736 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.317 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.317 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 34.7 ;
+    abi:codingIndex 28.9 ;
+    abi:mathIndex 71.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Lite .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Flash_Lite .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Flash_Lite .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Flash_Lite .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Flash-Lite (Reasoning)
+#################################################################
+
+abi:Gemini_2_5_Flash_Lite_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash-Lite (Reasoning)"@en ;
+    abi:modelSlug "gemini-2-5-flash-lite-reasoning"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Flash_Lite_Reasoning abi:inputTokenCost 0.1 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.4 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 476.698 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 10.96 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 10.96 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 44.3 ;
+    abi:codingIndex 39.3 ;
+    abi:mathIndex 83.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Lite_Reasoning .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Flash_Lite_Reasoning .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Flash_Lite_Reasoning .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Flash_Lite_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Flash (Reasoning)
+#################################################################
+
+abi:Gemini_2_5_Flash_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash (Reasoning)"@en ;
+    abi:modelSlug "gemini-2-5-flash-reasoning"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Flash_Reasoning abi:inputTokenCost 0.3 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 2.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.85 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 315.202 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 13.726 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 13.726 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 58.4 ;
+    abi:codingIndex 54.4 ;
+    abi:mathIndex 90.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Reasoning .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Flash_Reasoning .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Flash_Reasoning .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Flash_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Pro Experimental (Feb '25)
+#################################################################
+
+abi:Gemini_2_0_Pro_Experimental_Feb_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Pro Experimental (Feb '25)"@en ;
+    abi:modelSlug "gemini-2-0-pro-experimental-02-05"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Pro_Experimental_Feb_25 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 32.849 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 17.852 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 17.852 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 38.4 ;
+    abi:codingIndex 33 ;
+    abi:mathIndex 64.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Pro_Experimental_Feb_25 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Pro_Experimental_Feb_25 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Pro_Experimental_Feb_25 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Pro_Experimental_Feb_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Flash (experimental)
+#################################################################
+
+abi:Gemini_2_0_Flash_experimental a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash (experimental)"@en ;
+    abi:modelSlug "gemini-2-0-flash-experimental"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Flash_experimental abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 213.797 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.289 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.289 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 35.5 ;
+    abi:codingIndex 27.5 ;
+    abi:mathIndex 60.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_experimental .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Flash_experimental .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Flash_experimental .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Flash_experimental .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.5 Pro (Sep '24)
+#################################################################
+
+abi:Gemini_1_5_Pro_Sep_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Pro (Sep '24)"@en ;
+    abi:modelSlug "gemini-1-5-pro"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_5_Pro_Sep_24 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 33.6 ;
+    abi:codingIndex 30.6 ;
+    abi:mathIndex 55.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Pro_Sep_24 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_5_Pro_Sep_24 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_5_Pro_Sep_24 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_5_Pro_Sep_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Flash-Lite (Preview)
+#################################################################
+
+abi:Gemini_2_0_Flash_Lite_Preview a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Preview)"@en ;
+    abi:modelSlug "gemini-2-0-flash-lite-preview"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Flash_Lite_Preview abi:inputTokenCost 0.075 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.3 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.131 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 216.838 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.273 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.273 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 29.7 ;
+    abi:codingIndex 21.3 ;
+    abi:mathIndex 58.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Lite_Preview .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Flash_Lite_Preview .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Flash_Lite_Preview .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Flash_Lite_Preview .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Flash (Feb '25)
+#################################################################
+
+abi:Gemini_2_0_Flash_Feb_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash (Feb '25)"@en ;
+    abi:modelSlug "gemini-2-0-flash"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Flash_Feb_25 abi:inputTokenCost 0.1 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.4 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.175 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 223.837 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.331 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.331 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 37.8 ;
+    abi:codingIndex 33.4 ;
+    abi:mathIndex 63 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Feb_25 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Flash_Feb_25 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Flash_Feb_25 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Flash_Feb_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.5 Flash (Sep '24)
+#################################################################
+
+abi:Gemini_1_5_Flash_Sep_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash (Sep '24)"@en ;
+    abi:modelSlug "gemini-1-5-flash"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_5_Flash_Sep_24 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 27.7 ;
+    abi:codingIndex 27 ;
+    abi:mathIndex 50.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Flash_Sep_24 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_5_Flash_Sep_24 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_5_Flash_Sep_24 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_5_Flash_Sep_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.5 Flash-8B
+#################################################################
+
+abi:Gemini_1_5_Flash_8B a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash-8B"@en ;
+    abi:modelSlug "gemini-1-5-flash-8b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_5_Flash_8B abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 19.2 ;
+    abi:codingIndex 22.3 ;
+    abi:mathIndex 36.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Flash_8B .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_5_Flash_8B .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_5_Flash_8B .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_5_Flash_8B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Flash Thinking Experimental (Jan '25)
+#################################################################
+
+abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Jan '25)"@en ;
+    abi:modelSlug "gemini-2-0-flash-thinking-exp-0121"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 41.7 ;
+    abi:codingIndex 32.5 ;
+    abi:mathIndex 72.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Flash_Thinking_Experimental_Jan_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.5 Pro (May '24)
+#################################################################
+
+abi:Gemini_1_5_Pro_May_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Pro (May '24)"@en ;
+    abi:modelSlug "gemini-1-5-pro-may-2024"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_5_Pro_May_24 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 22.2 ;
+    abi:codingIndex 25.9 ;
+    abi:mathIndex 37.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Pro_May_24 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_5_Pro_May_24 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_5_Pro_May_24 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_5_Pro_May_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Flash Preview
+#################################################################
+
+abi:Gemini_2_5_Flash_Preview a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash Preview"@en ;
+    abi:modelSlug "gemini-2-5-flash-04-2025"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Flash_Preview abi:inputTokenCost 0.15 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.6 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.263 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 38 ;
+    abi:codingIndex 31.9 ;
+    abi:mathIndex 68 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Preview .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Flash_Preview .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Flash_Preview .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Flash_Preview .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Pro Preview (Mar' 25)
+#################################################################
+
+abi:Gemini_2_5_Pro_Preview_Mar_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro Preview (Mar' 25)"@en ;
+    abi:modelSlug "gemini-2-5-pro-03-25"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Pro_Preview_Mar_25 abi:inputTokenCost 1.25 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 10 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.438 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 147.041 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 35.783 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 35.783 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 59 ;
+    abi:codingIndex 58.6 ;
+    abi:mathIndex 92.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Pro_Preview_Mar_25 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Pro_Preview_Mar_25 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Pro_Preview_Mar_25 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Pro_Preview_Mar_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.0 Pro
+#################################################################
+
+abi:Gemini_1_0_Pro a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.0 Pro"@en ;
+    abi:modelSlug "gemini-1-0-pro"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_0_Pro abi:inputTokenCost 0.5 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 1.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.75 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 8.5 ;
+    abi:codingIndex 11.7 ;
+    abi:mathIndex 20.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_0_Pro .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_0_Pro .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_0_Pro .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_0_Pro .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.5 Flash (May '24)
+#################################################################
+
+abi:Gemini_1_5_Flash_May_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.5 Flash (May '24)"@en ;
+    abi:modelSlug "gemini-1-5-flash-may-2024"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_5_Flash_May_24 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 16.8 ;
+    abi:codingIndex 18.8 ;
+    abi:mathIndex 32.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_5_Flash_May_24 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_5_Flash_May_24 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_5_Flash_May_24 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_5_Flash_May_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Flash Thinking Experimental (Dec '24)
+#################################################################
+
+abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash Thinking Experimental (Dec '24)"@en ;
+    abi:modelSlug "gemini-2-0-flash-thinking-exp-1219"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 23.3 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Flash_Thinking_Experimental_Dec_24 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 1.0 Ultra
+#################################################################
+
+abi:Gemini_1_0_Ultra a abi:AIModelInstance ;
+    rdfs:label "Gemini 1.0 Ultra"@en ;
+    abi:modelSlug "gemini-1-0-ultra"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_1_0_Ultra abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 15.6 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_1_0_Ultra .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_1_0_Ultra .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_1_0_Ultra .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_1_0_Ultra .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Flash Preview (Reasoning)
+#################################################################
+
+abi:Gemini_2_5_Flash_Preview_Reasoning a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Flash Preview (Reasoning)"@en ;
+    abi:modelSlug "gemini-2-5-flash-reasoning-04-2025"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Flash_Preview_Reasoning abi:inputTokenCost 0.15 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 3.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.988 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 50.2 ;
+    abi:codingIndex 43.2 ;
+    abi:mathIndex 91.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Flash_Preview_Reasoning .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Flash_Preview_Reasoning .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Flash_Preview_Reasoning .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Flash_Preview_Reasoning .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.5 Pro Preview (May' 25)
+#################################################################
+
+abi:Gemini_2_5_Pro_Preview_May_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.5 Pro Preview (May' 25)"@en ;
+    abi:modelSlug "gemini-2-5-pro-05-06"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_5_Pro_Preview_May_25 abi:inputTokenCost 1.25 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 10 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 3.438 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 146.932 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 37.463 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 37.463 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 58 ;
+    abi:codingIndex 59.3 ;
+    abi:mathIndex 91.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_5_Pro_Preview_May_25 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_5_Pro_Preview_May_25 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_5_Pro_Preview_May_25 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_5_Pro_Preview_May_25 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemini 2.0 Flash-Lite (Feb '25)
+#################################################################
+
+abi:Gemini_2_0_Flash_Lite_Feb_25 a abi:AIModelInstance ;
+    rdfs:label "Gemini 2.0 Flash-Lite (Feb '25)"@en ;
+    abi:modelSlug "gemini-2-0-flash-lite-001"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemini_2_0_Flash_Lite_Feb_25 abi:inputTokenCost 0.075 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.3 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.131 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 211.541 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.254 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.254 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 30.3 ;
+    abi:codingIndex 21.8 ;
+    abi:mathIndex 57.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GeminiAgent abi:canUtilizeModel abi:Gemini_2_0_Flash_Lite_Feb_25 .
+abi:GeminiBusinessProposalProcess abi:utilizesModel abi:Gemini_2_0_Flash_Lite_Feb_25 .
+abi:GeminiCreativeWritingProcess abi:utilizesModel abi:Gemini_2_0_Flash_Lite_Feb_25 .
+abi:GeminiCodeGenerationProcess abi:utilizesModel abi:Gemini_2_0_Flash_Lite_Feb_25 .

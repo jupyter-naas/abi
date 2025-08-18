@@ -42,20 +42,29 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
-
+import re
 
 class AgentSharedState:
     __thread_id: int
+    _current_active_agent: Optional[str]
 
-    def __init__(self, thread_id: int = 1):
-        self.__thread_id = thread_id
+    def __init__(self, thread_id: int = 1, current_active_agent: Optional[str] = None):
+        self._thread_id = thread_id
+        self._current_active_agent = current_active_agent
 
     @property
     def thread_id(self) -> int:
-        return self.__thread_id
+        return self._thread_id
 
     def set_thread_id(self, thread_id: int):
-        self.__thread_id = thread_id
+        self._thread_id = thread_id
+    
+    @property 
+    def current_active_agent(self) -> Optional[str]:
+        return self._current_active_agent
+    
+    def set_current_active_agent(self, agent_name: Optional[str]):
+        self._current_active_agent = agent_name
 
 
 @dataclass
@@ -72,6 +81,9 @@ class ToolUsageEvent(Event):
 class ToolResponseEvent(Event):
     pass
 
+@dataclass
+class AIMessageEvent(Event):
+    agent_name: str
 
 @dataclass
 class FinalStateEvent(Event):
@@ -86,10 +98,12 @@ class AgentConfiguration:
     on_tool_response: Callable[[AnyMessage], None] = field(
         default_factory=lambda: lambda _: None
     )
+    on_ai_message: Callable[[AnyMessage, str], None] = field(
+        default_factory=lambda: lambda _, __: None
+    )
     system_prompt: str = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
     )
-
 
 class Agent(Expose):
     """An Agent class that orchestrates interactions between a language model and tools.
@@ -121,35 +135,37 @@ class Agent(Expose):
     3. Route back to agent after tool usage
     """
 
-    __name: str
-    __description: str
+    _name: str
+    _description: str
+    _system_prompt: str
 
-    __chat_model: BaseChatModel
-    __chat_model_with_tools: Runnable[
+    _chat_model: BaseChatModel
+    _chat_model_with_tools: Runnable[
         Any
         | str
         | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
         BaseMessage,
     ]
-    __tools: list[Union[Tool, "Agent"]]
-    __tools_by_name: dict[str, Union[Tool, BaseTool]]
+    _tools: list[Union[Tool, "Agent"]]
+    _tools_by_name: dict[str, Union[Tool, BaseTool]]
 
     # An agent can have other agents.
     # He will be responsible to load them as tools.
-    __agents: list["Agent"] = []
+    _agents: list["Agent"] = []
 
-    __chekpointer: BaseCheckpointSaver
-    __state: AgentSharedState
+    _chekpointer: BaseCheckpointSaver
+    _state: AgentSharedState
 
     graph: CompiledStateGraph
-    __workflow: StateGraph
-    __configuration: AgentConfiguration
+    _workflow: StateGraph
+    _configuration: AgentConfiguration
 
-    __on_tool_usage: Callable[[AnyMessage], None]
-    __on_tool_response: Callable[[AnyMessage], None]
+    _on_tool_usage: Callable[[AnyMessage], None]
+    _on_tool_response: Callable[[AnyMessage], None]
+    _on_ai_message: Callable[[AnyMessage, str], None]
 
     # Avent queue used to stream tool usage and responses.
-    __event_queue: Queue
+    _event_queue: Queue
 
     def __init__(
         self,
@@ -172,11 +188,12 @@ class Agent(Expose):
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 Defaults to an in-memory saver.
         """
-        self.__name = name
-        self.__description = description
+        self._name = name
+        self._description = description
+        self._system_prompt = configuration.system_prompt
 
         # We store the original list of provided tools. This will be usefull for duplication.
-        self.__tools = tools
+        self._tools = tools
 
         # Assertions
         assert isinstance(name, str)
@@ -189,41 +206,50 @@ class Agent(Expose):
         # We store the provided tools in __structured_tools because we will need to know which ones are provided by the user and which one are agents.
         # This is needed when we duplicate the agent.
         _structured_tools, _agents = self.prepare_tools(tools, agents)
-        self.__structured_tools = _structured_tools
-        self.__agents = _agents
+        self._structured_tools = _structured_tools
+        self._agents = _agents
 
         # We assert that the tool that are provided are valid.
-        for t in self.__structured_tools:
+        for t in self._structured_tools:
             assert isinstance(t, StructuredTool)
             assert hasattr(t, "name")
             assert hasattr(t, "description")
             assert hasattr(t, "func")
             assert hasattr(t, "args_schema")
 
-        self.__tools_by_name: dict[str, Union[Tool, BaseTool]] = {
-            tool.name: tool for tool in self.__structured_tools
+        self._tools_by_name: dict[str, Union[Tool, BaseTool]] = {
+            tool.name: tool for tool in self._structured_tools
         }
 
         # TODO: Make sure the Agent does not call the version without tools.
-        self.__chat_model = chat_model
-        self.__chat_model_with_tools = chat_model.bind_tools(self.__structured_tools)
-        self.__checkpointer = memory
-        self.__state = state
+        self._chat_model = chat_model
+        self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
+        self._checkpointer = memory
+        self._state = state
 
-        self.__configuration = configuration
+        self._configuration = configuration
 
-        self.__on_tool_usage = configuration.on_tool_usage
-        self.__on_tool_response = configuration.on_tool_response
+        self._on_tool_usage = configuration.on_tool_usage
+        self._on_tool_response = configuration.on_tool_response
+        self._on_ai_message = configuration.on_ai_message
 
         # Initialize the event queue.
         if event_queue is None:
-            self.__event_queue = Queue()
+            self._event_queue = Queue()
         else:
-            self.__event_queue = event_queue
+            self._event_queue = event_queue
 
-        # self.__setup_workflow()
+        # self._setup_workflow()
 
         self.build_graph()
+
+    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
+        if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
+            # Replace invalid characters with '_'
+            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', tool.name)
+            logger.warning(f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'.")
+            tool.name = valid_name
+        return tool
 
     def prepare_tools(
         self, tools: list[Union[Tool, "Agent"]], agents: list
@@ -231,27 +257,42 @@ class Agent(Expose):
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
+        
+        Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
         _agents: list["Agent"] = []
+        _tool_names: set[str] = set()
+        _agent_names: set[str] = set()
 
         # We process tools knowing that they can either be StructutedTools or Agent.
         for t in tools:
             if isinstance(t, Agent):
                 # TODO: We might want to duplicate the agent first.
-                logger.debug(f"Agent passed as tool: {t}")
-                _agents.append(t)
-                for tool in t.as_tools():
-                    _tools.append(tool)
+                # logger.debug(f"Agent passed as tool: {t}")
+                if t.name not in _agent_names:
+                    _agents.append(t)
+                    _agent_names.add(t.name)
+                    for tool in t.as_tools():
+                        tool = self.validate_tool_name(tool)
+                        if tool.name not in _tool_names:
+                            _tools.append(tool)
+                            _tool_names.add(tool.name)
             else:
-                _tools.append(t)
+                if t.name not in _tool_names:
+                    _tools.append(t)
+                    _tool_names.add(t.name)
 
         # We process agents that are not provided in tools.
         for agent in agents:
-            if agent not in _agents:
+            if agent.name not in _agent_names:
                 _agents.append(agent)
+                _agent_names.add(agent.name)
                 for tool in agent.as_tools():
-                    _tools.append(tool)
+                    tool = self.validate_tool_name(tool)
+                    if tool.name not in _tool_names:
+                        _tools.append(tool)
+                        _tool_names.add(tool.name)
 
         return _tools, _agents
 
@@ -260,7 +301,7 @@ class Agent(Expose):
 
     @property
     def state(self) -> AgentSharedState:
-        return self.__state
+        return self._state
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(MessagesState)
@@ -268,32 +309,35 @@ class Agent(Expose):
         graph.add_edge(START, "call_model")
 
         graph.add_node(self.call_tools)
+        # This is not needed because the call_tools is generating the proper Command to go to the right node after each tool call.
         # graph.add_edge("call_tools", "call_model")
 
-        for agent in self.__agents:
-            logger.debug(f"Adding node {agent.name} in graph")
+        for agent in self._agents:
+            # logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
-            # WARNING: This is not needed because the handoff is done as a tool, and therefore, after a handoff, the model will be called thanks to: graph.add_edge("call_tools", "call_model")
-            # graph.add_edge(agent.name, "call_model")
+            # This makes sure that after calling an agent in a graph, we call the main model of the graph.
+            #graph.add_edge(agent.name, "call_model")
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
         if patcher:
             graph = patcher(graph)
 
-        self.graph = graph.compile(checkpointer=self.__checkpointer)
+        self.graph = graph.compile(checkpointer=self._checkpointer)
 
     def call_model(
         self, state: MessagesState
     ) -> Command[Literal["call_tools", "__end__"]]:
-        # logger.debug(f"call_model on: {self.name}")
+        logger.info(f"call_model on: {self.name}")
         messages = state["messages"]
-        if self.__configuration.system_prompt:
+        if self._system_prompt:
             messages = [
-                SystemMessage(content=self.__configuration.system_prompt),
+                SystemMessage(content=self._system_prompt),
             ] + messages
 
-        response: BaseMessage = self.__chat_model_with_tools.invoke(messages)
+        logger.info(f"messages: {messages}")
+
+        response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         if (
             isinstance(response, AIMessage)
             and hasattr(response, "tool_calls")
@@ -304,19 +348,20 @@ class Agent(Expose):
             # It's important because, as some tools are subgraphs, and that we are passing the full state, the subgraph will be able to mess with the state.
             # Therefore, if the LLM calls a tool here like the "add" method, and at the same time request the multiplication agent, the agent will mess with the state, and the result of the "add" tool will be lost.
             #### ----->  A solution would be to rebuild the state to make sure that the following message of a tool call it the response of that call. If we do that we should theroetically be able to call multiple tools at once, which would be more effective.
-            response.tool_calls = [response.tool_calls[0]]
+            # response.tool_calls = [response.tool_calls[0]]
 
             return Command(goto="call_tools", update={"messages": [response]})
+        # else:
+        #     self._configuration._noti((self._name, response))
 
         return Command(goto="__end__", update={"messages": [response]})
 
-    # NOTE: this is a simplified version of the prebuilt ToolNode
-    # If you want to have a tool node that has full feature parity, please refer to the source code
     def call_tools(self, state: MessagesState) -> list[Command]:
         last_message: AnyMessage = state["messages"][-1]
         if not isinstance(last_message, AIMessage) or not hasattr(
             last_message, "tool_calls"
-        ):
+        ) or len(last_message.tool_calls) == 0:
+            logger.warning(f"No tool calls found in last message but call_tools was called: {last_message}")
             return [Command(goto="__end__", update={"messages": [last_message]})]
 
         tool_calls: list[ToolCall] = last_message.tool_calls
@@ -325,7 +370,7 @@ class Agent(Expose):
 
         results: list[Command] = []
         for tool_call in tool_calls:
-            tool_: BaseTool = self.__tools_by_name[tool_call["name"]]
+            tool_: BaseTool = self._tools_by_name[tool_call["name"]]
 
             tool_input_fields = tool_.get_input_schema().model_json_schema()[
                 "properties"
@@ -342,36 +387,48 @@ class Agent(Expose):
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
                 args = {"state": state, "tool_call_id": tool_call["id"]}
+            try:
+                tool_response = tool_.invoke(args)
 
-            tool_response = tool_.invoke(args)
 
-            if isinstance(tool_response, ToolMessage):
-                results.append(Command(update={"messages": [tool_response]}))
+                if isinstance(tool_response, ToolMessage):
+                    results.append(Command(update={"messages": [tool_response]}))
 
-            # handle tools that return Command directly
-            elif isinstance(tool_response, Command):
-                results.append(tool_response)
-            else:
-                raise ValueError(
-                    f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
-                )
+                # handle tools that return Command directly
+                elif isinstance(tool_response, Command):
+                    results.append(tool_response)
+                else:
+                    raise ValueError(
+                        f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
+                    )
+            except Exception as e:
+                # If the tool call fails, we want the model to interpret it.
+                results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
 
         assert len(results) > 0, state
-        results.append(Command(goto="call_model"))
+
+        # If the last response is a ToolMessage, we want the model to interpret it.
+        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage):
+            logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
+            results.append(Command(goto="call_model"))
 
         return results
 
     @property
     def workflow(self) -> StateGraph:
-        return self.__workflow
+        return self._workflow
 
-    def __notify_tool_usage(self, message: AnyMessage):
-        self.__event_queue.put(ToolUsageEvent(payload=message))
-        self.__on_tool_usage(message)
+    def _notify_tool_usage(self, message: AnyMessage):
+        self._event_queue.put(ToolUsageEvent(payload=message))
+        self._on_tool_usage(message)
 
-    def __notify_tool_response(self, message: AnyMessage):
-        self.__event_queue.put(ToolResponseEvent(payload=message))
-        self.__on_tool_response(message)
+    def _notify_tool_response(self, message: AnyMessage):
+        self._event_queue.put(ToolResponseEvent(payload=message))
+        self._on_tool_response(message)
+    
+    def _notify_ai_message(self, message: AnyMessage, agent_name: str):
+        self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
+        self._on_ai_message(message, agent_name)
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -383,7 +440,7 @@ class Agent(Expose):
             callback (Callable[[AnyMessage], None]): Function to call with the message
                 containing the tool call
         """
-        self.__on_tool_usage = callback
+        self._on_tool_usage = callback
 
     def on_tool_response(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool response is received.
@@ -395,7 +452,12 @@ class Agent(Expose):
             callback (Callable[[AnyMessage], None]): Function to call with the message
                 containing the tool response
         """
-        self.__on_tool_response = callback
+        self._on_tool_response = callback
+        
+    def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
+        """Register a callback to be called when an AI message is received.
+        """
+        self._on_ai_message = callback
 
     @property
     def app(self):
@@ -407,7 +469,7 @@ class Agent(Expose):
         Returns:
             RunnableSequence: The Langchain runnable sequence that processes messages
         """
-        return self.__app
+        return self._app
 
     def stream(self, prompt: str) -> Generator[dict[str, Any] | Any, None, None]:
         """Process a user prompt through the agent and yield responses as they come.
@@ -422,39 +484,65 @@ class Agent(Expose):
 
         for chunk in self.graph.stream(
             {"messages": [HumanMessage(content=prompt)]},
-            config={"configurable": {"thread_id": self.__state.thread_id}},
+            config={"configurable": {"thread_id": self._state.thread_id}},
             subgraphs=True,
         ):
-            _, payload = chunk
-
+            source, payload = chunk
+            agent_name = self._name if len(source) == 0 else source[0].split(':')[0]
             if isinstance(payload, dict):
-                last_message = list(payload.values())[0]["messages"][-1]
+                last_messages = []
 
-                if isinstance(last_message, AIMessage):
-                    if pd.get(last_message, "additional_kwargs.tool_calls"):
-                        # This is a tool call.
-                        self.__notify_tool_usage(last_message)
+                logger.debug(f"payload: {payload}")
+                # print(f"{left} {self} payload: {payload}")
+                
+                # agent_name = self._name
+                # if 'call_model' not in payload:
+                #     agent_name = list(payload.keys())[0]
+                
+                v = list(payload.values())[0]
+                
+                if v is None:
+                    continue
+                
+                if isinstance(v, dict):
+                    if "messages" in v:
+                        last_messages = [v["messages"][-1]]
                     else:
-                        # This is a message.
-                        # print("\n\nIntermediate AI Message:")
-                        # print(last_message.content)
-                        # print(last_message)
-                        # print('\n\n')
-                        pass
-                elif isinstance(last_message, ToolMessage):
-                    if last_message.id not in notified:
-                        self.__notify_tool_response(last_message)
-                        notified[last_message.id] = True
+                        continue
                 else:
-                    if "tool_call_id" in last_message:
-                        if last_message["tool_call_id"] not in notified:
-                            self.__notify_tool_response(last_message)
-                            notified[last_message["tool_call_id"]] = True
+                    logger.debug(f"v: {v}")
+                    last_messages = [e["messages"][-1] for e in v]
+
+
+                for last_message in last_messages:
+
+                    if isinstance(last_message, AIMessage):
+                        if pd.get(last_message, "additional_kwargs.tool_calls"):
+                            # This is a tool call.
+                            self._notify_tool_usage(last_message)
+                        else:
+                            if 'call_model' in payload or 'intent_mapping_router' in payload:
+                                self._notify_ai_message(last_message, agent_name)
+                            # This is a message.
+                            # print("\n\nIntermediate AI Message:")
+                            # print(last_message.content)
+                            # print(last_message)
+                            # print('\n\n')
+                            pass
+                    elif isinstance(last_message, ToolMessage):
+                        if last_message.id not in notified:
+                            self._notify_tool_response(last_message)
+                            notified[last_message.id] = True
                     else:
-                        print("\n\n Unknown message type:")
-                        print(type(last_message))
-                        print(last_message)
-                        print("\n\n")
+                        if "tool_call_id" in last_message:
+                            if last_message["tool_call_id"] not in notified:
+                                self._notify_tool_response(last_message)
+                                notified[last_message["tool_call_id"]] = True
+                        else:
+                            print("\n\n Unknown message type:")
+                            print(type(last_message))
+                            print(last_message)
+                            print("\n\n")
 
             yield chunk
 
@@ -492,7 +580,7 @@ class Agent(Expose):
         conversation thread. Any subsequent invocations will be processed as part of a
         new conversation context.
         """
-        self.__state.set_thread_id(self.__state.thread_id + 1)
+        self._state.set_thread_id(self._state.thread_id + 1)
 
     def __tool_function(self, prompt: str) -> str:
         response = self.invoke(prompt)
@@ -510,25 +598,25 @@ class Agent(Expose):
             Agent: A new Agent instance with the same configuration
         """
         # Initialize the tools list with the original list of tools.
-        # tools = [tool for tool in self.__structured_tools]
-        tools: list[Tool] = [tool for tool in self.__tools if isinstance(tool, Tool)]
+        # tools = [tool for tool in self._structured_tools]
+        tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
 
         if queue is None:
             queue = Queue()
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[Agent] = [agent.duplicate(queue) for agent in self.__agents]
+        agents: list[Agent] = [agent.duplicate(queue) for agent in self._agents]
 
         new_agent = Agent(
-            name=self.__name,
-            description=self.__description,
-            chat_model=self.__chat_model,
+            name=self._name,
+            description=self._description,
+            chat_model=self._chat_model,
             tools=tools + agents,
-            memory=self.__checkpointer,
+            memory=self._checkpointer,
             # TODO: Make sure that this is the behaviour we want.
             state=AgentSharedState(),  # Create new state instance
-            configuration=self.__configuration,
+            configuration=self._configuration,
             event_queue=queue,
         )
 
@@ -553,6 +641,11 @@ class Agent(Expose):
             description_stream (str): Optional description to add to the stream endpoints. Defaults to ""
             tags (list[str]): Optional list of tags to add to the endpoints. Defaults to None
         """
+        
+        route_name = route_name or self._name
+        name = name or self._name.capitalize().replace("_", " ")
+        description = description or self._description
+        description_stream = description_stream or self._description
 
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
@@ -598,7 +691,7 @@ class Agent(Expose):
         # Start a thread to run the invoke and put results in queue
         def run_invoke():
             final_state = self.invoke(prompt)
-            self.__event_queue.put(FinalStateEvent(payload=final_state))
+            self._event_queue.put(FinalStateEvent(payload=final_state))
 
         from threading import Thread
 
@@ -608,7 +701,7 @@ class Agent(Expose):
         final_state = None
         while True:
             try:
-                message = self.__event_queue.get(timeout=0.05)
+                message = self._event_queue.get(timeout=0.05)
                 if isinstance(message, ToolUsageEvent):
                     yield {
                         "event": "tool_usage",
@@ -619,13 +712,18 @@ class Agent(Expose):
                         "event": "tool_response",
                         "data": str(message.payload.content),
                     }
+                elif isinstance(message, AIMessageEvent):
+                    yield {
+                        "event": "ai_message",
+                        "data": str(message.payload.content),
+                    }
                 elif isinstance(message, FinalStateEvent):
                     final_state = message.payload
                     break
 
                 if (
                     not thread.is_alive()
-                    and self.__event_queue.empty()
+                    and self._event_queue.empty()
                     and final_state is None
                 ):
                     # We have a problem.
@@ -660,7 +758,7 @@ class Agent(Expose):
         Returns:
             list[Tool]: List of tools configured for this agent
         """
-        return self.__structured_tools
+        return self._structured_tools
 
     @property
     def name(self) -> str:
@@ -669,7 +767,7 @@ class Agent(Expose):
         Returns:
             str: The agent's name
         """
-        return self.__name
+        return self._name
 
     @property
     def description(self) -> str:
@@ -678,11 +776,11 @@ class Agent(Expose):
         Returns:
             str: The agent's description
         """
-        return self.__description
+        return self._description
 
     @property
     def agents(self) -> list["Agent"]:
-        return self.__agents
+        return self._agents
 
     @property
     def chat_model(self) -> BaseChatModel:
@@ -691,7 +789,7 @@ class Agent(Expose):
         Returns:
             BaseChatModel: The agent's chat model
         """
-        return self.__chat_model
+        return self._chat_model
 
     @property
     def configuration(self) -> AgentConfiguration:
@@ -700,7 +798,10 @@ class Agent(Expose):
         Returns:
             AgentConfiguration: The agent's configuration
         """
-        return self.__configuration
+        return self._configuration
+
+    def hello(self) -> str:
+        return "Hello"
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
@@ -733,6 +834,7 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
             # We're passing agent's FULL internal message history AND adding a tool message to make sure
             # the resulting chat history is valid. See the paragraph above for more information.
             update={"messages": state["messages"] + [tool_message]},
+            # update={"messages": state["messages"]},
         )
 
     assert isinstance(handoff_to_agent, BaseTool)

@@ -1,7 +1,6 @@
 from pydantic import Field, create_model
 import asyncio
-
-from abi import logger
+from rdflib import Graph, URIRef, RDF
 
 from .GenericWorkflow import GenericWorkflow
 
@@ -48,9 +47,32 @@ def templatable_queries():
         }
 
     arguments = {}
+    
+    argument_graph = Graph()
+    argument_graph.bind("intentMapping", URIRef("http://ontology.naas.ai/intentMapping/"))
+    results = services.triple_store_service.query("""
+                PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
+                
+                SELECT ?argument ?name ?description ?validationPattern ?validationFormat
+                WHERE {
+                    ?argument a intentMapping:QueryArgument ;
+                        intentMapping:argumentName ?name ;
+                        intentMapping:argumentDescription ?description ;
+                        intentMapping:validationPattern ?validationPattern ;
+                        intentMapping:validationFormat ?validationFormat .
+                }
+            """)
+    
+    for argument, name, description, validationPattern, validationFormat in results:
+        argument_graph.add((argument, RDF.type, URIRef("http://ontology.naas.ai/intentMapping/QueryArgument")))
+        argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/argumentName"), name))
+        argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/argumentDescription"), description))
+        argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/validationPattern"), validationPattern))
+        argument_graph.add((argument, URIRef("http://ontology.naas.ai/intentMapping/validationFormat"), validationFormat))
+    
 
-    def __load_arguments(templatableQuery):
-        arguments = {}
+    arguments = {}
+    for templatableQuery in queries:
         for argument in queries[templatableQuery].get("hasArgument"):
             q = (
                 """
@@ -69,8 +91,9 @@ def templatable_queries():
                 }
             """
             )
-            logger.debug(f"Query: {q}")
-            results = services.triple_store_service.query(q)
+            # logger.debug(f"Query: {q}")
+            # results = services.triple_store_service.query(q)
+            results = argument_graph.query(q)
 
             for result in results:
                 argument, name, description, validationPattern, validationFormat = (
@@ -83,11 +106,47 @@ def templatable_queries():
                     "validationPattern": validationPattern,
                     "validationFormat": validationFormat,
                 }
-        return arguments
 
-    jobs = [(__load_arguments, templatableQuery) for templatableQuery in queries]
-    for args in asyncio_thread_job(jobs):
-        arguments.update(args)
+    # def __load_arguments(templatableQuery):
+    #     arguments = {}
+    #     for argument in queries[templatableQuery].get("hasArgument"):
+    #         q = (
+    #             """
+    #             PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
+                
+    #             SELECT ?argument ?name ?description ?validationPattern ?validationFormat
+    #             WHERE {
+    #                 BIND(<"""
+    #             + str(argument)
+    #             + """> AS ?argument)
+    #                 ?argument a intentMapping:QueryArgument ;
+    #                     intentMapping:argumentName ?name ;
+    #                     intentMapping:argumentDescription ?description ;
+    #                     intentMapping:validationPattern ?validationPattern ;
+    #                     intentMapping:validationFormat ?validationFormat .
+    #             }
+    #         """
+    #         )
+    #         logger.debug(f"Query: {q}")
+    #         # results = services.triple_store_service.query(q)
+    #         results = argument_graph.query(q)
+
+    #         for result in results:
+    #             argument, name, description, validationPattern, validationFormat = (
+    #                 result
+    #             )
+
+    #             arguments[argument] = {
+    #                 "name": name,
+    #                 "description": description,
+    #                 "validationPattern": validationPattern,
+    #                 "validationFormat": validationFormat,
+    #             }
+    #     return arguments
+
+    # jobs = [(__load_arguments, templatableQuery) for templatableQuery in queries]
+    # for args in asyncio_thread_job(jobs):
+    #     arguments.update(args)
 
     return queries, arguments
 

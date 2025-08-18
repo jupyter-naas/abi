@@ -1,0 +1,414 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+<http://naas.ai/ontology/abi/GemmaOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Gemma AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Gemma AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
+abi:GemmaAgent a abi:AIAgent ;
+    rdfs:label "Gemma AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Gemma models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
+
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:GemmaBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Gemma Business Proposal Process"@en ;
+    abi:hasParticipant abi:GemmaAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:GemmaBusinessProposalSession ;
+    abi:hasQuality abi:GemmaBusinessProposalQuality .
+
+abi:GemmaCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Gemma Creative Writing Process"@en ;
+    abi:hasParticipant abi:GemmaAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:GemmaCreativeWritingSession ;
+    abi:hasQuality abi:GemmaCreativeWritingQuality .
+
+abi:GemmaCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Gemma Code Generation Process"@en ;
+    abi:hasParticipant abi:GemmaAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:GemmaCodeGenerationSession ;
+    abi:hasQuality abi:GemmaCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:GemmaBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Gemma Business Proposal Session"@en .
+
+abi:GemmaCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Gemma Creative Writing Session"@en .
+
+abi:GemmaCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Gemma Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3 27B Instruct
+#################################################################
+
+abi:Gemma_3_27B_Instruct a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 27B Instruct"@en ;
+    abi:modelSlug "gemma-3-27b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3_27B_Instruct abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 47.884 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.617 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.617 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 25.2 ;
+    abi:codingIndex 17.4 ;
+    abi:mathIndex 56.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3_27B_Instruct .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3_27B_Instruct .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3_27B_Instruct .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3_27B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3 4B Instruct
+#################################################################
+
+abi:Gemma_3_4B_Instruct a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 4B Instruct"@en ;
+    abi:modelSlug "gemma-3-4b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3_4B_Instruct abi:inputTokenCost 0.02 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.04 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.025 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 13.5 ;
+    abi:codingIndex 9.3 ;
+    abi:mathIndex 41.5 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3_4B_Instruct .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3_4B_Instruct .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3_4B_Instruct .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3_4B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3 12B Instruct
+#################################################################
+
+abi:Gemma_3_12B_Instruct a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 12B Instruct"@en ;
+    abi:modelSlug "gemma-3-12b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3_12B_Instruct abi:inputTokenCost 0.05 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.1 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.063 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 24 ;
+    abi:codingIndex 15.5 ;
+    abi:mathIndex 53.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3_12B_Instruct .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3_12B_Instruct .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3_12B_Instruct .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3_12B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3n E2B Instruct
+#################################################################
+
+abi:Gemma_3n_E2B_Instruct a abi:AIModelInstance ;
+    rdfs:label "Gemma 3n E2B Instruct"@en ;
+    abi:modelSlug "gemma-3n-e2b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3n_E2B_Instruct abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 48.892 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.207 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.207 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 10.4 ;
+    abi:codingIndex 7.4 ;
+    abi:mathIndex 39.1 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3n_E2B_Instruct .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3n_E2B_Instruct .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3n_E2B_Instruct .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3n_E2B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3 1B Instruct
+#################################################################
+
+abi:Gemma_3_1B_Instruct a abi:AIModelInstance ;
+    rdfs:label "Gemma 3 1B Instruct"@en ;
+    abi:modelSlug "gemma-3-1b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3_1B_Instruct abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 1.1 ;
+    abi:codingIndex 1.2 ;
+    abi:mathIndex 24.2 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3_1B_Instruct .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3_1B_Instruct .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3_1B_Instruct .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3_1B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3n E4B Instruct
+#################################################################
+
+abi:Gemma_3n_E4B_Instruct a abi:AIModelInstance ;
+    rdfs:label "Gemma 3n E4B Instruct"@en ;
+    abi:modelSlug "gemma-3n-e4b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3n_E4B_Instruct abi:inputTokenCost 0.02 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.04 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.025 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 87.237 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.45 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.45 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 18.5 ;
+    abi:codingIndex 11.3 ;
+    abi:mathIndex 45.4 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3n_E4B_Instruct .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3n_E4B_Instruct .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3n_E4B_Instruct .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3n_E4B_Instruct .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 2 27B
+#################################################################
+
+abi:Gemma_2_27B a abi:AIModelInstance ;
+    rdfs:label "Gemma 2 27B"@en ;
+    abi:modelSlug "gemma-2-27b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_2_27B abi:inputTokenCost 0.8 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.8 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.8 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 20.1 ;
+    abi:codingIndex 20.2 ;
+    abi:mathIndex 41.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_2_27B .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_2_27B .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_2_27B .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_2_27B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 2 9B
+#################################################################
+
+abi:Gemma_2_9B a abi:AIModelInstance ;
+    rdfs:label "Gemma 2 9B"@en ;
+    abi:modelSlug "gemma-2-9b"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_2_9B abi:inputTokenCost 0.2 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.2 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.2 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 10.2 ;
+    abi:codingIndex 6.6 ;
+    abi:mathIndex 25.9 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_2_9B .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_2_9B .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_2_9B .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_2_9B .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Gemma 3n E4B Instruct Preview (May '25)
+#################################################################
+
+abi:Gemma_3n_E4B_Instruct_Preview_May_25 a abi:AIModelInstance ;
+    rdfs:label "Gemma 3n E4B Instruct Preview (May '25)"@en ;
+    abi:modelSlug "gemma-3n-e4b-preview-0520"@en ;
+    abi:provider "Google"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Gemma_3n_E4B_Instruct_Preview_May_25 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 15.2 ;
+    abi:codingIndex 11.2 ;
+    abi:mathIndex 42.8 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GemmaAgent abi:canUtilizeModel abi:Gemma_3n_E4B_Instruct_Preview_May_25 .
+abi:GemmaBusinessProposalProcess abi:utilizesModel abi:Gemma_3n_E4B_Instruct_Preview_May_25 .
+abi:GemmaCreativeWritingProcess abi:utilizesModel abi:Gemma_3n_E4B_Instruct_Preview_May_25 .
+abi:GemmaCodeGenerationProcess abi:utilizesModel abi:Gemma_3n_E4B_Instruct_Preview_May_25 .

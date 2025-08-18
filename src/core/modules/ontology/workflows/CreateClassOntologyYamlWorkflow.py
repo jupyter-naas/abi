@@ -3,8 +3,8 @@ from abi.workflow.workflow import WorkflowParameters
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
 from src.core.modules.ontology.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflow,
-    ConvertOntologyGraphToYamlConfiguration,
-    ConvertOntologyGraphToYamlParameters,
+    ConvertOntologyGraphToYamlWorkflowConfiguration,
+    ConvertOntologyGraphToYamlWorkflowParameters,
 )
 from src import services
 from dataclasses import dataclass
@@ -19,7 +19,7 @@ from abi.utils.SPARQL import results_to_list, get_class_uri_from_individual_uri
 from enum import Enum
 
 @dataclass
-class CreateClassOntologyYamlConfiguration(WorkflowConfiguration):
+class CreateClassOntologyYamlWorkflowConfiguration(WorkflowConfiguration):
     """Configuration for CreateOntologyYAML workflow.
 
     Attributes:
@@ -27,10 +27,9 @@ class CreateClassOntologyYamlConfiguration(WorkflowConfiguration):
     """
 
     triple_store: ITripleStoreService
-    convert_ontology_graph_config: ConvertOntologyGraphToYamlConfiguration
+    convert_ontology_graph_config: ConvertOntologyGraphToYamlWorkflowConfiguration
 
-
-class CreateClassOntologyYamlParameters(WorkflowParameters):
+class CreateClassOntologyYamlWorkflowParameters(WorkflowParameters):
     """Parameters for CreateOntologyYAML workflow execution.
 
     Attributes:
@@ -41,19 +40,17 @@ class CreateClassOntologyYamlParameters(WorkflowParameters):
         level (str): The level of the ontology (e.g., 'TOP_LEVEL', 'MID_LEVEL', 'DOMAIN', 'USE_CASE')
         display_relations_names (bool): Whether to display relation names in the visualization
     """
-
     class_uri: Annotated[str, Field(
         ...,
         description="The URI of the class to convert to YAML"
     )]
 
-
 class CreateClassOntologyYamlWorkflow(Workflow):
     """Workflow for converting ontology files to YAML and pushing them to a Naas workspace."""
 
-    __configuration: CreateClassOntologyYamlConfiguration
+    __configuration: CreateClassOntologyYamlWorkflowConfiguration
 
-    def __init__(self, configuration: CreateClassOntologyYamlConfiguration):
+    def __init__(self, configuration: CreateClassOntologyYamlWorkflowConfiguration):
         self.__configuration = configuration
         self.__convert_ontology_graph_workflow = ConvertOntologyGraphToYamlWorkflow(
             self.__configuration.convert_ontology_graph_config
@@ -81,11 +78,11 @@ class CreateClassOntologyYamlWorkflow(Workflow):
                 f"==> Creating class ontology YAML for {class_uri} ({s} {p} {o})"
             )
             return self.graph_to_yaml(
-                CreateClassOntologyYamlParameters(class_uri=class_uri)
+                CreateClassOntologyYamlWorkflowParameters(class_uri=class_uri)
             )
         return None
 
-    def graph_to_yaml(self, parameters: CreateClassOntologyYamlParameters) -> str:
+    def graph_to_yaml(self, parameters: CreateClassOntologyYamlWorkflowParameters) -> str:
         # Initialize graph
         graph = Graph()
         graph.bind("abi", "http://ontology.naas.ai/abi/")
@@ -167,7 +164,7 @@ class CreateClassOntologyYamlWorkflow(Workflow):
 
         # Convert graph to YAML & push to Naas workspace
         ontology_id = self.__convert_ontology_graph_workflow.graph_to_yaml(
-            ConvertOntologyGraphToYamlParameters(
+            ConvertOntologyGraphToYamlWorkflowParameters(
                 graph=graph.serialize(format="turtle"),
                 label=ontology_label,
                 description=ontology_description,
@@ -182,9 +179,9 @@ class CreateClassOntologyYamlWorkflow(Workflow):
                 name="ontology_create_class_yaml",
                 description="Create an ontology class YAML and push it to Naas workspace.",
                 func=lambda **kwargs: self.graph_to_yaml(
-                    CreateClassOntologyYamlParameters(**kwargs)
+                    CreateClassOntologyYamlWorkflowParameters(**kwargs)
                 ),
-                args_schema=CreateClassOntologyYamlParameters,
+                args_schema=CreateClassOntologyYamlWorkflowParameters,
             )
         ]
 
