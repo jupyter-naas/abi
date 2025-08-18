@@ -7,18 +7,9 @@ load_dotenv()
 from dotenv import dotenv_values
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
-from rich.text import Text
-from rich.align import Align
-from rich.columns import Columns
-from rich.table import Table
-from rich.markdown import Markdown
-import rich
+from rich.prompt import Prompt
 import requests
 import time
-import random
 import os
 
 console = Console(style="")
@@ -78,7 +69,7 @@ def ensure_dev_services_running():
                 time.sleep(2)
                 if attempt == max_attempts - 1:
                     console.print("⚠️ Development services are taking longer than expected to start", style="yellow")
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             console.print("⚠️ Could not start development services. Make sure Docker is running.", style="yellow")
             console.print("You can start them manually with: make dev-up", style="dim")
 
@@ -104,7 +95,7 @@ def ensure_ollama_running():
                 #console.print("🟢 Ollama is running!", style="bright_green")
                 ollama_running = True
                 break
-        except Exception as e:
+        except Exception:
             console.print("I need Ollama running to use my local brain. Let me help you get it started!", style="bright_cyan")
             console.print("💡 Just run: `ollama run qwen3:8b`", style="dim")
             console.print("💡 If you don't have Ollama yet, get it here: https://ollama.com/download", style="dim")
@@ -125,7 +116,7 @@ def ensure_ollama_running():
         for line in response.iter_lines(decode_unicode=True):
             if line:
                 import json
-                data = json.loads(line)
+                json.loads(line)
                 # Don't show progress bar - just let it happen quietly
 
 
@@ -168,7 +159,7 @@ def define_naas_api_key():
         return
 
     # Optional Naas key
-    print(f"\nOne last thing - do you have a Naas API key for enhanced features?")
+    print("\nOne last thing - do you have a Naas API key for enhanced features?")
     print("You can get one for free by signing up at naas.ai and visiting naas.ai/account/api-key")
     naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
     
@@ -179,7 +170,7 @@ def define_naas_api_key():
             r.raise_for_status()
             if r.status_code == 200:
                 valid_naas_api_key = True
-        except Exception as e:
+        except Exception:
             print("Invalid Naas API key. Please try again.")
             naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
     

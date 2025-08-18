@@ -5,7 +5,6 @@ from src.core.modules.ontology.workflows.ExportGraphInstancesToExcelWorkflow imp
     ExportGraphInstancesToExcelWorkflowParameters
 )
 from src import services, secret
-from abi import logger
 
 if __name__ == "__main__":
     data_store_path: str = "datastore/triplestore/export/excel"
