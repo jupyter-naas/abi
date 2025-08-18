@@ -156,7 +156,7 @@ def create_agent(
         chat_model=model,
         tools=[],
         agents=[],
-        memory=None,
+        memory=MemorySaver(),
         state=agent_shared_state,
         configuration=agent_configuration,
     )

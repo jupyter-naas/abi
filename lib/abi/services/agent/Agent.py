@@ -90,7 +90,6 @@ def create_checkpointer() -> BaseCheckpointSaver:
                         
         except ImportError:
             logger.warning("PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory.")
-            return MemorySaver()
         except Exception as e:
             # Provide more helpful error messages
             error_msg = str(e)
@@ -100,7 +99,9 @@ def create_checkpointer() -> BaseCheckpointSaver:
             else:
                 logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
             logger.info("Falling back to in-memory checkpointer")
-            return MemorySaver()
+        
+        # Fallback to in-memory checkpointer
+        return MemorySaver()
     else:
         logger.info("Using in-memory checkpointer (set POSTGRES_URL for persistent memory)")
         return MemorySaver()

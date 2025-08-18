@@ -174,7 +174,7 @@ class TestAgentPostgresIntegration:
                 name="test_agent",
                 description="Test agent",
                 chat_model=mock_chat_model,
-                state=AgentSharedState(thread_id=123)
+                state=AgentSharedState(thread_id="123")
             )
             
             # Simulate some conversation
@@ -185,7 +185,7 @@ class TestAgentPostgresIntegration:
                 name="test_agent",
                 description="Test agent", 
                 chat_model=mock_chat_model,
-                state=AgentSharedState(thread_id=123)
+                state=AgentSharedState(thread_id="123")
             )
             
             # Both agents should share the same checkpointer type

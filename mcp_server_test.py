@@ -72,7 +72,7 @@ def analyze_agents(openapi_spec: Dict[str, Any]) -> list:
 async def test_agent_call(agent_name: str) -> bool:
     """Test calling a specific agent"""
     if not API_KEY:
-        print(f"\n⚠️  Skipping agent call test - ABI_API_KEY not set")
+        print("\n⚠️  Skipping agent call test - ABI_API_KEY not set")
         return False
     
     print(f"\n🔍 Testing agent call to '{agent_name}'...")
@@ -118,8 +118,8 @@ async def test_mcp_http_server() -> bool:
             else:
                 print(f"❌ MCP server returned status {response.status_code}")
                 return False
-    except Exception as e:
-        print(f"⚠️  MCP HTTP server not running (this is OK if testing STDIO mode)")
+    except Exception:
+        print("⚠️  MCP HTTP server not running (this is OK if testing STDIO mode)")
         return False
 
 async def main():
