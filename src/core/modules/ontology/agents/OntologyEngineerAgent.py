@@ -1,6 +1,5 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Optional
-from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
@@ -98,7 +97,7 @@ def create_agent(
         chat_model=model,
         tools=tools,
         agents=agents,
-        memory=MemorySaver(),
+        memory=None,
         state=agent_shared_state,
         configuration=agent_configuration,
     )

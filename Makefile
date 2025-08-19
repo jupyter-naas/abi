@@ -280,6 +280,18 @@ help:
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
+	@echo "  docker-cleanup           Clean up Docker conflicts and stuck containers"
+	@echo ""
+	@echo "TROUBLESHOOTING:"
+	@echo "  check-docker             Check if Docker is running"
+	@echo "  docker-cleanup           Fix Docker conflicts (run this if 'make' hangs)"
+	@echo ""
+	@echo "If 'make' hangs or times out:"
+	@echo "  1. Run: make docker-cleanup"
+	@echo "  2. Then: make dev-up"
+	@echo "  3. Finally: make"
+	@echo ""
+	@echo "For detailed troubleshooting: docs/troubleshooting/docker-conflicts.md"
 	@echo ""
 	@echo "DEFAULT:"
 	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
@@ -347,24 +359,47 @@ chat: deps
 # -----------------------
 # These commands manage Docker containers for development
 
-oxigraph-up:
-	@docker-compose --profile dev up -d oxigraph
+# Check if Docker is running before executing docker commands
+check-docker:
+	@if ! docker info > /dev/null 2>&1; then \
+		echo "❌ Docker is not running. Please start Docker Desktop first."; \
+		echo "💡 After starting Docker, run: make docker-cleanup && make dev-up"; \
+		exit 1; \
+	fi
+
+# Enhanced cleanup with conflict detection
+docker-cleanup: check-docker
+	@echo "🧹 Running Docker cleanup to prevent conflicts..."
+	@./scripts/docker_cleanup.sh
+
+oxigraph-up: check-docker
+	@docker-compose --profile dev up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
-oxigraph-down:
-	@docker-compose --profile dev stop oxigraph
+oxigraph-down: check-docker
+	@docker-compose --profile dev stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
-oxigraph-status:
+oxigraph-status: check-docker
 	@echo "Oxigraph status:"
 	@docker-compose --profile dev ps oxigraph
 
-dev-up:
-	@docker-compose --profile dev up -d
+dev-up: check-docker
+	@echo "🚀 Starting development services..."
+	@if ! docker-compose --profile dev up -d --timeout 60; then \
+		echo "❌ Failed to start services. Running cleanup..."; \
+		./scripts/docker_cleanup.sh; \
+		echo "🔄 Retrying..."; \
+		docker-compose --profile dev up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+	fi
 	@echo "✓ All development containers started"
+	@echo "✓ Services available at:"
+	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
+	@echo "  - PostgreSQL (Agent Memory): localhost:5432"  
+	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 
-dev-down:
-	@docker-compose --profile dev down
+dev-down: check-docker
+	@docker-compose --profile dev down --timeout 10 || true
 	@echo "✓ All development services stopped"
 
 container-up:
