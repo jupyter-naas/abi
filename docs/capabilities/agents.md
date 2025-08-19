@@ -25,7 +25,7 @@ Agents are designed to be:
    - **Tools**: External capabilities the agent can access (e.g., NaasIntegration tools)
    - **Other Agents**: References to other agents that can be called for specific tasks
    - **Shared State**: Maintains conversation thread IDs and other shared information
-   - **Memory**: Handles conversation history persistence (via MemorySaver)
+   - **Memory**: Handles conversation history persistence with automatic PostgreSQL detection
 
 3. **API Integration**:
    - **Router Configuration**: FastAPI endpoints for agent interaction
@@ -43,12 +43,39 @@ ABI agents are built on LangGraph, a framework for building stateful, multi-step
    - **Agent Node**: Processes messages using the language model
    - **Tool Node**: Executes tool actions when requested
 3. **Edges**: Define the transitions between nodes
-4. **Checkpointing**: Allows for conversation history persistence
+4. **Checkpointing**: Enables persistent conversation memory across sessions using PostgreSQL or in-memory storage
 
 The workflow typically follows this pattern:
 - Start with the agent node
 - Conditionally route to tools or end based on agent output
 - Route back to the agent after tool usage
+
+## Persistent Memory
+
+ABI agents feature automatic persistent memory that remembers conversations across sessions. This enables truly continuous interactions where agents maintain context, preferences, and ongoing tasks even after restarts.
+
+### Automatic Memory Configuration
+
+Agents automatically detect and configure memory based on your environment:
+
+- **With PostgreSQL**: Set `POSTGRES_URL` environment variable for persistent memory across sessions
+- **Without PostgreSQL**: Falls back to in-memory storage (conversations lost on restart)
+
+```bash
+# Enable persistent memory
+export POSTGRES_URL="postgresql://abi_user:abi_password@localhost:5432/abi_memory"
+make dev-up  # Start PostgreSQL service
+make         # Agent now has persistent memory!
+```
+
+### Memory Features
+
+- **Cross-session continuity**: Agents remember previous conversations after restarts
+- **Thread-based isolation**: Different conversation contexts maintain separate memory
+- **Automatic fallback**: Gracefully handles PostgreSQL unavailability
+- **Zero configuration**: Works out-of-the-box when PostgreSQL is available
+
+For detailed information about memory configuration, troubleshooting, and advanced usage, see the [Agent Memory Guide](storage/agent_memory.md).
 
 ## Creating a Basic Agent
 
@@ -109,7 +136,7 @@ def create_agent(
         agents=agents,  
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver()
+        # memory is automatically configured based on POSTGRES_URL environment variable
     )
 
 class NaasAgent(Agent):
