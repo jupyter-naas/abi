@@ -60,7 +60,7 @@ def create_agent(
             system_prompt=SYSTEM_PROMPT
         )
     if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
+        agent_shared_state = AgentSharedState(thread_id="0")
 
     # Set tools
     python_code_execution_tools: list = []

@@ -2,7 +2,7 @@ from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
-    MemorySaver,
+    
 )
 from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
@@ -102,7 +102,7 @@ def create_agent(
         agents=agents,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver(),
+        memory=None,
     )
 
 
