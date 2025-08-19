@@ -4,7 +4,7 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    MemorySaver,
+    
 )
 from fastapi import APIRouter
 from src.core.modules.llama.models.llama_3_3_70b import model
@@ -57,7 +57,7 @@ def create_agent(
             system_prompt=SYSTEM_PROMPT,
         )
     if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
+        agent_shared_state = AgentSharedState(thread_id="0")
     
     # Init
     tools: list = []
@@ -83,7 +83,7 @@ def create_agent(
         intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver(),
+        memory=None,
     ) 
 
 class LlamaAgent(IntentAgent):

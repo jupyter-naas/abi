@@ -21,7 +21,6 @@ from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
 
 # Automatic loading of agents from modules
-from src.__modules__ import get_modules
 
 # Init API
 TITLE = config.api_title
