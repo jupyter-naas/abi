@@ -45,13 +45,29 @@ def ensure_dev_services_running():
         pass
     
     if not services_running:
-        console.print("Starting development services (Oxigraph, PostgreSQL, YasGUI)...", style="bright_cyan")
+        console.print("⚠️ Development services not running. Attempting to start...", style="yellow")
         try:
-            # Start all dev services using make dev-up
-            subprocess.run(
+            # Try to start services with automatic cleanup on failure
+            result = subprocess.run(
                 ["make", "dev-up"],
-                check=True
+                capture_output=True,
+                text=True,
+                timeout=120  # 2 minute timeout
             )
+            
+            if result.returncode != 0:
+                console.print("❌ Failed to start services automatically.", style="red")
+                console.print("🔧 Try running: make docker-cleanup && make dev-up", style="cyan")
+                console.print("💡 Or start services manually and restart this command.", style="dim")
+                return
+        except subprocess.TimeoutExpired:
+            console.print("⏱️ Service startup timed out. Docker may be stuck.", style="yellow")
+            console.print("🔧 Try: make docker-cleanup && make dev-up", style="cyan")
+            return
+        except subprocess.CalledProcessError:
+            console.print("❌ Could not start development services.", style="yellow")
+            console.print("🔧 Try: make docker-cleanup && make dev-up", style="cyan")
+            return
             
             # Wait for services to be ready
             max_attempts = 30  # PostgreSQL + Oxigraph may take longer
