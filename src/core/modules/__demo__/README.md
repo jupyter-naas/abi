@@ -8,6 +8,7 @@ Key Features:
 - Multi-model agent comparison with different AI models
 - Safe Python code execution workflow with timeout and security controls
 - Streamlit web application demonstration
+- Dagster data orchestration with RSS feed processing
 - Example implementations for learning and development
 
 ## TL;DR
@@ -19,6 +20,10 @@ make chat Agent=MultiModelAgent
 - Start Streamlit demo:
 ```bash
 cd src/core/modules/__demo__/apps/streamlit && make run
+```
+- Start Dagster RSS processing:
+```bash
+make dagster-up
 ```
 
 ## Overview
@@ -32,11 +37,14 @@ src/core/modules/__demo__/
 ├── agents/                                        # AI agents
 │   ├── MultiModelAgent.py                        # Multi-model comparison agent
 │   └── MultiModelAgent_test.py                   # Agent tests
-└── apps/                                          # Applications
-    └── streamlit/                                 # Streamlit web app
-        ├── __init__.py                           # Streamlit application
-        ├── Dockerfile                            # Container configuration
-        └── Makefile                              # Build commands
+├── apps/                                          # Applications
+│   └── streamlit/                                 # Streamlit web app
+│       ├── __init__.py                           # Streamlit application
+│       ├── Dockerfile                            # Container configuration
+│       └── Makefile                              # Build commands
+└── orchestration/                                 # Data orchestration capability
+    ├── __init__.py                               # Orchestration module
+    └── definitions.py                            # Orchestration definitions (Dagster)
 ```
 
 ### Core Components
@@ -44,6 +52,7 @@ src/core/modules/__demo__/
 - **MultiModelAgent**: Agent that compares responses from different AI models (o3-mini, gpt-4o-mini, gpt-4-1)
 - **ExecutePythonCodeWorkflow**: Safe Python code execution with timeout and import controls
 - **Streamlit App**: Web-based chat interface demonstrating agent capabilities
+- **Data Orchestration**: Automated RSS feed monitoring and data collection from 15+ sources using orchestration engine
 
 ## Agents
 
@@ -100,6 +109,33 @@ parameters = ExecutePythonCodeWorkflowParameters(
 
 result = workflow.execute_python_code(parameters)
 print(f"Execution result: {result}")
+```
+
+## Data Orchestration
+
+### RSS Feed Orchestration
+
+A data orchestration pipeline that monitors RSS feeds and processes news content:
+
+1. **RSS Monitoring**: 15 sensors monitoring feeds from tech companies, AI topics, and key personalities
+2. **Data Processing**: Converts RSS entries to structured JSON with timestamp-based filenames
+3. **Storage**: Saves processed data to `storage/datastore/__demo__/rss_feed/`
+4. **Scheduling**: 30-second polling intervals for real-time updates
+
+**Monitored Sources:**
+- Technology: AI, LLM, Ontology, OpenAI
+- Companies: Google, Meta, Microsoft, Apple, Amazon, Tesla, SpaceX, NASA, Palantir
+- Personalities: Elon Musk, Donald Trump
+
+```bash
+# Start data orchestration
+make dagster-up
+
+# Check orchestration status
+make dagster-status
+
+# View orchestration web interface
+open http://localhost:3000
 ```
 
 ## Applications
