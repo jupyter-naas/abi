@@ -1,7 +1,6 @@
 import requests
 from io import StringIO
-from ttl2py import ttl2py
-from rdflib import URIRef
+from abi.utils.ttl2py.ttl2py import ttl2py
 import pytest
 from pydantic import ValidationError
 
@@ -212,10 +211,8 @@ ex:PetOwnerShape rdf:type sh:NodeShape ;
     assert "petName: str = Field(...)" in python_code  # Required property for Pet
     assert "hasPet: Pet = Field(...)" in python_code  # Required property for PetOwner
     
-    from uuid import uuid4
     import os
     import tempfile
-    import shutil
     
     temp_dir = tempfile.mkdtemp()
     temp_file = os.path.join(temp_dir, "shacl_ttl.py")
