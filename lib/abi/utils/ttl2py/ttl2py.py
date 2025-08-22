@@ -1,6 +1,6 @@
 import rdflib
 import io
-from typing import Dict, Set, List, Any, Optional
+from typing import Dict, Set, List, Optional
 from dataclasses import dataclass, field
 import re
 
@@ -49,7 +49,6 @@ def ttl2py(ttl_file: str | io.TextIOBase) -> str:
     RDFS = rdflib.Namespace("http://www.w3.org/2000/01/rdf-schema#")
     OWL = rdflib.Namespace("http://www.w3.org/2002/07/owl#")
     SHACL = rdflib.Namespace("http://www.w3.org/ns/shacl#")
-    XSD = rdflib.Namespace("http://www.w3.org/2001/XMLSchema#")
     
     # Extract classes and their information
     classes: Dict[str, ClassInfo] = {}
@@ -477,9 +476,9 @@ def generate_class_code(class_info: ClassInfo) -> List[str]:
     
     # Add class docstring if description exists
     if class_info.description:
-        lines.append(f'"""')
+        lines.append('"""')
         lines.append(f'{class_info.description}')
-        lines.append(f'"""')
+        lines.append('"""')
     
     # Class definition with inheritance
     if class_info.parent_classes:
