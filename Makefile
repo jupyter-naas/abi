@@ -393,7 +393,7 @@ container-down:
 
 dagster-dev: deps
 	@echo "🚀 Starting Dagster development server..."
-	@uv run dagster dev
+	@DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/__demo__/orchestration uv run dagster dev
 
 dagster-up: deps
 	@echo "🚀 Starting Dagster in background..."
@@ -427,10 +427,10 @@ dagster-ui: deps
 
 dagster-status: deps
 	@echo "📊 Checking Dagster asset status..."
-	@uv run dagster asset list
+	@DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/__demo__/orchestration uv run dagster asset list -m src.core.modules.__demo__.orchestration.definitions
 
 dagster-materialize: deps
 	@echo "⚙️ Materializing all Dagster assets..."
-	@uv run dagster asset materialize --all
+	@DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/__demo__/orchestration uv run dagster asset materialize --select "*" -m src.core.modules.__demo__.orchestration.definitions
 
 .PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status dev-up dev-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
