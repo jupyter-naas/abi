@@ -119,8 +119,9 @@ A data orchestration pipeline that monitors RSS feeds and processes news content
 
 1. **RSS Monitoring**: 15 sensors monitoring feeds from tech companies, AI topics, and key personalities
 2. **Data Processing**: Converts RSS entries to structured JSON with timestamp-based filenames
-3. **Storage**: Saves processed data to `storage/datastore/__demo__/rss_feed/`
+3. **Storage**: Saves processed data to `storage/datastore/core/modules/__demo__/rss_feed/`
 4. **Scheduling**: 30-second polling intervals for real-time updates
+5. **Smart Naming**: Files include timestamp, query term, and title for easy analysis
 
 **Monitored Sources:**
 - Technology: AI, LLM, Ontology, OpenAI
