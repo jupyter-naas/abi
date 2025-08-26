@@ -2,7 +2,7 @@ from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
-    MemorySaver,
+    
 )
 from src import secret
 from langchain_openai import ChatOpenAI
@@ -88,5 +88,5 @@ def create_account_executive_agent(
         tools=tools,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver(),
+        memory=None,
     )

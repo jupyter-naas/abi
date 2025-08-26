@@ -59,7 +59,10 @@ dependencies = [
     "langchain-anthropic>=0.3.17",
     "langchain-mistralai>=0.2.11",
     "langchain-xai>=0.2.5",
-    "wordcloud>=1.9.4",
+    "google-genai>=1.28.0",
+    "psycopg[binary,pool]>=3.2.9",
+    "langgraph-checkpoint-postgres>=2.0.23",
+    "mypy>=1.17.1",
 ]
 
 [project.scripts]

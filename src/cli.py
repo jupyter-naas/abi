@@ -7,18 +7,9 @@ load_dotenv()
 from dotenv import dotenv_values
 
 from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
-from rich.text import Text
-from rich.align import Align
-from rich.columns import Columns
-from rich.table import Table
-from rich.markdown import Markdown
-import rich
+from rich.prompt import Prompt
 import requests
 import time
-import random
 import os
 
 console = Console(style="")
@@ -38,47 +29,65 @@ def append_to_dotenv(key, value):
     with open(".env", "a") as f:
         f.write(f"\n{key}={value}\n")
 
-def ensure_oxigraph_running():
-    """Ensure Oxigraph container is running for development."""
+def ensure_dev_services_running():
+    """Ensure all development services (Oxigraph, PostgreSQL, etc.) are running."""
     import subprocess
     
     oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
     
-    # Check if Oxigraph is accessible
-    oxigraph_running = False
+    # Check if Oxigraph is accessible (indicates dev services are running)
+    services_running = False
     try:
         r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
         if r.status_code == 200:
-            oxigraph_running = True
+            services_running = True
     except:
         pass
     
-    if not oxigraph_running:
-        console.print("Starting Oxigraph triple store...", style="bright_cyan")
+    if not services_running:
+        console.print("⚠️ Development services not running. Attempting to start...", style="yellow")
         try:
-            # Start Oxigraph using docker-compose
-            subprocess.run(
-                ["docker-compose", "--profile", "dev", "up", "-d", "oxigraph"],
+            # Try to start services with automatic cleanup on failure
+            result = subprocess.run(
+                ["make", "dev-up"],
                 capture_output=True,
-                check=True
+                text=True,
+                timeout=120  # 2 minute timeout
             )
             
-            # Wait for Oxigraph to be ready
-            max_attempts = 20  # Oxigraph starts very quickly
+            if result.returncode != 0:
+                console.print("❌ Failed to start services automatically.", style="red")
+                console.print("🔧 Try running: make docker-cleanup && make dev-up", style="cyan")
+                console.print("💡 Or start services manually and restart this command.", style="dim")
+                return
+        except subprocess.TimeoutExpired:
+            console.print("⏱️ Service startup timed out. Docker may be stuck.", style="yellow")
+            console.print("🔧 Try: make docker-cleanup && make dev-up", style="cyan")
+            return
+        except subprocess.CalledProcessError:
+            console.print("❌ Could not start development services.", style="yellow")
+            console.print("🔧 Try: make docker-cleanup && make dev-up", style="cyan")
+            return
+            
+            # Wait for services to be ready
+            max_attempts = 30  # PostgreSQL + Oxigraph may take longer
             for attempt in range(max_attempts):
                 try:
                     r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
                     if r.status_code == 200:
-                        console.print("✓ Oxigraph is ready!", style="bright_green")
+                        console.print("✓ Development services are ready!", style="bright_green")
+                        console.print("✓ Oxigraph (Knowledge Graph): http://localhost:7878", style="dim")
+                        console.print("✓ PostgreSQL (Agent Memory): localhost:5432", style="dim")
+                        console.print("✓ YasGUI (SPARQL Editor): http://localhost:3000", style="dim")
                         break
                 except:
                     pass
-                time.sleep(1)
+                time.sleep(2)
                 if attempt == max_attempts - 1:
-                    console.print("⚠️ Oxigraph is taking longer than expected to start", style="yellow")
-        except subprocess.CalledProcessError as e:
-            console.print("⚠️ Could not start Oxigraph. Make sure Docker is running.", style="yellow")
-            console.print("You can start it manually with: docker-compose --profile dev up -d oxigraph", style="dim")
+                    console.print("⚠️ Development services are taking longer than expected to start", style="yellow")
+        except subprocess.CalledProcessError:
+            console.print("⚠️ Could not start development services. Make sure Docker is running.", style="yellow")
+            console.print("You can start them manually with: make dev-up", style="dim")
 
 def ensure_ollama_running():
     dv = dotenv_values()
@@ -102,7 +111,7 @@ def ensure_ollama_running():
                 #console.print("🟢 Ollama is running!", style="bright_green")
                 ollama_running = True
                 break
-        except Exception as e:
+        except Exception:
             console.print("I need Ollama running to use my local brain. Let me help you get it started!", style="bright_cyan")
             console.print("💡 Just run: `ollama run qwen3:8b`", style="dim")
             console.print("💡 If you don't have Ollama yet, get it here: https://ollama.com/download", style="dim")
@@ -123,7 +132,7 @@ def ensure_ollama_running():
         for line in response.iter_lines(decode_unicode=True):
             if line:
                 import json
-                data = json.loads(line)
+                json.loads(line)
                 # Don't show progress bar - just let it happen quietly
 
 
@@ -166,7 +175,7 @@ def define_naas_api_key():
         return
 
     # Optional Naas key
-    print(f"\nOne last thing - do you have a Naas API key for enhanced features?")
+    print("\nOne last thing - do you have a Naas API key for enhanced features?")
     print("You can get one for free by signing up at naas.ai and visiting naas.ai/account/api-key")
     naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
     
@@ -177,7 +186,7 @@ def define_naas_api_key():
             r.raise_for_status()
             if r.status_code == 200:
                 valid_naas_api_key = True
-        except Exception as e:
+        except Exception:
             print("Invalid Naas API key. Please try again.")
             naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
     
@@ -200,6 +209,15 @@ def define_oxigraph_url():
     # Default to local Oxigraph in development
     oxigraph_url = "http://localhost:7878"
     append_to_dotenv("OXIGRAPH_URL", oxigraph_url)
+
+def define_postgres_url():
+    if "POSTGRES_URL" in dv:
+        return
+    
+    # Default to local PostgreSQL for agent memory persistence
+    # Use localhost since CLI runs outside containers
+    postgres_url = "postgresql://abi_user:abi_password@localhost:5432/abi_memory"
+    append_to_dotenv("POSTGRES_URL", postgres_url)
 
 def define_cloud_api_keys():
     if "AI_MODE" not in dv or dv["AI_MODE"] == "local":
@@ -226,6 +244,7 @@ checks = [
     define_naas_api_key,
     define_abi_api_key,
     define_oxigraph_url,
+    define_postgres_url,
     define_cloud_api_keys,
 ]
     
@@ -240,8 +259,8 @@ def main():
     
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
     
-    # Ensure Oxigraph is running in development
-    ensure_oxigraph_running()
+    # Ensure all development services are running (Oxigraph, PostgreSQL, etc.)
+    ensure_dev_services_running()
     
     from src.core.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("AbiAgent")

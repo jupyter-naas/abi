@@ -1,8 +1,6 @@
 import pytest
 import os
 from fastapi.testclient import TestClient
-from unittest.mock import patch
-import asyncio
 
 def test_import_fastapi_app():
     """Test that we can import the FastAPI app from src.api."""
@@ -98,7 +96,7 @@ def test_api_agent_routes():
         total_agents = 0
         agents_with_routes = {}
         
-        print(f"\n📦 Loaded modules and their agents:")
+        print("\n📦 Loaded modules and their agents:")
         for module in loaded_modules:
             print(f"Module: {module.module_import_path}")
             print(f"Agents: {module.agents}")
@@ -120,9 +118,9 @@ def test_api_agent_routes():
                     agents_with_routes[agent.name] = agent_route_paths
                     print(f"  🤖 Agent: {agent.name} (routes: {agent_route_paths})")
                 else:
-                    print(f"  ⚠️ Skipped None agent (missing API key)")
+                    print("  ⚠️ Skipped None agent (missing API key)")
         
-        print(f"\n📈 Summary:")
+        print("\n📈 Summary:")
         print(f"  - Total modules loaded: {len(loaded_modules)}")
         print(f"  - Total agents loaded: {total_agents}")
         print(f"  - Total agent routes in API: {len(agent_routes)}")
@@ -147,7 +145,7 @@ def test_api_agent_routes():
                 
                 # Check in the actual API paths (with /agents prefix)
                 for path in paths.keys():
-                    if path.startswith(f"/agents/"):
+                    if path.startswith("/agents/"):
                         if path.endswith("/completion"):
                             has_completion = True
                         elif path.endswith("/stream-completion"):
@@ -163,7 +161,7 @@ def test_api_agent_routes():
                         missing.append("stream-completion")
                     agents_missing_routes.append((agent_name, missing))
             
-            print(f"\n🔍 Route validation:")
+            print("\n🔍 Route validation:")
             print(f"  - Agents with both endpoints: {len(agents_with_both_routes)}/{total_agents}")
             print(f"  - Agents missing endpoints: {len(agents_missing_routes)}/{total_agents}")
             
