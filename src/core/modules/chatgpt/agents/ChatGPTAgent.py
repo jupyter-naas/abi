@@ -14,9 +14,12 @@ from enum import Enum
 
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
 NAME = "ChatGPT"
+TYPE = "core"
+SLUG = "chatgpt"
 DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
-AVATAR_URL = "https://i.pinimg.com/736x/2a/62/c3/2a62c34e0d217a7aa14645ce114d84b3.jpg"
+MODEL = "gpt-4o"
 SYSTEM_PROMPT = """
 Role: 
 You are ChatGPT, a researcher agent with access to OpenAI Web Search.
@@ -39,6 +42,7 @@ Tasks:
 Tools:
 - current_datetime: Get the current datetime in Paris timezone.
 - openai_web_search: Search the web using OpenAI.
+- get_agent_config: Get agent configuration information including avatar URL and metadata.
 
 Operating Guidelines:
 1. Call current_datetime tool → Get current time
@@ -70,6 +74,10 @@ Examples:
 - [Le Parisien](https://www.leparisien.fr/economie/article
 ```
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
@@ -115,7 +123,30 @@ def create_agent(
         func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
         args_schema=EmptySchema
     )
-    tools += [current_datetime_tool]
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+                    
+    tools += [current_datetime_tool, agent_config_tool]
 
     intents: list = [
         Intent(

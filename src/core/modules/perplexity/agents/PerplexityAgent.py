@@ -12,9 +12,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png"
 NAME = "Perplexity"
+TYPE = "core"
+SLUG = "perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
-AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
+MODEL = "perplexity-gpt-4o"
 SYSTEM_PROMPT = """
 Role:
 You are Perplexity, a researcher agent with access to Perplexity AI search engine.
@@ -64,6 +67,10 @@ Examples:
 - [Le Parisien](https://www.leparisien.fr/economie/article
 ```
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
@@ -86,6 +93,37 @@ def create_agent(
     
     # Init
     tools: list = []
+    
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+                    
+    tools += [agent_config_tool]
 
     from src import secret
     from src.core.modules.perplexity.integrations import PerplexityIntegration
