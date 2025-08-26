@@ -10,8 +10,13 @@ from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
 from abi import logger
 
+AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcGemma3Logo&s"
 NAME = "Gemma"
+TYPE = "custom"
+SLUG = "gemma"
 DESCRIPTION = "Local Gemma3 4B model via Ollama - lightweight, fast alternative to cloud Gemini"
+MODEL = "gemma3-4b"
+
 SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's open-source Gemma3 4B model running locally via Ollama.
 
 ## Your Strengths
@@ -52,6 +57,12 @@ SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's ope
 
 Remember: I'm your local, private AI assistant - fast, efficient, and completely offline!
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
+
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -70,6 +81,41 @@ def create_agent(
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
+
+        # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+    # Initialize file system tools from PR #515
+    from abi.services.agent.tools import FileSystemTools
+    file_system_tools = FileSystemTools(config_name="development")
+    fs_tools = file_system_tools.as_tools()
+    
+    tools = [agent_config_tool] + fs_tools
 
     # Define Gemma-specific intents
     intents = [

@@ -10,7 +10,7 @@ from src.core.modules.deepseek.models.deepseek_r1_8b import model
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRQjf8KvJ8vJ8vJ8vJ8vJ8vJ8vJ8vJ8vJ8vJ8&s"
+AVATAR_URL = "https://compareaimodels.com/content/images/2025/01/deepseek-square@2x.png"
 NAME = "DeepSeek"
 TYPE = "custom"
 SLUG = "deepseek"
