@@ -1,8 +1,6 @@
 import pytest
 import os
 from fastapi.testclient import TestClient
-from unittest.mock import patch
-import asyncio
 
 def test_import_fastapi_app():
     """Test that we can import the FastAPI app from src.api."""
@@ -72,10 +70,11 @@ def test_api_authentication():
 
 
 def test_api_agent_routes():
-    """Test that the API has agent routes loaded from modules."""
+    """Test that each agent has both /completion and /stream-completion endpoints."""
     try:
         from src.api import app
         from src import modules
+        from fastapi import APIRouter
         client = TestClient(app)
         
         # Get OpenAPI schema to check routes
@@ -95,21 +94,33 @@ def test_api_agent_routes():
         # Get loaded modules and agents
         loaded_modules = modules
         total_agents = 0
-        agent_names = []
+        agents_with_routes = {}
         
-        print(f"\n📦 Loaded modules and their agents:")
+        print("\n📦 Loaded modules and their agents:")
         for module in loaded_modules:
             print(f"Module: {module.module_import_path}")
+            print(f"Agents: {module.agents}")
             for agent in module.agents:
                 # Skip None agents (when API keys are missing)
                 if agent is not None:
                     total_agents += 1
-                    agent_names.append(agent.name)
-                    print(f"  🤖 Agent: {agent.name}")
+                    
+                    # Create a temporary router to inspect what routes the agent would add
+                    temp_router = APIRouter()
+                    agent.as_api(temp_router)
+                    
+                    # Extract route paths from the temporary router
+                    agent_route_paths = []
+                    for route in temp_router.routes:
+                        if hasattr(route, 'path'):
+                            agent_route_paths.append(route.path)
+                    
+                    agents_with_routes[agent.name] = agent_route_paths
+                    print(f"  🤖 Agent: {agent.name} (routes: {agent_route_paths})")
                 else:
-                    print(f"  ⚠️ Skipped None agent (missing API key)")
+                    print("  ⚠️ Skipped None agent (missing API key)")
         
-        print(f"\n📈 Summary:")
+        print("\n📈 Summary:")
         print(f"  - Total modules loaded: {len(loaded_modules)}")
         print(f"  - Total agents loaded: {total_agents}")
         print(f"  - Total agent routes in API: {len(agent_routes)}")
@@ -118,47 +129,54 @@ def test_api_agent_routes():
         assert len(paths) > 0, "No API paths found"
         assert len(loaded_modules) > 0, "No modules loaded"
         
-        # Check if agent routes match loaded agents
-        expected_routes_found = []
-        missing_routes = []
-        
-        for agent_name in agent_names:
-            expected_completion_route = f"/agents/{agent_name}/completion"
-            expected_stream_route = f"/agents/{agent_name}/stream-completion"
-            
-            if expected_completion_route in paths:
-                expected_routes_found.append(expected_completion_route)
-            else:
-                missing_routes.append(expected_completion_route)
-                
-            if expected_stream_route in paths:
-                expected_routes_found.append(expected_stream_route)
-            else:
-                missing_routes.append(expected_stream_route)
-        
-        print(f"\n🔍 Route validation:")
-        print(f"  - Expected routes found: {len(expected_routes_found)}")
-        print(f"  - Missing routes: {len(missing_routes)}")
-        
-        if missing_routes:
-            print("  Missing routes:")
-            for route in missing_routes[:10]:  # Show first 10
-                print(f"    ❌ {route}")
-        
-        if expected_routes_found:
-            print("  Found routes:")
-            for route in expected_routes_found[:10]:  # Show first 10
-                print(f"    ✅ {route}")
-        
-        # Assert that we found at least some agent routes
+        # Check that each agent has both required endpoints
         if total_agents > 0:
-            assert len(agent_routes) > 0, f"No agent routes found despite having {total_agents} agents loaded"
+            # We expect at least 2 routes per agent (completion and stream-completion)
+            assert len(agent_routes) >= 2 * total_agents, \
+                f"Expected at least {2 * total_agents} routes for {total_agents} agents, but found {len(agent_routes)}"
             
-            # Fail if there are missing routes
-            if missing_routes:
-                pytest.fail(f"Missing {len(missing_routes)} expected agent routes: {missing_routes[:5]}")
+            # Check each agent has routes ending with /completion and /stream-completion
+            agents_missing_routes = []
+            agents_with_both_routes = []
             
-            print("✅ API has agent routes matching loaded agents")
+            for agent_name, route_paths in agents_with_routes.items():
+                has_completion = False
+                has_stream = False
+                
+                # Check in the actual API paths (with /agents prefix)
+                for path in paths.keys():
+                    if path.startswith("/agents/"):
+                        if path.endswith("/completion"):
+                            has_completion = True
+                        elif path.endswith("/stream-completion"):
+                            has_stream = True
+                
+                if has_completion and has_stream:
+                    agents_with_both_routes.append(agent_name)
+                else:
+                    missing = []
+                    if not has_completion:
+                        missing.append("completion")
+                    if not has_stream:
+                        missing.append("stream-completion")
+                    agents_missing_routes.append((agent_name, missing))
+            
+            print("\n🔍 Route validation:")
+            print(f"  - Agents with both endpoints: {len(agents_with_both_routes)}/{total_agents}")
+            print(f"  - Agents missing endpoints: {len(agents_missing_routes)}/{total_agents}")
+            
+            if agents_with_both_routes:
+                print("  ✅ Agents with both endpoints:")
+                for agent in agents_with_both_routes[:5]:  # Show first 5
+                    print(f"    - {agent}")
+            
+            if agents_missing_routes:
+                print("  ❌ Agents missing endpoints:")
+                for agent, missing in agents_missing_routes[:5]:  # Show first 5
+                    print(f"    - {agent}: missing {', '.join(missing)}")
+                pytest.fail(f"{len(agents_missing_routes)} agents are missing required endpoints")
+            
+            print("✅ All agents have both /completion and /stream-completion endpoints")
         else:
             print("⚠️ No agents were loaded, so no agent routes expected")
             

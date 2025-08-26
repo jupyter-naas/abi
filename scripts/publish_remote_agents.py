@@ -1,5 +1,4 @@
 from src.__modules__ import get_modules
-import inspect
 from abi import logger
 from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegration,
@@ -19,7 +18,7 @@ def publish_remote_agent(
     workspace_id: str,
     github_access_token: str,
     github_repository: str,
-    default_agent: str = "Supervisor",
+    default_agent: str = "Abi",
     agents_to_publish: list[str] = []
     ):
     # Init Naas Integration
@@ -134,8 +133,8 @@ if __name__ == "__main__":
     workspace_id = config.workspace_id
     github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
     github_repository = config.github_project_repository
-    default_agent = "Supervisor"
-    agents_to_publish = ["Supervisor", "Ontology", "Naas", "Multi_Models", "Support"]
+    default_agent = "Abi"
+    agents_to_publish = ["Abi", "Ontology", "Naas", "Multi_Models", "Support"]
     if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None:
         raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID must be set")
     publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository, default_agent, agents_to_publish)

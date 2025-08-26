@@ -5,10 +5,9 @@ from src.core.modules.ontology.workflows.ExportGraphInstancesToExcelWorkflow imp
     ExportGraphInstancesToExcelWorkflowParameters
 )
 from src import services, secret
-from abi import logger
 
 if __name__ == "__main__":
-    data_store_path: str = "storage/datastore/triplestore/export/excel"
+    data_store_path: str = "datastore/triplestore/export/excel"
     configuration = ExportGraphInstancesToExcelWorkflowConfiguration(
         triple_store=services.triple_store_service,
         naas_integration_config=NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY")),

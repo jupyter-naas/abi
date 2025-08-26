@@ -128,6 +128,18 @@ trivy-container-scan: build
 api: deps
 	uv run src/api.py
 
+mcp: deps
+	@echo "🚀 Starting MCP Server (STDIO mode for Claude Desktop)..."
+	uv run mcp-server
+
+mcp-http: deps
+	@echo "🌐 Starting MCP Server (SSE mode on port 8000)..."
+	MCP_TRANSPORT=sse uv run mcp-server
+
+mcp-test: deps
+	@echo "🔍 Running MCP Server validation tests..."
+	uv run python mcp_server_test.py
+
 api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
@@ -157,11 +169,11 @@ dvc-login: deps
 
 datastore-pull: deps
 	@ echo "Pulling datastore..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/datastore_pull.py | sh'
+	@ uv run --no-dev python scripts/datastore_pull.py | sh
 
 datastore-push: deps datastore-pull
 	@ echo "Pushing datastore..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/datastore_push.py | sh'
+	@ uv run --no-dev python scripts/datastore_push.py | sh
 
 storage-pull: deps
 	@ echo "Pulling storage..."
@@ -169,7 +181,7 @@ storage-pull: deps
 
 storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_push.py | sh'
 
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
@@ -221,6 +233,9 @@ help:
 	@echo "DEVELOPMENT:"
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
+	@echo "  mcp                      Start MCP server in STDIO mode for Claude Desktop integration"
+	@echo "  mcp-http                 Start MCP server in HTTP mode on port 3000"
+	@echo "  mcp-test                 Run MCP server validation tests"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
 	@echo "  oxigraph-admin           Open Oxigraph administrative interface for monitoring and management"
 	@echo "  oxigraph-explorer        Open unified Knowledge Graph Explorer with iframe integration"
@@ -265,6 +280,18 @@ help:
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
+	@echo "  docker-cleanup           Clean up Docker conflicts and stuck containers"
+	@echo ""
+	@echo "TROUBLESHOOTING:"
+	@echo "  check-docker             Check if Docker is running"
+	@echo "  docker-cleanup           Fix Docker conflicts (run this if 'make' hangs)"
+	@echo ""
+	@echo "If 'make' hangs or times out:"
+	@echo "  1. Run: make docker-cleanup"
+	@echo "  2. Then: make dev-up"
+	@echo "  3. Finally: make"
+	@echo ""
+	@echo "For detailed troubleshooting: docs/troubleshooting/docker-conflicts.md"
 	@echo ""
 	@echo "DEFAULT:"
 	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
@@ -332,24 +359,47 @@ chat: deps
 # -----------------------
 # These commands manage Docker containers for development
 
-oxigraph-up:
-	@docker-compose --profile dev up -d oxigraph
+# Check if Docker is running before executing docker commands
+check-docker:
+	@if ! docker info > /dev/null 2>&1; then \
+		echo "❌ Docker is not running. Please start Docker Desktop first."; \
+		echo "💡 After starting Docker, run: make docker-cleanup && make dev-up"; \
+		exit 1; \
+	fi
+
+# Enhanced cleanup with conflict detection
+docker-cleanup: check-docker
+	@echo "🧹 Running Docker cleanup to prevent conflicts..."
+	@./scripts/docker_cleanup.sh
+
+oxigraph-up: check-docker
+	@docker-compose --profile dev up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
-oxigraph-down:
-	@docker-compose --profile dev stop oxigraph
+oxigraph-down: check-docker
+	@docker-compose --profile dev stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
-oxigraph-status:
+oxigraph-status: check-docker
 	@echo "Oxigraph status:"
 	@docker-compose --profile dev ps oxigraph
 
-dev-up:
-	@docker-compose --profile dev up -d
+dev-up: check-docker
+	@echo "🚀 Starting development services..."
+	@if ! docker-compose --profile dev up -d --timeout 60; then \
+		echo "❌ Failed to start services. Running cleanup..."; \
+		./scripts/docker_cleanup.sh; \
+		echo "🔄 Retrying..."; \
+		docker-compose --profile dev up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+	fi
 	@echo "✓ All development containers started"
+	@echo "✓ Services available at:"
+	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
+	@echo "  - PostgreSQL (Agent Memory): localhost:5432"  
+	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 
-dev-down:
-	@docker-compose --profile dev down
+dev-down: check-docker
+	@docker-compose --profile dev down --timeout 10 || true
 	@echo "✓ All development services stopped"
 
 container-up:

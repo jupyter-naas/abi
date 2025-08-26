@@ -32,7 +32,7 @@ Oxigraph is particularly well-suited for:
 When you run ABI in development mode, Oxigraph will automatically start if it's not already running:
 
 ```bash
-make chat-supervisor-agent
+make chat-abi-agent
 ```
 
 The CLI will:

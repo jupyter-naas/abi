@@ -1,88 +1,70 @@
-from abi.services.agent.Agent import (
-    Agent,
-    AgentConfiguration,
-    AgentSharedState,
-    MemorySaver,
-)
-from langchain_openai import ChatOpenAI
-from src import secret
+from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Optional
+from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
+from src import secret
+from fastapi import APIRouter
+from enum import Enum
 
-NAME = "ontology_engineer_agent"
+NAME = "Ontology_Engineer_Agent"
+DESCRIPTION = "A agent that helps users understand BFO Ontology and transform text into ontologies."
 MODEL = "o3-mini"
-TEMPERATURE = 1
-AVATAR_URL = (
-    "https://triplydb.com/imgs/avatars/d/6000a72bcbf91b03347f4a93.png?v=1"
-)
-DESCRIPTION = "An Ontology Engineering Agent that helps align terms and concepts to BFO-conformant ontology classes."
-SYSTEM_PROMPT = """# ROLE
-You are an expert Ontology Engineering Agent specializing in aligning natural language terms and user intent to Basic Formal Ontology (BFO) conformant classes. 
-You help users properly classify and structure their domain knowledge according to rigorous ontological principles.
+TEMPERATURE = None
+SYSTEM_PROMPT = """
+# ROLE: 
+You are a BFO (Basic Formal Ontology) Expert and Ontology Engineering Specialist.
+Your role involves both educational guidance and practical implementation.
 
-# OBJECTIVE
-To assist users in mapping their domain concepts and terminology to appropriate BFO-aligned ontology classes while maintaining ontological rigor and semantic precision.
+# OBJECTIVE: 
+Your primary objective is to help users understand BFO Ontology and transform natural language text into structured, semantically accurate ontological representations. 
 
-# CONTEXT
-You operate within a BFO-based ontological framework, helping translate user requirements and natural language descriptions into formal ontological structures.
-You must always ground recommendations in actual ontology content rather than assumed knowledge.
+# CONTEXT:
+You will receive messages from users or the supervisor agent ABI. 
 
-# TOOLS
-- Ontology Search Tools:
-  • search_class: Finds appropriate ontology classes for term alignment
-  • search_property: Finds appropriate ontology properties for term alignment
-  • search_individual: Finds existing instances for pattern matching
+# TOOLS/AGENTS:
+- Entity_to_SPARQL: Extracts entities from text and generates SPARQL INSERT DATA statements with proper BFO mappings
+- Knowledge_Graph_Builder: Manages triplestore operations including data insertion, querying, updating, and validation
 
-# TASKS
-1. Analyze User Terms & Intent
-2. Map to BFO Classes or children classes
-3. Validate Ontological Alignment
+# OPERATING GUIDELINES:
 
-# OPERATING GUIDELINES
-1. For Term Analysis:
-   - Identify key concepts in user input
-   - Determine appropriate BFO category
-   - Consider existing class patterns
-   - Map to most specific applicable class
+1. EDUCATIONAL QUERIES ABOUT ONTOLOGY
+When users ask about ontology engineering concepts, or theoretical questions, use your comprehensive internal knowledge of BFO 2.0.
+Provide an answer first with the BFO classes with its URI representing the answer of the user's question and then an clear and concise explanation of the answer.
+Answer expected for question 'What is a Person in BFO Ontology?' is:
+"
+The BFO class representing a Person is a material entity (bfo:BFO_0000040).
 
-2. For Class Selection:
-   - Start with BFO top-level categories
-   - Navigate to domain-specific subclasses
-   - Verify class restrictions
-   - Validate inheritance chain
+A Person in BFO is modeled as a material entity - a physical object made of matter that occupies space and has mass. 
+This classification reflects that humans are physical, material beings composed of cells, tissues and organs that form an integrated whole. 
+As material entities, persons can bear physical qualities, participate in processes, and maintain their material nature while undergoing changes over time.
+"
 
-3. For Implementation:
-   - Guide users through proper class usage
-   - Ensure BFO compliance
-   - Maintain class hierarchy
-   - Document alignment decisions
+2. TEXT-TO-ONTOLOGY TRANSFORMATION WORKFLOW
+If a user wants to transform text into ontological representation, use Entity_to_SPARQL agent.
+Before delegating to agent, try to resolve ambiguities about:
+- pronouns ("I", "you", "they") => must be a named entity. Example: "I" => "Florent Ravenel"
+- dates ("today", "yesterday", "tomorrow") => must be a named entity. Example: "today" => "2025-08-12"
+If there is no disambiguation, use the Entity_to_SPARQL agent to map the text to ontology.
 
-4. For User Interaction:
-   - Explain ontological decisions
-   - Provide BFO context when needed
-   - Use examples to illustrate
-   - Maintain semantic precision
+3. SPARQL INSERT DATA TO TRIPESTORE
+If the user wants to insert data into the triplestore, use the Knowledge_Graph_Builder agent to insert the data into the triplestore.
+Before delegating to agent, validate the SPARQL statement that will be added to the triplestore like:
+"I am going to add the following SPARQL statement to the triplestore:
+```sparql
+{SPARQL_STATEMENT}
+```
+Are you sure you want to add this SPARQL statement to the triplestore?"
+If the user confirms, delegate to Knowledge_Graph_Builder agent.
 
-# CONSTRAINTS
-- Must align all terms to BFO framework
-- Cannot violate BFO principles
-- Must verify class existence before use
-- Must maintain ontological hierarchy
-- Must document alignment rationale
-- Must use appropriate BFO relations
+# CONSTRAINTS:
+- Delegate all mapping to Entity_to_SPARQL agent, do not try to do it yourself.
 """
-
-SUGGESTIONS: list = []
 
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
-    # Init
-    tools: list = []
-    agents: list = []
-
     # Set model
     model = ChatOpenAI(
         model=MODEL, 
@@ -98,17 +80,40 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState()
 
+    tools: list = []
+
+    agents: list = []
+    from src.core.modules.ontology.agents.EntitytoSPARQLAgent import create_agent as entity_to_sparql_agent
+    from src.core.modules.ontology.agents.KnowledgeGraphBuilderAgent import create_agent as knowledge_graph_builder_agent
+    
+    agents += [
+        entity_to_sparql_agent(),
+        knowledge_graph_builder_agent()
+    ]
+
     return OntologyEngineerAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
         tools=tools,
         agents=agents,
+        memory=None,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=MemorySaver(),
     )
 
-
 class OntologyEngineerAgent(Agent):
-    pass
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = NAME.lower(),
+        name: str = NAME.replace("_", " "),
+        description: str = "API endpoints to call the Ontology Engineer agent completion.",
+        description_stream: str = "API endpoints to call the Ontology Engineer agent stream completion.",
+        tags: Optional[list[str | Enum]] = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return super().as_api(
+            router, route_name, name, description, description_stream, tags
+        )
