@@ -12,6 +12,13 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
+AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
+NAME = "Perplexity"
+TYPE = "custom"
+SLUG = "perplexity"
+DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
+MODEL = "perplexity-gpt-4o"
+
 NAME = "Perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
 AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
