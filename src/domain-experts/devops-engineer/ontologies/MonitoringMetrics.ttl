@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# MonitoringMetrics Ontology for Devops Engineer Domain
+# System monitoring metrics and alerts ontology
+
+@prefix : <http://naas.ai/ontology/devops-engineer/monitoringmetrics#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "MonitoringMetrics Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - System monitoring metrics and alerts ontology" .
+
+# Core Classes
+:MonitoringMetricsEntity a owl:Class ;
+    rdfs:label "MonitoringMetrics Entity" ;
+    rdfs:comment "Base class for monitoringmetrics entities" .
+
+:MonitoringMetricsProcess a owl:Class ;
+    rdfs:label "MonitoringMetrics Process" ;
+    rdfs:comment "Processes related to monitoringmetrics" .
+
+:MonitoringMetricsMetric a owl:Class ;
+    rdfs:label "MonitoringMetrics Metric" ;
+    rdfs:comment "Metrics and measurements for monitoringmetrics" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :MonitoringMetricsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :MonitoringMetricsMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :MonitoringMetricsEntity ;
+    rdfs:range :MonitoringMetricsEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge
