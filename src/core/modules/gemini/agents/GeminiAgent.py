@@ -112,6 +112,11 @@ Note: This creates production-ready image concepts. The descriptions can be used
 - Follow ethical guidelines in all interactions
 - Avoid generating harmful, biased, or misleading content
 - Maintain professional boundaries while being approachable"""
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 SUGGESTIONS = [
     {
@@ -162,6 +167,41 @@ def create_agent(
     # Init
     tools: list = []
     agents: list = []
+
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+    # Initialize file system tools from PR #515
+    from abi.services.agent.tools import FileSystemTools
+    file_system_tools = FileSystemTools(config_name="development")
+    fs_tools = file_system_tools.as_tools()
+    
+    tools += [agent_config_tool] + fs_tools
 
     # Import workflow here to avoid circular imports
     from src.core.modules.gemini.workflows.ImageGenerationStorageWorkflow import (

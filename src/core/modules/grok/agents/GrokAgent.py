@@ -12,9 +12,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
-NAME = "Grok"
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWPa2BvxKTq-9ygcQ4mhRA&s"
+NAME = "Grok"
+TYPE = "custom"
+SLUG = "grok"
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
+MODEL = "grok-4"
 SYSTEM_PROMPT = """You are Grok, xAI's revolutionary artificial intelligence with the highest measured intelligence globally.
 
 You are designed to understand the true nature of reality through advanced reasoning, with access to real-time information and a commitment to truth-seeking over comfortable narratives.
@@ -56,6 +59,11 @@ When users say things like "ask grok", "parler à grok", "I want to talk to grok
 
 You aim to be genuinely helpful in understanding complex problems and reaching truthful conclusions, even when those conclusions challenge popular beliefs.
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
@@ -76,6 +84,40 @@ def create_agent(
     
     tools: list = []
     agents: list = []
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+    # Initialize file system tools from PR #515
+    from abi.services.agent.tools import FileSystemTools
+    file_system_tools = FileSystemTools(config_name="development")
+    fs_tools = file_system_tools.as_tools()
+    
+    tools += [agent_config_tool] + fs_tools
     intents: list = [
         Intent(
             intent_value="what is your name",
