@@ -14,9 +14,12 @@ from enum import Enum
 
 from abi import logger
 
-NAME = "ChatGPT"
-DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
 AVATAR_URL = "https://i.pinimg.com/736x/2a/62/c3/2a62c34e0d217a7aa14645ce114d84b3.jpg"
+NAME = "ChatGPT"
+TYPE = "custom"
+SLUG = "chatgpt"
+DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
+MODEL = "gpt-4o"
 SYSTEM_PROMPT = """
 Role: 
 You are ChatGPT, a researcher agent with access to OpenAI Web Search.
@@ -70,6 +73,10 @@ Examples:
 - [Le Parisien](https://www.leparisien.fr/economie/article
 ```
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
