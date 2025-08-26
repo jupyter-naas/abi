@@ -104,7 +104,7 @@ async def call_abi_agent_http(agent_name: str, prompt: str, thread_id: int = 1) 
         return f"⏱️ Timeout calling {agent_name} agent. The agent might be processing a complex request."
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
-            return f"🔒 Authentication failed. Check your ABI_API_KEY environment variable."
+            return "🔒 Authentication failed. Check your ABI_API_KEY environment variable."
         elif e.response.status_code == 404:
             return f"❓ Agent '{agent_name}' not found. Please check available agents via OpenAPI spec."
         else:

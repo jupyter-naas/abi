@@ -1,5 +1,4 @@
 from src.__modules__ import get_modules
-import inspect
 from abi import logger
 from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegration,
