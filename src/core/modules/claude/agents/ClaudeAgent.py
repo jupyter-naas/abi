@@ -13,7 +13,7 @@ from enum import Enum
 from abi import logger
 
 NAME = "Claude"
-AVATAR_URL = "https://assets.anthropic.com/m/0edc05fa8e30f2f9/original/Anthropic_Glyph_Black.svg"
+AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZleuSWjfZGUB_aCncoBFE8v4stq1HGLcNdg&s"
 DESCRIPTION = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
 SYSTEM_PROMPT = """You are Claude, a helpful, harmless, and honest AI assistant created by Anthropic.
 You excel at complex reasoning, analysis, and creative tasks with a focus on:
