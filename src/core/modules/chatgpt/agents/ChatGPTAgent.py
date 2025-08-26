@@ -14,7 +14,7 @@ from enum import Enum
 
 from abi import logger
 
-AVATAR_URL = "https://i.pinimg.com/736x/2a/62/c3/2a62c34e0d217a7aa14645ce114d84b3.jpg"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
 NAME = "ChatGPT"
 TYPE = "core"
 SLUG = "chatgpt"

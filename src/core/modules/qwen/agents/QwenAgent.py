@@ -10,7 +10,7 @@ from src.core.modules.qwen.models.qwen3_8b import model
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "https://pbs.twimg.com/profile_images/1894073235379273728/0ROUmdkE_400x400.jpg"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg"
 NAME = "Qwen"
 TYPE = "core"
 SLUG = "qwen"

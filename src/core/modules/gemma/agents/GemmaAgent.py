@@ -10,7 +10,7 @@ from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcGemma3Logo&s"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemma.png"
 NAME = "Gemma"
 TYPE = "core"
 SLUG = "gemma"

@@ -12,7 +12,7 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZleuSWjfZGUB_aCncoBFE8v4stq1HGLcNdg&s"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/claude.png"
 NAME = "Claude"
 TYPE = "core"
 SLUG = "claude"

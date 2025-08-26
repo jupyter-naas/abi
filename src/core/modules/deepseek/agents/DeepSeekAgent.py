@@ -10,7 +10,7 @@ from src.core.modules.deepseek.models.deepseek_r1_8b import model
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "https://compareaimodels.com/content/images/2025/01/deepseek-square@2x.png"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
 NAME = "DeepSeek"
 TYPE = "core"
 SLUG = "deepseek"

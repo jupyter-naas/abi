@@ -14,7 +14,7 @@ from abi import logger
 import os
 from datetime import datetime
 
-AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Google-gemini-icon.svg/2048px-Google-gemini-icon.svg.png"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
 NAME = "Gemini"
 TYPE = "core"
 SLUG = "gemini"

@@ -12,7 +12,7 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
-AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png"
 NAME = "Perplexity"
 TYPE = "core"
 SLUG = "perplexity"
