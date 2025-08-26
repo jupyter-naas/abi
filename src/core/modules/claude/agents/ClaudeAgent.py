@@ -14,7 +14,7 @@ from abi import logger
 
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZleuSWjfZGUB_aCncoBFE8v4stq1HGLcNdg&s"
 NAME = "Claude"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "claude"
 DESCRIPTION = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
 MODEL = "claude-3-5-sonnet"

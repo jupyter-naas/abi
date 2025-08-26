@@ -14,7 +14,7 @@ from abi import logger
 
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQDlRsSrziKNomt388XZ3tyqUimjUyCQY8Rtg&s"
 NAME = "Mistral"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "mistral"
 DESCRIPTION = "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."
 MODEL = "mistral-large-2"

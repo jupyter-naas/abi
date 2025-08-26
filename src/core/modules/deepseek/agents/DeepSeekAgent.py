@@ -12,7 +12,7 @@ from abi import logger
 
 AVATAR_URL = "https://compareaimodels.com/content/images/2025/01/deepseek-square@2x.png"
 NAME = "DeepSeek"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "deepseek"
 DESCRIPTION = "Local DeepSeek R1 8B model via Ollama - advanced reasoning, mathematics, and problem-solving"
 MODEL = "deepseek-r1-8b"

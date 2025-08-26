@@ -12,9 +12,9 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWPa2BvxKTq-9ygcQ4mhRA&s"
+AVATAR_URL = "https://pbs.twimg.com/profile_images/189321n9113717342208/Vgg2hEPa_400x400.jpg"
 NAME = "Grok"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "grok"
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
 MODEL = "grok-4"

@@ -16,7 +16,7 @@ from datetime import datetime
 
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Google-gemini-icon.svg/2048px-Google-gemini-icon.svg.png"
 NAME = "Gemini"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
 MODEL = "google-gemini-2-5-flash"

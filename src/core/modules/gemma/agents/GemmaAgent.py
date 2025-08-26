@@ -12,7 +12,7 @@ from abi import logger
 
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcGemma3Logo&s"
 NAME = "Gemma"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "gemma"
 DESCRIPTION = "Local Gemma3 4B model via Ollama - lightweight, fast alternative to cloud Gemini"
 MODEL = "gemma3-4b"
@@ -154,6 +154,7 @@ def create_agent(
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
+        tools=tools,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,

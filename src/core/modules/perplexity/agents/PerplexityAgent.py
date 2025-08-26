@@ -14,7 +14,7 @@ from abi import logger
 
 AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
 NAME = "Perplexity"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
 MODEL = "perplexity-gpt-4o"

@@ -14,7 +14,7 @@ from abi import logger
 
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5EgCMe365ZQGnnMEOzO_9uQyXnB8zQc4W7Q&s"
 NAME = "Llama"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "llama"
 DESCRIPTION = "Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."
 MODEL = "llama-3-3-70b"

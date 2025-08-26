@@ -10,9 +10,9 @@ from src.core.modules.qwen.models.qwen3_8b import model
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwen3Logo&s"
+AVATAR_URL = "https://pbs.twimg.com/profile_images/1894073235379273728/0ROUmdkE_400x400.jpg"
 NAME = "Qwen"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "qwen"
 DESCRIPTION = "Local Qwen3 8B model via Ollama - privacy-focused AI for coding, reasoning, and multilingual tasks"
 MODEL = "qwen3-8b"
@@ -129,6 +129,7 @@ def create_agent(
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
+        tools=tools,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,

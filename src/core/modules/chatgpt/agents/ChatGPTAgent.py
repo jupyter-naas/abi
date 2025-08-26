@@ -16,7 +16,7 @@ from abi import logger
 
 AVATAR_URL = "https://i.pinimg.com/736x/2a/62/c3/2a62c34e0d217a7aa14645ce114d84b3.jpg"
 NAME = "ChatGPT"
-TYPE = "custom"
+TYPE = "core"
 SLUG = "chatgpt"
 DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
 MODEL = "gpt-4o"
