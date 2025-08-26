@@ -12,9 +12,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
-NAME = "Claude"
 AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZleuSWjfZGUB_aCncoBFE8v4stq1HGLcNdg&s"
+NAME = "Claude"
+TYPE = "custom"
+SLUG = "claude"
 DESCRIPTION = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
+MODEL = "claude-3-5-sonnet"
 SYSTEM_PROMPT = """You are Claude, a helpful, harmless, and honest AI assistant created by Anthropic.
 You excel at complex reasoning, analysis, and creative tasks with a focus on:
 - Advanced reasoning and critical thinking
@@ -40,6 +43,11 @@ When users say things like "ask claude", "parler à claude", "I want to talk to 
 
 You prioritize accuracy, helpfulness, and ethical considerations in all your responses.
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -61,6 +69,41 @@ def create_agent(
     # Init
     tools: list = []
     agents: list = []
+    
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+    # Initialize file system tools from PR #515
+    from abi.services.agent.tools import FileSystemTools
+    file_system_tools = FileSystemTools(config_name="development")
+    fs_tools = file_system_tools.as_tools()
+    
+    tools += [agent_config_tool] + fs_tools
     intents: list = [
         Intent(
             intent_value="what is your name",

@@ -14,11 +14,14 @@ from abi import logger
 import os
 from datetime import datetime
 
-NAME = "Gemini"
 AVATAR_URL = (
     "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/google_gemini_logo.png"
 )
+NAME = "Gemini"
+TYPE = "custom"
+SLUG = "gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
+MODEL = "google-gemini-2-5-flash"
 
 SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
 
