@@ -42,6 +42,13 @@ Tasks:
 Tools:
 - current_datetime: Get the current datetime in Paris timezone.
 - openai_web_search: Search the web using OpenAI.
+- get_agent_config: Get agent configuration information including avatar URL and metadata.
+- file_read: Read content from files on the file system.
+- file_write: Write content to files on the file system.
+- file_list: List directory contents.
+- file_delete: Delete files or directories.
+- file_copy: Copy files or directories.
+- file_move: Move or rename files or directories.
 
 Operating Guidelines:
 1. Call current_datetime tool → Get current time
@@ -122,7 +129,34 @@ def create_agent(
         func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
         args_schema=EmptySchema
     )
-    tools += [current_datetime_tool]
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+    # Initialize file system tools from PR #515
+    from abi.services.agent.tools import FileSystemTools
+    file_system_tools = FileSystemTools(config_name="development")
+    fs_tools = file_system_tools.as_tools()
+    
+    tools += [current_datetime_tool, agent_config_tool] + fs_tools
 
     intents: list = [
         Intent(
