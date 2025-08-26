@@ -122,12 +122,8 @@ def create_agent(
         args_schema=EmptySchema
     )
     
-    # Initialize file system tools from PR #515
-    from abi.services.agent.tools import FileSystemTools
-    file_system_tools = FileSystemTools(config_name="development")
-    fs_tools = file_system_tools.as_tools()
-    
-    tools += [agent_config_tool] + fs_tools
+                    
+    tools += [agent_config_tool]
 
     from src import secret
     from src.core.modules.perplexity.integrations import PerplexityIntegration

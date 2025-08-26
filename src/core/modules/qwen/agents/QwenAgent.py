@@ -46,7 +46,6 @@ INSTRUCTIONS_TYPE = "system"
 ONTOLOGY = True
 SUGGESTIONS: list = []
 
-
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
@@ -92,12 +91,8 @@ def create_agent(
         args_schema=EmptySchema
     )
     
-    # Initialize file system tools from PR #515
-    from abi.services.agent.tools import FileSystemTools
-    file_system_tools = FileSystemTools(config_name="development")
-    fs_tools = file_system_tools.as_tools()
-    
-    tools = [agent_config_tool] + fs_tools
+                    
+    tools = [agent_config_tool]
 
     # Define Qwen-specific intents
     intents = [

@@ -194,12 +194,8 @@ def create_agent(
         args_schema=EmptySchema
     )
     
-    # Initialize file system tools from PR #515
-    from abi.services.agent.tools import FileSystemTools
-    file_system_tools = FileSystemTools(config_name="development")
-    fs_tools = file_system_tools.as_tools()
-    
-    tools += [agent_config_tool] + fs_tools
+                    
+    tools += [agent_config_tool]
 
     # Import workflow here to avoid circular imports
     from src.core.modules.gemini.workflows.ImageGenerationStorageWorkflow import (
@@ -234,7 +230,6 @@ def create_agent(
         configuration=agent_configuration,
         memory=None,
     )
-
 
 class GoogleGemini2FlashAgent(IntentAgent):
     def as_api(
