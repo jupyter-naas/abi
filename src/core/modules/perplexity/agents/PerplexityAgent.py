@@ -4,8 +4,8 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
+from abi.services.agent.Agent import Agent
 from fastapi import APIRouter
 from src.core.modules.perplexity.models.perplexity_gpt_4o import model
 from typing import Optional
@@ -92,13 +92,14 @@ def create_agent(
     
     
     # Init
-    tools: list = []
-    
     # Add configuration access tool
-    from langchain_core.tools import StructuredTool
+    from langchain_core.tools import StructuredTool, Tool
     from pydantic import BaseModel
+    from typing import List, Union
     
-    class EmptySchema(BaseModel):
+    tools: List[Union[Tool, Agent]] = []
+    
+    class AgentConfigSchema(BaseModel):
         pass
     
     def get_agent_config() -> str:
@@ -119,11 +120,12 @@ def create_agent(
         name="get_agent_config",
         description="Get agent configuration information including avatar URL and metadata.",
         func=get_agent_config,
-        args_schema=EmptySchema
+        args_schema=AgentConfigSchema
     )
     
                     
-    tools += [agent_config_tool]
+    from typing import cast
+    tools += [cast(Tool, agent_config_tool)]
 
     from src import secret
     from src.core.modules.perplexity.integrations import PerplexityIntegration
@@ -151,9 +153,9 @@ def create_agent(
         name="current_datetime", 
         description="Get the current datetime in Paris timezone.",
         func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-        args_schema=EmptySchema
+        args_schema=AgentConfigSchema
     )
-    tools += [current_datetime_tool]
+    tools += [cast(Tool, current_datetime_tool)]
 
     intents: list = [
         Intent(

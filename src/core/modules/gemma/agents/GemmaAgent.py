@@ -1,11 +1,11 @@
 from abi.services.agent.IntentAgent import (
-    IntentAgent, 
-    Intent, 
-    IntentType, 
-    AgentConfiguration, 
-    AgentSharedState, 
-    
+    IntentAgent,
+    Intent,
+    IntentType,
+    AgentConfiguration,
+    AgentSharedState,
 )
+from abi.services.agent.Agent import Agent
 from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
 from abi import logger
@@ -82,8 +82,9 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id="0")
 
         # Add configuration access tool
-    from langchain_core.tools import StructuredTool
+    from langchain_core.tools import StructuredTool, Tool
     from pydantic import BaseModel
+    from typing import List, Union
     
     class EmptySchema(BaseModel):
         pass
@@ -110,7 +111,8 @@ def create_agent(
     )
     
                     
-    tools = [agent_config_tool]
+    from typing import cast
+    tools: List[Union[Tool, Agent]] = [cast(Tool, agent_config_tool)]
 
     # Define Gemma-specific intents
     intents = [
