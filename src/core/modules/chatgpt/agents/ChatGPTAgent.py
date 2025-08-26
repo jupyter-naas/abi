@@ -43,12 +43,6 @@ Tools:
 - current_datetime: Get the current datetime in Paris timezone.
 - openai_web_search: Search the web using OpenAI.
 - get_agent_config: Get agent configuration information including avatar URL and metadata.
-- file_read: Read content from files on the file system.
-- file_write: Write content to files on the file system.
-- file_list: List directory contents.
-- file_delete: Delete files or directories.
-- file_copy: Copy files or directories.
-- file_move: Move or rename files or directories.
 
 Operating Guidelines:
 1. Call current_datetime tool → Get current time
