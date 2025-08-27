@@ -289,14 +289,6 @@ The module provides comprehensive error handling:
 4. **Upload Failures**: Verify storage exists and has proper credentials
 5. **Pipeline Errors**: Check image URL accessibility and storage configuration
 
-### Debug Mode
-
-Enable debug logging for detailed troubleshooting:
-
-```python
-import logging
-logging.getLogger("src.marketplace.modules.applications.naas.).setLevel(logging.DEBUG)
-```
 
 ## Dependencies
 
