@@ -141,6 +141,12 @@ if 'thread_id' not in st.session_state:
     st.session_state.thread_id = 1
 if 'active_agent' not in st.session_state:
     st.session_state.active_agent = "Abi"
+if 'conversations' not in st.session_state:
+    st.session_state.conversations = {}
+if 'current_conversation_id' not in st.session_state:
+    st.session_state.current_conversation_id = "default"
+if 'conversation_counter' not in st.session_state:
+    st.session_state.conversation_counter = 1
 
 # Agent name mapping for @mentions (maps to actual API endpoint names)
 AGENT_MAPPING = {
@@ -163,6 +169,46 @@ AGENT_AVATARS = {
     "Qwen": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg",
     "DeepSeek": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
 }
+
+def get_conversation_title(messages: list) -> str:
+    """Generate a title for a conversation based on the first user message"""
+    if not messages:
+        return "New Chat"
+    
+    first_user_msg = next((msg for msg in messages if msg["role"] == "user"), None)
+    if first_user_msg:
+        content = first_user_msg["content"][:30]
+        return content + "..." if len(first_user_msg["content"]) > 30 else content
+    return "New Chat"
+
+def save_current_conversation():
+    """Save the current conversation to the conversations dict"""
+    if st.session_state.messages:
+        st.session_state.conversations[st.session_state.current_conversation_id] = {
+            "messages": st.session_state.messages.copy(),
+            "title": get_conversation_title(st.session_state.messages),
+            "active_agent": st.session_state.active_agent,
+            "thread_id": st.session_state.thread_id
+        }
+
+def load_conversation(conversation_id: str):
+    """Load a conversation from the conversations dict"""
+    if conversation_id in st.session_state.conversations:
+        conv = st.session_state.conversations[conversation_id]
+        st.session_state.messages = conv["messages"].copy()
+        st.session_state.active_agent = conv["active_agent"]
+        st.session_state.thread_id = conv["thread_id"]
+        st.session_state.current_conversation_id = conversation_id
+
+def create_new_conversation():
+    """Create a new conversation"""
+    save_current_conversation()
+    st.session_state.conversation_counter += 1
+    new_id = f"chat_{st.session_state.conversation_counter}"
+    st.session_state.current_conversation_id = new_id
+    st.session_state.messages = []
+    st.session_state.active_agent = "Abi"
+    st.session_state.thread_id = st.session_state.conversation_counter
 
 def check_api_status() -> bool:
     """Check if the ABI API is running"""
@@ -297,7 +343,7 @@ def send_message(user_input: str):
 
 # UI Layout - minimal
 
-# Sidebar with active agent and API status
+# Sidebar with active agent, API status, and conversation history
 with st.sidebar:
     st.write(f"**Active: {st.session_state.active_agent}**")
     
@@ -308,8 +354,41 @@ with st.sidebar:
         st.error("❌ API Offline")
         st.info("💡 Run `make api` in terminal to start")
     
-    # Clear chat button
-    if st.button("🗑️ Clear Chat"):
+    st.markdown("---")
+    
+    # Conversation Management
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.write("**Conversations**")
+    with col2:
+        if st.button("➕", help="New Chat"):
+            create_new_conversation()
+            st.rerun()
+    
+    # Save current conversation before displaying list
+    save_current_conversation()
+    
+    # Display conversation list
+    conversations = st.session_state.conversations
+    if conversations:
+        for conv_id, conv_data in reversed(list(conversations.items())):
+            is_current = conv_id == st.session_state.current_conversation_id
+            title = conv_data["title"]
+            
+            # Highlight current conversation
+            if is_current:
+                st.markdown(f"**🗨️ {title}**")
+            else:
+                if st.button(f"💬 {title}", key=f"conv_{conv_id}"):
+                    load_conversation(conv_id)
+                    st.rerun()
+    else:
+        st.write("*No conversations yet*")
+    
+    st.markdown("---")
+    
+    # Clear current chat button
+    if st.button("🗑️ Clear Current Chat"):
         st.session_state.messages = []
         st.rerun()
     
