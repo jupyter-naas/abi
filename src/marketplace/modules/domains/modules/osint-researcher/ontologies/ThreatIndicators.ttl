@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# ThreatIndicators Ontology for Osint Researcher Domain
+# Threat indicators and intelligence ontology
+
+@prefix : <http://naas.ai/ontology/osint-researcher/threatindicators#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "ThreatIndicators Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Threat indicators and intelligence ontology" .
+
+# Core Classes
+:ThreatIndicatorsEntity a owl:Class ;
+    rdfs:label "ThreatIndicators Entity" ;
+    rdfs:comment "Base class for threatindicators entities" .
+
+:ThreatIndicatorsProcess a owl:Class ;
+    rdfs:label "ThreatIndicators Process" ;
+    rdfs:comment "Processes related to threatindicators" .
+
+:ThreatIndicatorsMetric a owl:Class ;
+    rdfs:label "ThreatIndicators Metric" ;
+    rdfs:comment "Metrics and measurements for threatindicators" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :ThreatIndicatorsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :ThreatIndicatorsMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :ThreatIndicatorsEntity ;
+    rdfs:range :ThreatIndicatorsEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge

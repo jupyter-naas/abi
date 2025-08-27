@@ -274,7 +274,7 @@ You can browse the data and run queries there."""
     tools.append(knowledge_graph_tool)
 
     # Get agent recommendation tools from intentmapping
-    from src.core.modules.abi import get_tools
+    from src.core.modules.intentmapping import get_tools
     agent_recommendation_tools = [
         "find_business_proposal_agents",
         "find_coding_agents", 

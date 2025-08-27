@@ -14,11 +14,12 @@ from abi import logger
 import os
 from datetime import datetime
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
 NAME = "Gemini"
-AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/google_gemini_logo.png"
-)
+TYPE = "core"
+SLUG = "gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
+MODEL = "google-gemini-2-5-flash"
 
 SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
 
@@ -109,6 +110,11 @@ Note: This creates production-ready image concepts. The descriptions can be used
 - Follow ethical guidelines in all interactions
 - Avoid generating harmful, biased, or misleading content
 - Maintain professional boundaries while being approachable"""
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 SUGGESTIONS = [
     {
@@ -160,6 +166,37 @@ def create_agent(
     tools: list = []
     agents: list = []
 
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+                    
+    tools += [agent_config_tool]
+
     # Import workflow here to avoid circular imports
     from src.core.modules.gemini.workflows.ImageGenerationStorageWorkflow import (
         ImageGenerationStorageWorkflow,
@@ -193,7 +230,6 @@ def create_agent(
         configuration=agent_configuration,
         memory=None,
     )
-
 
 class GoogleGemini2FlashAgent(IntentAgent):
     def as_api(

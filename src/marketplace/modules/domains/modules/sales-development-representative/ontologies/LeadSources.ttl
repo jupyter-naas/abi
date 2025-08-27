@@ -1,0 +1,78 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# LeadSources Ontology for Sales Development Representative Domain
+# Lead sources, channels, and generation methods ontology
+
+@prefix : <http://naas.ai/ontology/sales-development-representative/leadsources#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "LeadSources Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Lead sources, channels, and generation methods ontology" .
+
+# Core Classes
+:LeadSourcesEntity a owl:Class ;
+    rdfs:label "LeadSources Entity" ;
+    rdfs:comment "Base class for leadsources entities" .
+
+:LeadSourcesProcess a owl:Class ;
+    rdfs:label "LeadSources Process" ;
+    rdfs:comment "Processes related to leadsources" .
+
+:LeadSourcesMetric a owl:Class ;
+    rdfs:label "LeadSources Metric" ;
+    rdfs:comment "Metrics and measurements for leadsources" .
+
+# Lead Source-specific Classes
+:LeadChannel a owl:Class ;
+    rdfs:subClassOf :LeadSourcesEntity ;
+    rdfs:label "Lead Channel" ;
+    rdfs:comment "Channels for lead generation (email, social, phone, etc.)" .
+
+:LeadDatabase a owl:Class ;
+    rdfs:subClassOf :LeadSourcesEntity ;
+    rdfs:label "Lead Database" ;
+    rdfs:comment "Lead databases and prospecting platforms" .
+
+:OutreachSequence a owl:Class ;
+    rdfs:subClassOf :LeadSourcesEntity ;
+    rdfs:label "Outreach Sequence" ;
+    rdfs:comment "Multi-touch outreach sequences and cadences" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :LeadSourcesEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :LeadSourcesMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :LeadSourcesEntity ;
+    rdfs:range :LeadSourcesEntity ;
+    rdfs:label "related to" .
+
+# Lead Source-specific Properties
+:hasResponseRate a owl:DatatypeProperty ;
+    rdfs:domain :LeadChannel ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has response rate" .
+
+:hasLeadQuality a owl:DatatypeProperty ;
+    rdfs:domain :LeadDatabase ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has lead quality score" .
+
+:hasTouchPoints a owl:DatatypeProperty ;
+    rdfs:domain :OutreachSequence ;
+    rdfs:range xsd:integer ;
+    rdfs:label "has number of touch points" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge
