@@ -63,38 +63,10 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-        # Add configuration access tool
-    from langchain_core.tools import StructuredTool, Tool
-    from pydantic import BaseModel
+    from langchain_core.tools import Tool
     from typing import List, Union
     
-    class EmptySchema(BaseModel):
-        pass
-    
-    def get_agent_config() -> str:
-        """Get agent configuration information including avatar URL and metadata."""
-        return f"""Agent Configuration:
-- Name: {NAME}
-- Type: {TYPE}
-- Slug: {SLUG}
-- Model: {MODEL}
-- Avatar URL: {AVATAR_URL}
-- Description: {DESCRIPTION}
-- Temperature: {TEMPERATURE}
-- Date Support: {DATE}
-- Instructions Type: {INSTRUCTIONS_TYPE}
-- Ontology Support: {ONTOLOGY}"""
-    
-    agent_config_tool = StructuredTool(
-        name="get_agent_config",
-        description="Get agent configuration information including avatar URL and metadata.",
-        func=get_agent_config,
-        args_schema=EmptySchema
-    )
-    
-                    
-    from typing import cast
-    tools: List[Union[Tool, Agent]] = [cast(Tool, agent_config_tool)]
+    tools: List[Union[Tool, Agent]] = []
 
     # Define Qwen-specific intents
     intents = [
