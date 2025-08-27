@@ -490,7 +490,7 @@ def send_message(user_input: str):
             "agent": "system",
             "timestamp": datetime.now()
         })
-    
+
     # If agent switched, rerun to update sidebar
     if st.session_state.get('agent_switched', False):
         st.session_state.agent_switched = False
