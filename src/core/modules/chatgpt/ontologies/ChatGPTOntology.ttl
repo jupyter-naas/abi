@@ -70,13 +70,13 @@ abi:GPT_4o_mini a abi:AIModelInstance ;
     rdfs:label "GPT-4o mini"@en ;
     abi:modelSlug "gpt-4o-mini"@en ;
     abi:provider "OpenAI"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
+    abi:sourceAPI "artificial_analysis"@en ;
 
 #################################################################
 #    BFO Bucket 2: Qualities - Performance & Cost Metrics
 #################################################################
 
-abi:GPT_4o_mini abi:inputTokenCost 0.15 ;
+    abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.6 ;
     abi:outputTokenCostCurrency "USD"@en ;
