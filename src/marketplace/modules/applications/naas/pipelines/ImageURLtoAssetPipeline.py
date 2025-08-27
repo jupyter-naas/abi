@@ -10,7 +10,7 @@ from rdflib import Literal, Graph, URIRef
 import hashlib
 import requests
 from src import config
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )

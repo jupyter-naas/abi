@@ -7,8 +7,8 @@ from abi.services.agent.Agent import (
 )
 from src import secret
 from fastapi import APIRouter
-from src.core.modules.naas.integrations import NaasIntegration
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations import NaasIntegration
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
 from typing import Optional

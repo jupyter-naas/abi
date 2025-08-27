@@ -1,7 +1,7 @@
 import pytest
 
-from src.core.modules.naas.pipelines.ImageURLtoAssetPipeline import ImageURLtoAssetPipeline, ImageURLtoAssetPipelineParameters, ImageURLtoAssetPipelineConfiguration
-from src.core.modules.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.marketplace.modules.applications.naas.pipelines.ImageURLtoAssetPipeline import ImageURLtoAssetPipeline, ImageURLtoAssetPipelineParameters, ImageURLtoAssetPipelineConfiguration
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
 from src import secret, services
 
 @pytest.fixture

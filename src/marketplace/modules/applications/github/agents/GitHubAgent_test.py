@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.github.agents.GitHubAgent import create_agent
+from src.marketplace.modules.applications.github.agents.GitHubAgent import create_agent
 
 @pytest.fixture
 def agent():

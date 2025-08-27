@@ -29,7 +29,7 @@ make chat Agent=NaasAgent
 ### Structure
 
 ```
-src/core/modules/naas/
+src/marketplace/modules/applications/naas/
 ├── agents/                                        # AI agents
 │   └── NaasAgent.py                              # Main Naas management agent
 ├── integrations/                                  # API integrations
@@ -61,7 +61,7 @@ An AI agent that provides natural language interface for Naas workspace manageme
 6. **Storage Operations**: Manage storage spaces and assets
 
 ```python
-from src.core.modules.naas.agents.NaasAgent import create_agent
+from src.marketplace.modules.applications.naas.agents.NaasAgent import create_agent
 
 # Create agent
 agent = create_agent()
@@ -84,7 +84,7 @@ Complete API integration providing access to all Naas services:
 6. **Storage API**: Asset and storage management
 
 ```python
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration
 )
@@ -113,7 +113,7 @@ Automated pipeline for converting image URLs to Naas assets:
 5. **Error Handling**: Graceful handling of download/upload failures
 
 ```python
-from src.core.modules.naas.pipelines.ImageURLtoAssetPipeline import (
+from src.marketplace.modules.applications.naas.pipelines.ImageURLtoAssetPipeline import (
     ImageURLtoAssetPipeline,
     ImageURLtoAssetPipelineConfiguration,
     ImageURLtoAssetPipelineParameters
@@ -236,7 +236,7 @@ objects = integration.list_workspace_storage_objects(
 
 ```bash
 # Test image URL to asset pipeline
-uv run python -m pytest src/core/modules/naas/pipelines/ImageURLtoAssetPipeline_test.py
+uv run python -m pytest src.marketplace.modules.applications.naas.pipelines/ImageURLtoAssetPipeline_test.py
 ```
 
 ## Configuration
@@ -295,7 +295,7 @@ Enable debug logging for detailed troubleshooting:
 
 ```python
 import logging
-logging.getLogger("src.core.modules.naas").setLevel(logging.DEBUG)
+logging.getLogger("src.marketplace.modules.applications.naas.).setLevel(logging.DEBUG)
 ```
 
 ## Dependencies

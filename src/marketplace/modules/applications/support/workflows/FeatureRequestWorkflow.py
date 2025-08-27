@@ -1,7 +1,7 @@
 from abi.workflow import Workflow, WorkflowConfiguration
 from abi.workflow.workflow import WorkflowParameters
-from src.core.modules.github.integrations.GitHubIntegration import GitHubIntegration, GitHubIntegrationConfiguration
-from src.core.modules.github.integrations.GitHubGraphqlIntegration import GitHubGraphqlIntegration, GitHubGraphqlIntegrationConfiguration
+from src.marketplace.modules.applications.github.integrations.GitHubIntegration import GitHubIntegration, GitHubIntegrationConfiguration
+from src.marketplace.modules.applications.github.integrations.GitHubGraphqlIntegration import GitHubGraphqlIntegration, GitHubGraphqlIntegrationConfiguration
 from src import config
 from dataclasses import dataclass
 from pydantic import Field

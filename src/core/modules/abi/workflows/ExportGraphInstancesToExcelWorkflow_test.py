@@ -4,7 +4,7 @@ from src.core.modules.abi.workflows.ExportGraphInstancesToExcelWorkflow import (
     ExportGraphInstancesToExcelWorkflowConfiguration,
     ExportGraphInstancesToExcelWorkflowParameters,
 )
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
 from src import services, secret
