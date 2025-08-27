@@ -105,11 +105,12 @@ def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
         return {"success": False, "error": f"❌ Error: {str(e)}"}
 
 def process_user_input(user_input: str) -> tuple[str, str]:
-    """Process user input and handle @mentions"""
-    # Check for @mentions
-    mention_match = re.search(r'@(\w+)', user_input.lower())
+    """Process user input and handle @mentions and natural language agent switching"""
     agent_name = st.session_state.active_agent
+    original_agent = agent_name
     
+    # Check for @mentions first
+    mention_match = re.search(r'@(\w+)', user_input.lower())
     if mention_match:
         mentioned_agent = mention_match.group(1)
         if mentioned_agent in AGENT_MAPPING:
@@ -123,6 +124,29 @@ def process_user_input(user_input: str) -> tuple[str, str]:
                 user_input = user_input_clean
             else:
                 user_input = f"Hello, I want to talk to {mentioned_agent}"
+    else:
+        # Check for natural language agent switching
+        user_lower = user_input.lower()
+        for agent_key, agent_value in AGENT_MAPPING.items():
+            # Look for patterns like "talk to grok", "switch to claude", "use gemini", etc.
+            patterns = [
+                f"talk to {agent_key}",
+                f"switch to {agent_key}",
+                f"use {agent_key}",
+                f"parlons a {agent_key}",  # French
+                f"parler avec {agent_key}",  # French
+                f"je veux parler a {agent_key}",  # French
+            ]
+            
+            if any(pattern in user_lower for pattern in patterns):
+                agent_name = agent_value
+                st.session_state.active_agent = agent_name
+                user_input = f"Hello, I'm now talking to {agent_key}"
+                break
+    
+    # If agent changed, we'll need to rerun to update the sidebar
+    if original_agent != agent_name:
+        st.session_state.agent_switched = True
     
     return agent_name, user_input
 
@@ -161,6 +185,11 @@ def send_message(user_input: str):
             "agent": "system",
             "timestamp": datetime.now()
         })
+    
+    # If agent switched, rerun to update sidebar
+    if st.session_state.get('agent_switched', False):
+        st.session_state.agent_switched = False
+        st.rerun()
 
 # UI Layout - minimal
 
