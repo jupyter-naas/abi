@@ -69,16 +69,34 @@ st.markdown("""
         margin-bottom: 0 !important;
     }
     
-    /* Chat input styling */
-    .stChatInput > div > div {
+    /* Chat input styling - more aggressive selectors */
+    [data-testid="stChatInput"] {
         border-radius: 8px !important;
         min-height: 80px !important;
     }
     
-    .stChatInput textarea {
+    [data-testid="stChatInput"] > div {
         border-radius: 8px !important;
         min-height: 80px !important;
+    }
+    
+    [data-testid="stChatInput"] textarea {
+        border-radius: 8px !important;
+        min-height: 80px !important;
+        height: 80px !important;
         resize: vertical !important;
+    }
+    
+    /* Target all input elements in chat */
+    .stChatInput * {
+        border-radius: 8px !important;
+    }
+    
+    /* Specific textarea targeting */
+    textarea[data-testid="stChatInputTextArea"] {
+        border-radius: 8px !important;
+        min-height: 80px !important;
+        height: 80px !important;
     }
     
     /* Reduce border radius on chat messages */
