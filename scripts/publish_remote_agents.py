@@ -4,9 +4,9 @@ from src.core.modules.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from src.core.modules.support.integrations.GithubIntegration import (
-    GithubIntegration,
-    GithubIntegrationConfiguration,
+from src.core.modules.github.integrations.GitHubIntegration import (
+    GitHubIntegration,
+    GitHubIntegrationConfiguration,
 )
 from src import load_modules
 from fastapi import APIRouter
@@ -28,7 +28,7 @@ def publish_remote_agent(
 
     # Init Github Integration
     if github_access_token is not None and github_repository is not None:
-        github_integration = GithubIntegration(GithubIntegrationConfiguration(access_token=github_access_token))
+        github_integration = GitHubIntegration(GitHubIntegrationConfiguration(access_token=github_access_token))
         logger.info(f"🔑 Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
         github_integration.create_or_update_repository_secret(
             repo_name=github_repository,
@@ -43,7 +43,7 @@ def publish_remote_agent(
         logger.info(f"=> Getting agents from module: {module.module_path}")
         for agent in module.agents:
             name = getattr(agent, "name", "")
-            if name not in agents_to_publish:
+            if len(agents_to_publish) > 0 and name not in agents_to_publish:
                 continue
             logger.info(f"==> Publishing agent: {name}")
             
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
     github_repository = config.github_project_repository
     default_agent = "Abi"
-    agents_to_publish = ["Abi", "Ontology", "Naas", "Multi_Models", "Support"]
+    agents_to_publish = []
     if naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None:
         raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID must be set")
     publish_remote_agent(naas_api_key, api_base_url, abi_api_key, workspace_id, github_access_token, github_repository, default_agent, agents_to_publish)
