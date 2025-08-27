@@ -36,7 +36,7 @@ st.markdown("""
     .chat-content {
         font-weight: 400;
         font-size: 1rem;
-        color: #1d1d1f;
+        color: #000000;
         line-height: 1.4;
         margin-top: 0;
         margin-bottom: 0;
@@ -273,12 +273,12 @@ for msg in st.session_state.messages:
             avatar_url = AGENT_AVATARS.get(agent_name, None)
             with st.chat_message("assistant", avatar=avatar_url):
                 st.markdown(f'<div class="assistant-label">{agent_name}:</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="chat-content">{msg["content"]}</div>', unsafe_allow_html=True)
+                st.write(msg["content"])
     else:
         # User message with default user avatar
         with st.chat_message("user"):
             st.markdown('<div class="user-label">You:</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="chat-content">{msg["content"]}</div>', unsafe_allow_html=True)
+            st.write(msg["content"])
 
 # Chat input
 if prompt := st.chat_input("Message ABI..."):
