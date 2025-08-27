@@ -1,5 +1,5 @@
 from src.core.modules.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.modules.ontology.workflows.ExportGraphInstancesToExcelWorkflow import (
+from src.core.modules.abi.workflows.ExportGraphInstancesToExcelWorkflow import (
     ExportGraphInstancesToExcelWorkflow, 
     ExportGraphInstancesToExcelWorkflowConfiguration,
     ExportGraphInstancesToExcelWorkflowParameters
