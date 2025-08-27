@@ -143,6 +143,10 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
 
     def get_linked_classes(self, cls_id, rel_type=None):
         """Recursive function to build a tree of classes based on unionOf, intersectionOf and complementOf."""
+        # Handle None case
+        if cls_id is None:
+            return []
+        
         # If it's a leaf we return a dict with the class id and the operator.
         if "http" in cls_id:
             if rel_type is not None and rel_type in self.operators:
@@ -195,19 +199,19 @@ class GetObjectPropertiesFromClassWorkflow(Workflow):
             else:
                 return {operator: left}
 
-    def map_ranges_domains(self, property_data):
-        """Map the ranges and domains to the classes by calling get_linked_classes."""
-        if "domain" in property_data:
-            property_data["domain"] = self._.map_(
-                property_data["domain"],
-                lambda x: x if "http" in x else self.get_linked_classes(x)[0],
+    # We map the ranges and domains to the classes by calling get_linked_classes.
+    def map_ranges_domains(self, x):
+        if "domain" in x:
+            x["domain"] = self._.map_(
+                x["domain"],
+                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
             )
-        if "range" in property_data:
-            property_data["range"] = self._.map_(
-                property_data["range"],
-                lambda x: x if "http" in x else self.get_linked_classes(x)[0],
+        if "range" in x:
+            x["range"] = self._.map_(
+                x["range"],
+                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
             )
-        return property_data
+        return x
 
     def is_class(self, uri):
         """Check if the given URI is a class in the ontology."""
