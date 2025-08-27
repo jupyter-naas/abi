@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
 # SOP Section in Sidebar
 st.sidebar.markdown("---")
-if st.sidebar.button("📖 View SOP", use_container_width=True):
+if st.sidebar.button("📖 View SOP", width="stretch"):
     st.session_state.page = "sop"
     st.rerun()
 
@@ -218,7 +218,8 @@ else:
 
 # Pagination
 if page_size != "All":
-    total_pages = len(display_df) // page_size + (1 if len(display_df) % page_size > 0 else 0)
+    page_size_int = int(page_size)
+    total_pages = len(display_df) // page_size_int + (1 if len(display_df) % page_size_int > 0 else 0)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -228,8 +229,8 @@ if page_size != "All":
             key="page_selector"
         ) if total_pages > 0 else 1
     
-    start_idx = (page_number - 1) * page_size
-    end_idx = start_idx + page_size
+    start_idx = (page_number - 1) * page_size_int
+    end_idx = start_idx + page_size_int
     paginated_df = display_df.iloc[start_idx:end_idx]
 else:
     paginated_df = display_df
@@ -238,7 +239,7 @@ else:
 if view_mode == "Standard Table":
     st.dataframe(
         paginated_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=not show_index,
         height=400 if not compact_view else 300
     )
@@ -247,7 +248,7 @@ elif view_mode == "Editable Grid":
     st.info("📝 Editable mode - Changes are highlighted but not persisted in this demo")
     edited_df = st.data_editor(
         paginated_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=not show_index,
         height=400 if not compact_view else 300,
         key="editable_table"
@@ -262,7 +263,7 @@ elif view_mode == "Summary View":
             'Progress': 'mean' if 'Progress' in display_df.columns else 'count'
         }).round(2)
         summary.columns = ['Count', 'Total Budget', 'Avg Progress']
-        st.dataframe(summary, use_container_width=True)
+        st.dataframe(summary, width="stretch")
     else:
         st.warning("Summary view requires a 'Category' column")
 
@@ -295,7 +296,7 @@ elif view_mode == "Pivot Table":
                     aggfunc='mean',
                     fill_value=0
                 )
-                st.dataframe(pivot_table, use_container_width=True)
+                st.dataframe(pivot_table, width="stretch")
             except Exception as e:
                 st.error(f"Error creating pivot table: {str(e)}")
         else:
@@ -316,7 +317,7 @@ if len(filtered_df) > 0:
                 names=category_counts.index,
                 title="Distribution by Category"
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width="stretch")
     
     with viz_col2:
         # Progress distribution
@@ -327,7 +328,7 @@ if len(filtered_df) > 0:
                 title="Progress Distribution",
                 nbins=20
             )
-            st.plotly_chart(fig_hist, use_container_width=True)
+            st.plotly_chart(fig_hist, width="stretch")
 
 # Export options
 st.markdown("### 💾 Export Data")

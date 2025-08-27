@@ -303,7 +303,7 @@ with col1:
 
 with col2:
     # Tasks by assignee
-    assignee_counts = {}
+    assignee_counts: dict[str, int] = {}
     for task in filtered_tasks:
         assignee = task["assignee"]
         assignee_counts[assignee] = assignee_counts.get(assignee, 0) + 1

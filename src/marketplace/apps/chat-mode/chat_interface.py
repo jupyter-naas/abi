@@ -1,5 +1,6 @@
 """
 ABI Chat Interface - Clean, minimal, functional
+Uses the same initialization as the terminal agent for consistency
 """
 
 import streamlit as st
@@ -9,16 +10,23 @@ from pathlib import Path
 from datetime import datetime
 import re
 
-# Load environment
+# Load environment first
 from dotenv import load_dotenv
+load_dotenv()
 
-# Environment setup
+# Environment setup - ensure we're in the correct project root
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 os.chdir(str(project_root))
-load_dotenv()
+
+# Debug path information
+st.write(f"🔍 **Debug:** Current working directory: {os.getcwd()}")
+st.write(f"🔍 **Debug:** Project root: {project_root}")
+st.write(f"🔍 **Debug:** Python path includes: {str(project_root) in sys.path}")
+
+# Set environment for development
 os.environ['ENV'] = 'dev'
-os.environ['LOG_LEVEL'] = 'DEBUG'  # Increase logging for debugging
+os.environ['LOG_LEVEL'] = 'ERROR'  # Reduce noise in Streamlit
 
 # Page config
 st.set_page_config(
@@ -43,66 +51,93 @@ AGENT_MAPPING = {
     "deepseek": "DeepSeek", "gemma": "Gemma"
 }
 
+def load_agent(agent_class: str):
+    """Load agent from modules like terminal agent does"""
+    try:
+        st.write("🔍 **Debug:** Attempting to import modules...")
+        
+        # Check if we can import src
+        try:
+            import src
+            st.write(f"🔍 **Debug:** ✅ Successfully imported src from: {src.__file__}")
+        except Exception as e:
+            st.error(f"❌ Cannot import src: {e}")
+            return None
+        
+        # Try to import modules
+        from src import modules
+        st.write("🔍 **Debug:** ✅ Successfully imported modules")
+        
+        # Force modules to load if they haven't been loaded yet
+        loaded_modules = modules  # This triggers the LazyLoader
+        
+        st.write(f"🔍 **Debug:** Found {len(loaded_modules)} modules")
+        
+        if len(loaded_modules) == 0:
+            st.error("❌ No modules loaded - check module loading errors")
+            return None
+        
+        for module in loaded_modules:
+            st.write(f"🔍 **Debug:** Checking module {module.module_import_path}")
+            st.write(f"🔍 **Debug:** Module has {len(module.agents)} agents")
+            
+            for agent in module.agents:
+                agent_name = agent.__class__.__name__
+                st.write(f"🔍 **Debug:** Found agent: {agent_name}")
+                if agent_name == agent_class:
+                    st.write(f"🔍 **Debug:** ✅ Found matching agent: {agent_name}")
+                    return agent
+        
+        st.write(f"🔍 **Debug:** ❌ Agent {agent_class} not found in any module")
+        return None
+    except Exception as e:
+        st.error(f"Error loading modules: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        return None
+
 def initialize_agent():
-    """Initialize ABI agent with proper error handling"""
+    """Initialize ABI agent using the same approach as terminal agent"""
     if st.session_state.agent is not None:
         return st.session_state.agent
     
     try:
-        from src.core.modules.abi.agents.AbiAgent import create_agent
+        # Load agent from modules like terminal agent does
+        agent = load_agent("AbiAgent")
         
-        agent = create_agent()
         if not agent:
-            st.error("Failed to create ABI agent")
+            st.error("Failed to load AbiAgent from modules")
             return None
         
-        # Debug: Show agent structure
-        st.write("🔍 **Debug Info:**")
-        st.write(f"- Agent type: {type(agent).__name__}")
-        st.write(f"- Agent name: {getattr(agent, 'name', 'Unknown')}")
-        
-        # Check for sub-agents
-        if hasattr(agent, 'agents') and agent.agents:
-            st.write(f"- Sub-agents found: {len(agent.agents)}")
-            for i, sub_agent in enumerate(agent.agents):
-                if sub_agent:
-                    st.write(f"  - {i}: {getattr(sub_agent, 'name', 'Unknown')} ({type(sub_agent).__name__})")
-                    # Store sub-agents for direct access
-                    if not hasattr(st.session_state, 'sub_agents'):
-                        st.session_state.sub_agents = {}
-                    st.session_state.sub_agents[sub_agent.name] = sub_agent
-        else:
-            st.write("- No sub-agents found")
-        
-        # Set up response callback
-        def handle_response(message, agent_name=None):
-            st.write(f"🔍 **Response Debug:** Agent={agent_name}, Message type={type(message)}")
-            if hasattr(message, 'content') and message.content:
-                # Clean response content
-                content = re.sub(r'<think>.*?</think>', '', message.content, flags=re.DOTALL).strip()
-                if content:
-                    # Update active agent
-                    if agent_name:
-                        st.session_state.active_agent = agent_name
-                        st.write(f"🔍 **Active agent updated to:** {agent_name}")
-                    
-                    # Store response
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": content,
-                        "agent": agent_name or "Abi",
-                        "timestamp": datetime.now()
-                    })
-        
-        agent.on_ai_message(handle_response)
         st.session_state.agent = agent
         return agent
         
     except Exception as e:
-        st.error(f"Agent initialization failed: {e}")
-        import traceback
-        st.error(f"Traceback: {traceback.format_exc()}")
+        st.error(f"Error initializing agent: {str(e)}")
         return None
+
+def handle_agent_response(response):
+    """Handle agent response like terminal agent does"""
+    if not response:
+        return
+    
+    # Extract content from response
+    content = ""
+    if hasattr(response, 'content'):
+        content = response.content
+    elif isinstance(response, str):
+        content = response
+    elif hasattr(response, 'messages') and response.messages:
+        # Handle message list response
+        for msg in response.messages:
+            if hasattr(msg, 'content') and msg.content:
+                content += msg.content + "\n"
+    
+    if content:
+        # Clean up the content (remove thinking tags, etc.)
+        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+        if content:
+            st.session_state.messages.append({"role": "assistant", "content": content})
 
 def process_user_input(user_input):
     """Process user input and handle @mentions like terminal interface"""
@@ -143,21 +178,11 @@ def send_message(user_input):
         
         # CRITICAL: Always use ABI orchestration like terminal does
         # Set active agent context BEFORE invoke (like terminal line 433)
-        if hasattr(agent, '_state') and hasattr(agent._state, 'set_current_active_agent'):
-            agent._state.set_current_active_agent(st.session_state.active_agent)
-            st.write(f"🔍 **Set agent state to:** {st.session_state.active_agent}")
-        else:
-            st.write("🔍 **Warning:** Agent has no _state or set_current_active_agent method")
-            
-        # Check agent state structure
-        if hasattr(agent, '_state'):
-            st.write(f"🔍 **Agent state type:** {type(agent._state)}")
-            if hasattr(agent._state, 'current_active_agent'):
-                st.write(f"🔍 **Current active agent in state:** {agent._state.current_active_agent}")
+        # Invoke agent like terminal agent does
+        response = agent.invoke(user_input)
         
-        # Invoke agent (ABI will handle routing based on active agent state)
-        st.write("🔍 **Invoking ABI agent with orchestration**")
-        agent.invoke(user_input)
+        # Handle the response
+        handle_agent_response(response)
         
     except Exception as e:
         st.error(f"Error sending message: {e}")

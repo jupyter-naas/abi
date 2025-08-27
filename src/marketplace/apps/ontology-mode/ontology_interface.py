@@ -350,7 +350,7 @@ if st.session_state.selected_files:
             
             # Category breakdown
             st.markdown("**By Category:**")
-            category_counts = defaultdict(int)
+            category_counts: dict[str, int] = defaultdict(int)
             for f in st.session_state.selected_files:
                 category_counts[f['category']] += 1
             
@@ -370,7 +370,7 @@ if ttl_files:
     # Display with filtering
     st.dataframe(
         df[['name', 'category', 'module', 'path', 'size']],
-        use_container_width=True,
+        width="stretch",
         column_config={
             'name': 'File Name',
             'category': 'Category', 
@@ -384,7 +384,7 @@ else:
 
 # SOP Section
 st.sidebar.markdown("---")
-if st.sidebar.button("📖 View SOP", use_container_width=True):
+if st.sidebar.button("📖 View SOP", width="stretch"):
     st.session_state.page = "sop"
     st.rerun()
 
