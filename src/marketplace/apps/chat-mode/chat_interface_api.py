@@ -44,13 +44,13 @@ st.markdown("""
     
     /* User message styling */
     .user-label {
-        color: #007aff;
+        color: #86868b;
         font-weight: 600;
     }
     
     /* Assistant message styling */
     .assistant-label {
-        color: #34c759;
+        color: #86868b;
         font-weight: 600;
     }
     
