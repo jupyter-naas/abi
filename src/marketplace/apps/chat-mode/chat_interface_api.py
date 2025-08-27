@@ -46,18 +46,18 @@ st.markdown("""
     .user-label {
         color: #86868b;
         font-weight: 600;
-        margin-bottom: 2px;
+        margin-bottom: 0px;
         display: block;
-        line-height: 1.2;
+        line-height: 1.1;
     }
     
     /* Assistant message styling */
     .assistant-label {
         color: #86868b;
         font-weight: 600;
-        margin-bottom: 2px;
+        margin-bottom: 0px;
         display: block;
-        line-height: 1.2;
+        line-height: 1.1;
     }
     
     /* Reduce spacing in chat messages */
