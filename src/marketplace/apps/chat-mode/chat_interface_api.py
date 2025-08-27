@@ -86,7 +86,7 @@ def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
         api_agent_name = AGENT_MAPPING.get(agent_name, agent_name.capitalize())
         url = f"{ABI_API_BASE}/agents/{api_agent_name}/completion"
         
-        response = requests.post(url, json=data, headers=headers, timeout=60)
+        response = requests.post(url, json=data, headers=headers, timeout=120)
         
         if response.status_code == 200:
             return {"success": True, "content": response.text.strip('"')}
@@ -100,7 +100,7 @@ def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
     except requests.exceptions.ConnectionError:
         return {"success": False, "error": f"❌ Cannot connect to ABI API at {ABI_API_BASE}.\n\n💡 **To fix this:**\n1. Open a terminal in the project root\n2. Run: `make api`\n3. Wait for the API to start, then try again"}
     except requests.exceptions.Timeout:
-        return {"success": False, "error": f"⏱️ Timeout calling {agent_name} agent."}
+        return {"success": False, "error": f"⏱️ Timeout calling {agent_name} agent (>2 minutes). The agent might be processing a complex request. Try a simpler question or try again later."}
     except Exception as e:
         return {"success": False, "error": f"❌ Error: {str(e)}"}
 
