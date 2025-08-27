@@ -785,16 +785,21 @@ class OntologyDocs:
 
                             # Create Ontology Slim
                             ontology_slim_path = os.path.join(reference_dir, k)
-                            if len(level_path.split("/")) < 4:
+                            if len(level_path.split("/")) < 3:
                                 continue
                             if "Process boundary" in level_path or "Process profile" in level_path:
                                 continue
+
                             level_slim_path = "/".join(level_path.split("/")[1:3])
                             for word in ["Specifically dependent continuant", "Independent continuant"]:
-                                if word in level_path and len(level_path.split("/")) > 3:
+                                if word in level_path and not level_path.endswith(word) and len(level_path.split("/")) > 3:
                                     slim_level = level_path.split("/")[3:4][0]
                                     level_slim_path = level_slim_path.replace(word, slim_level)
                                     break
+                                elif word in level_path and level_path.endswith(word):
+                                    level_slim_path = None
+                            if level_slim_path is None:
+                                continue
                             abi_slim_path = os.path.join(
                                 ontology_slim_path, level_slim_path, f"{label_safe}.md"
                             )
@@ -807,22 +812,22 @@ class OntologyDocs:
                             )
                             break
 
-                    # # Add curated in foundry to the markdown content
-                    # if curated_in_foundry:
-                    #     for foundry in curated_in_foundry:
-                    #         foundry_path = os.path.join(
-                    #             "docs", "ontology", "foundry", foundry
-                    #         )
-                    #         file_foundry_path = os.path.join(
-                    #             foundry_path, level_slim_path, f"{label_safe}.md"
-                    #         )
-                    #         os.makedirs(
-                    #             os.path.dirname(file_foundry_path), exist_ok=True
-                    #         )
-                    #         shutil.copy(file_path, file_foundry_path)
-                    #         logger.info(
-                    #             f"✅ {label.capitalize()} saved in {file_foundry_path}"
-                    #         )
+                    # Add curated in foundry to the markdown content
+                    if curated_in_foundry:
+                        for foundry in curated_in_foundry:
+                            foundry_path = os.path.join(
+                                "docs", "ontology", "foundry", foundry
+                            )
+                            file_foundry_path = os.path.join(
+                                foundry_path, level_slim_path, f"{label_safe}.md"
+                            )
+                            os.makedirs(
+                                os.path.dirname(file_foundry_path), exist_ok=True
+                            )
+                            shutil.copy(file_path, file_foundry_path)
+                            logger.info(
+                                f"✅ {label.capitalize()} saved in {file_foundry_path}"
+                            )
 
 if __name__ == "__main__":  
     OntologyDocs().rdf_to_md()
