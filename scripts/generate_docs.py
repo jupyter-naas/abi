@@ -259,6 +259,10 @@ class OntologyDocs:
     # It will build a tree of classes based on the unionOf, intersectionOf and complementOf.
     # It is usefull to understand what are the conditions for a class to be in the range or domain of an object property.
     def get_linked_classes(self, cls_id, rel_type=None):
+        # Handle None case
+        if cls_id is None:
+            return []
+        
         # If it's a leaf we return a dict with the class id and the operator.
         if "http" in cls_id:
             if rel_type is not None and rel_type in self.operators:
@@ -316,12 +320,12 @@ class OntologyDocs:
         if "domain" in x:
             x["domain"] = self._.map_(
                 x["domain"],
-                lambda x: x if "http" in x else self.get_linked_classes(x)[0],
+                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
             )
         if "range" in x:
             x["range"] = self._.map_(
                 x["range"],
-                lambda x: x if "http" in x else self.get_linked_classes(x)[0],
+                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
             )
         return x
 
@@ -803,22 +807,22 @@ class OntologyDocs:
                             )
                             break
 
-                    # Add curated in foundry to the markdown content
-                    if curated_in_foundry:
-                        for foundry in curated_in_foundry:
-                            foundry_path = os.path.join(
-                                "docs", "ontology", "foundry", foundry
-                            )
-                            file_foundry_path = os.path.join(
-                                foundry_path, level_path, f"{label_safe}.md"
-                            )
-                            os.makedirs(
-                                os.path.dirname(file_foundry_path), exist_ok=True
-                            )
-                            shutil.copy(file_path, file_foundry_path)
-                            logger.info(
-                                f"✅ {label.capitalize()} saved in {file_foundry_path}"
-                            )
+                    # # Add curated in foundry to the markdown content
+                    # if curated_in_foundry:
+                    #     for foundry in curated_in_foundry:
+                    #         foundry_path = os.path.join(
+                    #             "docs", "ontology", "foundry", foundry
+                    #         )
+                    #         file_foundry_path = os.path.join(
+                    #             foundry_path, level_slim_path, f"{label_safe}.md"
+                    #         )
+                    #         os.makedirs(
+                    #             os.path.dirname(file_foundry_path), exist_ok=True
+                    #         )
+                    #         shutil.copy(file_path, file_foundry_path)
+                    #         logger.info(
+                    #             f"✅ {label.capitalize()} saved in {file_foundry_path}"
+                    #         )
 
 if __name__ == "__main__":  
     OntologyDocs().rdf_to_md()
