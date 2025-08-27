@@ -17,7 +17,7 @@ load_dotenv()
 # Page config
 st.set_page_config(
     page_title="ABI Chat (API)", 
-    page_icon="🤖", 
+    page_icon="💬", 
     layout="centered"
 )
 
