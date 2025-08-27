@@ -21,10 +21,12 @@
 #################################################################
 
 intentMapping:TemplatableSparqlQuery a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
     rdfs:label "Templatable SPARQL Query"@en ;
     rdfs:comment "A class representing a SPARQL query that can be templated with variables and includes intent information."@en .
 
 intentMapping:QueryArgument a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
     rdfs:label "Query Argument"@en ;
     rdfs:comment "A class representing an argument that can be used to template a SPARQL query."@en .
 
