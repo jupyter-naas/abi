@@ -23,7 +23,12 @@ st.set_page_config(
 
 # Configuration
 ABI_API_BASE = os.getenv("ABI_API_BASE", "http://localhost:9879")
-ABI_API_KEY = os.getenv("ABI_API_KEY", "***REMOVED***")
+ABI_API_KEY = os.getenv("ABI_API_KEY")
+
+# Check if API key is provided
+if not ABI_API_KEY:
+    st.error("❌ ABI_API_KEY environment variable is required")
+    st.stop()
 
 # Session state initialization
 if 'messages' not in st.session_state:
