@@ -60,6 +60,14 @@ AGENT_AVATARS = {
     "DeepSeek": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
 }
 
+def check_api_status() -> bool:
+    """Check if the ABI API is running"""
+    try:
+        response = requests.get(f"{ABI_API_BASE}/openapi.json", timeout=3)
+        return response.status_code == 200
+    except:
+        return False
+
 def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
     """Call the ABI API for agent completion"""
     try:
@@ -90,7 +98,7 @@ def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
             return {"success": False, "error": f"❌ HTTP {response.status_code}: {response.text}"}
             
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"❌ Cannot connect to ABI API at {ABI_API_BASE}. Is the API running?"}
+        return {"success": False, "error": f"❌ Cannot connect to ABI API at {ABI_API_BASE}.\n\n💡 **To fix this:**\n1. Open a terminal in the project root\n2. Run: `make api`\n3. Wait for the API to start, then try again"}
     except requests.exceptions.Timeout:
         return {"success": False, "error": f"⏱️ Timeout calling {agent_name} agent."}
     except Exception as e:
@@ -156,9 +164,16 @@ def send_message(user_input: str):
 
 # UI Layout - minimal
 
-# Sidebar with active agent
+# Sidebar with active agent and API status
 with st.sidebar:
     st.write(f"**Active: {st.session_state.active_agent}**")
+    
+    # API Status
+    if check_api_status():
+        st.success("✅ API Online")
+    else:
+        st.error("❌ API Offline")
+        st.info("💡 Run `make api` in terminal to start")
     
     # Clear chat button
     if st.button("🗑️ Clear Chat"):
