@@ -106,3 +106,4 @@ storage/vectorstore/*
 !storage/*/example/**/*.webp
 !storage/*/example/**/*.heic
 
+sandbox/

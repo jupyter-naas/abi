@@ -318,17 +318,17 @@ build.linux.x86_64: deps
 
 # -------------------------------------------------------------------------------------------------
 
-chat-naas-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
-
 chat-abi-agent: deps
 	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
 
-chat-ontology-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
+chat-naas-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
 
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
+
+pull-request-description: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 # Local Ollama-based agents for privacy-focused interactions
 chat-qwen-agent: deps
@@ -339,9 +339,6 @@ chat-deepseek-agent: deps
 
 chat-gemma-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
-
-pull-request-description: deps
-	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 default: deps help
 
@@ -373,10 +370,12 @@ docker-cleanup: check-docker
 	@./scripts/docker_cleanup.sh
 
 oxigraph-up: check-docker
+	@echo "Starting Oxigraph..."
 	@docker-compose --profile dev up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
 oxigraph-down: check-docker
+	@echo "Stopping Oxigraph..."
 	@docker-compose --profile dev stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
