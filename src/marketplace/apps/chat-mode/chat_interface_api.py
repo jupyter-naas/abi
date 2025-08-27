@@ -268,17 +268,93 @@ def load_conversation_from_db(thread_id: str):
     st.session_state.thread_id = int(thread_id)
     st.session_state.current_conversation_id = thread_id
     
-    # Clear current messages - they will be loaded from the API calls
-    # The agent memory will handle loading the conversation history
-    st.session_state.messages = []
+    # Load the actual conversation messages from PostgreSQL
+    conn = get_postgres_connection()
+    if not conn:
+        st.error("Cannot connect to PostgreSQL to load conversation")
+        return
     
-    # Add a system message to indicate we're loading the conversation
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": f"Loaded conversation thread {thread_id}. Previous context has been restored.",
-        "agent": "system",
-        "timestamp": datetime.now()
-    })
+    try:
+        with conn.cursor() as cur:
+            # Get all checkpoints for this thread in order
+            cur.execute("""
+                SELECT checkpoint, checkpoint_id
+                FROM checkpoints 
+                WHERE thread_id = %s 
+                ORDER BY checkpoint_id ASC
+            """, (thread_id,))
+            
+            checkpoints = cur.fetchall()
+            messages = []
+            
+            # Extract messages from checkpoints
+            for checkpoint_data in checkpoints:
+                try:
+                    import json
+                    data = json.loads(checkpoint_data['checkpoint']) if isinstance(checkpoint_data['checkpoint'], str) else checkpoint_data['checkpoint']
+                    
+                    # Look for messages in the checkpoint data
+                    if 'channel_values' in data and 'messages' in data['channel_values']:
+                        checkpoint_messages = data['channel_values']['messages']
+                        
+                        for msg in checkpoint_messages:
+                            if isinstance(msg, dict):
+                                # Convert LangChain message format to our format
+                                if msg.get('type') == 'human':
+                                    messages.append({
+                                        "role": "user",
+                                        "content": msg.get('content', ''),
+                                        "timestamp": datetime.now()
+                                    })
+                                elif msg.get('type') == 'ai':
+                                    # Try to determine which agent responded
+                                    agent_name = "Abi"  # Default
+                                    content = msg.get('content', '')
+                                    
+                                    # Try to extract agent name from content or other fields
+                                    if 'name' in msg:
+                                        agent_name = msg['name']
+                                    
+                                    messages.append({
+                                        "role": "assistant",
+                                        "content": content,
+                                        "agent": agent_name,
+                                        "timestamp": datetime.now()
+                                    })
+                except Exception as e:
+                    continue
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_messages = []
+            for msg in messages:
+                # Create a simple hash of the message
+                msg_hash = f"{msg['role']}:{msg['content'][:50]}"
+                if msg_hash not in seen:
+                    seen.add(msg_hash)
+                    unique_messages.append(msg)
+            
+            # Set the loaded messages
+            st.session_state.messages = unique_messages
+            
+            if not unique_messages:
+                st.session_state.messages = [{
+                    "role": "assistant",
+                    "content": f"Loaded conversation thread {thread_id}, but no messages found. You can continue the conversation from here.",
+                    "agent": "system",
+                    "timestamp": datetime.now()
+                }]
+                
+    except Exception as e:
+        st.error(f"Error loading conversation: {e}")
+        st.session_state.messages = [{
+            "role": "assistant",
+            "content": f"Error loading conversation thread {thread_id}: {str(e)}",
+            "agent": "system",
+            "timestamp": datetime.now()
+        }]
+    finally:
+        conn.close()
 
 def create_new_conversation():
     """Create a new conversation with a new thread ID"""
