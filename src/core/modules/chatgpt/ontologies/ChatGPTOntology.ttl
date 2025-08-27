@@ -1305,10 +1305,10 @@ abi:GPT_4o_March_2025_chatgpt_4o_latest abi:inputTokenCost 5 ;
 #    Relationships - Agent/Process/Model Network
 #################################################################
 
-abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
-abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
-abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
-abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_March_2025,_chatgpt_4o_latest .
+abi:ChatgptAgent abi:canUtilizeModel abi:GPT_4o_March_2025_chatgpt_4o_latest .
+abi:ChatgptBusinessProposalProcess abi:utilizesModel abi:GPT_4o_March_2025_chatgpt_4o_latest .
+abi:ChatgptCreativeWritingProcess abi:utilizesModel abi:GPT_4o_March_2025_chatgpt_4o_latest .
+abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_March_2025_chatgpt_4o_latest .
 
 #################################################################
 #    BFO Bucket 1: Material Entity - GPT-3.5 Turbo (0613)
