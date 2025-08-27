@@ -184,12 +184,12 @@ class OntologyDocs:
 
     def load_classes(self):
         # We filter the classes from the ontology.
-        _onto_classes = self._.filter_(
+        _onto_classes = sorted(self._.filter_(
             self.onto,
             lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
             if "type" in x
             else None,
-        )
+        ), key=lambda x: x["__id"])
         logger.info(f"🔍 Found {len(_onto_classes)} classes in the ontology.")
 
         # We remove the subclassOf that are restrictions to keep it simple for now.
@@ -391,7 +391,9 @@ class OntologyDocs:
         # Init
         reference_dir = os.path.join(self.docs_ontology, "reference")
         shutil.rmtree(reference_dir, ignore_errors=True)
-        folder = "model"
+        foundry_dir = os.path.join(self.docs_ontology, "foundry")
+        shutil.rmtree(foundry_dir, ignore_errors=True)
+        folder = "full"
         dir_path = os.path.join(reference_dir, folder)
         onto_classes = self.onto_classes.values()
         logger.info(f"Foundry classes : {len(onto_classes)}")
@@ -498,12 +500,6 @@ class OntologyDocs:
                     markdown_content += "    classDef bfo fill:#97c1fb,color:#060606\n"
                     markdown_content += "    classDef cco fill:#e4c51e,color:#060606\n"
                     markdown_content += "    classDef abi fill:#48DD82,color:#060606\n"
-                    markdown_content += (
-                        "    classDef attack fill:#FF0000,color:#060606\n"
-                    )
-                    markdown_content += (
-                        "    classDef d3fend fill:#FF0000,color:#060606\n"
-                    )
                     markdown_content += "```\n\n"
                     for h in hierarchy:
                         h_label = h.get("label")
@@ -771,16 +767,39 @@ class OntologyDocs:
                     # Save markdown ontology folder
                     for k, v in self.ontologies_dict.items():
                         if v in onto_class:
-                            ontology_path = os.path.join(reference_dir, k)
-                            file_ontology_path = os.path.join(
-                                ontology_path, level_path, f"{label_safe}.md"
+                            # ontology_path = os.path.join(reference_dir, k)
+                            # file_ontology_path = os.path.join(
+                            #     ontology_path, level_path, f"{label_safe}.md"
+                            # )
+                            # os.makedirs(
+                            #     os.path.dirname(file_ontology_path), exist_ok=True
+                            # )
+                            # shutil.copy(file_path, file_ontology_path)
+                            # logger.info(
+                            #     f"✅ {label.capitalize()} saved in {file_ontology_path}"
+                            # )
+
+                            # Create Ontology Slim
+                            ontology_slim_path = os.path.join(reference_dir, k)
+                            if len(level_path.split("/")) < 4:
+                                continue
+                            if "Process boundary" in level_path or "Process profile" in level_path:
+                                continue
+                            level_slim_path = "/".join(level_path.split("/")[1:3])
+                            for word in ["Specifically dependent continuant", "Independent continuant"]:
+                                if word in level_path and len(level_path.split("/")) > 3:
+                                    slim_level = level_path.split("/")[3:4][0]
+                                    level_slim_path = level_slim_path.replace(word, slim_level)
+                                    break
+                            abi_slim_path = os.path.join(
+                                ontology_slim_path, level_slim_path, f"{label_safe}.md"
                             )
                             os.makedirs(
-                                os.path.dirname(file_ontology_path), exist_ok=True
+                                os.path.dirname(abi_slim_path), exist_ok=True
                             )
-                            shutil.copy(file_path, file_ontology_path)
+                            shutil.copy(file_path, abi_slim_path)
                             logger.info(
-                                f"✅ {label.capitalize()} saved in {file_ontology_path}"
+                                f"✅ {label.capitalize()} saved in {abi_slim_path}"
                             )
                             break
 
