@@ -49,10 +49,10 @@ class IModule(ABC):
         try:
             self.__load_agents()
         except Exception as e:
-            import traceback
-            logger.error(f"❌ Critical error loading agents for module {self.module_import_path}: {e}")
-            traceback.print_exc()
-            raise SystemExit(f"Application crashed due to agent loading failure: {self.module_import_path}")
+            logger.error(f"❌ Error loading agents for module {self.module_import_path}: {e}")
+            logger.error(f"⚠️ Skipping agent loading for module {self.module_import_path}")
+            # Don't crash the entire system - just skip agent loading for this module
+            self.agents = []
 
     def __load_agents(self):
         # Load agents

@@ -49,11 +49,10 @@ def get_modules():
 
                         __modules.append(mod)
                     except Exception as e:
-                        import traceback
-                        
-                        logger.error(f"❌ Critical error loading module {module.name}: {e}")
-                        traceback.print_exc()
-                        raise SystemExit(f"Application crashed due to module loading failure: {module.name}")
+                        logger.error(f"❌ Error loading module {module.name}: {e}")
+                        logger.error(f"⚠️ Skipping module {module.name} due to loading failure")
+                        # Don't crash the entire system - just skip this module
+                        continue
 
         __loaded = True
 
