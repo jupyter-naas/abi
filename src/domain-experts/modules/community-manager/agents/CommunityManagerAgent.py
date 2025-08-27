@@ -14,7 +14,7 @@ from abi.services.agent.Agent import Agent
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "assets/domain-experts/community-manager.png"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/domain-experts/community-manager.png"
 NAME = "Community Manager"
 TYPE = "domain-expert"
 SLUG = "community-manager"

@@ -13,7 +13,7 @@ from abi.services.agent.IntentAgent import (
 from typing import Optional
 from abi import logger
 
-AVATAR_URL = "assets/domain-experts/osint-researcher.png"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/domain-experts/osint-researcher.png"
 NAME = "OSINT Researcher"
 TYPE = "domain-expert"
 SLUG = "osint-researcher"
