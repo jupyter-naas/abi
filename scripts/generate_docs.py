@@ -5,10 +5,9 @@ import os
 import urllib.parse
 from abi import logger
 import shutil
-from mappings import rdf_terms, rdfs_terms, owl_terms, skos_terms, dc_terms # type: ignore
 import json
 
-ONTOLOGY_DICT = {
+ONTOLOGY_DICT: dict[str, str] = {
     "abi": "http://ontology.naas.ai/abi/",
     "bfo": "http://purl.obolibrary.org/obo/",
     "cco": "https://www.commoncoreontologies.org/",
@@ -16,21 +15,65 @@ ONTOLOGY_DICT = {
     "d3fend": "http://d3fend.mitre.org/ontologies/d3fend.owl#",
 }
 
-ONTOLOGY_OPERATORS = {"unionOf": "or", "intersectionOf": "and", "complementOf": "not"}
+ONTOLOGY_OPERATORS: dict[str, str] = {
+    "unionOf": "or",
+    "intersectionOf": "and",
+    "complementOf": "not",
+}
 
+# Add standard RDF terms
+rdf_terms: dict[str, str] = {
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": "type",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#first": "first",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest": "rest",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil": "nil",
+}
+
+# Add RDFS terms
+rdfs_terms: dict[str, str] = {
+    "http://www.w3.org/2000/01/rdf-schema#domain": "domain",
+    "http://www.w3.org/2000/01/rdf-schema#label": "label",
+    "http://www.w3.org/2000/01/rdf-schema#range": "range",
+    "http://www.w3.org/2000/01/rdf-schema#subClassOf": "subclassOf",
+}
+
+# Add OWL terms
+owl_terms: dict[str, str] = {
+    "http://www.w3.org/2002/07/owl#complementOf": "complementOf",
+    "http://www.w3.org/2002/07/owl#intersectionOf": "intersectionOf",
+    "http://www.w3.org/2002/07/owl#inverseOf": "inverseOf",
+    "http://www.w3.org/2002/07/owl#unionOf": "unionOf",
+}
+
+# Add SKOS terms
+skos_terms: dict[str, str] = {
+    "http://www.w3.org/2004/02/skos/core#altLabel": "altLabel",
+    "http://www.w3.org/2004/02/skos/core#definition": "definition",
+    "http://www.w3.org/2004/02/skos/core#example": "example",
+}
+
+# Add DC terms
+dc_terms: dict[str, str] = {
+    "http://purl.org/dc/elements/1.1/identifier": "identifier",
+    "http://purl.org/dc/terms/title": "title",
+    "http://purl.org/dc/terms/description": "description",
+    "http://purl.org/dc/terms/license": "license",
+    "http://purl.org/dc/terms/rights": "rights",
+    "http://purl.org/dc/terms/contributor": "contributor",
+}
 
 class OntologyDocs:
     def __init__(self):
         # Dictionary to store ontology components
-        self.onto = {}
-        self.onto_tuples = {}
-        self.onto_oprop = {}
-        self.onto_dprop = {}
-        self.onto_classes = {}
-        self.amount_per_level = {}
-        self.mapping_oprop = {}
-        self.ontologies_dict = ONTOLOGY_DICT
-        self.operators = ONTOLOGY_OPERATORS
+        self.onto: dict = {}
+        self.onto_tuples: dict = {}
+        self.onto_oprop: dict = {}
+        self.onto_dprop: dict = {}
+        self.onto_classes: dict = {}
+        self.amount_per_level: dict = {}
+        self.mapping_oprop: dict = {}
+        self.ontologies_dict: dict = ONTOLOGY_DICT
+        self.operators: dict = ONTOLOGY_OPERATORS
         # Add pydash as instance variable
         self._ = pydash
         self.docs_ontology = os.path.join("docs", "ontology")
@@ -66,45 +109,6 @@ class OntologyDocs:
                     "label": "Entity",
                     "level": 0,
                     "level_path": "Entity",
-                }
-            ],
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore",
-            level=0,
-            level_path="D3FENDCore",
-            hierarchy=[
-                {
-                    "uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore",
-                    "label": "D3FENDCore",
-                    "level": 0,
-                    "level_path": "D3FENDCore",
-                }
-            ],
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing",
-            level=0,
-            level_path="D3FENDKBThing",
-            hierarchy=[
-                {
-                    "uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing",
-                    "label": "D3FENDKBThing",
-                    "level": 0,
-                    "level_path": "D3FENDKBThing",
-                }
-            ],
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing",
-            level=0,
-            level_path="ExternalThing",
-            hierarchy=[
-                {
-                    "uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing",
-                    "label": "ExternalThing",
-                    "level": 0,
-                    "level_path": "ExternalThing",
                 }
             ],
         )
