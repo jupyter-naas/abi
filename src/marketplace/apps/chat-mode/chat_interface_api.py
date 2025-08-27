@@ -31,14 +31,28 @@ if 'messages' not in st.session_state:
 if 'thread_id' not in st.session_state:
     st.session_state.thread_id = 1
 if 'active_agent' not in st.session_state:
-    st.session_state.active_agent = "abi"
+    st.session_state.active_agent = "Abi"
 
-# Agent name mapping for @mentions
+# Agent name mapping for @mentions (maps to actual API endpoint names)
 AGENT_MAPPING = {
-    "abi": "abi", "claude": "claude", "gemini": "gemini", 
-    "mistral": "mistral", "chatgpt": "chatgpt", "grok": "grok",
-    "llama": "llama", "perplexity": "perplexity", "qwen": "qwen",
-    "deepseek": "deepseek"
+    "abi": "Abi", "claude": "Claude", "gemini": "Gemini", 
+    "mistral": "Mistral", "chatgpt": "ChatGPT", "grok": "Grok",
+    "llama": "Llama", "perplexity": "Perplexity", "qwen": "Qwen",
+    "deepseek": "DeepSeek"
+}
+
+# Agent avatar URLs
+AGENT_AVATARS = {
+    "Abi": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png",
+    "Claude": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/claude.png",
+    "Gemini": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png",
+    "Mistral": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/mistral.png",
+    "ChatGPT": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg",
+    "Grok": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/grok.jpg",
+    "Llama": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/llama.jpeg",
+    "Perplexity": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png",
+    "Qwen": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg",
+    "DeepSeek": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
 }
 
 def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
@@ -55,11 +69,11 @@ def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
             "thread_id": str(thread_id)  # API expects string
         }
         
-        # Map agent names to API endpoints (capitalize first letter)
-        api_agent_name = agent_name.capitalize()
+        # Map agent names to API endpoints using the mapping
+        api_agent_name = AGENT_MAPPING.get(agent_name, agent_name.capitalize())
         url = f"{ABI_API_BASE}/agents/{api_agent_name}/completion"
         
-        response = requests.post(url, json=data, headers=headers, timeout=30)
+        response = requests.post(url, json=data, headers=headers, timeout=60)
         
         if response.status_code == 200:
             return {"success": True, "content": response.text.strip('"')}
@@ -135,59 +149,34 @@ def send_message(user_input: str):
             "timestamp": datetime.now()
         })
 
-# UI Layout
-st.title("🤖 ABI Chat (API)")
-st.caption(f"Active Agent: **{st.session_state.active_agent.title()}** | Thread: {st.session_state.thread_id}")
+# UI Layout - minimal
 
-# Sidebar controls
+# Sidebar with active agent
 with st.sidebar:
-    st.header("🎛️ Controls")
+    st.write(f"**Active: {st.session_state.active_agent}**")
     
-    # API Status
-    st.subheader("API Status")
-    try:
-        health_response = requests.get(f"{ABI_API_BASE}/health", timeout=5)
-        if health_response.status_code == 200:
-            st.success("✅ API Connected")
-        else:
-            st.error("❌ API Error")
-    except:
-        st.error("❌ API Offline")
-        st.write(f"Expected at: {ABI_API_BASE}")
-        st.write("Start with: `uv run api`")
-    
-    # Chat controls
+    # Clear chat button
     if st.button("🗑️ Clear Chat"):
         st.session_state.messages = []
         st.rerun()
     
-    if st.button("🔄 New Thread"):
-        st.session_state.thread_id += 1
-        st.session_state.messages = []
-        st.rerun()
-    
-    # Agent selection
-    st.subheader("🤖 Available Agents")
-    st.write("Use @mentions to switch:")
-    for key, name in AGENT_MAPPING.items():
-        emoji = "🎯" if name == st.session_state.active_agent else "🤖"
-        st.write(f"{emoji} @{key} → {name.title()}")
-    
-    # Configuration
-    st.subheader("⚙️ Configuration")
-    st.write(f"**API Base:** {ABI_API_BASE}")
-    st.write(f"**Thread ID:** {st.session_state.thread_id}")
+
 
 # Display messages
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        if msg["role"] == "assistant":
-            agent_name = msg.get('agent', 'unknown')
-            if agent_name == "system":
+    if msg["role"] == "assistant":
+        agent_name = msg.get('agent', 'unknown')
+        if agent_name == "system":
+            with st.chat_message("assistant"):
                 st.error(msg['content'])
-            else:
-                st.write(f"**{agent_name.title()}:** {msg['content']}")
         else:
+            # Get avatar URL for the agent
+            avatar_url = AGENT_AVATARS.get(agent_name, None)
+            with st.chat_message("assistant", avatar=avatar_url):
+                st.write(msg['content'])
+    else:
+        # User message with default user avatar
+        with st.chat_message("user"):
             st.write(msg['content'])
 
 # Chat input
@@ -195,7 +184,4 @@ if prompt := st.chat_input("Message ABI..."):
     send_message(prompt)
     st.rerun()
 
-# Footer
-st.markdown("---")
-st.markdown("**ABI Chat Interface** - API Version | Powered by NaasAI")
-st.markdown("💡 *Tip: Use @agent to switch agents (e.g., @claude, @gemini)*")
+
