@@ -222,10 +222,12 @@ for msg in st.session_state.messages:
             # Get avatar URL for the agent
             avatar_url = AGENT_AVATARS.get(agent_name, None)
             with st.chat_message("assistant", avatar=avatar_url):
+                st.write(f"**{agent_name}:**")
                 st.write(msg['content'])
     else:
         # User message with default user avatar
         with st.chat_message("user"):
+            st.write("**You:**")
             st.write(msg['content'])
 
 # Chat input
