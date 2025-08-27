@@ -9,6 +9,13 @@
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
+<http://ontology.naas.ai/abi/OfferingOntology> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/OfferingOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for offering."@en ;
+    dc:license "" ;
+    dc:title "Offering Ontology" .
+
 #################################################################
 #    Classes
 #################################################################

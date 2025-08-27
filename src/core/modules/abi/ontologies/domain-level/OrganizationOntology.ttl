@@ -10,7 +10,7 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
 <http://ontology.naas.ai/abi/OrganizationOntology> a owl:Ontology ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/OrganizationOntology.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/OrganizationOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Domain ontology for organizations."@en ;
     dc:license "" ;

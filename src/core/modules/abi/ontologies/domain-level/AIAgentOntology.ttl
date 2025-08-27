@@ -13,7 +13,7 @@
 <http://ontology.naas.ai/abi/AIAgentOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:imports <http://ontology.naas.ai/abi/CapabilityOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/AIAgentOntology.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/AIAgentOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc:description "Ontology for AI agents and AI systems using BFO and CCO standards, integrated with capability ontology."@en ;
     dc:title "AI Agent Ontology (BFO+CCO)" .

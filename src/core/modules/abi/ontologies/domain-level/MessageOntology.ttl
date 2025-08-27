@@ -11,17 +11,17 @@
 @prefix iao: <http://purl.obolibrary.org/obo/IAO_> .
 @base <http://ontology.naas.ai/messaging> .
 
-<http://ontology.naas.ai/messaging.owl> rdf:type owl:Ontology ;
-                                        owl:versionIRI <http://ontology.naas.ai/messaging/2024/messaging-core.ttl> ; #message-core.ttl
-                                        owl:imports <http://purl.obolibrary.org/obo/bfo.owl> ;
-                                        dc11:contributor "Maxime Jublou" ,
-                                                        "Florent Ravenel" ,
-                                                        "Jeremy Ravenel" ,
-                                                        "Giacomo De Colle" ;
-                                        dc:description "A formal ontology of message-based communication processes and roles, extending Basic Formal Ontology (BFO) 2020."@en ;
-                                        dc:license <https://creativecommons.org/licenses/by/4.0/> ;
-                                        dc:title "Message Communication Ontology" ;
-                                        rdfs:comment "This ontology provides a systematic account of messaging entities, roles, and processes in accordance with BFO 2020 design patterns." .
+<http://ontology.naas.ai/abi/MessageOntology> rdf:type owl:Ontology ;
+  owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/MessageOntology.ttl> ;
+  owl:imports <http://purl.obolibrary.org/obo/bfo.owl> ;
+  dc11:contributor "Maxime Jublou" ,
+                  "Florent Ravenel" ,
+                  "Jeremy Ravenel" ,
+                  "Giacomo De Colle" ;
+  dc:description "A formal ontology of message-based communication processes and roles, extending Basic Formal Ontology (BFO) 2020."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc:title "Message Communication Ontology" ;
+  rdfs:comment "This ontology provides a systematic account of messaging entities, roles, and processes in accordance with BFO 2020 design patterns." .
 
 #################################################################
 #    Annotation properties

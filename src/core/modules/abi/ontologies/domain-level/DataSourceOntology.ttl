@@ -6,6 +6,12 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
 
+<http://ontology.naas.ai/abi/DataSourceOntology> rdf:type owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/DataSourceOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for data sources."@en ;
+    dc:title "Data Source Ontology" .
+
 #################################################################
 #    Classes
 #################################################################

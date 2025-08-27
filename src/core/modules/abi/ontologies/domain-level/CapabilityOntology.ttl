@@ -13,7 +13,7 @@
 <http://ontology.naas.ai/abi/CapabilityOntology> rdf:type owl:Ontology ;
     owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
-    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/CapabilityOntology.ttl> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/CapabilityOntology.ttl> ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
     dc11:contributor "Barry Smith" , "John Beverley" ;
     dc:description "Capability ontology based on Barry Smith and John Beverley's work, following BFO standards."@en ;
