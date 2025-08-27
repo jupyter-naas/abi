@@ -165,7 +165,7 @@ def test_api_agent_routes():
             print(f"  - Agents with both endpoints: {len(agents_with_both_routes)}/{total_agents}")
             print(f"  - Agents missing endpoints: {len(agents_missing_routes)}/{total_agents}")
 
-            assert len(total_agents) == len(agents_with_both_routes) + len(agents_missing_routes), f"Expected {len(total_agents)} routes, but found {len(agents_with_both_routes) + len(agents_missing_routes)}"
+            assert total_agents == len(agents_with_both_routes) + len(agents_missing_routes), f"Expected {total_agents} agents, but found {len(agents_with_both_routes) + len(agents_missing_routes)}"
             
             if agents_with_both_routes:
                 print("  ✅ Agents with both endpoints:")
