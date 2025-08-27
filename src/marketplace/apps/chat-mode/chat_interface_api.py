@@ -170,45 +170,124 @@ AGENT_AVATARS = {
     "DeepSeek": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
 }
 
-def get_conversation_title(messages: list) -> str:
-    """Generate a title for a conversation based on the first user message"""
-    if not messages:
-        return "New Chat"
+def get_postgres_connection():
+    """Get PostgreSQL connection using the same config as agents"""
+    postgres_url = os.getenv("POSTGRES_URL")
+    if not postgres_url:
+        return None
     
-    first_user_msg = next((msg for msg in messages if msg["role"] == "user"), None)
-    if first_user_msg:
-        content = first_user_msg["content"][:30]
-        return content + "..." if len(first_user_msg["content"]) > 30 else content
-    return "New Chat"
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+        conn = psycopg.Connection.connect(
+            postgres_url,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row
+        )
+        return conn
+    except Exception as e:
+        st.error(f"Failed to connect to PostgreSQL: {e}")
+        return None
 
-def save_current_conversation():
-    """Save the current conversation to the conversations dict"""
-    if st.session_state.messages:
-        st.session_state.conversations[st.session_state.current_conversation_id] = {
-            "messages": st.session_state.messages.copy(),
-            "title": get_conversation_title(st.session_state.messages),
-            "active_agent": st.session_state.active_agent,
-            "thread_id": st.session_state.thread_id
-        }
+def get_conversation_threads():
+    """Get all conversation threads from PostgreSQL"""
+    conn = get_postgres_connection()
+    if not conn:
+        return []
+    
+    try:
+        with conn.cursor() as cur:
+            # Query the checkpoints table to get unique thread_ids with their latest checkpoint
+            cur.execute("""
+                SELECT DISTINCT 
+                    thread_id,
+                    MAX(checkpoint_id) as latest_checkpoint_id,
+                    MAX(checkpoint_ns) as latest_ns
+                FROM checkpoints 
+                WHERE thread_id IS NOT NULL 
+                GROUP BY thread_id 
+                ORDER BY latest_ns DESC
+                LIMIT 50
+            """)
+            threads = cur.fetchall()
+            
+            # Get conversation titles by looking at the first user message in each thread
+            conversations = []
+            for thread in threads:
+                thread_id = thread['thread_id']
+                
+                # Get the first few checkpoints to find user messages
+                cur.execute("""
+                    SELECT checkpoint
+                    FROM checkpoints 
+                    WHERE thread_id = %s 
+                    ORDER BY checkpoint_id ASC 
+                    LIMIT 10
+                """, (thread_id,))
+                
+                checkpoints = cur.fetchall()
+                title = f"Thread {thread_id}"
+                
+                # Try to extract a meaningful title from the conversation
+                for checkpoint in checkpoints:
+                    try:
+                        import json
+                        data = json.loads(checkpoint['checkpoint']) if isinstance(checkpoint['checkpoint'], str) else checkpoint['checkpoint']
+                        
+                        # Look for messages in the checkpoint data
+                        if 'channel_values' in data and 'messages' in data['channel_values']:
+                            messages = data['channel_values']['messages']
+                            for msg in messages:
+                                if isinstance(msg, dict) and msg.get('type') == 'human':
+                                    content = msg.get('content', '')
+                                    if content and len(content.strip()) > 0:
+                                        title = content[:40] + "..." if len(content) > 40 else content
+                                        break
+                            if title != f"Thread {thread_id}":
+                                break
+                    except:
+                        continue
+                
+                conversations.append({
+                    'thread_id': thread_id,
+                    'title': title,
+                    'last_updated': thread['latest_ns']
+                })
+            
+            return conversations
+            
+    except Exception as e:
+        st.error(f"Error querying conversations: {e}")
+        return []
+    finally:
+        conn.close()
 
-def load_conversation(conversation_id: str):
-    """Load a conversation from the conversations dict"""
-    if conversation_id in st.session_state.conversations:
-        conv = st.session_state.conversations[conversation_id]
-        st.session_state.messages = conv["messages"].copy()
-        st.session_state.active_agent = conv["active_agent"]
-        st.session_state.thread_id = conv["thread_id"]
-        st.session_state.current_conversation_id = conversation_id
+def load_conversation_from_db(thread_id: str):
+    """Load a conversation from PostgreSQL and switch to it"""
+    st.session_state.thread_id = int(thread_id)
+    st.session_state.current_conversation_id = thread_id
+    
+    # Clear current messages - they will be loaded from the API calls
+    # The agent memory will handle loading the conversation history
+    st.session_state.messages = []
+    
+    # Add a system message to indicate we're loading the conversation
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": f"Loaded conversation thread {thread_id}. Previous context has been restored.",
+        "agent": "system",
+        "timestamp": datetime.now()
+    })
 
 def create_new_conversation():
-    """Create a new conversation"""
-    save_current_conversation()
-    st.session_state.conversation_counter += 1
-    new_id = f"chat_{st.session_state.conversation_counter}"
-    st.session_state.current_conversation_id = new_id
+    """Create a new conversation with a new thread ID"""
+    import random
+    new_thread_id = random.randint(10000, 99999)
+    st.session_state.thread_id = new_thread_id
+    st.session_state.current_conversation_id = str(new_thread_id)
     st.session_state.messages = []
     st.session_state.active_agent = "Abi"
-    st.session_state.thread_id = st.session_state.conversation_counter
 
 def check_api_status() -> bool:
     """Check if the ABI API is running"""
@@ -365,25 +444,33 @@ with st.sidebar:
             create_new_conversation()
             st.rerun()
     
-    # Save current conversation before displaying list
-    save_current_conversation()
-    
-    # Display conversation list
-    conversations = st.session_state.conversations
-    if conversations:
-        for conv_id, conv_data in reversed(list(conversations.items())):
-            is_current = conv_id == st.session_state.current_conversation_id
-            title = conv_data["title"]
-            
-            # Highlight current conversation
-            if is_current:
-                st.markdown(f"**🗨️ {title}**")
+    # Display conversation list from PostgreSQL
+    try:
+        conversations = get_conversation_threads()
+        if conversations:
+            for conv in conversations:
+                thread_id = str(conv['thread_id'])
+                title = conv['title']
+                is_current = thread_id == st.session_state.current_conversation_id
+                
+                # Highlight current conversation
+                if is_current:
+                    st.markdown(f"**🗨️ {title}**")
+                else:
+                    if st.button(f"💬 {title}", key=f"thread_{thread_id}"):
+                        load_conversation_from_db(thread_id)
+                        st.rerun()
+        else:
+            postgres_url = os.getenv("POSTGRES_URL")
+            if postgres_url:
+                st.write("*No conversations found*")
+                st.caption("Start chatting to create conversations!")
             else:
-                if st.button(f"💬 {title}", key=f"conv_{conv_id}"):
-                    load_conversation(conv_id)
-                    st.rerun()
-    else:
-        st.write("*No conversations yet*")
+                st.write("*PostgreSQL not configured*")
+                st.caption("Set POSTGRES_URL for persistent conversations")
+    except Exception as e:
+        st.error(f"Error loading conversations: {e}")
+        st.write("*Using session-only conversations*")
     
     st.markdown("---")
     
