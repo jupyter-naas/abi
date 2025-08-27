@@ -252,7 +252,7 @@ def send_message(user_input: str):
     })
     
     # Call API
-    with st.spinner(f"Thinking... (via {agent_name})"):
+    with st.spinner(f"{agent_name} is responding..."):
         result = call_abi_api(agent_name, processed_input, st.session_state.thread_id)
     
     if result["success"]:
