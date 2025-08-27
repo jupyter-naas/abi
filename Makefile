@@ -370,10 +370,12 @@ docker-cleanup: check-docker
 	@./scripts/docker_cleanup.sh
 
 oxigraph-up: check-docker
+	@echo "Starting Oxigraph..."
 	@docker-compose --profile dev up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
 oxigraph-down: check-docker
+	@echo "Stopping Oxigraph..."
 	@docker-compose --profile dev stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
