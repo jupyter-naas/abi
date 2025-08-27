@@ -362,8 +362,7 @@ def get_modules() -> List[Dict[str, Any]]:
 # Apps data
 apps_data = [
     {"name": "Dashboard", "port": 8500, "icon": "🎛️", "description": "Central control hub with system monitoring"},
-    {"name": "Chat API", "port": 8501, "icon": "💬", "description": "API-based chat interface with multi-agent support"},
-    {"name": "Chat MCP", "port": 8502, "icon": "🚀", "description": "Model Context Protocol compliant chat interface"},
+    {"name": "Chat API", "port": 8511, "icon": "💬", "description": "API-based chat interface with multi-agent support"},
     {"name": "Table Mode", "port": 8503, "icon": "📊", "description": "Advanced data table interface with filtering"},
     {"name": "Kanban Mode", "port": 8504, "icon": "📋", "description": "Project management with kanban boards"},
     {"name": "Ontology Mode", "port": 8505, "icon": "🕸️", "description": "Knowledge graph visualization"},
@@ -505,15 +504,14 @@ if filtered_items:
                                 # Map ports to their corresponding app files
                                 app_files = {
                                     8500: "src/marketplace/apps/dashboard.py",
-                                    8501: "src/marketplace/apps/chat-mode/chat_interface_api.py", 
-                                    8502: "src/marketplace/apps/chat-mode/chat_interface_mcp.py",
+                                    8511: "src/marketplace/apps/chat-mode/chat_interface_api.py",
                                     8503: "src/marketplace/apps/table-mode/table_interface.py",
                                     8504: "src/marketplace/apps/kanban-mode/kanban_interface.py",
                                     8505: "src/marketplace/apps/ontology-mode/ontology_interface.py",
-                                    8506: "src/marketplace/modules/domains/user-interfaces/dashboard/financial_dashboard.py",
-                                    8507: "src/marketplace/modules/domains/user-interfaces/calendar/scheduling_interface.py",
-                                    8508: "src/marketplace/modules/domains/user-interfaces/project-board/project_management.py",
-                                    8509: "src/marketplace/modules/domains/user-interfaces/reconciliation/account_reconciliation.py",
+                                    8506: "src/marketplace/modules/domains/apps/dashboard/financial_dashboard.py",
+                                    8507: "src/marketplace/modules/domains/apps/calendar/scheduling_interface.py",
+                                    8508: "src/marketplace/modules/domains/apps/project-board/project_management.py",
+                                    8509: "src/marketplace/modules/domains/apps/reconciliation/account_reconciliation.py",
                                     8510: "src/marketplace/apps/network-vizualization/streamlit.py"
                                 }
                                 
