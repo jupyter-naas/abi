@@ -187,7 +187,7 @@ def style_status(val):
     }
     return colors.get(val, '')
 
-styled_df = recon_df.style.applymap(style_variance, subset=['Variance']).applymap(style_status, subset=['Status'])
+styled_df = recon_df.style.map(style_variance, subset=['Variance']).map(style_status, subset=['Status'])
 st.dataframe(styled_df, use_container_width=True)
 
 # Outstanding items analysis
@@ -224,7 +224,7 @@ def color_age(val):
     else:
         return 'color: red'
 
-styled_outstanding = outstanding_display.style.applymap(color_age, subset=['Days_Outstanding'])
+styled_outstanding = outstanding_display.style.map(color_age, subset=['Days_Outstanding'])
 st.dataframe(styled_outstanding, use_container_width=True)
 
 # Reconciliation actions

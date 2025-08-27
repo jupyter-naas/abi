@@ -38,7 +38,7 @@ view_mode = st.sidebar.selectbox(
 
 # SOP Section in Sidebar
 st.sidebar.markdown("---")
-if st.sidebar.button("📖 View SOP", use_container_width=True):
+if st.sidebar.button("📖 View SOP", width="stretch"):
     st.session_state.page = "sop"
     st.rerun()
 
@@ -173,7 +173,7 @@ elif view_mode == "Timeline View":
         title="Project Timeline Overview"
     )
     fig_timeline.update_yaxes(autorange="reversed")
-    st.plotly_chart(fig_timeline, use_container_width=True)
+    st.plotly_chart(fig_timeline, width="stretch")
     
     # Progress tracking
     col1, col2 = st.columns(2)
@@ -184,7 +184,7 @@ elif view_mode == "Timeline View":
                              color='Progress',
                              color_continuous_scale='RdYlGn')
         fig_progress.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig_progress, use_container_width=True)
+        st.plotly_chart(fig_progress, width="stretch")
     
     with col2:
         # Days remaining analysis
@@ -192,7 +192,7 @@ elif view_mode == "Timeline View":
                              color='Priority', size='Story_Points',
                              title="Progress vs Time Remaining",
                              hover_data=['Title', 'Assignee'])
-        st.plotly_chart(fig_days, use_container_width=True)
+        st.plotly_chart(fig_days, width="stretch")
 
 elif view_mode == "Resource View":
     st.subheader("👥 Resource Allocation")
@@ -210,14 +210,14 @@ elif view_mode == "Resource View":
                              title="Story Points by Assignee",
                              color='Story_Points',
                              color_continuous_scale='Viridis')
-        st.plotly_chart(fig_workload, use_container_width=True)
+        st.plotly_chart(fig_workload, width="stretch")
     
     with col2:
         # Team distribution
         team_dist = filtered_projects['Team'].value_counts()
         fig_teams = px.pie(values=team_dist.values, names=team_dist.index,
                           title="Projects by Team")
-        st.plotly_chart(fig_teams, use_container_width=True)
+        st.plotly_chart(fig_teams, width="stretch")
     
     # Resource capacity table
     st.markdown("**👤 Team Member Capacity**")
@@ -238,7 +238,7 @@ elif view_mode == "Resource View":
             return 'background-color: lightgreen'
     
     styled_capacity = capacity_data.style.applymap(color_utilization, subset=['Utilization'])
-    st.dataframe(styled_capacity, use_container_width=True)
+    st.dataframe(styled_capacity, width="stretch")
 
 elif view_mode == "Sprint View":
     st.subheader("🏃‍♂️ Sprint Planning")
@@ -275,7 +275,7 @@ elif view_mode == "Sprint View":
     fig_burndown.add_trace(go.Scatter(x=days, y=ideal_burndown, name='Ideal Burndown', line=dict(dash='dash')))
     fig_burndown.add_trace(go.Scatter(x=days, y=actual_burndown, name='Actual Burndown', line=dict(width=3)))
     fig_burndown.update_layout(title="Sprint Burndown Chart", xaxis_title="Days", yaxis_title="Story Points Remaining")
-    st.plotly_chart(fig_burndown, use_container_width=True)
+    st.plotly_chart(fig_burndown, width="stretch")
 
 # Project actions
 st.subheader("⚡ Project Actions")
@@ -283,19 +283,19 @@ st.subheader("⚡ Project Actions")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    if st.button("➕ Create New Project", use_container_width=True):
+    if st.button("➕ Create New Project", width="stretch"):
         st.success("New project creation form opened")
 
 with col2:
-    if st.button("📊 Generate Report", use_container_width=True):
+    if st.button("📊 Generate Report", width="stretch"):
         st.info("Project status report generated")
 
 with col3:
-    if st.button("🔄 Sync with Jira", use_container_width=True):
+    if st.button("🔄 Sync with Jira", width="stretch"):
         st.success("Synchronization with Jira completed")
 
 with col4:
-    if st.button("📧 Send Updates", use_container_width=True):
+    if st.button("📧 Send Updates", width="stretch"):
         st.success("Status updates sent to stakeholders")
 
 # Detailed project table
@@ -304,7 +304,7 @@ st.subheader("📊 Project Details")
 # Add selection capability
 selected_projects = st.dataframe(
     filtered_projects[['Project_ID', 'Title', 'Status', 'Priority', 'Team', 'Assignee', 'Progress', 'Days_Remaining']],
-    use_container_width=True,
+    width="stretch",
     hide_index=True
 )
 

@@ -99,7 +99,7 @@ def load_financial_data():
     })
     
     # P&L data
-    monthly_dates = pd.date_range(start=datetime.now()-timedelta(days=365), end=datetime.now(), freq='M')
+    monthly_dates = pd.date_range(start=datetime.now()-timedelta(days=365), end=datetime.now(), freq='ME')
     pnl_data = pd.DataFrame({
         'Month': monthly_dates,
         'Revenue': np.random.normal(500000, 50000, len(monthly_dates)),

@@ -104,7 +104,7 @@ def load_calendar_data():
         events.append({
             'Title': event_title,
             'Type': event_type,
-            'Date': event_date.date(),
+            'Date': event_date,  # Keep as datetime for .dt accessor
             'Start_Time': f"{event_time:02d}:00",
             'Duration': duration,
             'Attendees': np.random.randint(2, 8),
@@ -126,10 +126,10 @@ else:
 # Summary metrics
 col1, col2, col3, col4 = st.columns(4)
 
-today_events = len(filtered_events[filtered_events['Date'] == datetime.now().date()])
+today_events = len(filtered_events[filtered_events['Date'].dt.date == datetime.now().date()])
 this_week_events = len(filtered_events[
-    (filtered_events['Date'] >= datetime.now().date()) & 
-    (filtered_events['Date'] <= datetime.now().date() + timedelta(days=7))
+    (filtered_events['Date'].dt.date >= datetime.now().date()) & 
+    (filtered_events['Date'].dt.date <= datetime.now().date() + timedelta(days=7))
 ])
 high_priority = len(filtered_events[filtered_events['Priority'].isin(['High', 'Critical'])])
 conflicts = np.random.randint(0, 3)  # Mock conflicts
@@ -165,7 +165,7 @@ if view_type == "Week View":
             st.markdown(f"{date.strftime('%m/%d')}")
             
             # Get events for this day
-            day_events = filtered_events[filtered_events['Date'] == date.date()]
+            day_events = filtered_events[filtered_events['Date'].dt.date == date.date()]
             
             for _, event in day_events.iterrows():
                 priority_color = {
@@ -241,7 +241,7 @@ elif view_type == "Day View":
     st.subheader("📅 Today's Schedule")
     
     selected_date = st.date_input("Select Date", datetime.now().date())
-    day_events = filtered_events[filtered_events['Date'] == selected_date].sort_values('Start_Time')
+    day_events = filtered_events[filtered_events['Date'].dt.date == selected_date].sort_values('Start_Time')
     
     if len(day_events) == 0:
         st.info("No events scheduled for this day")
@@ -284,14 +284,14 @@ elif view_type == "Agenda View":
     
     # Next 7 days agenda
     upcoming_events = filtered_events[
-        (filtered_events['Date'] >= datetime.now().date()) &
-        (filtered_events['Date'] <= datetime.now().date() + timedelta(days=7))
+        (filtered_events['Date'].dt.date >= datetime.now().date()) &
+        (filtered_events['Date'].dt.date <= datetime.now().date() + timedelta(days=7))
     ].sort_values(['Date', 'Start_Time'])
     
     current_date = None
     for _, event in upcoming_events.iterrows():
-        if event['Date'] != current_date:
-            current_date = event['Date']
+        if event['Date'].date() != current_date:
+            current_date = event['Date'].date()
             st.markdown(f"### {current_date.strftime('%A, %B %d, %Y')}")
         
         priority_icon = {
