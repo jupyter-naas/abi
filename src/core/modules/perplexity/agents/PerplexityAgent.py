@@ -92,40 +92,10 @@ def create_agent(
     
     
     # Init
-    # Add configuration access tool
-    from langchain_core.tools import StructuredTool, Tool
-    from pydantic import BaseModel
+    from langchain_core.tools import Tool
     from typing import List, Union
     
     tools: List[Union[Tool, Agent]] = []
-    
-    class AgentConfigSchema(BaseModel):
-        pass
-    
-    def get_agent_config() -> str:
-        """Get agent configuration information including avatar URL and metadata."""
-        return f"""Agent Configuration:
-- Name: {NAME}
-- Type: {TYPE}
-- Slug: {SLUG}
-- Model: {MODEL}
-- Avatar URL: {AVATAR_URL}
-- Description: {DESCRIPTION}
-- Temperature: {TEMPERATURE}
-- Date Support: {DATE}
-- Instructions Type: {INSTRUCTIONS_TYPE}
-- Ontology Support: {ONTOLOGY}"""
-    
-    agent_config_tool = StructuredTool(
-        name="get_agent_config",
-        description="Get agent configuration information including avatar URL and metadata.",
-        func=get_agent_config,
-        args_schema=AgentConfigSchema
-    )
-    
-                    
-    from typing import cast
-    tools += [cast(Tool, agent_config_tool)]
 
     from src import secret
     from src.core.modules.perplexity.integrations import PerplexityIntegration
@@ -153,8 +123,10 @@ def create_agent(
         name="current_datetime", 
         description="Get the current datetime in Paris timezone.",
         func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-        args_schema=AgentConfigSchema
+        args_schema=EmptySchema
     )
+    
+    from typing import cast
     tools += [cast(Tool, current_datetime_tool)]
 
     intents: list = [

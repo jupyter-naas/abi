@@ -42,7 +42,6 @@ Tasks:
 Tools:
 - current_datetime: Get the current datetime in Paris timezone.
 - openai_web_search: Search the web using OpenAI.
-- get_agent_config: Get agent configuration information including avatar URL and metadata.
 
 Operating Guidelines:
 1. Call current_datetime tool → Get current time
@@ -124,29 +123,7 @@ def create_agent(
         args_schema=EmptySchema
     )
     
-    def get_agent_config() -> str:
-        """Get agent configuration information including avatar URL and metadata."""
-        return f"""Agent Configuration:
-- Name: {NAME}
-- Type: {TYPE}
-- Slug: {SLUG}
-- Model: {MODEL}
-- Avatar URL: {AVATAR_URL}
-- Description: {DESCRIPTION}
-- Temperature: {TEMPERATURE}
-- Date Support: {DATE}
-- Instructions Type: {INSTRUCTIONS_TYPE}
-- Ontology Support: {ONTOLOGY}"""
-    
-    agent_config_tool = StructuredTool(
-        name="get_agent_config",
-        description="Get agent configuration information including avatar URL and metadata.",
-        func=get_agent_config,
-        args_schema=EmptySchema
-    )
-    
-                    
-    tools += [current_datetime_tool, agent_config_tool]
+    tools += [current_datetime_tool]
 
     intents: list = [
         Intent(

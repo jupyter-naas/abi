@@ -70,36 +70,10 @@ def create_agent(
     tools: list = []
     agents: list = []
     
-    # Add configuration access tool
-    from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel
-    
-    class EmptySchema(BaseModel):
-        pass
-    
-    def get_agent_config() -> str:
-        """Get agent configuration information including avatar URL and metadata."""
-        return f"""Agent Configuration:
-- Name: {NAME}
-- Type: {TYPE}
-- Slug: {SLUG}
-- Model: {MODEL}
-- Avatar URL: {AVATAR_URL}
-- Description: {DESCRIPTION}
-- Temperature: {TEMPERATURE}
-- Date Support: {DATE}
-- Instructions Type: {INSTRUCTIONS_TYPE}
-- Ontology Support: {ONTOLOGY}"""
-    
-    agent_config_tool = StructuredTool(
-        name="get_agent_config",
-        description="Get agent configuration information including avatar URL and metadata.",
-        func=get_agent_config,
-        args_schema=EmptySchema
-    )
+
     
                     
-    tools += [agent_config_tool]
+
     intents: list = [
         Intent(
             intent_value="what is your name",
