@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.ontology.agents.OntologyEngineerAgent import create_agent
+from src.core.modules.abi.agents.OntologyEngineerAgent import create_agent
 
 @pytest.fixture
 def agent():

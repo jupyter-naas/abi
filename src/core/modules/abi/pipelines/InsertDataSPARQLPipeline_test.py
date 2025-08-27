@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.ontology.pipelines.InsertDataSPARQLPipeline import (
+from src.core.modules.abi.pipelines.InsertDataSPARQLPipeline import (
     InsertDataSPARQLPipeline,
     InsertDataSPARQLPipelineConfiguration,
     InsertDataSPARQLPipelineParameters,

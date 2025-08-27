@@ -83,8 +83,8 @@ def create_agent(
     tools: list = []
 
     agents: list = []
-    from src.core.modules.ontology.agents.EntitytoSPARQLAgent import create_agent as entity_to_sparql_agent
-    from src.core.modules.ontology.agents.KnowledgeGraphBuilderAgent import create_agent as knowledge_graph_builder_agent
+    from src.core.modules.abi.agents.EntitytoSPARQLAgent import create_agent as entity_to_sparql_agent
+    from src.core.modules.abi.agents.KnowledgeGraphBuilderAgent import create_agent as knowledge_graph_builder_agent
     
     agents += [
         entity_to_sparql_agent(),

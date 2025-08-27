@@ -742,7 +742,7 @@ If you find you missed entities, you can add it again in the message.
         from src.utils.Storage import save_json, save_text
         import uuid
         from src import services
-        from src.core.modules.ontology.workflows.GetObjectPropertiesFromClassWorkflow import (
+        from src.core.modules.abi.workflows.GetObjectPropertiesFromClassWorkflow import (
             GetObjectPropertiesFromClassWorkflow, 
             GetObjectPropertiesFromClassWorkflowConfiguration,
             GetObjectPropertiesFromClassWorkflowParameters

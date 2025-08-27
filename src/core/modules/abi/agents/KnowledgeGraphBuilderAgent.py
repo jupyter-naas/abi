@@ -165,11 +165,11 @@ def create_agent(
     from src import services
 
     # Add Foundational Tools
-    from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
+    from src.core.modules.abi.workflows.SearchIndividualWorkflow import (
         SearchIndividualWorkflow,
         SearchIndividualWorkflowConfiguration,
     )
-    from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
+    from src.core.modules.abi.pipelines.AddIndividualPipeline import (
         AddIndividualPipeline,
         AddIndividualPipelineConfiguration,
     )
@@ -183,7 +183,7 @@ def create_agent(
     add_pipeline = AddIndividualPipeline(add_config)
     tools += add_pipeline.as_tools()
 
-    from src.core.modules.ontology.pipelines.InsertDataSPARQLPipeline import (
+    from src.core.modules.abi.pipelines.InsertDataSPARQLPipeline import (
         InsertDataSPARQLPipeline,
         InsertDataSPARQLPipelineConfiguration,
     )
@@ -195,7 +195,7 @@ def create_agent(
     tools += insert_data_spql_pipeline.as_tools()
 
     # Add GetSubjectGraphWorkflow
-    from src.core.modules.ontology.workflows.GetSubjectGraphWorkflow import (
+    from src.core.modules.abi.workflows.GetSubjectGraphWorkflow import (
         GetSubjectGraphWorkflow,
         GetSubjectGraphWorkflowConfiguration,
     )
@@ -204,7 +204,7 @@ def create_agent(
     tools += get_subject_graph_workflow.as_tools()
 
     # Add UpdateDataPropertyPipeline
-    from src.core.modules.ontology.pipelines.UpdateDataPropertyPipeline import (
+    from src.core.modules.abi.pipelines.UpdateDataPropertyPipeline import (
         UpdateDataPropertyPipeline,
         UpdateDataPropertyPipelineConfiguration,
     )
@@ -216,7 +216,7 @@ def create_agent(
     tools += update_data_property_pipeline.as_tools()
 
     # Add MergeIndividualsPipeline
-    from src.core.modules.ontology.pipelines.MergeIndividualsPipeline import (
+    from src.core.modules.abi.pipelines.MergeIndividualsPipeline import (
         MergeIndividualsPipeline,
         MergeIndividualsPipelineConfiguration,
     )
@@ -228,7 +228,7 @@ def create_agent(
     tools += merge_individuals_pipeline.as_tools()
 
     # Add RemoveIndividualPipeline
-    from src.core.modules.ontology.pipelines.RemoveIndividualPipeline import (
+    from src.core.modules.abi.pipelines.RemoveIndividualPipeline import (
         RemoveIndividualPipeline,
         RemoveIndividualPipelineConfiguration,
     )
@@ -240,31 +240,31 @@ def create_agent(
     tools += remove_individuals_pipeline.as_tools()
 
     # Add specialized pipelines
-    from src.core.modules.ontology.pipelines.UpdatePersonPipeline import (
+    from src.core.modules.abi.pipelines.UpdatePersonPipeline import (
         UpdatePersonPipeline,
         UpdatePersonPipelineConfiguration,
     )
-    from src.core.modules.ontology.pipelines.UpdateSkillPipeline import (
+    from src.core.modules.abi.pipelines.UpdateSkillPipeline import (
         UpdateSkillPipeline,
         UpdateSkillPipelineConfiguration,
     )
-    from src.core.modules.ontology.pipelines.UpdateCommercialOrganizationPipeline import (
+    from src.core.modules.abi.pipelines.UpdateCommercialOrganizationPipeline import (
         UpdateCommercialOrganizationPipeline,
         UpdateCommercialOrganizationPipelineConfiguration,
     )
-    from src.core.modules.ontology.pipelines.UpdateLinkedInPagePipeline import (
+    from src.core.modules.abi.pipelines.UpdateLinkedInPagePipeline import (
         UpdateLinkedInPagePipeline,
         UpdateLinkedInPagePipelineConfiguration,
     )
-    from src.core.modules.ontology.pipelines.UpdateWebsitePipeline import (
+    from src.core.modules.abi.pipelines.UpdateWebsitePipeline import (
         UpdateWebsitePipeline,
         UpdateWebsitePipelineConfiguration,
     )
-    from src.core.modules.ontology.pipelines.UpdateLegalNamePipeline import (
+    from src.core.modules.abi.pipelines.UpdateLegalNamePipeline import (
         UpdateLegalNamePipeline,
         UpdateLegalNamePipelineConfiguration,
     )
-    from src.core.modules.ontology.pipelines.UpdateTickerPipeline import (
+    from src.core.modules.abi.pipelines.UpdateTickerPipeline import (
         UpdateTickerPipeline,
         UpdateTickerPipelineConfiguration,
     )

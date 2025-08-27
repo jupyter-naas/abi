@@ -1,7 +1,7 @@
 import pytest
 
 from abi.services.agent.Agent import Agent
-from src.core.modules.ontology.agents.KnowledgeGraphBuilderAgent import create_agent
+from src.core.modules.abi.agents.KnowledgeGraphBuilderAgent import create_agent
 
 @pytest.fixture
 def agent() -> Agent:
