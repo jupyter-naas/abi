@@ -503,16 +503,16 @@ if filtered_items:
                                 
                                 # Map ports to their corresponding app files
                                 app_files = {
-                                    8500: "src/marketplace/apps/dashboard.py",
-                                    8511: "src/marketplace/apps/chat-mode/chat_interface_api.py",
-                                    8503: "src/marketplace/apps/table-mode/table_interface.py",
-                                    8504: "src/marketplace/apps/kanban-mode/kanban_interface.py",
-                                    8505: "src/marketplace/apps/ontology-mode/ontology_interface.py",
-                                    8506: "src/marketplace/modules/domains/apps/dashboard/financial_dashboard.py",
-                                    8507: "src/marketplace/modules/domains/apps/calendar/scheduling_interface.py",
-                                    8508: "src/marketplace/modules/domains/apps/project-board/project_management.py",
-                                    8509: "src/marketplace/modules/domains/apps/reconciliation/account_reconciliation.py",
-                                    8510: "src/marketplace/apps/network-vizualization/streamlit.py"
+                                    8500: "apps/dashboard.py",
+                                    8511: "apps/chat-mode/chat_interface_api.py",
+                                    8503: "apps/table-mode/table_interface.py",
+                                    8504: "apps/kanban-mode/kanban_interface.py",
+                                    8505: "apps/ontology-mode/ontology_interface.py",
+                                    8506: "modules/domains/apps/dashboard/financial_dashboard.py",
+                                    8507: "modules/domains/apps/calendar/scheduling_interface.py",
+                                    8508: "modules/domains/apps/project-board/project_management.py",
+                                    8509: "modules/domains/apps/reconciliation/account_reconciliation.py",
+                                    8510: "apps/network-vizualization/streamlit.py"
                                 }
                                 
                                 app_file = app_files.get(item['port'])
@@ -523,7 +523,7 @@ if filtered_items:
                                             "streamlit", "run", app_file,
                                             "--server.port", str(item['port']),
                                             "--server.headless", "true"
-                                        ], cwd=os.getcwd())
+                                        ], cwd=os.path.dirname(os.path.abspath(__file__)))
                                         st.success(f"✅ Starting {item['name']} and opening in new tab...")
                                         
                                         # Open the app in a new tab after a short delay (no rerun interruption)
