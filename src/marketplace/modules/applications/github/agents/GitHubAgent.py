@@ -141,11 +141,11 @@ def create_agent(
         agent_shared_state = AgentSharedState()
 
     tools: list = []
-    from src.core.modules.github.integrations import GitHubGraphqlIntegration, GitHubIntegration
-    from src.core.modules.github.integrations.GitHubGraphqlIntegration import (
+    from src.marketplace.modules.applications.github.integrations import GitHubGraphqlIntegration, GitHubIntegration
+    from src.marketplace.modules.applications.github.integrations.GitHubGraphqlIntegration import (
         GitHubGraphqlIntegrationConfiguration,
     )
-    from src.core.modules.github.integrations.GitHubIntegration import (
+    from src.marketplace.modules.applications.github.integrations.GitHubIntegration import (
         GitHubIntegrationConfiguration,
     )
     if github_access_token := secret.get("GITHUB_ACCESS_TOKEN"):

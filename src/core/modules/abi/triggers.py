@@ -36,7 +36,7 @@ def create_class_ontology_yaml():
         logger.debug("Skipping class ontology YAML trigger - not in production mode")
         return None
         
-    from src.core.modules.naas.integrations.NaasIntegration import (
+    from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
     from src.core.modules.abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
@@ -77,7 +77,7 @@ def create_individual_ontology_yaml():
         logger.debug("Skipping individual ontology YAML trigger - not in production mode")
         return None
         
-    from src.core.modules.naas.integrations.NaasIntegration import (
+    from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
         NaasIntegrationConfiguration,
     )
     from src.core.modules.abi.workflows.ConvertOntologyGraphToYamlWorkflow import (

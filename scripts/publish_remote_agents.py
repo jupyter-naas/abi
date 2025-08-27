@@ -1,10 +1,10 @@
 from src.__modules__ import get_modules
 from abi import logger
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from src.core.modules.github.integrations.GitHubIntegration import (
+from src.marketplace.modules.applications.github.integrations.GitHubIntegration import (
     GitHubIntegration,
     GitHubIntegrationConfiguration,
 )

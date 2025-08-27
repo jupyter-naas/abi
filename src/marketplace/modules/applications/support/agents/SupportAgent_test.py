@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.support.agents.SupportAgent import create_agent
+from src.marketplace.modules.applications.support.agents.SupportAgent import create_agent
 
 @pytest.fixture
 def agent():

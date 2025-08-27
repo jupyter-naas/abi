@@ -7,7 +7,7 @@ from abi.services.agent.Agent import (
 )
 from src import secret, config
 from fastapi import APIRouter
-from src.core.modules.support.agents.SupportAssistant import (
+from src.marketplace.modules.applications.support.agents.SupportAssistant import (
     create_agent as create_support_agent,
 )
 from src.core.modules.common.prompts.responsabilities_prompt import (

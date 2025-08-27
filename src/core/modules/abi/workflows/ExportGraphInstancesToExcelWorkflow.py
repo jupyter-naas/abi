@@ -13,7 +13,7 @@ from abi import logger
 from langchain_core.tools import StructuredTool, BaseTool
 from fastapi import APIRouter
 from enum import Enum
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )

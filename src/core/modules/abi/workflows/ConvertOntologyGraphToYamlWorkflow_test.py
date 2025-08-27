@@ -5,7 +5,7 @@ from src.core.modules.abi.workflows.ConvertOntologyGraphToYamlWorkflow import (
     ConvertOntologyGraphToYamlWorkflowConfiguration,
     ConvertOntologyGraphToYamlWorkflowParameters,
 )
-from src.core.modules.naas.integrations.NaasIntegration import (
+from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
     NaasIntegration
 )
