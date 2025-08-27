@@ -1,4 +1,4 @@
-from workflows.TemplatableSparqlQuery import load_workflows
+from src.core.modules.abi.workflows.TemplatableSparqlQuery import load_workflows
 # from abi import logger
 
 workflows: list = []

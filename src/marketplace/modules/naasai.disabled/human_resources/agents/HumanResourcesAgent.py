@@ -7,11 +7,11 @@ from abi.services.agent.Agent import (
 from langchain_openai import ChatOpenAI
 from fastapi import APIRouter
 from src import secret, services
-from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
+from src.core.modules.abi.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
 )
-from src.core.modules.ontology.workflows.GetClassWorkflow import (
+from src.core.modules.abi.workflows.GetClassWorkflow import (
     GetClassWorkflow,
     GetClassConfigurationWorkflow,
 )

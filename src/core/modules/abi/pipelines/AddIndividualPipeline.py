@@ -18,7 +18,7 @@ from rdflib import (
     DCTERMS,
 )
 import uuid
-from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
+from src.core.modules.abi.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflow,
     SearchIndividualWorkflowParameters,
     SearchIndividualWorkflowConfiguration,

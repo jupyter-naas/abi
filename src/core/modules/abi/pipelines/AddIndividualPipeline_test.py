@@ -1,11 +1,11 @@
 import pytest
 
-from src.core.modules.ontology.pipelines.AddIndividualPipeline import (
+from src.core.modules.abi.pipelines.AddIndividualPipeline import (
     AddIndividualPipeline,
     AddIndividualPipelineConfiguration,
     AddIndividualPipelineParameters,
 )
-from src.core.modules.ontology.workflows.SearchIndividualWorkflow import (
+from src.core.modules.abi.workflows.SearchIndividualWorkflow import (
     SearchIndividualWorkflowConfiguration,
 )
 from src import services

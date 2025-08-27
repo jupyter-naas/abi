@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.ontology.pipelines.MergeIndividualsPipeline import (
+from src.core.modules.abi.pipelines.MergeIndividualsPipeline import (
     MergeIndividualsPipeline,
     MergeIndividualsPipelineConfiguration,
     MergeIndividualsPipelineParameters,

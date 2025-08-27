@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.ontology.pipelines.RemoveIndividualPipeline import (
+from src.core.modules.abi.pipelines.RemoveIndividualPipeline import (
     RemoveIndividualPipeline,
     RemoveIndividualPipelineConfiguration,
     RemoveIndividualPipelineParameters,
