@@ -42,17 +42,10 @@ class Services:
                 TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel()
             )
         else:
-            try:
-                logger.debug("Using Oxigraph triple store")
-                self.triple_store_service = TripleStoreFactory.TripleStoreServiceOxigraph(
-                    oxigraph_url="http://localhost:7878"
-                )
-            except Exception as e:
-                logger.error(f"Error initializing Oxigraph triple store: {e}")
-                logger.debug("Using Naas triple store")
-                self.triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(
-                    self.config.triple_store_path
-                )
+            logger.debug("Using Oxigraph triple store")
+            self.triple_store_service = TripleStoreFactory.TripleStoreServiceOxigraph(
+                oxigraph_url="http://localhost:7878"
+            )
 
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
