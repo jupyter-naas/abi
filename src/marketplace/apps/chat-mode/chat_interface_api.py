@@ -68,6 +68,27 @@ st.markdown("""
     .stChatMessage [data-testid="stMarkdownContainer"]:last-child p {
         margin-bottom: 0 !important;
     }
+    
+    /* Chat input styling */
+    .stChatInput > div > div {
+        border-radius: 8px !important;
+        min-height: 80px !important;
+    }
+    
+    .stChatInput textarea {
+        border-radius: 8px !important;
+        min-height: 80px !important;
+        resize: vertical !important;
+    }
+    
+    /* Reduce border radius on chat messages */
+    .stChatMessage {
+        border-radius: 8px !important;
+    }
+    
+    .stChatMessage > div {
+        border-radius: 8px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
