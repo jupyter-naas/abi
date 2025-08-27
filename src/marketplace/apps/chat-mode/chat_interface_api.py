@@ -281,7 +281,7 @@ for msg in st.session_state.messages:
             st.write(msg["content"])
 
 # Chat input
-if prompt := st.chat_input("Message ABI..."):
+if prompt := st.chat_input("Type a message or @ an agent..."):
     send_message(prompt)
     st.rerun()
 
