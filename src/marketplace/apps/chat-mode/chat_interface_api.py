@@ -46,16 +46,20 @@ st.markdown("""
     .user-label {
         color: #86868b;
         font-weight: 600;
-        padding: 4px 0;
-        margin-bottom: 6px;
+        padding: 6px 0 8px 0;
+        margin-bottom: 8px;
+        display: block;
+        line-height: 1.2;
     }
     
     /* Assistant message styling */
     .assistant-label {
         color: #86868b;
         font-weight: 600;
-        padding: 4px 0;
-        margin-bottom: 6px;
+        padding: 6px 0 8px 0;
+        margin-bottom: 8px;
+        display: block;
+        line-height: 1.2;
     }
     
     /* Reduce spacing in chat messages */
@@ -71,6 +75,15 @@ st.markdown("""
     
     .stChatMessage [data-testid="stMarkdownContainer"]:last-child p {
         margin-bottom: 0 !important;
+    }
+    
+    /* Ensure consistent spacing for all chat message elements */
+    .stChatMessage [data-testid="stMarkdownContainer"] {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .stChatMessage [data-testid="stMarkdownContainer"]:first-child {
+        margin-bottom: 0.25rem !important;
     }
     
     /* Chat input styling - more aggressive selectors */
