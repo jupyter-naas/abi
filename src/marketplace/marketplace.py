@@ -493,7 +493,6 @@ if filtered_items:
                                 # Launch running app in new tab
                                 import webbrowser
                                 webbrowser.open(f"http://localhost:{item['port']}")
-                                st.success(f"✅ Opening {item['name']} in new tab...")
                             else:
                                 # Start the app and open it
                                 import subprocess
@@ -524,7 +523,6 @@ if filtered_items:
                                             "--server.port", str(item['port']),
                                             "--server.headless", "true"
                                         ], cwd=os.path.dirname(os.path.abspath(__file__)))
-                                        st.success(f"✅ Starting {item['name']} and opening in new tab...")
                                         
                                         # Open the app in a new tab after a short delay (no rerun interruption)
                                         def open_after_delay():
