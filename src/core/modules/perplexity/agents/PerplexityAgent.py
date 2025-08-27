@@ -4,17 +4,20 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
+from abi.services.agent.Agent import Agent
 from fastapi import APIRouter
 from src.core.modules.perplexity.models.perplexity_gpt_4o import model
 from typing import Optional
 from enum import Enum
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png"
 NAME = "Perplexity"
+TYPE = "core"
+SLUG = "perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
-AVATAR_URL = "https://images.seeklogo.com/logo-png/61/1/perplexity-ai-icon-black-logo-png_seeklogo-611679.png"
+MODEL = "perplexity-gpt-4o"
 SYSTEM_PROMPT = """
 Role:
 You are Perplexity, a researcher agent with access to Perplexity AI search engine.
@@ -64,6 +67,10 @@ Examples:
 - [Le Parisien](https://www.leparisien.fr/economie/article
 ```
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
@@ -85,7 +92,40 @@ def create_agent(
     
     
     # Init
-    tools: list = []
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool, Tool
+    from pydantic import BaseModel
+    from typing import List, Union
+    
+    tools: List[Union[Tool, Agent]] = []
+    
+    class AgentConfigSchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=AgentConfigSchema
+    )
+    
+                    
+    from typing import cast
+    tools += [cast(Tool, agent_config_tool)]
 
     from src import secret
     from src.core.modules.perplexity.integrations import PerplexityIntegration
@@ -113,9 +153,9 @@ def create_agent(
         name="current_datetime", 
         description="Get the current datetime in Paris timezone.",
         func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-        args_schema=EmptySchema
+        args_schema=AgentConfigSchema
     )
-    tools += [current_datetime_tool]
+    tools += [cast(Tool, current_datetime_tool)]
 
     intents: list = [
         Intent(

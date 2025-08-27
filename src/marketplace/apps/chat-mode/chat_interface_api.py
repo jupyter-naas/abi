@@ -1,0 +1,192 @@
+"""
+ABI Chat Interface - API-based version
+Clean, minimal chat interface using the ABI API instead of direct module loading
+"""
+
+import streamlit as st
+import requests
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+
+# Load environment
+from dotenv import load_dotenv
+load_dotenv()
+
+# Page config
+st.set_page_config(
+    page_title="ABI Chat (API)", 
+    page_icon="🤖", 
+    layout="centered"
+)
+
+# Configuration
+ABI_API_BASE = os.getenv("ABI_API_BASE", "http://localhost:9879")
+ABI_API_KEY = os.getenv("ABI_API_KEY")
+
+# Check if API key is provided
+if not ABI_API_KEY:
+    st.error("❌ ABI_API_KEY environment variable is required")
+    st.stop()
+
+# Session state initialization
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'thread_id' not in st.session_state:
+    st.session_state.thread_id = 1
+if 'active_agent' not in st.session_state:
+    st.session_state.active_agent = "Abi"
+
+# Agent name mapping for @mentions (maps to actual API endpoint names)
+AGENT_MAPPING = {
+    "abi": "Abi", "claude": "Claude", "gemini": "Gemini", 
+    "mistral": "Mistral", "chatgpt": "ChatGPT", "grok": "Grok",
+    "llama": "Llama", "perplexity": "Perplexity", "qwen": "Qwen",
+    "deepseek": "DeepSeek"
+}
+
+# Agent avatar URLs
+AGENT_AVATARS = {
+    "Abi": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png",
+    "Claude": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/claude.png",
+    "Gemini": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png",
+    "Mistral": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/mistral.png",
+    "ChatGPT": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg",
+    "Grok": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/grok.jpg",
+    "Llama": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/llama.jpeg",
+    "Perplexity": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png",
+    "Qwen": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg",
+    "DeepSeek": "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
+}
+
+def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:
+    """Call the ABI API for agent completion"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {ABI_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "ABI-Streamlit-Chat/1.0"
+        }
+        
+        data = {
+            "prompt": prompt,
+            "thread_id": str(thread_id)  # API expects string
+        }
+        
+        # Map agent names to API endpoints using the mapping
+        api_agent_name = AGENT_MAPPING.get(agent_name, agent_name.capitalize())
+        url = f"{ABI_API_BASE}/agents/{api_agent_name}/completion"
+        
+        response = requests.post(url, json=data, headers=headers, timeout=60)
+        
+        if response.status_code == 200:
+            return {"success": True, "content": response.text.strip('"')}
+        elif response.status_code == 401:
+            return {"success": False, "error": "🔒 Authentication failed. Check your ABI_API_KEY."}
+        elif response.status_code == 404:
+            return {"success": False, "error": f"❓ Agent '{agent_name}' not found."}
+        else:
+            return {"success": False, "error": f"❌ HTTP {response.status_code}: {response.text}"}
+            
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": f"❌ Cannot connect to ABI API at {ABI_API_BASE}. Is the API running?"}
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": f"⏱️ Timeout calling {agent_name} agent."}
+    except Exception as e:
+        return {"success": False, "error": f"❌ Error: {str(e)}"}
+
+def process_user_input(user_input: str) -> tuple[str, str]:
+    """Process user input and handle @mentions"""
+    # Check for @mentions
+    mention_match = re.search(r'@(\w+)', user_input.lower())
+    agent_name = st.session_state.active_agent
+    
+    if mention_match:
+        mentioned_agent = mention_match.group(1)
+        if mentioned_agent in AGENT_MAPPING:
+            # Update active agent
+            agent_name = AGENT_MAPPING[mentioned_agent]
+            st.session_state.active_agent = agent_name
+            
+            # Clean input (remove @mention)
+            user_input_clean = re.sub(r'@\w+\s*', '', user_input).strip()
+            if user_input_clean:
+                user_input = user_input_clean
+            else:
+                user_input = f"Hello, I want to talk to {mentioned_agent}"
+    
+    return agent_name, user_input
+
+def send_message(user_input: str):
+    """Send message to ABI API and handle response"""
+    # Process input and determine agent
+    agent_name, processed_input = process_user_input(user_input)
+    
+    # Add user message to chat
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_input,
+        "timestamp": datetime.now()
+    })
+    
+    # Call API
+    with st.spinner(f"Thinking... (via {agent_name})"):
+        result = call_abi_api(agent_name, processed_input, st.session_state.thread_id)
+    
+    if result["success"]:
+        # Clean response content (remove thinking tags, etc.)
+        content = re.sub(r'<think>.*?</think>', '', result["content"], flags=re.DOTALL).strip()
+        
+        # Add assistant response to chat
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": content,
+            "agent": agent_name,
+            "timestamp": datetime.now()
+        })
+    else:
+        # Add error message
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": result["error"],
+            "agent": "system",
+            "timestamp": datetime.now()
+        })
+
+# UI Layout - minimal
+
+# Sidebar with active agent
+with st.sidebar:
+    st.write(f"**Active: {st.session_state.active_agent}**")
+    
+    # Clear chat button
+    if st.button("🗑️ Clear Chat"):
+        st.session_state.messages = []
+        st.rerun()
+    
+
+
+# Display messages
+for msg in st.session_state.messages:
+    if msg["role"] == "assistant":
+        agent_name = msg.get('agent', 'unknown')
+        if agent_name == "system":
+            with st.chat_message("assistant"):
+                st.error(msg['content'])
+        else:
+            # Get avatar URL for the agent
+            avatar_url = AGENT_AVATARS.get(agent_name, None)
+            with st.chat_message("assistant", avatar=avatar_url):
+                st.write(msg['content'])
+    else:
+        # User message with default user avatar
+        with st.chat_message("user"):
+            st.write(msg['content'])
+
+# Chat input
+if prompt := st.chat_input("Message ABI..."):
+    send_message(prompt)
+    st.rerun()
+
+

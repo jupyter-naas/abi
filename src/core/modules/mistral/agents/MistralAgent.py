@@ -12,9 +12,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/mistral.png"
 NAME = "Mistral"
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQDlRsSrziKNomt388XZ3tyqUimjUyCQY8Rtg&s"
+TYPE = "core"
+SLUG = "mistral"
 DESCRIPTION = "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."
+MODEL = "mistral-large-2"
 SYSTEM_PROMPT = """You are Mistral, a powerful AI assistant developed by Mistral AI with exceptional capabilities in code generation, mathematics, and logical reasoning.
 
 You are designed to provide accurate, helpful, and efficient responses across a wide range of topics, with particular strengths in:
@@ -39,6 +42,11 @@ When users say things like "ask mistral", "parler à mistral", "I want to talk t
 
 Always provide practical, actionable insights and prioritize accuracy in your responses.
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -59,6 +67,37 @@ def create_agent(
     
     tools: list = []
     agents: list = []
+    
+    # Add configuration access tool
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+    
+    def get_agent_config() -> str:
+        """Get agent configuration information including avatar URL and metadata."""
+        return f"""Agent Configuration:
+- Name: {NAME}
+- Type: {TYPE}
+- Slug: {SLUG}
+- Model: {MODEL}
+- Avatar URL: {AVATAR_URL}
+- Description: {DESCRIPTION}
+- Temperature: {TEMPERATURE}
+- Date Support: {DATE}
+- Instructions Type: {INSTRUCTIONS_TYPE}
+- Ontology Support: {ONTOLOGY}"""
+    
+    agent_config_tool = StructuredTool(
+        name="get_agent_config",
+        description="Get agent configuration information including avatar URL and metadata.",
+        func=get_agent_config,
+        args_schema=EmptySchema
+    )
+    
+                    
+    tools += [agent_config_tool]
     intents: list = [
         Intent(
             intent_value="what is your name",
