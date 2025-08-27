@@ -70,13 +70,13 @@ abi:GPT_4o_mini a abi:AIModelInstance ;
     rdfs:label "GPT-4o mini"@en ;
     abi:modelSlug "gpt-4o-mini"@en ;
     abi:provider "OpenAI"@en ;
-    abi:sourceAPI "artificial_analysis"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
 
 #################################################################
 #    BFO Bucket 2: Qualities - Performance & Cost Metrics
 #################################################################
 
-    abi:inputTokenCost 0.15 ;
+abi:GPT_4o_mini abi:inputTokenCost 0.15 ;
     abi:inputTokenCostCurrency "USD"@en ;
     abi:outputTokenCost 0.6 ;
     abi:outputTokenCostCurrency "USD"@en ;
@@ -1275,7 +1275,7 @@ abi:ChatgptCodeGenerationProcess abi:utilizesModel abi:GPT_4o_Realtime_Dec_24 .
 #    BFO Bucket 1: Material Entity - GPT-4o (March 2025, chatgpt-4o-latest)
 #################################################################
 
-abi:GPT_4o_March_2025,_chatgpt_4o_latest a abi:AIModelInstance ;
+abi:GPT_4o_March_2025_chatgpt_4o_latest a abi:AIModelInstance ;
     rdfs:label "GPT-4o (March 2025, chatgpt-4o-latest)"@en ;
     abi:modelSlug "gpt-4o-chatgpt-03-25"@en ;
     abi:provider "OpenAI"@en ;
