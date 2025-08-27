@@ -21,6 +21,56 @@ st.set_page_config(
     layout="centered"
 )
 
+# Apple-style CSS for chat messages
+st.markdown("""
+<style>
+    /* Chat message styling */
+    .chat-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #1d1d1f;
+        margin-bottom: 4px;
+        letter-spacing: -0.01em;
+    }
+    
+    .chat-content {
+        font-weight: 400;
+        font-size: 1rem;
+        color: #1d1d1f;
+        line-height: 1.4;
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+    
+    /* User message styling */
+    .user-label {
+        color: #007aff;
+        font-weight: 600;
+    }
+    
+    /* Assistant message styling */
+    .assistant-label {
+        color: #34c759;
+        font-weight: 600;
+    }
+    
+    /* Reduce spacing in chat messages */
+    .stChatMessage > div {
+        gap: 0.5rem !important;
+    }
+    
+    /* Streamlit chat message content spacing */
+    .stChatMessage [data-testid="stMarkdownContainer"] p {
+        margin-bottom: 0.25rem !important;
+        margin-top: 0 !important;
+    }
+    
+    .stChatMessage [data-testid="stMarkdownContainer"]:last-child p {
+        margin-bottom: 0 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Configuration
 ABI_API_BASE = os.getenv("ABI_API_BASE", "http://localhost:9879")
 ABI_API_KEY = os.getenv("ABI_API_KEY")
@@ -222,13 +272,13 @@ for msg in st.session_state.messages:
             # Get avatar URL for the agent
             avatar_url = AGENT_AVATARS.get(agent_name, None)
             with st.chat_message("assistant", avatar=avatar_url):
-                st.write(f"**{agent_name}:**")
-                st.write(msg['content'])
+                st.markdown(f'<div class="assistant-label">{agent_name}:</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="chat-content">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         # User message with default user avatar
         with st.chat_message("user"):
-            st.write("**You:**")
-            st.write(msg['content'])
+            st.markdown('<div class="user-label">You:</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="chat-content">{msg["content"]}</div>', unsafe_allow_html=True)
 
 # Chat input
 if prompt := st.chat_input("Message ABI..."):
