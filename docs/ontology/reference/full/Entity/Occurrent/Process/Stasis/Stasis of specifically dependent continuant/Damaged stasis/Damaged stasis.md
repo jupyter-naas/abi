@@ -9,9 +9,9 @@ A Stasis of Specifically Dependent Continuant in which some Independent Continua
 Not defined.
 
 ### Aliases
-- Damaged
 - Injured
 - Compromised
+- Damaged
 
 ### URI
 https://www.commoncoreontologies.org/ont00001289

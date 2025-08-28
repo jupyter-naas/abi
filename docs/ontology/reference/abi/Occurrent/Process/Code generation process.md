@@ -3,8 +3,8 @@
 ## Overview
 
 ### Definition
-A process in which an AI system generates code based on specifications.
 A process in which an AI system generates computer code, algorithms, and software solutions based on specifications.
+A process in which an AI system generates code based on specifications.
 
 ### Examples
 Programming algorithms, software development, debugging code, system design implementation.
