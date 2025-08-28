@@ -9,9 +9,9 @@ A Rotational Motion in which the direction of rotation is toward the left as see
 the axial rotation of the Earth as seen from above the North Pole
 
 ### Aliases
-- Counter-Clockwise Rotation
 - Anti-Clockwise Rotation
 - CCW Rotational Motion
+- Counter-Clockwise Rotation
 
 ### URI
 https://www.commoncoreontologies.org/ont00001109

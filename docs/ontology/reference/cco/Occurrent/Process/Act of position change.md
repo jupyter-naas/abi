@@ -7,9 +7,9 @@ An Act of Motion in which the position (i.e. the orientation, alignment, or arra
 
 ### Examples
 - adjusting your posture
-- a top spinning in place
 - swivelling your office chair to face the window
 - raising your left arm
+- a top spinning in place
 
 ### Aliases
 Not defined.

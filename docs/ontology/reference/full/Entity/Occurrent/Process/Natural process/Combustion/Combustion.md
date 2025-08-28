@@ -9,8 +9,8 @@ A Natural Process in which a Portion of Fuel or other Material Entity is burned.
 Not defined.
 
 ### Aliases
-- Combustion Process
 - Burning Process
+- Combustion Process
 
 ### URI
 https://www.commoncoreontologies.org/ont00000272
