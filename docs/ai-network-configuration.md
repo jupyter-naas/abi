@@ -1,10 +1,10 @@
 # AI Network Configuration System
 
-The AI Network Configuration System replaces the old "disabled" prefix approach with a centralized, YAML-based configuration system that provides fine-grained control over module loading.
+The AI Network Configuration System provides centralized, intelligent control over your AI ecosystem. Configure which models, domain experts, and applications to load with priority-based orchestration and rich metadata management.
 
 ## Overview
 
-Instead of renaming directories with `.disabled` suffixes, you now configure which modules to load directly in `config.yaml` under the `ai_network` section. This provides:
+Configure your AI Network through a YAML-based system that delivers:
 
 - **Centralized Control**: All module configuration in one place
 - **Priority-Based Loading**: Control the order modules are loaded
@@ -140,32 +140,25 @@ python src/cli.py network --help
 | `applications` | `src/marketplace/modules/applications/` | External integrations |
 | `custom_modules` | `src/custom/modules/` | User-defined modules |
 
-## Migration from Disabled Prefix System
+## Configuration Management
 
-### Old System (Deprecated)
-```bash
-# Disable a module
-mv src/core/modules/claude src/core/modules/claude.disabled
-
-# Enable a module
-mv src/core/modules/claude.disabled src/core/modules/claude
-```
-
-### New System
+### Declarative Configuration
 ```yaml
 # In config.yaml
 ai_network:
   core_models:
     modules:
       - name: "claude"
-        enabled: false  # Disabled
-        # enabled: true   # Enabled
+        enabled: true
+        priority: 3
+        description: "Anthropic Claude models integration"
 ```
 
-Or use the CLI:
+### CLI Management
 ```bash
-python src/cli.py network disable claude core_models
 python src/cli.py network enable claude core_models
+python src/cli.py network disable claude core_models
+python src/cli.py network list  # View current status
 ```
 
 ## Advanced Features
@@ -272,13 +265,13 @@ python src/cli.py system status
 - Consider enabling `parallel_loading` (experimental)
 - Monitor module loading times in logs
 
-## Backward Compatibility
+## Legacy Support
 
-The system still recognizes `.disabled` suffixes and will warn you about them:
+The system automatically detects legacy `.disabled` suffixes and provides migration guidance:
 
 ```
 ⚠️ Module 'arxiv' exists but is disabled via .disabled suffix
 💡 Remove .disabled suffix or update config to enable: src/marketplace/modules/applications/arxiv.disabled
 ```
 
-This allows for gradual migration from the old system to the new configuration approach.
+This ensures smooth transitions when upgrading existing installations.
