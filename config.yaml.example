@@ -10,6 +10,87 @@ config:
   favicon_path: "assets/favicon.ico" # Path to the favicon
   storage_name: "abi" # Name of the storage
   space_name: "abi" # Name of the space
+  cors_origins:
+    - "http://localhost:9879"
+
+# AI Network Configuration - Define which modules to load and their priorities
+# This replaces the old "disabled" prefix system with a centralized configuration approach
+ai_network:
+  # Core AI Models - Foundation language models
+  core_models:
+    enabled: true
+    modules:
+      - name: "abi"
+        enabled: true
+        priority: 1
+        description: "Core ABI system with ontology management"
+      - name: "chatgpt"
+        enabled: true # Set to false to disable ChatGPT integration
+        priority: 2
+        description: "OpenAI GPT models integration"
+      - name: "claude"
+        enabled: true # Set to false to disable Claude integration
+        priority: 3
+        description: "Anthropic Claude models integration"
+      # Add other models as needed - set enabled: true to activate them
+      - name: "deepseek"
+        enabled: false
+        priority: 4
+        description: "DeepSeek R1 models integration"
+      - name: "gemini"
+        enabled: false
+        priority: 5
+        description: "Google Gemini models integration"
+
+  # Domain Expert Agents - Specialized business roles
+  domain_experts:
+    enabled: true # Set to false to disable all domain experts
+    modules:
+      # Enable the domain experts you need for your use case
+      - name: "software-engineer"
+        enabled: true # Essential for development teams
+        priority: 1
+        description: "Software development and architecture expert"
+      - name: "data-engineer"
+        enabled: false # Enable if you need data pipeline expertise
+        priority: 2
+        description: "Data pipeline and infrastructure expert"
+      - name: "project-manager"
+        enabled: false # Enable for project management capabilities
+        priority: 3
+        description: "Project planning and management expert"
+      # Add more domain experts as needed
+
+  # Application Integrations - External service integrations
+  applications:
+    enabled: true
+    modules:
+      - name: "github"
+        enabled: true # Essential for GitHub integration
+        priority: 1
+        description: "GitHub repository and project management integration"
+      - name: "naas"
+        enabled: true # Essential for Naas platform integration
+        priority: 2
+        description: "Naas platform integration"
+      # Enable other applications as needed
+      - name: "arxiv"
+        enabled: false # Enable for research paper integration
+        priority: 3
+        description: "ArXiv research paper integration"
+
+  # Custom Modules - User-defined modules
+  custom_modules:
+    enabled: true
+    auto_discover: true # Automatically discover modules in src/custom/modules
+    modules: [] # Add specific custom modules here if auto_discover is false
+
+  # Module Loading Settings
+  loading:
+    fail_on_error: true # Stop loading if a module fails
+    parallel_loading: false # Load modules in parallel (experimental)
+    timeout_seconds: 30 # Timeout for module loading
+    retry_attempts: 3 # Number of retry attempts for failed modules
   
 pipelines:
   - name: github.GithubIssuesPipeline

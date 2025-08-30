@@ -1,22 +1,212 @@
+ai_network:
+  applications:
+    enabled: true
+    modules:
+    - description: GitHub repository and project management integration
+      enabled: true
+      name: github
+      priority: 1
+    - description: Git version control integration
+      enabled: true
+      name: git
+      priority: 2
+    - description: Naas platform integration
+      enabled: true
+      name: naas
+      priority: 3
+    - description: Customer support and ticketing system
+      enabled: true
+      name: support
+      priority: 4
+    - description: ArXiv research paper integration
+      enabled: false
+      name: arxiv
+      priority: 5
+    - description: Gladia audio/video processing integration
+      enabled: false
+      name: gladia
+      priority: 6
+    - description: Microsoft PowerPoint integration
+      enabled: false
+      name: powerpoint
+      priority: 7
+    - description: Algolia search integration
+      enabled: false
+      name: algolia
+      priority: 8
+    - description: Amazon Web Services integration
+      enabled: false
+      name: aws
+      priority: 9
+    - description: Microsoft Azure integration
+      enabled: false
+      name: azure
+      priority: 10
+    - description: Google Cloud Platform integration
+      enabled: false
+      name: google
+      priority: 11
+    - description: Microsoft Office integration
+      enabled: false
+      name: microsoft
+      priority: 12
+  core_models:
+    enabled: true
+    modules:
+    - description: Core ABI system with ontology management
+      enabled: true
+      name: abi
+      priority: 1
+    - description: OpenAI GPT models integration
+      enabled: true
+      name: chatgpt
+      priority: 2
+    - description: Anthropic Claude models integration
+      enabled: true
+      name: claude
+      priority: 3
+    - description: DeepSeek R1 models integration
+      enabled: false
+      name: deepseek
+      priority: 4
+    - description: Google Gemini models integration
+      enabled: true
+      name: gemini
+      priority: 5
+    - description: Google Gemma models integration
+      enabled: false
+      name: gemma
+      priority: 6
+    - description: xAI Grok models integration
+      enabled: false
+      name: grok
+      priority: 7
+    - description: Meta Llama models integration
+      enabled: false
+      name: llama
+      priority: 8
+    - description: Mistral AI models integration
+      enabled: false
+      name: mistral
+      priority: 9
+    - description: Perplexity AI models integration
+      enabled: false
+      name: perplexity
+      priority: 10
+    - description: Alibaba Qwen models integration
+      enabled: false
+      name: qwen
+      priority: 11
+  custom_modules:
+    auto_discover: true
+    enabled: true
+    modules: []
+  domain_experts:
+    enabled: true
+    modules:
+    - description: Software development and architecture expert
+      enabled: true
+      name: software-engineer
+      priority: 1
+    - description: Data pipeline and infrastructure expert
+      enabled: true
+      name: data-engineer
+      priority: 2
+    - description: DevOps and infrastructure automation expert
+      enabled: true
+      name: devops-engineer
+      priority: 3
+    - description: Project planning and management expert
+      enabled: false
+      name: project-manager
+      priority: 4
+    - description: Content strategy and planning expert
+      enabled: false
+      name: content-strategist
+      priority: 5
+    - description: Content creation and copywriting expert
+      enabled: false
+      name: content-creator
+      priority: 6
+    - description: Content analysis and optimization expert
+      enabled: false
+      name: content-analyst
+      priority: 7
+    - description: Marketing campaign management expert
+      enabled: false
+      name: campaign-manager
+      priority: 8
+    - description: Community building and engagement expert
+      enabled: false
+      name: community-manager
+      priority: 9
+    - description: Account management and sales expert
+      enabled: false
+      name: account-executive
+      priority: 10
+    - description: Lead generation and sales development expert
+      enabled: false
+      name: sales-development-representative
+      priority: 11
+    - description: Inside sales and CRM management expert
+      enabled: false
+      name: inside-sales representative
+      priority: 12
+    - description: Business development and partnerships expert
+      enabled: false
+      name: business-development-representative
+      priority: 13
+    - description: Customer success and retention expert
+      enabled: false
+      name: customer-success-manager
+      priority: 14
+    - description: Accounting and financial reporting expert
+      enabled: false
+      name: accountant
+      priority: 15
+    - description: Financial controls and budgeting expert
+      enabled: false
+      name: financial-controller
+      priority: 16
+    - description: Treasury and cash management expert
+      enabled: false
+      name: treasurer
+      priority: 17
+    - description: HR policies and employee management expert
+      enabled: false
+      name: human-resources-manager
+      priority: 18
+    - description: Open source intelligence research expert
+      enabled: false
+      name: osint-researcher
+      priority: 19
+    - description: Investigation and evidence analysis expert
+      enabled: false
+      name: private-investigator
+      priority: 20
+  loading:
+    fail_on_error: true
+    parallel_loading: false
+    retry_attempts: 3
+    timeout_seconds: 30
 config:
-  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
-  github_project_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
-  github_support_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
-  github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
-  triple_store_path: "storage/triplestore" # Path to the ontology store
-  api_title: "ABI API" # API title
-  api_description: "API for ABI, your Artifical Business Intelligence" # API description
-  logo_path: "assets/logo.png" # Path to the logo
-  favicon_path: "assets/favicon.ico" # Path to the favicon
-  storage_name: "abi" # Name of the storage
-  space_name: "abi" # Name of the space
+  api_description: API for ABI, your Artifical Business Intelligence
+  api_title: ABI API
   cors_origins:
-    - "http://localhost:9879"
-  
+  - http://localhost:9879
+  favicon_path: assets/favicon.ico
+  github_project_id: 12
+  github_project_repository: jupyter-naas/abi
+  github_support_repository: jupyter-naas/abi
+  logo_path: assets/logo.png
+  space_name: abi
+  storage_name: abi
+  triple_store_path: storage/triplestore
+  workspace_id: 96ce7ee7-e5f5-4bca-acf9-9d5d41317f81
 pipelines:
-  - name: github.GithubIssuesPipeline
-    cron: "0 0 * * *"
-    parameters:
-      - github_repository: "https://github.com/jupyter-naas/abi"
-      - github_repository: "https://github.com/jupyter-naas/docs"
-      - github_repository: "https://github.com/jupyter-naas/naaspython"
+- cron: 0 0 * * *
+  name: github.GithubIssuesPipeline
+  parameters:
+  - github_repository: https://github.com/jupyter-naas/abi
+  - github_repository: https://github.com/jupyter-naas/docs
+  - github_repository: https://github.com/jupyter-naas/naaspython
