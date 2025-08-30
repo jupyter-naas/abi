@@ -24,7 +24,7 @@ class AgentRecommendationConfiguration(WorkflowConfiguration):
     """
     triple_store: ITripleStoreService
     oxigraph_url: str = "http://localhost:7878"
-    queries_file_path: str = "src/core/modules/abi/ontologies/AgentRecommendationQueries.ttl"
+    queries_file_path: str = "src/core/modules/abi/ontologies/application-level/AgentRecommendationSparqlQueries.ttl"
 
 class AgentRecommendationParameters(WorkflowParameters):
     """Parameters for Agent Recommendation Workflow execution.

@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# ContentMetrics Ontology for Content Strategist Domain
+# Content performance metrics and KPIs ontology
+
+@prefix : <http://naas.ai/ontology/content-strategist/contentmetrics#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "ContentMetrics Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Content performance metrics and KPIs ontology" .
+
+# Core Classes
+:ContentMetricsEntity a owl:Class ;
+    rdfs:label "ContentMetrics Entity" ;
+    rdfs:comment "Base class for contentmetrics entities" .
+
+:ContentMetricsProcess a owl:Class ;
+    rdfs:label "ContentMetrics Process" ;
+    rdfs:comment "Processes related to contentmetrics" .
+
+:ContentMetricsMetric a owl:Class ;
+    rdfs:label "ContentMetrics Metric" ;
+    rdfs:comment "Metrics and measurements for contentmetrics" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :ContentMetricsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :ContentMetricsMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :ContentMetricsEntity ;
+    rdfs:range :ContentMetricsEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge

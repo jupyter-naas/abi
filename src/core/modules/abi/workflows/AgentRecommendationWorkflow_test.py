@@ -15,7 +15,7 @@ def workflow() -> AgentRecommendationWorkflow:
     workflow_configuration = AgentRecommendationConfiguration(
         triple_store=mock_triple_store,
         oxigraph_url="http://localhost:7878",
-        queries_file_path="src/core/modules/abi/ontologies/AgentRecommendationQueries.ttl"
+        queries_file_path="src/core/modules/abi/ontologies/application-level/AgentRecommendationSparqlQueries.ttl"
     )
     
     return AgentRecommendationWorkflow(workflow_configuration)

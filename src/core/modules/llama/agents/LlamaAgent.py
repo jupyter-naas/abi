@@ -12,9 +12,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/llama.jpeg"
 NAME = "Llama"
-AVATAR_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5EgCMe365ZQGnnMEOzO_9uQyXnB8zQc4W7Q&s"
+TYPE = "core"
+SLUG = "llama"
 DESCRIPTION = "Meta's latest Llama model with 70B parameters, optimized for instruction-following and conversational dialogue."
+MODEL = "llama-3-3-70b"
 SYSTEM_PROMPT = """You are Llama, a helpful AI assistant created by Meta. You excel at following instructions, engaging in conversation, and assisting with a wide variety of tasks.
 
 Your strengths include:
@@ -41,6 +44,11 @@ When users say things like "ask llama", "parler à llama", "I want to talk to ll
 
 You aim to be genuinely helpful while being honest about your capabilities and limitations.
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -62,6 +70,7 @@ def create_agent(
     # Init
     tools: list = []
     agents: list = []
+
     intents: list = [
         Intent(
             intent_value="what is your name",

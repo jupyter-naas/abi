@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# JobRoles Ontology for Human Resources Domain
+# Job roles, responsibilities, and hierarchies ontology
+
+@prefix : <http://naas.ai/ontology/human-resources/jobroles#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "JobRoles Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Job roles, responsibilities, and hierarchies ontology" .
+
+# Core Classes
+:JobRolesEntity a owl:Class ;
+    rdfs:label "JobRoles Entity" ;
+    rdfs:comment "Base class for jobroles entities" .
+
+:JobRolesProcess a owl:Class ;
+    rdfs:label "JobRoles Process" ;
+    rdfs:comment "Processes related to jobroles" .
+
+:JobRolesMetric a owl:Class ;
+    rdfs:label "JobRoles Metric" ;
+    rdfs:comment "Metrics and measurements for jobroles" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :JobRolesEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :JobRolesMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :JobRolesEntity ;
+    rdfs:range :JobRolesEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge

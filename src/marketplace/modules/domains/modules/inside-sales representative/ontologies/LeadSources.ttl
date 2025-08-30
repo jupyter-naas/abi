@@ -1,0 +1,27 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# LeadSources Ontology for Inside Sales Representative Domain
+# Lead sources and qualification criteria ontology
+
+@prefix : <http://naas.ai/ontology/inside-sales representative/leadsources#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "LeadSources Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Lead sources and qualification criteria ontology" .
+
+# Core Classes
+:LeadSourcesEntity a owl:Class ;
+    rdfs:label "LeadSources Entity" ;
+    rdfs:comment "Base class for leadsources entities" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :LeadSourcesEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+# Domain-specific instances would be defined here
