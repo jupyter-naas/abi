@@ -1,6 +1,18 @@
-# # Suppress debug logs for cleaner conversational experience
-# import os
-# os.environ["LOG_LEVEL"] = "CRITICAL"  # Even more aggressive
+#!/usr/bin/env python3
+"""
+ABI Command Line Interface
+
+Main CLI for ABI with subcommands for various operations including
+AI Network management, agent interaction, and system administration.
+"""
+
+import argparse
+import sys
+import os
+from pathlib import Path
+
+# Add project root to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,11 +22,8 @@ from rich.console import Console
 from rich.prompt import Prompt
 import requests
 import time
-import os
 
 console = Console(style="")
-
-dv = dotenv_values()
 
 # Catch ctrl+c
 import signal
@@ -249,21 +258,397 @@ checks = [
 ]
     
 
-def main():
+# ============================================================================
+# AI Network Management Commands
+# ============================================================================
+
+def cmd_ai_network_list(args):
+    """List all AI Network modules with their status"""
+    try:
+        from src.utils.ConfigLoader import get_ai_network_config
+        
+        config = get_ai_network_config()
+        enabled_modules = config.get_enabled_modules()
+        
+        console.print("\n🤖 AI Network Module Status", style="bold cyan")
+        console.print("=" * 50)
+        
+        for category, modules in enabled_modules.items():
+            category_config = config.ai_network.get(category, {})
+            category_enabled = category_config.get("enabled", False)
+            
+            status_icon = "✅ ENABLED" if category_enabled else "❌ DISABLED"
+            console.print(f"\n📂 {category.upper().replace('_', ' ')} ({status_icon})", style="bold")
+            console.print("-" * 30)
+            
+            if not category_enabled:
+                console.print("   Category is disabled - no modules will load", style="dim")
+                continue
+                
+            if not modules:
+                console.print("   No enabled modules in this category", style="dim")
+                continue
+                
+            for module in modules:
+                name = module["name"]
+                priority = module.get("priority", "N/A")
+                description = module.get("description", "No description")
+                console.print(f"   ✅ {name} (priority: {priority})", style="green")
+                console.print(f"      {description}", style="dim")
+        
+        # Show disabled modules if requested
+        if args.show_disabled:
+            console.print(f"\n❌ DISABLED MODULES", style="bold red")
+            console.print("-" * 30)
+            
+            for category, category_config in config.ai_network.items():
+                if category == "loading":
+                    continue
+                    
+                modules = category_config.get("modules", [])
+                disabled_modules = [m for m in modules if not m.get("enabled", False)]
+                
+                if disabled_modules:
+                    console.print(f"\n   {category}:", style="bold")
+                    for module in disabled_modules:
+                        name = module["name"]
+                        description = module.get("description", "No description")
+                        console.print(f"     ❌ {name} - {description}", style="red")
+                        
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
+
+def cmd_ai_network_enable(args):
+    """Enable a specific AI Network module"""
+    try:
+        if not _update_module_status(args.module, args.category, True):
+            sys.exit(1)
+        
+        console.print(f"✅ Enabled module '{args.module}' in category '{args.category}'", style="green")
+        console.print("💡 Restart the application to apply changes", style="dim")
+        
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
+
+def cmd_ai_network_disable(args):
+    """Disable a specific AI Network module"""
+    try:
+        if not _update_module_status(args.module, args.category, False):
+            sys.exit(1)
+        
+        console.print(f"❌ Disabled module '{args.module}' in category '{args.category}'", style="yellow")
+        console.print("💡 Restart the application to apply changes", style="dim")
+        
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
+
+def cmd_ai_network_validate(args):
+    """Validate the AI Network configuration"""
+    try:
+        from src.utils.ConfigLoader import get_ai_network_config
+        
+        config = get_ai_network_config()
+        issues = config.validate_configuration()
+        
+        if not issues:
+            console.print("✅ AI Network configuration is valid", style="green")
+            return
+        
+        console.print("❌ Configuration validation issues found:", style="red")
+        for issue in issues:
+            console.print(f"   - {issue}", style="red")
+        
+        sys.exit(1)
+        
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
+
+def cmd_ai_network_show(args):
+    """Show the current AI Network configuration"""
+    try:
+        from src.utils.ConfigLoader import get_ai_network_config
+        import yaml
+        
+        config = get_ai_network_config()
+        
+        console.print("\n🔧 AI Network Configuration", style="bold cyan")
+        console.print("=" * 50)
+        
+        # Pretty print the ai_network section
+        ai_network_config = config.ai_network
+        config_yaml = yaml.dump({"ai_network": ai_network_config}, default_flow_style=False, indent=2)
+        console.print(config_yaml)
+        
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
+
+def _update_module_status(module_name: str, category: str, enabled: bool) -> bool:
+    """Update the enabled status of a module in the configuration file"""
+    import yaml
+    
+    config_path = "config.yaml"
+    
+    try:
+        # Read current configuration
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+        
+        # Navigate to the module
+        ai_network = config.get("ai_network", {})
+        category_config = ai_network.get(category, {})
+        modules = category_config.get("modules", [])
+        
+        # Find and update the module
+        module_found = False
+        for module in modules:
+            if module.get("name") == module_name:
+                module["enabled"] = enabled
+                module_found = True
+                break
+        
+        if not module_found:
+            console.print(f"❌ Module '{module_name}' not found in category '{category}'", style="red")
+            console.print(f"💡 Available modules in {category}:", style="dim")
+            for module in modules:
+                console.print(f"   - {module.get('name')}", style="dim")
+            return False
+        
+        # Write back to file
+        with open(config_path, 'w') as file:
+            yaml.dump(config, file, default_flow_style=False, indent=2)
+        
+        return True
+        
+    except Exception as e:
+        console.print(f"❌ Error updating configuration: {e}", style="red")
+        return False
+
+
+# ============================================================================
+# Agent Interaction Commands
+# ============================================================================
+
+def cmd_agent_chat(args):
+    """Start interactive chat with ABI agent"""
+    # Run the setup checks first
     for f in checks:
         f()
     
-    
+    # Set environment variables
     for key, value in dotenv_values().items():
         os.environ[key] = value
     
     os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
     
-    # Ensure all development services are running (Oxigraph, PostgreSQL, etc.)
+    # Ensure all development services are running
     ensure_dev_services_running()
     
+    # Launch the terminal agent
     from src.core.apps.terminal_agent.main import generic_run_agent
-    generic_run_agent("AbiAgent")
+    
+    agent_name = args.agent if args.agent else "AbiAgent"
+    console.print(f"🚀 Starting chat with {agent_name}...", style="cyan")
+    generic_run_agent(agent_name)
+
+
+def cmd_agent_list(args):
+    """List available agents"""
+    try:
+        from src.__modules__ import get_modules
+        
+        console.print("\n🤖 Available Agents", style="bold cyan")
+        console.print("=" * 30)
+        
+        modules = get_modules()
+        agents_found = False
+        
+        for module in modules:
+            # Look for agents in the module
+            try:
+                agents_dir = Path(module.module_path) / "agents"
+                if agents_dir.exists():
+                    for agent_file in agents_dir.glob("*Agent.py"):
+                        if not agent_file.name.endswith("_test.py"):
+                            agent_name = agent_file.stem
+                            module_name = module.module_import_path.split(".")[-1]
+                            console.print(f"  📋 {agent_name} (from {module_name})", style="green")
+                            agents_found = True
+            except Exception:
+                continue
+        
+        if not agents_found:
+            console.print("  No agents found", style="dim")
+            
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
+
+# ============================================================================
+# System Commands
+# ============================================================================
+
+def cmd_system_status(args):
+    """Show system status and health checks"""
+    console.print("\n🔍 ABI System Status", style="bold cyan")
+    console.print("=" * 30)
+    
+    # Check configuration
+    try:
+        from src.utils.ConfigLoader import get_ai_network_config
+        config = get_ai_network_config()
+        issues = config.validate_configuration()
+        
+        if not issues:
+            console.print("✅ Configuration: Valid", style="green")
+        else:
+            console.print(f"❌ Configuration: {len(issues)} issues", style="red")
+    except Exception as e:
+        console.print(f"❌ Configuration: Error - {e}", style="red")
+    
+    # Check services
+    oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
+    try:
+        r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
+        if r.status_code == 200:
+            console.print("✅ Oxigraph: Running", style="green")
+        else:
+            console.print("❌ Oxigraph: Not responding", style="red")
+    except:
+        console.print("❌ Oxigraph: Not accessible", style="red")
+    
+    # Check modules
+    try:
+        from src.__modules__ import get_modules
+        modules = get_modules()
+        console.print(f"✅ Modules: {len(modules)} loaded", style="green")
+    except Exception as e:
+        console.print(f"❌ Modules: Error - {e}", style="red")
+
+
+def cmd_system_setup(args):
+    """Run initial system setup"""
+    console.print("🚀 Running ABI system setup...", style="cyan")
+    
+    for f in checks:
+        f()
+    
+    console.print("✅ Setup completed!", style="green")
+
+
+# ============================================================================
+# Main CLI Setup
+# ============================================================================
+
+def create_parser():
+    """Create the main argument parser with subcommands"""
+    parser = argparse.ArgumentParser(
+        prog="abi",
+        description="ABI - Artificial Business Intelligence CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  abi chat                                    # Start interactive chat
+  abi chat --agent ClaudeAgent              # Chat with specific agent
+  abi agent list                             # List available agents
+  abi network list                           # List AI Network modules
+  abi network enable gemini core_models      # Enable Gemini model
+  abi network disable claude core_models     # Disable Claude model
+  abi network validate                       # Validate configuration
+  abi system status                          # Show system status
+  abi system setup                           # Run initial setup
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Chat command (default behavior)
+    chat_parser = subparsers.add_parser('chat', help='Start interactive chat with ABI agent')
+    chat_parser.add_argument('--agent', help='Specific agent to chat with')
+    chat_parser.set_defaults(func=cmd_agent_chat)
+    
+    # Agent commands
+    agent_parser = subparsers.add_parser('agent', help='Agent management commands')
+    agent_subparsers = agent_parser.add_subparsers(dest='agent_command')
+    
+    agent_list_parser = agent_subparsers.add_parser('list', help='List available agents')
+    agent_list_parser.set_defaults(func=cmd_agent_list)
+    
+    # AI Network commands
+    network_parser = subparsers.add_parser('network', help='AI Network configuration management')
+    network_subparsers = network_parser.add_subparsers(dest='network_command')
+    
+    # Network list
+    network_list_parser = network_subparsers.add_parser('list', help='List all modules with their status')
+    network_list_parser.add_argument('--show-disabled', action='store_true', help='Also show disabled modules')
+    network_list_parser.set_defaults(func=cmd_ai_network_list)
+    
+    # Network enable
+    network_enable_parser = network_subparsers.add_parser('enable', help='Enable a specific module')
+    network_enable_parser.add_argument('module', help='Module name to enable')
+    network_enable_parser.add_argument('category', help='Module category', 
+                                      choices=['core_models', 'domain_experts', 'applications', 'custom_modules'])
+    network_enable_parser.set_defaults(func=cmd_ai_network_enable)
+    
+    # Network disable
+    network_disable_parser = network_subparsers.add_parser('disable', help='Disable a specific module')
+    network_disable_parser.add_argument('module', help='Module name to disable')
+    network_disable_parser.add_argument('category', help='Module category',
+                                       choices=['core_models', 'domain_experts', 'applications', 'custom_modules'])
+    network_disable_parser.set_defaults(func=cmd_ai_network_disable)
+    
+    # Network validate
+    network_validate_parser = network_subparsers.add_parser('validate', help='Validate the configuration')
+    network_validate_parser.set_defaults(func=cmd_ai_network_validate)
+    
+    # Network show
+    network_show_parser = network_subparsers.add_parser('show', help='Show current configuration')
+    network_show_parser.set_defaults(func=cmd_ai_network_show)
+    
+    # System commands
+    system_parser = subparsers.add_parser('system', help='System management commands')
+    system_subparsers = system_parser.add_subparsers(dest='system_command')
+    
+    system_status_parser = system_subparsers.add_parser('status', help='Show system status')
+    system_status_parser.set_defaults(func=cmd_system_status)
+    
+    system_setup_parser = system_subparsers.add_parser('setup', help='Run initial system setup')
+    system_setup_parser.set_defaults(func=cmd_system_setup)
+    
+    return parser
+
+
+def main():
+    """Main CLI entry point"""
+    parser = create_parser()
+    args = parser.parse_args()
+    
+    # If no command specified, default to chat
+    if not args.command:
+        args.command = 'chat'
+        args.func = cmd_agent_chat
+        args.agent = None
+    
+    # Execute the command
+    try:
+        args.func(args)
+    except KeyboardInterrupt:
+        console.print("\n⚠️ Operation cancelled by user", style="yellow")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"❌ Error: {e}", style="red")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

@@ -87,36 +87,48 @@ ai_network:
 
 ## CLI Management
 
-Use the `src/cli_ai_network.py` script to manage your AI Network configuration:
+Use the integrated ABI CLI to manage your AI Network configuration:
 
 ### List All Modules
 ```bash
-python src/cli_ai_network.py list
-python src/cli_ai_network.py list --show-disabled  # Include disabled modules
+python src/cli.py network list
+python src/cli.py network list --show-disabled  # Include disabled modules
 ```
 
 ### Enable/Disable Modules
 ```bash
 # Enable a module
-python src/cli_ai_network.py enable gemini core_models
+python src/cli.py network enable gemini core_models
 
 # Disable a module  
-python src/cli_ai_network.py disable claude core_models
+python src/cli.py network disable claude core_models
 ```
 
 ### Validate Configuration
 ```bash
-python src/cli_ai_network.py validate
+python src/cli.py network validate
 ```
 
 ### Show Current Configuration
 ```bash
-python src/cli_ai_network.py show
+python src/cli.py network show
 ```
 
-### Reset to Defaults
+### Additional CLI Commands
 ```bash
-python src/cli_ai_network.py reset --confirm
+# System status and health checks
+python src/cli.py system status
+
+# List available agents
+python src/cli.py agent list
+
+# Start interactive chat (default behavior)
+python src/cli.py chat
+python src/cli.py  # Same as above
+
+# Get help
+python src/cli.py --help
+python src/cli.py network --help
 ```
 
 ## Module Categories and Paths
@@ -152,8 +164,8 @@ ai_network:
 
 Or use the CLI:
 ```bash
-python src/cli_ai_network.py disable claude core_models
-python src/cli_ai_network.py enable claude core_models
+python src/cli.py network disable claude core_models
+python src/cli.py network enable claude core_models
 ```
 
 ## Advanced Features
@@ -241,18 +253,18 @@ enabled_modules = config.get_enabled_modules()
 ## Troubleshooting
 
 ### Module Not Loading
-1. Check if the module is enabled: `python src/cli_ai_network.py list`
-2. Validate configuration: `python src/cli_ai_network.py validate`
+1. Check if the module is enabled: `python src/cli.py network list`
+2. Validate configuration: `python src/cli.py network validate`
 3. Check module directory exists in the correct path
 4. Review application logs for specific error messages
 
 ### Configuration Errors
 ```bash
 # Validate your configuration
-python src/cli_ai_network.py validate
+python src/cli.py network validate
 
-# Reset to defaults if needed
-python src/cli_ai_network.py reset --confirm
+# Check system status
+python src/cli.py system status
 ```
 
 ### Performance Issues
