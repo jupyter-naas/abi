@@ -9,8 +9,8 @@ A Portion of Material that is disposed to steal electrons from other substances 
 oxygen, hydrogen peroxide, chlorine, sulfiric acid, potassium nitrate
 
 ### Aliases
-- Portion of Oxidant
 - Portion of Oxidizing Agent
+- Portion of Oxidant
 
 ### URI
 https://www.commoncoreontologies.org/ont00000897

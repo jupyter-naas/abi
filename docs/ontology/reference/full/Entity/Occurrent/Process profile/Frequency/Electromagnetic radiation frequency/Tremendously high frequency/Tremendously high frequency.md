@@ -10,8 +10,8 @@ Not defined.
 
 ### Aliases
 - ITU Band Number 12
-- Terahertz Radiation Frequency
 - Submillimeter Band Frequency
+- Terahertz Radiation Frequency
 
 ### URI
 https://www.commoncoreontologies.org/ont00000391

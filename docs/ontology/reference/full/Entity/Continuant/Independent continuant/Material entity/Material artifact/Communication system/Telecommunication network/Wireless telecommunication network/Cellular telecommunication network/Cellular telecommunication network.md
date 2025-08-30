@@ -9,8 +9,8 @@ A Wireless Telecommunication Network where the last link between the network and
 Not defined.
 
 ### Aliases
-- Cellular Network
 - Mobile Telecommunication Network
+- Cellular Network
 
 ### URI
 https://www.commoncoreontologies.org/ont00001095
