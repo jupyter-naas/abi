@@ -7,12 +7,12 @@ A Natural Process in which one or more Forces are generated and applied to a par
 
 ### Examples
 - an apple falling to the ground under the power of Earth's gravitational force
-- the wind blowing leaves across a lawn
-- launching a water balloon using a sling shot
-- heat from a fire causing ashes to rise into the sky
 - turning a paddle wheel against a portion of water to propel the paddle boat forward
-- burning a portion of fuel to produce exhaust that is ejected through a jet nozzle to propel a rocket and its payload
 - a twin-engine turboprop plane rotating both of its propellers against a portion of atmosphere to propel the plane forward
+- launching a water balloon using a sling shot
+- burning a portion of fuel to produce exhaust that is ejected through a jet nozzle to propel a rocket and its payload
+- heat from a fire causing ashes to rise into the sky
+- the wind blowing leaves across a lawn
 
 ### Aliases
 Not defined.

@@ -9,8 +9,8 @@ A Highway that is designed for high-speed vehicular traffic, with all traffic fl
 Not defined.
 
 ### Aliases
-- Expressway
 - Motorway
+- Expressway
 - Freeway
 
 ### URI

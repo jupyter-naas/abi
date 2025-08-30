@@ -6,8 +6,8 @@
 A Material Artifact that is designed to have some Information Bearing Artifact as part.
 
 ### Examples
-- A notebook
 - A magnetic hard drive
+- A notebook
 
 ### Aliases
 Not defined.

@@ -9,8 +9,8 @@ An Electromagnetic Wave Process that consists of a short high-energy burst of el
 Not defined.
 
 ### Aliases
-- Transient Electromagnetic Disturbance
 - EMP
+- Transient Electromagnetic Disturbance
 
 ### URI
 https://www.commoncoreontologies.org/ont00000812

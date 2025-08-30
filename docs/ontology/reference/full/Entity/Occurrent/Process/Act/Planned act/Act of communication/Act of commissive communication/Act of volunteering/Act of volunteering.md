@@ -6,8 +6,8 @@
 An Act of Commissive Communication performed by voluntarily undertaking or expressing a willingness to undertake a service.
 
 ### Examples
-- rendering a service voluntarily
 - entering into military service voluntarily
+- rendering a service voluntarily
 
 ### Aliases
 Not defined.
