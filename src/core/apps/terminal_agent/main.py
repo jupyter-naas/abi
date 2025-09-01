@@ -300,20 +300,20 @@ def run_agent(agent: Agent):
         # Local agents (privacy-focused)
         "qwen", "deepseek", "gemma"
     ]
-    # Map from mention names to actual agent names
-    agent_name_mapping = {
-        # Cloud agents
-        "gemini": "Gemini",
-        "claude": "Claude", 
-        "mistral": "Mistral",
-        "chatgpt": "ChatGPT",
-        "perplexity": "Perplexity",
-        "llama": "Llama",
-        # Local agents
-        "qwen": "Qwen",
-        "deepseek": "DeepSeek", 
-        "gemma": "Gemma"
-    }
+    # Get agent name mapping dynamically from config
+    def get_agent_name_mapping():
+        """Get agent name mapping dynamically from configuration"""
+        from src.utils.ConfigLoader import get_ai_network_config
+        config = get_ai_network_config()
+        mapping = {}
+        for agent_slug, agent_config in config.ai_network.items():
+            if isinstance(agent_config, dict):
+                # Map slug to display name (capitalize first letter of each word)
+                display_name = agent_slug.replace("_", " ").title()
+                mapping[agent_slug] = display_name
+        return mapping
+    
+    agent_name_mapping = get_agent_name_mapping()
     
     # Just start chatting naturally - like the screenshot
     while True:

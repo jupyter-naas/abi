@@ -86,31 +86,14 @@ You coordinate access to the following enabled agents:
 """
     
     # Generate agent descriptions dynamically from config
-    # Map config names to proper display names
-    name_mapping = {
-        "abi": "Abi",
-        "chatgpt": "ChatGPT", 
-        "claude": "Claude",
-        "deepseek": "DeepSeek",
-        "gemini": "Gemini",
-        "gemma": "Gemma",
-        "grok": "Grok",
-        "llama": "Llama",
-        "mistral": "Mistral",
-        "perplexity": "Perplexity",
-        "qwen": "Qwen"
-    }
-    
     for agent_name, metadata in enabled_agents.items():
-        category = metadata["category"]
         strengths = metadata["strengths"]
         use_when = metadata["use_when"]
         
-        # Use proper display name mapping
-        display_name = name_mapping.get(agent_name, agent_name.replace("_", " ").title())
+        # Use proper display name (capitalize first letter of each word)
+        display_name = agent_name.replace("_", " ").title()
         
         base_prompt += f"""## {display_name}
-- **Category**: {category.title()}
 - **Strengths**: {strengths}
 - **Use When**: {use_when}
 
@@ -253,50 +236,36 @@ You can browse the data and run queries there."""
         
         try:
             config_loader = get_ai_network_config()
-            enabled_modules = config_loader.get_enabled_modules()
             
             if agent_name:
-                # Check specific agent
+                # Check specific agent in flat ai_network structure
                 agent_name_lower = agent_name.lower()
-                for category, modules in enabled_modules.items():
-                    for module in modules:
-                        if module["name"].lower() == agent_name_lower:
-                            status = "enabled" if module["enabled"] else "disabled"
-                            return f"Agent '{agent_name}' is **{status}** in the AI Network configuration (category: {category})."
+                agent_config = config_loader.ai_network.get(agent_name_lower)
                 
-                # Check if agent exists in config but is disabled
-                all_config = config_loader.ai_network
-                for category, category_config in all_config.items():
-                    if category == "loading":
-                        continue
-                    modules = category_config.get("modules", [])
-                    for module in modules:
-                        if module["name"].lower() == agent_name_lower:
-                            status = "enabled" if module.get("enabled", False) else "disabled"
-                            return f"Agent '{agent_name}' is **{status}** in the AI Network configuration (category: {category})."
-                
-                return f"Agent '{agent_name}' not found in the AI Network configuration."
+                if agent_config:
+                    status = "enabled" if agent_config.get("enabled", False) else "disabled"
+                    return f"Agent '{agent_name}' is **{status}** in the AI Network configuration."
+                else:
+                    return f"Agent '{agent_name}' not found in the AI Network configuration."
             else:
-                # Show all agents status
+                # Show all agents status from flat structure
                 result = "**AI Network Configuration Status:**\n\n"
-                for category, modules in enabled_modules.items():
-                    if modules:
-                        result += f"**{category.title()} Agents:**\n"
-                        for module in modules:
-                            status = "🟢 enabled" if module["enabled"] else "🟠 disabled"
-                            result += f"- {module['name']}: {status}\n"
-                        result += "\n"
                 
-                # Also show disabled ones from full config
-                all_config = config_loader.ai_network
+                enabled_agents = []
                 disabled_agents = []
-                for category, category_config in all_config.items():
-                    if category == "loading":
-                        continue
-                    modules = category_config.get("modules", [])
-                    for module in modules:
-                        if not module.get("enabled", False):
-                            disabled_agents.append(f"{module['name']} ({category})")
+                
+                for agent_name, agent_config in config_loader.ai_network.items():
+                    if isinstance(agent_config, dict):  # Skip non-agent entries
+                        if agent_config.get("enabled", False):
+                            enabled_agents.append(agent_name)
+                        else:
+                            disabled_agents.append(agent_name)
+                
+                if enabled_agents:
+                    result += "**Enabled Agents:**\n"
+                    for agent in enabled_agents:
+                        result += f"- 🟢 {agent}\n"
+                    result += "\n"
                 
                 if disabled_agents:
                     result += "**Disabled Agents:**\n"
@@ -367,7 +336,7 @@ You can browse the data and run queries there."""
     _cache_built = False
     
     def build_agent_cache():
-        """Build a cache of all available agents for O(1) lookup"""
+        """Build a cache of all available agents for O(1) lookup using SLUG"""
         nonlocal _agent_cache, _cache_built
         if _cache_built:
             return
@@ -376,21 +345,44 @@ You can browse the data and run queries there."""
         try:
             for module in modules:
                 if module.module_path != "src.core.modules.abi":
+                    # Get the SLUG from the module path (e.g., "src/core/modules/claude" -> "claude")
+                    module_slug = module.module_path.split("/")[-1]
+                    logger.debug(f"🔍 Processing module: {module.module_path} -> SLUG: {module_slug}")
+                    
+                    # Find the main agent (not specialized ones like Knowledge_Graph_Builder)
+                    main_agent = None
                     for agent in module.agents:
-                        if agent is not None and hasattr(agent, 'name'):
-                            _agent_cache[agent.name] = agent
+                        if agent is not None:
+                            # Look for the main agent that matches the module name pattern
+                            agent_name = agent.name.lower().replace(" ", "").replace("_", "")
+                            if agent_name == module_slug or agent_name == module_slug.replace("gpt", ""):
+                                main_agent = agent
+                                break
+                    
+                    if main_agent:
+                        # Cache using SLUG, not NAME
+                        _agent_cache[module_slug] = main_agent
+                        logger.debug(f"🔗 Cached agent: {module_slug} -> {main_agent.name}")
+                    else:
+                        # Fallback: use first non-None agent
+                        for agent in module.agents:
+                            if agent is not None:
+                                _agent_cache[module_slug] = agent
+                                logger.debug(f"🔗 Cached agent (fallback): {module_slug} -> {agent.name}")
+                                break
+            
             _cache_built = True
-            logger.debug(f"🔍 Built agent cache with {len(_agent_cache)} agents")
+            logger.info(f"🔍 Built agent cache with {len(_agent_cache)} agents using SLUG: {list(_agent_cache.keys())}")
         except Exception as e:
             logger.warning(f"Error building agent cache: {e}")
     
-    def get_agent_by_name(name: str):
-        """Optimized agent lookup using cache for O(1) performance"""
+    def get_agent_by_slug(slug: str):
+        """Optimized agent lookup using SLUG for O(1) performance"""
         try:
             build_agent_cache()
-            return _agent_cache.get(name)
+            return _agent_cache.get(slug)
         except Exception as e:
-            logger.warning(f"Error getting agent '{name}': {e}")
+            logger.warning(f"Error getting agent '{slug}': {e}")
             return None
 
     # Get enabled agents from configuration
@@ -402,27 +394,34 @@ You can browse the data and run queries there."""
     agent_references = {}
     agents: list = []
     
-    # Name mapping from config names to actual agent names
-    name_mapping = {
-        "abi": "Abi",
-        "chatgpt": "ChatGPT", 
-        "claude": "Claude",
-        "deepseek": "DeepSeek",
-        "gemini": "Gemini",
-        "gemma": "Gemma",
-        "grok": "Grok",
-        "llama": "Llama",
-        "mistral": "Mistral",
-        "perplexity": "Perplexity",
-        "qwen": "Qwen"
-    }
+    # Build agent cache first
+    build_agent_cache()
     
-    for agent_name in enabled_agents_metadata.keys():
-        actual_agent_name = name_mapping.get(agent_name, agent_name.replace("_", " ").title())
-        agent = get_agent_by_name(actual_agent_name)
-        if agent is not None:
-            agent_references[agent_name] = agent
-            agents.append(agent)
+    # Load agents using SLUG (config keys directly) - no more name mapping needed!
+    logger.debug(f"🔍 Looking for agents with SLUGs: {list(enabled_agents_metadata.keys())}")
+    for agent_slug in enabled_agents_metadata.keys():
+        if agent_slug != "abi":  # Skip ABI itself
+            logger.debug(f"🔍 Looking up agent with SLUG: {agent_slug}")
+            agent = get_agent_by_slug(agent_slug)
+            if agent is not None:
+                agent_references[agent_slug] = agent
+                agents.append(agent)
+                logger.info(f"✅ Added agent reference: {agent_slug} -> {agent.name}")
+            else:
+                logger.warning(f"⚠️ Agent not found for SLUG: {agent_slug}")
+    
+    # Add transfer tools for ALL available agents (enabled + disabled)
+    # This ensures transfer tools work instantly when agents are enabled
+    for agent_slug, agent_config in config_loader.ai_network.items():
+        if isinstance(agent_config, dict) and agent_slug != "abi":  # Skip ABI itself
+            agent = get_agent_by_slug(agent_slug)
+            if agent is not None:
+                # Import the make_handoff_tool function
+                from abi.services.agent.Agent import make_handoff_tool
+                transfer_tool = make_handoff_tool(agent=agent)
+                tools.append(transfer_tool)
+                status = "🟢 enabled" if agent_config.get("enabled", False) else "🔴 disabled"
+                logger.info(f"✅ Added transfer tool: {transfer_tool.name} ({status})")
     
     # All agent references are now dynamically managed through agent_references dict
     # No need for individual variables since we use configuration-driven approach

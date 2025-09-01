@@ -68,33 +68,27 @@ class AINetworkConfig:
             return {}
     
     def get_enabled_modules(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Get all enabled modules organized by category in config file order"""
-        enabled_modules = {}
+        """Get all enabled modules organized by category - adapted for simplified structure"""
+        enabled_modules = {"core": []}
         
-        # Process categories in the order they appear in config
-        for category, category_config in self.ai_network.items():
-            if category == "loading":  # Skip loading settings
-                continue
-                
-            if not isinstance(category_config, dict):
-                continue
-                
-            if not category_config.get("enabled", False):
-                logger.info(f"📴 Category '{category}' is disabled")
-                enabled_modules[category] = []
-                continue
-                
-            modules = category_config.get("modules", [])
-            
-            # Filter enabled modules (maintain config file order)
-            enabled_in_category = [
-                module for module in modules 
-                if module.get("enabled", False)
-            ]
-            
-            enabled_modules[category] = enabled_in_category
-            
-            logger.info(f"✅ Enabled {len(enabled_in_category)} modules in '{category}' category")
+        # Convert the simplified ai_network structure to the expected format
+        for agent_name, agent_config in self.ai_network.items():
+            if isinstance(agent_config, dict) and agent_config.get("enabled", False):
+                # Convert agent config to module format expected by the loader
+                module_config = {
+                    "name": agent_name,
+                    "enabled": True,
+                    "description": agent_config.get("description", ""),
+                    "strengths": agent_config.get("strengths", ""),
+                    "use_when": agent_config.get("use_when", "")
+                }
+                enabled_modules["core"].append(module_config)
+        
+        logger.info(f"✅ Enabled {len(enabled_modules['core'])} modules in 'core' category")
+        
+        # Add empty categories to avoid warnings
+        enabled_modules["custom"] = []
+        enabled_modules["marketplace"] = []
         
         return enabled_modules
     
@@ -146,34 +140,25 @@ class AINetworkConfig:
         return None
     
     def get_enabled_agents_metadata(self) -> Dict[str, Dict[str, str]]:
-        """Get metadata for all enabled agents for dynamic system prompt generation"""
+        """Get metadata for all enabled agents for dynamic system prompt generation - adapted for simplified structure"""
         enabled_agents = {}
 
-        for category, config in self.ai_network.items():
-            if not config.get("enabled", False):
-                continue
-
-            modules = config.get("modules", [])
-            for module in modules:
-                if module.get("enabled", False):
-                    agent_name = module["name"]
-                    enabled_agents[agent_name] = {
-                        "category": category,
-                        "strengths": module.get("strengths", "General AI capabilities"),
-                        "use_when": module.get("use_when", "General assistance tasks")
-                    }
+        # Convert the simplified ai_network structure to the expected format
+        for agent_name, agent_config in self.ai_network.items():
+            if isinstance(agent_config, dict) and agent_config.get("enabled", False):
+                enabled_agents[agent_name] = {
+                    "category": "core",  # All agents are now in core category
+                    "strengths": agent_config.get("strengths", "General AI capabilities"),
+                    "use_when": agent_config.get("use_when", "General assistance tasks")
+                }
 
         return enabled_agents
     
     def get_intent_mapping(self) -> Dict[str, List[str]]:
-        """Get intent mapping configuration for ABI's orchestration"""
-        # Intent mapping is stored under the ABI module configuration
-        for category_name, category_config in self.ai_network.items():
-            if category_config.get("enabled", False):
-                modules = category_config.get("modules", [])
-                for module in modules:
-                    if module.get("name") == "abi" and module.get("enabled", False):
-                        return module.get("intent_mapping", {})
+        """Get intent mapping from ABI agent configuration"""
+        abi_config = self.ai_network.get("abi", {})
+        if abi_config.get("enabled", False):
+            return abi_config.get("intent_mapping", {})
         return {}
     
     def get_logging_config(self) -> Dict[str, Any]:

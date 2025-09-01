@@ -37,317 +37,228 @@ logging:
   file_path: "storage/datastore/utils/logs/{timestamp}_abi_logs.txt"  # {timestamp} = YYYYMMDDTHHMMSS
 
 ai_network:
-  core:
+  abi:
     enabled: true
-    modules:
-    - name: abi
-      enabled: true
-      strengths: Multi-agent orchestration, strategic advisory, conversation flow management
-      use_when: Identity questions, strategic consulting, meta-system questions, agent coordination
-      intent_mapping:
-        abi:
-          - "call supervisor"
-          - "talk to abi"
-          - "back to abi"
-          - "supervisor"
-          - "return to supervisor"
-          - "ask abi"
-          - "use abi"
-          - "switch to abi"
-          - "parler à abi"
-          - "retour à abi"
-          - "superviseur"
-          - "demander à abi"
-          - "can i talk back to abi"
-          - "go back to abi"
-          - "return to abi"
-          - "back to supervisor"
-        chatgpt:
-          - "use chatgpt"
-          - "switch to chatgpt"
-          - "openai"
-          - "gpt"
-          - "chatgpt 4"
-          - "gpt-4"
-          - "use openai"
-          - "switch to openai"
-          - "ask chatgpt"
-          - "web search"
-          - "search the web"
-          - "current events"
-          - "latest news"
-          - "real-time information"
-        gemini:
-          - "use gemini"
-          - "switch to gemini"
-          - "google ai"
-          - "google gemini"
-          - "gemini 2.0"
-          - "gemini flash"
-          - "use google ai"
-          - "switch to google"
-          - "ask gemini"
-          - "use google gemini"
-          - "multimodal analysis"
-          - "analyze image"
-          - "image understanding"
-          - "video analysis"
-          - "audio analysis"
-          - "generate image"
-          - "create image"
-          - "generate an image"
-          - "create a picture"
-          - "make an image"
-          - "draw"
-          - "illustrate"
-          - "picture of"
-          - "image of"
-          - "visual representation"
-        grok:
-          - "use grok"
-          - "switch to grok"
-          - "talk to grok"
-          - "can we talk to grok"
-          - "ask grok"
-          - "grok"
-          - "xai"
-          - "grok 4"
-          - "maximum intelligence"
-          - "highest intelligence"
-          - "use xai"
-          - "switch to xai"
-          - "truth seeking"
-          - "contrarian analysis"
-          - "scientific reasoning"
-        claude:
-          - "use claude"
-          - "switch to claude"
-          - "anthropic"
-          - "claude sonnet"
-          - "claude haiku"
-          - "claude opus"
-          - "detailed analysis"
-          - "complex reasoning"
-          - "critical thinking"
-          - "nuanced reasoning"
-          - "deep analysis"
-        deepseek:
-          - "complex reasoning"
-          - "deep reasoning"
-          - "logical analysis"
-          - "step by step"
-          - "chain of thought"
-          - "mathematics"
-          - "solve equation"
-          - "mathematical proof"
-          - "calculus help"
-          - "statistics analysis"
-          - "scientific analysis"
-          - "research methodology"
-          - "hypothesis testing"
-          - "experimental design"
-          - "use deepseek"
-          - "switch to deepseek"
-          - "deepseek reasoning"
-          - "local reasoning"
-          - "solve problem"
-          - "logical puzzle"
-          - "complex problem"
-          - "research question"
-        gemma:
-          - "quick question"
-          - "fast response"
-          - "lightweight ai"
-          - "efficient ai"
-          - "private chat"
-          - "local conversation"
-          - "offline chat"
-          - "personal assistant"
-          - "local gemini"
-          - "offline gemini"
-          - "private gemini"
-          - "open source gemini"
-          - "use gemma"
-          - "switch to gemma"
-          - "gemma chat"
-          - "gemma help"
-          - "writing help"
-          - "quick editing"
-          - "general question"
-          - "everyday task"
-        llama:
-          - "use llama"
-          - "switch to llama"
-          - "llama chat"
-          - "meta llama"
-          - "local llama"
-          - "offline llama"
-          - "private llama"
-          - "instruction following"
-          - "conversational dialogue"
-          - "general assistance"
-          - "clear instructions"
-          - "natural conversation"
-        mistral:
-          - "use mistral"
-          - "switch to mistral"
-          - "mistral ai"
-          - "code generation"
-          - "debugging"
-          - "mathematical computations"
-          - "programming tasks"
-          - "technical documentation"
-          - "code help"
-          - "debug code"
-          - "math problems"
-        perplexity:
-          - "use perplexity"
-          - "switch to perplexity"
-          - "perplexity ai"
-          - "real-time web search"
-          - "research synthesis"
-          - "up-to-date information"
-          - "latest information"
-          - "research compilation"
-          - "fact verification"
-          - "current research"
-          - "web research"
-          - "search web"
-          - "latest news"
-          - "recent information"
-        qwen:
-          - "code with qwen"
-          - "qwen code"
-          - "local coding"
-          - "private code help"
-          - "private ai"
-          - "local ai"
-          - "offline ai"
-          - "use qwen"
-          - "switch to qwen"
-          - "qwen chinese"
-          - "qwen 中文"
-          - "multilingual help"
-          - "qwen reasoning"
-          - "local reasoning"
-          - "private analysis"
-    - name: chatgpt
-      enabled: true
-      strengths: Real-time web search, current events, comprehensive analysis
-      use_when: Real-time information, web research, general intelligence tasks
-    - name: claude
-      enabled: false
-      strengths: Complex reasoning, critical thinking, detailed analysis
-      use_when: Deep analysis, nuanced reasoning, complex problem-solving
-    - name: deepseek
-      enabled: false
-      strengths: Advanced reasoning, mathematical computations, code analysis
-      use_when: Complex mathematical problems, advanced reasoning tasks
-    - name: gemini
-      enabled: true
-      strengths: Multimodal understanding, image generation/analysis, creative writing
-      use_when: Visual tasks, creative projects, multimodal analysis
-    - name: gemma
-      enabled: false
-      strengths: Lightweight reasoning, efficient processing, general assistance
-      use_when: Quick queries, lightweight tasks, resource-constrained environments
-    - name: grok
-      enabled: false
-      strengths: Unfiltered analysis, current events, truth-seeking with evidence
-      use_when: Controversial topics, truth verification, current affairs analysis
-    - name: llama
-      enabled: false
-      strengths: Instruction-following, conversational dialogue, general assistance
-      use_when: Clear instruction execution, natural conversation flow
-    - name: mistral
-      enabled: false
-      strengths: Code generation, debugging, mathematical computations
-      use_when: Programming tasks, mathematical problems, technical documentation
-    - name: perplexity
-      enabled: false
-      strengths: Real-time web search, research synthesis, up-to-date information
-      use_when: Latest information, research compilation, fact verification
-    - name: qwen
-      enabled: false
-      strengths: Multilingual processing, reasoning, general intelligence
-      use_when: Multilingual tasks, cross-cultural communication, diverse reasoning
-  custom:
-    auto_discover: true
-    enabled: true
-    modules: []
+    description: "Multi-agent orchestrator and strategic advisor"
+    strengths: "Multi-agent orchestration, strategic advisory, conversation flow management"
+    use_when: "Identity questions, strategic consulting, meta-system questions, agent coordination"
+    intent_mapping:
+      abi:
+        - "call supervisor"
+        - "talk to abi"
+        - "back to abi"
+        - "supervisor"
+        - "return to supervisor"
+        - "ask abi"
+        - "use abi"
+        - "switch to abi"
+        - "parler à abi"
+        - "retour à abi"
+        - "superviseur"
+        - "demander à abi"
+        - "can i talk back to abi"
+        - "go back to abi"
+        - "return to abi"
+        - "back to supervisor"
+        - "who are you"
+        - "what is abi"
+        - "who made you"
+        - "identity questions"
+        - "strategic consulting"
+        - "meta-system questions"
+      chatgpt:
+        - "ask openai"
+        - "ask chatgpt"
+        - "use openai"
+        - "use chatgpt"
+        - "switch to openai"
+        - "switch to chatgpt"
+        - "openai gpt"
+        - "gpt-4o"
+        - "gpt4"
+        - "web search"
+        - "search the internet"
+        - "online search"
+        - "real-time search"
+        - "current information"
+        - "latest updates"
+        - "search the web"
+        - "current events"
+        - "latest news"
+        - "real-time information"
+      gemini:
+        - "use gemini"
+        - "switch to gemini"
+        - "google ai"
+        - "google gemini"
+        - "gemini 2.0"
+        - "gemini flash"
+        - "use google ai"
+        - "switch to google"
+        - "ask gemini"
+        - "use google gemini"
+        - "multimodal analysis"
+        - "analyze image"
+        - "image understanding"
+        - "video analysis"
+        - "audio analysis"
+        - "generate image"
+        - "create image"
+        - "generate an image"
+        - "create a picture"
+        - "make an image"
+        - "draw"
+        - "illustrate"
+        - "picture of"
+        - "image of"
+        - "visual representation"
+        - "let's use google"
+        - "try google ai"
+        - "google's model"
+        - "google's ai"
+        - "use bard"
+        - "switch to bard"
+        - "generate an image of"
+        - "create an image of"
+        - "make a picture of"
+        - "show me"
+        - "visualization"
+      grok:
+        - "use grok"
+        - "switch to grok"
+        - "xai"
+        - "grok 4"
+        - "maximum intelligence"
+        - "highest intelligence"
+        - "use xai"
+        - "switch to xai"
+        - "ask grok"
+        - "truth seeking"
+        - "contrarian analysis"
+        - "scientific reasoning"
+      claude:
+        - "ask claude"
+        - "use claude"
+        - "switch to claude"
+        - "claude 3.5"
+        - "anthropic"
+        - "anthropic claude"
+        - "claude sonnet"
+      mistral:
+        - "ask mistral"
+        - "use mistral"
+        - "switch to mistral"
+        - "mistral ai"
+        - "mistral large"
+        - "french ai"
+      perplexity:
+        - "ask perplexity"
+        - "use perplexity"
+        - "switch to perplexity"
+        - "perplexity ai"
+        - "research"
+        - "fact check"
+        - "search web"
+        - "latest information"
+        - "current events"
+        - "web research"
+        - "search internet"
+        - "search online"
+      llama:
+        - "ask llama"
+        - "use llama"
+        - "switch to llama"
+        - "llama 3.3"
+        - "meta ai"
+        - "meta llama"
+        - "local ai"
+        - "private reasoning"
+        - "private code"
+      qwen:
+        - "ask qwen"
+        - "use qwen"
+        - "switch to qwen"
+        - "qwen code"
+      deepseek:
+        - "ask deepseek"
+        - "use deepseek"
+        - "switch to deepseek"
+        - "complex reasoning"
+        - "logical analysis"
+        - "step by step"
+        - "mathematical proof"
+      gemma:
+        - "ask gemma"
+        - "use gemma"
+        - "switch to gemma"
+        - "quick question"
+        - "fast response"
+        - "lightweight ai"
+        - "local gemini"
+        - "private chat"
+        - "offline ai"
+        - "private ai"
 
-  marketplace:
+
+  chatgpt:
     enabled: true
-    modules:
-    - name: software-engineer
-      enabled: false
-    - name: data-engineer
-      enabled: false
-    - name: devops-engineer
-      enabled: false
-    - name: project-manager
-      enabled: false
-    - name: content-strategist
-      enabled: false
-    - name: content-creator
-      enabled: false
-    - name: content-analyst
-      enabled: false
-    - name: campaign-manager
-      enabled: false
-    - name: community-manager
-      enabled: false
-    - name: account-executive
-      enabled: false
-    - name: sales-development-representative
-      enabled: false
-    - name: inside-sales representative
-      enabled: false
-    - name: business-development-representative
-      enabled: false
-    - name: customer-success-manager
-      enabled: false
-    - name: accountant
-      enabled: false
-    - name: financial-controller
-      enabled: false
-    - name: treasurer
-      enabled: false
-    - name: human-resources-manager
-      enabled: false
-    - name: osint-researcher
-      enabled: false
-    - name: private-investigator
-      enabled: false
-    - name: github
-      enabled: false
-    - name: git
-      enabled: false
-    - name: naas
-      enabled: false
-    - name: support
-      enabled: false
-    - name: arxiv
-      enabled: false
-    - name: gladia
-      enabled: false
-    - name: powerpoint
-      enabled: false
-    - name: algolia
-      enabled: false
-    - name: aws
-      enabled: false
-    - name: azure
-      enabled: false
-    - name: google
-      enabled: false
-    - name: microsoft
-      enabled: false
-  loading:
-    fail_on_error: true
-    parallel_loading: false
-    retry_attempts: 3
-    timeout_seconds: 30
+    description: "OpenAI's ChatGPT for general conversation and tasks"
+    strengths: "General conversation, creative writing, problem solving, coding assistance"
+    use_when: "General questions, creative tasks, coding help, explanations"
+
+  gemini:
+    enabled: true
+    description: "Google's Gemini for advanced reasoning and multimodal tasks"
+    strengths: "Advanced reasoning, multimodal understanding, code analysis, research"
+    use_when: "Complex analysis, multimodal content, advanced reasoning tasks"
+
+  claude:
+    enabled: true
+    description: "Anthropic's Claude for thoughtful analysis and writing"
+    strengths: "Thoughtful analysis, ethical reasoning, long-form writing"
+    use_when: "Ethical questions, detailed analysis, thoughtful responses"
+
+  mistral:
+    enabled: true
+    description: "Mistral AI for efficient and focused responses"
+    strengths: "Efficient processing, focused responses, multilingual support"
+    use_when: "Quick responses, multilingual tasks, efficient processing"
+
+  perplexity:
+    enabled: true
+    description: "Perplexity for research and fact-checking"
+    strengths: "Research, fact-checking, current information, citations"
+    use_when: "Research tasks, fact verification, current events"
+
+  grok:
+    enabled: true
+    description: "xAI's Grok for truth-seeking and unfiltered analysis"
+    strengths: "Truth-seeking, unfiltered analysis, current events, controversial topics"
+    use_when: "Truth verification, controversial topics, unbiased analysis, current affairs"
+
+  llama:
+    enabled: false
+    description: "Meta's Llama for local and private AI tasks"
+    strengths: "Local processing, privacy-focused, instruction following, conversational dialogue"
+    use_when: "Private tasks, local processing, instruction following"
+
+  qwen:
+    enabled: false
+    description: "Alibaba's Qwen for code generation and analysis"
+    strengths: "Code generation, code analysis, programming assistance, multilingual support"
+    use_when: "Code generation, programming tasks, code analysis, multilingual tasks"
+
+  deepseek:
+    enabled: false
+    description: "DeepSeek for complex reasoning and mathematical analysis"
+    strengths: "Complex reasoning, logical analysis, mathematical proofs, step-by-step thinking"
+    use_when: "Complex reasoning tasks, mathematical problems, logical analysis"
+
+  gemma:
+    enabled: false
+    description: "Google's Gemma for lightweight AI tasks"
+    strengths: "Lightweight processing, efficient responses, Google ecosystem"
+    use_when: "Lightweight tasks, efficient processing, Google integration"
   
 pipelines:
 - cron: 0 0 * * *
