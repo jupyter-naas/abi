@@ -273,40 +273,58 @@ The ABI agent contains centralized intent mapping with three types:
 
 ### Start Your First Agent
 
-Once configured, start chatting with the core ABI agent:
+Once configured, start ABI:
 
 ```bash
-make chat-abi-agent
+make
 ```
 
-This command will:
-1. Set up the environment and install Python dependencies
-2. Start Docker services (Oxigraph triple store, PostgreSQL, Dagster)
-3. Initialize the knowledge graph with base ontologies
-4. Launch the interactive agent in your terminal
-
-The first run may take a few minutes as it downloads and starts the Docker containers.
-
-### Expected Output
-
-You should see something like:
+Here's what happens in your terminal:
 
 ```
+$ make
+
+  _____ _____ _____ _____
+ |     |     |     |     |
+ |  C  |  O  |  R  |  E  |
+ |_____|_____|_____|_____|
+
+🔍 Running code quality checks...
+
+📝 Linting with ruff...
+All checks passed!
+
+🔍 Running static type analysis...
+Success: no issues found in 173 source files
+
+✅ CORE security checks passed!
+
 🚀 Starting ABI Agent...
-🐳 Starting Oxigraph triple store...
+🐳 Starting Docker services...
+   - Oxigraph triple store (port 7878)
+   - PostgreSQL database (port 5432)
+   - Dagster orchestration (port 3000)
+
 🧠 Initializing knowledge graph...
+📊 Loading 7 AI agents: abi, chatgpt, gemini, claude, mistral, perplexity, grok
+
 💬 ABI Agent ready! Type your message below:
 
-ABI Agent: Hello! I'm your ABI agent. I can help you with:
-- Building custom AI agents
-- Managing ontologies and knowledge graphs  
-- Creating integrations with external services
-- Developing workflows and pipelines
+ABI: Hello! I'm your ABI agent. I can help you with building custom AI agents, 
+managing knowledge graphs, and orchestrating multi-agent workflows.
 
 What would you like to work on today?
 
+You: use claude for analysis
+ABI: Transferring to Claude for detailed analysis...
+
+Claude: I'm Claude, ready to help with thoughtful analysis and writing tasks. 
+What would you like me to analyze?
+
 You: 
 ```
+
+The first run takes a few minutes to download Docker containers and initialize services.
 
 ## Verification
 
