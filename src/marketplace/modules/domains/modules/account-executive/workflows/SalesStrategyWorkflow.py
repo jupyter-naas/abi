@@ -3,9 +3,15 @@
 Strategic sales planning and execution workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class SalesStrategyWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for SalesStrategyWorkflow"""
+    pass
 
 class SalesStrategyWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class SalesStrategyWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[SalesStrategyWorkflowConfiguration] = None):
         """Initialize SalesStrategyWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or SalesStrategyWorkflowConfiguration())
         logger.warning("🚧 SalesStrategyWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

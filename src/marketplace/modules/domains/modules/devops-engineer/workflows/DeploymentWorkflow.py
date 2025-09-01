@@ -3,9 +3,15 @@
 Application deployment and rollback workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class DeploymentWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for DeploymentWorkflow"""
+    pass
 
 class DeploymentWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class DeploymentWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[DeploymentWorkflowConfiguration] = None):
         """Initialize DeploymentWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or DeploymentWorkflowConfiguration())
         logger.warning("🚧 DeploymentWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

@@ -3,9 +3,15 @@
 Investigation planning and case setup workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class InvestigationPlanningWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for InvestigationPlanningWorkflow"""
+    pass
 
 class InvestigationPlanningWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class InvestigationPlanningWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[InvestigationPlanningWorkflowConfiguration] = None):
         """Initialize InvestigationPlanningWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or InvestigationPlanningWorkflowConfiguration())
         logger.warning("🚧 InvestigationPlanningWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

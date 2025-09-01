@@ -3,9 +3,15 @@
 Multi-channel lead generation and sourcing workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class LeadGenerationWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for LeadGenerationWorkflow"""
+    pass
 
 class LeadGenerationWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class LeadGenerationWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[LeadGenerationWorkflowConfiguration] = None):
         """Initialize LeadGenerationWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or LeadGenerationWorkflowConfiguration())
         logger.warning("🚧 LeadGenerationWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

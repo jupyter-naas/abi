@@ -218,7 +218,8 @@ else:
 
 # Pagination
 if page_size != "All":
-    page_size_int = int(page_size)
+    assert isinstance(page_size, int), "page_size should be an int when not 'All'"
+    page_size_int = page_size
     total_pages = len(display_df) // page_size_int + (1 if len(display_df) % page_size_int > 0 else 0)
     
     col1, col2, col3 = st.columns([1, 2, 1])

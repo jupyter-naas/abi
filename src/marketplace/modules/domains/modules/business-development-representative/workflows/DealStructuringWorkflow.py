@@ -3,9 +3,15 @@
 Business deal structuring and negotiation workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class DealStructuringWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for DealStructuringWorkflow"""
+    pass
 
 class DealStructuringWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class DealStructuringWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[DealStructuringWorkflowConfiguration] = None):
         """Initialize DealStructuringWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or DealStructuringWorkflowConfiguration())
         logger.warning("🚧 DealStructuringWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

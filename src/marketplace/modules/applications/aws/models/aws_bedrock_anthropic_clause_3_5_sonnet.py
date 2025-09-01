@@ -1,6 +1,5 @@
 from lib.abi.models.Model import ChatModel
-
-from langchain_aws import ChatBedrockConverse
+from langchain_aws import ChatBedrockConverse  # type: ignore
 
 
 model = ChatModel(

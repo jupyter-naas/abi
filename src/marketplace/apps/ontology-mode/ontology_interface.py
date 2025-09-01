@@ -7,8 +7,8 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 from rdflib import Graph, URIRef, Literal, BNode
-import networkx as nx
-from pyvis.network import Network
+import networkx as nx  # type: ignore
+from pyvis.network import Network  # type: ignore
 import tempfile
 import os
 from collections import defaultdict
@@ -323,11 +323,14 @@ if st.session_state.selected_files:
                     )
                     
                     # Save to temporary file
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-                        net.save_graph(f.name)
-                        with open(f.name, 'r') as html_file:
-                            st.session_state.graph_html = html_file.read()
-                        os.unlink(f.name)
+                    temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False)
+                    temp_file_path = temp_file.name
+                    temp_file.close()
+                    
+                    net.save_graph(temp_file_path)
+                    with open(temp_file_path, 'r') as html_file:
+                        st.session_state.graph_html = html_file.read()
+                    os.unlink(temp_file_path)
                     
                     st.success(f"✅ Generated graph with {node_count} nodes and {edge_count} edges")
                     

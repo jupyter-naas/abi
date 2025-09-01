@@ -15,7 +15,7 @@ model = ChatModel(
     image="",
     owner="openai",
     model=AzureChatOpenAI(
-        deployment_name="o4-mini",
+        azure_deployment="o4-mini",
         api_version="2024-08-01-preview",
         azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
     ),

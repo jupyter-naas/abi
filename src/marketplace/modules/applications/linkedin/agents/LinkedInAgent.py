@@ -41,7 +41,7 @@ def create_agent(
     
     # Set model
     if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id=0)
+        agent_shared_state = AgentSharedState(thread_id="0")
     
     return LinkedInAgent(
         name=NAME,

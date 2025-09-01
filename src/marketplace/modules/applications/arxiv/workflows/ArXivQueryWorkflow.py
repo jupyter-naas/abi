@@ -2,12 +2,14 @@ from abi.workflow import Workflow, WorkflowConfiguration
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
+from enum import Enum
 from fastapi import APIRouter
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 import os
 import glob
 from rdflib import Graph
 from abi.utils.Graph import ABIGraph
+from rdflib.query import ResultRow
 
 
 @dataclass
@@ -152,18 +154,22 @@ class ArXivQueryWorkflow(Workflow):
 
         results = graph.query(query)
 
-        papers = {}
+        papers: Dict[str, Dict[str, Any]] = {}
         for row in results:
-            paper_uri = str(row.paper)
-            paper_id = paper_uri.split("/")[-1]
-            paper_title = str(row.paperTitle)
-            author_name = str(row.authorName)
+            # Type assertion for SPARQL result row
+            if (isinstance(row, ResultRow) and 
+                hasattr(row, 'paper') and hasattr(row, 'paperTitle') and hasattr(row, 'authorName')):
+                paper_uri = str(row.paper)
+                paper_id = paper_uri.split("/")[-1]
+                paper_title = str(row.paperTitle)
+                author_name = str(row.authorName)
+                
+                if paper_id not in papers:
+                    papers[paper_id] = {"id": paper_id, "title": paper_title, "authors": []}
 
-            if paper_id not in papers:
-                papers[paper_id] = {"id": paper_id, "title": paper_title, "authors": []}
-
-            if author_name not in papers[paper_id]["authors"]:
-                papers[paper_id]["authors"].append(author_name)
+                authors_list: list[str] = papers[paper_id]["authors"]
+                if author_name not in authors_list:
+                    authors_list.append(author_name)
 
         return {"papers": list(papers.values())}
 
@@ -214,23 +220,26 @@ class ArXivQueryWorkflow(Workflow):
 
         papers = []
         for row in results:
-            paper_uri = str(row.paper)
-            paper_id = paper_uri.split("/")[-1]
-            paper_title = str(row.paperTitle)
-            pdf_url = str(row.pdfUrl) if row.pdfUrl else None
+            # Type assertion for SPARQL result row
+            if (isinstance(row, ResultRow) and 
+                hasattr(row, 'paper') and hasattr(row, 'paperTitle') and hasattr(row, 'pdfUrl')):
+                paper_uri = str(row.paper)
+                paper_id = paper_uri.split("/")[-1]
+                paper_title = str(row.paperTitle)
+                pdf_url = str(row.pdfUrl) if row.pdfUrl else None
 
-            papers.append({"id": paper_id, "title": paper_title, "pdf_url": pdf_url})
+                papers.append({"id": paper_id, "title": paper_title, "pdf_url": pdf_url})
 
         return {"papers": papers}
 
-    def get_schema(self, parameters: SchemaParameters) -> str:
+    def get_schema(self, parameters: SchemaParameters) -> Dict[str, str]:
         """Gets the ArXiv ontology schema.
 
         Args:
             parameters: Schema parameters (unused)
 
         Returns:
-            str: The ArXiv ontology schema in turtle format
+            Dict[str, str]: The ArXiv ontology schema in turtle format or error message
         """
         ontology_path = "src/custom/modules/arxiv_agent/ontologies/ArXivOntology.ttl"
 
@@ -258,9 +267,10 @@ class ArXivQueryWorkflow(Workflow):
             result_list = []
             for row in results:
                 row_dict = {}
-                for var in results.vars:
-                    if getattr(row, var) is not None:
-                        row_dict[var] = str(getattr(row, var))
+                if isinstance(row, ResultRow) and results.vars:  # Check if vars is not None
+                    for var in results.vars:
+                        if getattr(row, var) is not None:
+                            row_dict[var] = str(getattr(row, var))
                 result_list.append(row_dict)
 
             return {"results": result_list}
@@ -295,15 +305,18 @@ class ArXivQueryWorkflow(Workflow):
 
             authors = []
             for row in results:
-                authors.append(
-                    {"name": str(row.authorName), "paper_count": int(row.paperCount)}
-                )
+                # Type assertion for SPARQL result row
+                if (isinstance(row, ResultRow) and 
+                    hasattr(row, 'authorName') and hasattr(row, 'paperCount')):
+                    authors.append(
+                        {"name": str(row.authorName), "paper_count": int(row.paperCount)}
+                    )
 
             return {"authors": authors}
         except Exception as e:
             return {"error": f"Query execution failed: {str(e)}"}
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         """Returns a list of LangChain tools for this workflow.
 
         Returns:
@@ -314,7 +327,7 @@ class ArXivQueryWorkflow(Workflow):
                 name="query_arxiv_authors",
                 description="Find the authors of a paper by paper ID or title",
                 func=lambda **kwargs: self.query_authors(
-                    AuthorQueryParameters(**kwargs)
+                    AuthorQueryParameters(**kwargs)  # type: ignore
                 ),
                 args_schema=AuthorQueryParameters,
             ),
@@ -342,15 +355,28 @@ class ArXivQueryWorkflow(Workflow):
                 name="get_frequent_authors",
                 description="Find which authors appear most frequently in your saved papers",
                 func=lambda **kwargs: self.get_frequent_authors(),
-                args_schema=None,
+                args_schema=BaseModel,
             ),
         ]
 
-    def as_api(self, router: APIRouter) -> None:
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
         """Adds API endpoints for this workflow to the given router.
 
         Args:
             router (APIRouter): FastAPI router to add endpoints to
+            route_name (str): Name for the route
+            name (str): Name for the API
+            description (str): Description for the API
+            description_stream (str): Description for streaming
+            tags (list[str]): Tags for the API
         """
 
         @router.post("/arxiv/query-authors")
@@ -375,5 +401,5 @@ if __name__ == "__main__":
     workflow = ArXivQueryWorkflow(ArXivQueryWorkflowConfiguration())
 
     # Example: Find authors of a paper by title
-    test_result = workflow.query_authors(AuthorQueryParameters(paper_title="scaling"))
+    test_result = workflow.query_authors(AuthorQueryParameters(paper_title="scaling", paper_id="2206.11097"))
     print("Authors query result:", test_result)
