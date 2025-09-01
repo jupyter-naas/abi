@@ -28,6 +28,14 @@ config:
   triple_store_path: storage/triplestore
   workspace_id: 96ce7ee7-e5f5-4bca-acf9-9d5d41317f81
 
+# Logging Configuration
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+  console_output: true
+  file_output: false
+  file_path: "storage/logs/abi.log"
+
 ai_network:
   core:
     enabled: true
@@ -340,11 +348,11 @@ ai_network:
     parallel_loading: false
     retry_attempts: 3
     timeout_seconds: 30
-
+  
 pipelines:
 - cron: 0 0 * * *
   name: github.GithubIssuesPipeline
   parameters:
-  - github_repository: https://github.com/jupyter-naas/abi
-  - github_repository: https://github.com/jupyter-naas/docs
-  - github_repository: https://github.com/jupyter-naas/naaspython
+    - github_repository: https://github.com/jupyter-naas/abi
+    - github_repository: https://github.com/jupyter-naas/docs
+    - github_repository: https://github.com/jupyter-naas/naaspython
