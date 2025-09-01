@@ -90,7 +90,7 @@ check-core: deps
 	@.venv/bin/mypy -p src.core --follow-untyped-imports --exclude "src/core/.*/sandbox/.*"
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check lib src tests
+	@#uv run pyrefly check lib src/core
 
 	@echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
 	@echo "⚠️ Skipping bandit... (disabled)"
@@ -131,7 +131,7 @@ check-marketplace: deps
 	@.venv/bin/mypy -p src.marketplace --follow-untyped-imports --exclude "src/marketplace/.*/sandbox/.*"
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
-	@#uv run pyrefly check src/marketplace/modules
+	@#uv run pyrefly check src/marketplace
 
 	@echo "\n✅ MARKETPLACE security checks passed!"
 
