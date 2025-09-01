@@ -260,9 +260,7 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (uses config.yaml log level)"
-	@echo "  console                  Start ABI with minimal logging (LOG_LEVEL=ERROR)"
-	@echo "  debug                    Start ABI with verbose logging (LOG_LEVEL=DEBUG)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
 	@echo ""
@@ -321,7 +319,7 @@ build.linux.x86_64: deps
 # -------------------------------------------------------------------------------------------------
 
 chat-abi-agent: deps
-	@ $(shell uv run python scripts/get_log_level.py 2>/dev/null || echo "LOG_LEVEL=INFO") uv run python -m src.cli
+	@ uv run python -m src.cli
 
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
@@ -344,13 +342,7 @@ chat-gemma-agent: deps
 
 default: deps help
 
-# Console mode with minimal logging (can override config)
-console: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli
 
-# Debug mode with verbose logging (overrides config)
-debug: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli
 
 .DEFAULT_GOAL := chat-abi-agent
 
