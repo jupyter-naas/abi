@@ -76,13 +76,28 @@ You coordinate access to the following enabled agents:
 """
     
     # Generate agent descriptions dynamically from config
+    # Map config names to proper display names
+    name_mapping = {
+        "abi": "Abi",
+        "chatgpt": "ChatGPT", 
+        "claude": "Claude",
+        "deepseek": "DeepSeek",
+        "gemini": "Gemini",
+        "gemma": "Gemma",
+        "grok": "Grok",
+        "llama": "Llama",
+        "mistral": "Mistral",
+        "perplexity": "Perplexity",
+        "qwen": "Qwen"
+    }
+    
     for agent_name, metadata in enabled_agents.items():
         category = metadata["category"]
         strengths = metadata["strengths"]
         use_when = metadata["use_when"]
         
-        # Format agent name for display
-        display_name = agent_name.replace("_", " ").title()
+        # Use proper display name mapping
+        display_name = name_mapping.get(agent_name, agent_name.replace("_", " ").title())
         
         base_prompt += f"""## {display_name}
 - **Category**: {category.title()}
