@@ -15,11 +15,44 @@ from abi import logger
 class AINetworkConfig:
     """Configuration class for AI Network module management"""
     
+    # Class-level cache for configuration data
+    _config_cache = {}
+    _cache_timestamp = {}
+    
     def __init__(self, config_path: str = "config.yaml"):
         self.config_path = config_path
-        self.config = self._load_config()
+        self.config = self._load_config_cached()
         self.ai_network = self.config.get("ai_network", {})
         
+    def _load_config_cached(self) -> Dict[str, Any]:
+        """Load configuration from YAML file with caching and file modification check"""
+        import os
+        import time
+        
+        try:
+            # Get file modification time
+            file_mtime = os.path.getmtime(self.config_path)
+            
+            # Check if we have cached data and if file hasn't been modified
+            if (self.config_path in self._config_cache and 
+                self.config_path in self._cache_timestamp and
+                self._cache_timestamp[self.config_path] >= file_mtime):
+                logger.debug(f"📋 Using cached configuration from {self.config_path}")
+                return self._config_cache[self.config_path]
+            
+            # Load fresh configuration
+            config = self._load_config()
+            
+            # Cache the configuration and timestamp
+            self._config_cache[self.config_path] = config
+            self._cache_timestamp[self.config_path] = time.time()
+            
+            return config
+            
+        except Exception as e:
+            logger.error(f"❌ Error in cached config loading: {e}")
+            return self._load_config()
+    
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from YAML file"""
         try:

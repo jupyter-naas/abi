@@ -7,7 +7,7 @@ from abi.services.agent.IntentAgent import (
     
 )
 from fastapi import APIRouter
-from typing import Optional
+from typing import Optional, Dict, Any
 from enum import Enum
 from abi import logger
 
@@ -35,10 +35,20 @@ SUGGESTIONS: list = [
 ]
 
 def generate_dynamic_system_prompt() -> str:
-    """Generate system prompt dynamically from config.yaml"""
+    """Generate system prompt dynamically from config.yaml with caching"""
     from src.utils.ConfigLoader import get_ai_network_config
     
     config = get_ai_network_config()
+    
+    # Check if we can use cached system prompt
+    cache_attr = '_cache'
+    if hasattr(generate_dynamic_system_prompt, cache_attr):
+        cached_data = getattr(generate_dynamic_system_prompt, cache_attr)
+        config_timestamp = config._cache_timestamp.get(config.config_path, 0)
+        if isinstance(cached_data, dict) and cached_data.get('config_timestamp') == config_timestamp:
+            logger.debug("📋 Using cached system prompt")
+            return cached_data['prompt']
+    
     enabled_agents = config.get_enabled_agents_metadata()
     
     # Base system prompt
@@ -171,6 +181,19 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **CANNOT pretend to be disabled agents** - when users request unavailable agents, check configuration and inform them about the status
 """
     
+    # Cache the generated prompt with config timestamp
+    # Using function attribute for caching (mypy workaround)
+    cache_attr = '_cache'
+    if not hasattr(generate_dynamic_system_prompt, cache_attr):
+        setattr(generate_dynamic_system_prompt, cache_attr, {})
+    
+    config_timestamp = config._cache_timestamp.get(config.config_path, 0)
+    cache_data = {
+        'prompt': base_prompt,
+        'config_timestamp': config_timestamp
+    }
+    setattr(generate_dynamic_system_prompt, cache_attr, cache_data)
+    
     return base_prompt
 
 def create_agent(
@@ -278,7 +301,7 @@ You can browse the data and run queries there."""
                 if disabled_agents:
                     result += "**Disabled Agents:**\n"
                     for agent in disabled_agents:
-                        result += f"- ❌ {agent}\n"
+                        result += f"- 🔴 {agent}\n"
                 
                 return result
                 
@@ -339,16 +362,33 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    # Lazy loading function to get agent references when needed
-    def get_agent_by_name(name: str):
-        """Lazy loading of agent references to avoid circular dependency during module loading"""
+    # Optimized agent discovery with caching
+    _agent_cache: Dict[str, Any] = {}
+    _cache_built = False
+    
+    def build_agent_cache():
+        """Build a cache of all available agents for O(1) lookup"""
+        nonlocal _agent_cache, _cache_built
+        if _cache_built:
+            return
+            
+        _agent_cache.clear()
         try:
             for module in modules:
                 if module.module_path != "src.core.modules.abi":
                     for agent in module.agents:
-                        if agent is not None and hasattr(agent, 'name') and agent.name == name:
-                            return agent
-            return None
+                        if agent is not None and hasattr(agent, 'name'):
+                            _agent_cache[agent.name] = agent
+            _cache_built = True
+            logger.debug(f"🔍 Built agent cache with {len(_agent_cache)} agents")
+        except Exception as e:
+            logger.warning(f"Error building agent cache: {e}")
+    
+    def get_agent_by_name(name: str):
+        """Optimized agent lookup using cache for O(1) performance"""
+        try:
+            build_agent_cache()
+            return _agent_cache.get(name)
         except Exception as e:
             logger.warning(f"Error getting agent '{name}': {e}")
             return None
@@ -412,37 +452,49 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
     ]
     
-    # Add dynamic agent intents from ABI's intent mapping configuration
+    # Optimized intent mapping processing with batch operations
     intent_mapping = config_loader.get_intent_mapping()
+    
+    # Pre-build intent lists for better performance
+    enabled_agent_intents = []
+    disabled_agent_intents = []
     
     for agent_name, intent_patterns in intent_mapping.items():
         agent_ref = agent_references.get(agent_name)
         
         if agent_ref is not None:
-            # Agent is enabled and loaded - route to agent
-            for intent_value in intent_patterns:
-                if agent_name == "abi":
-                    # Special case: ABI intents route back to call_model (supervisor return)
-                    intents.append(Intent(
+            # Agent is enabled and loaded - batch create intents
+            if agent_name == "abi":
+                # Special case: ABI intents route back to call_model (supervisor return)
+                enabled_agent_intents.extend([
+                    Intent(
                         intent_type=IntentType.AGENT,
                         intent_value=intent_value,
                         intent_target="call_model"
-                    ))
-                else:
-                    # Regular agent intents route to the agent
-                    intents.append(Intent(
+                    ) for intent_value in intent_patterns
+                ])
+            else:
+                # Regular agent intents route to the agent
+                enabled_agent_intents.extend([
+                    Intent(
                         intent_type=IntentType.AGENT,
                         intent_value=intent_value,
                         intent_target=agent_ref.name
-                    ))
+                    ) for intent_value in intent_patterns
+                ])
         else:
-            # Agent is disabled - route to configuration checker
-            for intent_value in intent_patterns:
-                intents.append(Intent(
+            # Agent is disabled - batch create configuration checker intents
+            disabled_agent_intents.extend([
+                Intent(
                     intent_type=IntentType.TOOL,
                     intent_value=intent_value,
                     intent_target="check_ai_network_config"
-                ))
+                ) for intent_value in intent_patterns
+            ])
+    
+    # Add all intents in batch operations
+    intents.extend(enabled_agent_intents)
+    intents.extend(disabled_agent_intents)
 
     # All intents are now dynamically generated from config.yaml
     

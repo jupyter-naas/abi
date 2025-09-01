@@ -56,24 +56,29 @@ def get_modules():
                 
             logger.info(f"📂 Loading {len(modules)} modules from '{category}' ({category_path})")
             
-            # Load modules in the order they appear in config file
-            for i, module_config in enumerate(modules, 1):
-                module_name = module_config["name"]
-                description = module_config.get("description", "No description")
-                
-                success = _load_single_module(
-                    module_name, 
-                    category, 
-                    category_path, 
-                    loading_settings,
-                    description,
-                    i,
-                    len(modules)
-                )
-                
-                if not success and loading_settings.get("fail_on_error", True):
-                    logger.error(f"❌ Critical: Module loading failed and fail_on_error is enabled")
-                    raise SystemExit(f"Application crashed due to module loading failure: {module_name}")
+            # Load modules with optional parallel processing
+            if loading_settings.get("parallel_loading", False) and len(modules) > 1:
+                logger.info(f"🚀 Using parallel loading for {len(modules)} modules")
+                _load_modules_parallel(modules, category, category_path, loading_settings)
+            else:
+                # Load modules sequentially (default behavior)
+                for i, module_config in enumerate(modules, 1):
+                    module_name = module_config["name"]
+                    description = module_config.get("description", "No description")
+                    
+                    success = _load_single_module(
+                        module_name, 
+                        category, 
+                        category_path, 
+                        loading_settings,
+                        description,
+                        i,
+                        len(modules)
+                    )
+                    
+                    if not success and loading_settings.get("fail_on_error", True):
+                        logger.error(f"❌ Critical: Module loading failed and fail_on_error is enabled")
+                        raise SystemExit(f"Application crashed due to module loading failure: {module_name}")
 
         __loaded = True
         
@@ -88,6 +93,61 @@ def get_modules():
                 logger.info(f"   📂 {category}: {enabled_count} modules")
 
     return __modules
+
+
+def _load_modules_parallel(
+    modules: List[Dict[str, Any]], 
+    category: str, 
+    category_path: str, 
+    loading_settings: Dict[str, Any]
+) -> None:
+    """Load modules in parallel using ThreadPoolExecutor"""
+    import concurrent.futures
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    max_workers = min(len(modules), loading_settings.get("max_parallel_workers", 4))
+    timeout = loading_settings.get("timeout_seconds", 30)
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all module loading tasks
+        future_to_module = {}
+        for i, module_config in enumerate(modules, 1):
+            module_name = module_config["name"]
+            description = module_config.get("description", "No description")
+            
+            future = executor.submit(
+                _load_single_module,
+                module_name,
+                category,
+                category_path,
+                loading_settings,
+                description,
+                i,
+                len(modules)
+            )
+            future_to_module[future] = module_name
+        
+        # Collect results with timeout
+        failed_modules = []
+        for future in as_completed(future_to_module, timeout=timeout):
+            module_name = future_to_module[future]
+            try:
+                success = future.result(timeout=5)  # Individual module timeout
+                if not success:
+                    failed_modules.append(module_name)
+            except concurrent.futures.TimeoutError:
+                logger.error(f"❌ Module '{module_name}' loading timed out")
+                failed_modules.append(module_name)
+            except Exception as e:
+                logger.error(f"❌ Module '{module_name}' loading failed: {e}")
+                failed_modules.append(module_name)
+        
+        # Handle failures
+        if failed_modules and loading_settings.get("fail_on_error", True):
+            logger.error(f"❌ Critical: {len(failed_modules)} modules failed to load: {failed_modules}")
+            raise SystemExit(f"Application crashed due to parallel module loading failures: {failed_modules}")
+        elif failed_modules:
+            logger.warning(f"⚠️ {len(failed_modules)} modules failed to load but continuing: {failed_modules}")
 
 
 def _load_single_module(
