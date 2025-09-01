@@ -21,18 +21,54 @@
 
 ### What is ABI?
 
-The **ABI** (Agent Based Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Agentic AI Ontology Engine. This system empowers organizations to integrate, manage, and scale AI-driven operations with a focus on ontology, agent-driven workflows, and analytics. Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
+**ABI** (Agentic Brain Infrastructure) is your local AI development framework - the open source core that powers intelligent, multi-agent systems. ABI provides a configuration-driven platform for building, customizing, and orchestrating AI agents tailored to your specific needs.
+
+**Key Benefits:**
+- 🔧 **Customize Everything** - Build custom agents for specific business processes
+- 🏠 **Run Locally** - Keep sensitive data on your infrastructure  
+- ⚙️ **Full Control** - Modify, extend, and integrate however you want
+- 🚀 **Open Source** - Complete transparency and community contributions
+- 🤖 **Multi-Agent** - Orchestrate multiple specialized AI agents seamlessly
 
 ### Why ABI?
-The **ABI** project aims to provide a open alternative to Palantir by offering a flexible and scalable framework for building intelligent systems using ontology. Unlike Palantir, which is often seen as a monolithic solution, ABI emphasizes modularity and customization, allowing organizations to tailor their AI-driven operations to specific needs. Combined with the Naas.ai ecosystem, ABI can be used to build the brain of your organization's agentic AI applications.
+
+ABI provides an open alternative to monolithic AI solutions by emphasizing modularity and customization. Unlike rigid platforms, ABI's configuration-driven architecture allows organizations to:
+
+- **Start Simple**: Begin with basic agents and expand as needed
+- **Stay Flexible**: Change agent behavior through configuration, not code
+- **Scale Intelligently**: Add new agents and capabilities without system rewrites
+- **Maintain Control**: Keep your AI infrastructure and data under your control
+
+Combined with the Naas.ai ecosystem, ABI serves as the brain of your organization's agentic AI applications.
+
+### When to Use ABI
+
+**✅ Use ABI When You Need:**
+- Custom AI agents for specific business processes
+- Local data processing for sensitive information
+- Deep customization of AI behavior and tools
+- Offline capabilities without internet dependency
+- Full control over AI models and data
+- Development environment for building platform integrations
+
+**🌐 Use Cloud Platform When You Need:**
+- Quick start without any setup
+- Team collaboration and sharing
+- Managed infrastructure and scaling
+- Browser-based interface for non-technical users
+- Immediate productivity with pre-built agents
+
+Most users start with the cloud platform and add ABI for customization later.
 
 ### Key Features
 
-- **Agents**: Configurable AI agents (also named agents) to handle specific organizational tasks and interact with users.
-- **Flexible Tools**: Agents with custom tools to interact with external services and data sources (Integrations, Pipelines, Workflows, Analytics)
-- **Ontology Based**: Ontologies are used to convert data into knowledge to create a flexible and scalable system.
-- **Storage**: Storage system is managing unstructured data in datastore, knowledge graph in triple_store and vector data in vectorstore. It is also designed to manage local and remote data storage seamlessly.
-- **Customizable API**: All components can be deployed in an API and use externally by other applications.
+- **Configuration-Driven Agents**: All agents defined in config.yaml with SLUG-based routing
+- **Enhanced Intent Mapping**: Support for RAW, TOOL, and AGENT intent types
+- **Dynamic Agent Loading**: Enable/disable agents without code changes
+- **Multi-Model Support**: Built-in support for OpenAI, Anthropic, Google, Meta, and Mistral
+- **Ontology-Based Knowledge**: Convert data into knowledge using flexible ontology system
+- **Flexible Storage**: Manage unstructured data, knowledge graphs, and vector data seamlessly
+- **Customizable API**: Deploy all components via API for external integration
 
 ### Key Capabilities
 
@@ -100,23 +136,48 @@ as it contains sensitive credentials
 
 ### Configure YAML
 
-1. Copy the example file to config.yaml
-```bash
-cp config.yaml.example config.yaml
+ABI uses a single `config.yaml` file for all configuration. The main configuration includes:
+
+**System Configuration:**
+- `workspace_id`: Naas Platform workspace ID for storage and publishing
+- `github_project_repository`: Your GitHub repository (e.g. "jupyter-naas/abi")
+- `github_support_repository`: Repository for support issues
+- `github_project_id`: GitHub project number for issue assignment
+- `triple_store_path`: Path to ontology store (e.g. "storage/triplestore")
+- `api_title`: API title displayed in documentation
+- `api_description`: API description for documentation
+- `storage_name` and `space_name`: Storage configuration
+
+**AI Network Configuration:**
+The `ai_network` section defines all your agents using SLUG-based identifiers:
+
+```yaml
+ai_network:
+  abi:
+    enabled: true
+    description: "Multi-agent orchestrator"
+    strengths: "Orchestration, strategic advisory"
+    use_when: "Identity, strategy, coordination"
+    intent_mapping:
+      # Raw responses, tool routing, and agent routing
+      
+  chatgpt:
+    enabled: true
+    description: "OpenAI ChatGPT"
+    strengths: "General conversation, coding"
+    use_when: "General tasks, coding help"
+    
+  claude:
+    enabled: false  # Easily enable/disable agents
+    description: "Anthropic Claude"
+    strengths: "Analysis, writing"
+    use_when: "Detailed analysis"
 ```
 
-2. Edit the file with your configuration:
-- `workspace_id`: Workspace ID in Naas Platform. It will be used for storage and publishing modules components. Access it from this [link](https://naas.ai/account/settings)
-- `github_project_repository`: Your Github repository name (e.g. "jupyter-naas/abi"). It will be used in documentation and API as registry name.
-- `github_support_repository`: A Github repository name (e.g. "jupyter-naas/abi") to store support issues. It will be used by the support agent to create all requests or report bugs. It can be the same as `github_project_repository`.
-- `github_project_id`: Your Github project number stored in Github URL (e.g. 12 for https://github.com/jupyter-naas/abi/projects/12). It will be used to assign all your issues to your github project.
-- `triple_store_path`: Path to the ontology store (e.g. "storage/triplestore")
-- `api_title`: API title (e.g. "ABI API") displayed in the documentation.
-- `api_description`: API description (e.g. "API for ABI, your Artifical Business Intelligence") displayed in the documentation.
-- `logo_path`: Path to the logo (e.g. "assets/logo.png") used in the API documentation.
-- `favicon_path`: Path to the favicon (e.g. "assets/favicon.ico") used in the API documentation.
-- `storage_name`: Name of the storage (e.g. "abi")
-- `space_name`: Name of the space (e.g. "abi")
+**Key Benefits:**
+- **Instant Agent Control**: Change `enabled: true/false` to activate/deactivate agents
+- **Zero Code Changes**: All agent behavior controlled through configuration
+- **SLUG-Based Routing**: Consistent agent identification across the system
 
 ## Quickstart
 

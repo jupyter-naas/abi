@@ -1,72 +1,82 @@
 # AI Network Configuration System
 
-The AI Network Configuration System provides centralized, intelligent control over your AI ecosystem. Configure which models, domain experts, and applications to load with priority-based orchestration and rich metadata management.
+The AI Network Configuration System provides centralized, configuration-driven control over your multi-agent AI ecosystem. All agents, intent mappings, and system behaviors are dynamically loaded from a single configuration file.
 
 ## Overview
 
 Configure your AI Network through a YAML-based system that delivers:
 
-- **Centralized Control**: All module configuration in one place
-- **Priority-Based Loading**: Control the order modules are loaded
-- **Category Organization**: Modules organized by type (core models, domain experts, applications, custom)
-- **Rich Metadata**: Descriptions and priorities for each module
-- **CLI Management**: Command-line tools for easy configuration
+- **Configuration-Driven Architecture**: All agents and intents defined in config.yaml
+- **SLUG-Based Routing**: Consistent agent identification and routing system
+- **Enhanced Intent Mapping**: Support for RAW, TOOL, and AGENT intent types
+- **Dynamic Agent Loading**: Enable/disable agents without code changes
+- **Zero Hardcoded Elements**: Complete flexibility through configuration
 
 ## Configuration Structure
 
-The `ai_network` section in `config.yaml` contains four main categories:
+The `ai_network` section in `config.yaml` uses a flat, SLUG-based structure where each agent is defined by its unique identifier (SLUG).
 
-### Core Models
-Foundation language models (ChatGPT, Claude, Gemini, etc.)
+### Agent Definition
+Each agent contains:
+- **enabled**: Boolean flag for activation
+- **description**: Brief agent description
+- **strengths**: Core capabilities
+- **use_when**: Recommended use cases
 
-### Domain Experts  
-Specialized business role agents (Software Engineer, Accountant, etc.)
-
-### Applications
-External service integrations (GitHub, ArXiv, etc.)
-
-### Custom Modules
-User-defined modules in `src/custom/modules`
+### ABI Intent Mapping
+The ABI agent contains centralized intent mapping with three types:
+- **raw_intents**: Direct text responses (key-value pairs)
+- **tool_intents**: Route to specific tools/functions
+- **agent_intents**: Route to specific agents
 
 ## Example Configuration
 
 ```yaml
 ai_network:
-  # Core AI Models - Foundation language models  
-  core:
+  # ABI Orchestrator with centralized intent mapping
+  abi:
     enabled: true
-    modules:
-      - name: "abi"
-        enabled: true
-      - name: "chatgpt"
-        enabled: true
-      - name: "claude"
-        enabled: false
+    description: "Multi-agent orchestrator"
+    strengths: "Orchestration, strategic advisory"
+    use_when: "Identity, strategy, coordination"
+    intent_mapping:
+      raw_intents:
+        "what is your name": "My name is ABI"
+        "who are you": "I am ABI, developed by NaasAI"
+      tool_intents:
+        open_knowledge_graph_explorer:
+          - "show knowledge graph"
+          - "sparql query"
+        check_ai_network_config:
+          - "list agents"
+          - "agent status"
+      agent_intents:
+        chatgpt:
+          - "use chatgpt"
+          - "web search"
+        claude:
+          - "use claude"
+          - "anthropic"
 
-  # Custom Modules - User-defined extensions
-  custom:
+  # Foundation AI Models
+  chatgpt:
     enabled: true
-    auto_discover: true
-    modules: []
+    description: "OpenAI ChatGPT"
+    strengths: "General conversation, coding"
+    use_when: "General tasks, coding help"
 
-  # Marketplace - All marketplace content (domains + applications)
-  marketplace:
+  claude:
     enabled: true
-    modules:
-      - name: "software-engineer"
-        enabled: true
-      - name: "data-engineer"
-        enabled: false
-      - name: "github"
-        enabled: true
-    modules: []
+    description: "Anthropic Claude"
+    strengths: "Analysis, writing"
+    use_when: "Detailed analysis"
 
-  # Module Loading Settings
-  loading:
-    fail_on_error: true # Stop loading if a module fails
-    parallel_loading: false # Load modules in parallel (experimental)
-    timeout_seconds: 30 # Timeout for module loading
-    retry_attempts: 3 # Number of retry attempts for failed modules
+  # Disabled agents (ready for activation)
+  llama:
+    enabled: false
+    description: "Meta Llama"
+    strengths: "Local, private"
+    use_when: "Private tasks"
 ```
 
 ## CLI Management
