@@ -283,6 +283,8 @@ make
 docker ps
 ```
 
+You should see Oxigraph, PostgreSQL, and Dagster containers running.
+
 ## Troubleshooting
 
 ### Common Issues
