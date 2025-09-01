@@ -260,7 +260,7 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (default target)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
 	@echo ""
@@ -319,7 +319,7 @@ build.linux.x86_64: deps
 # -------------------------------------------------------------------------------------------------
 
 chat-abi-agent: deps
-	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
+	@ uv run python -m src.cli
 
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
@@ -342,8 +342,7 @@ chat-gemma-agent: deps
 
 default: deps help
 
-console: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli
+
 
 .DEFAULT_GOAL := chat-abi-agent
 

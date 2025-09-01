@@ -7,7 +7,7 @@ from abi.services.agent.IntentAgent import (
     
 )
 from fastapi import APIRouter
-from typing import Optional
+from typing import Optional, Dict, Any
 from enum import Enum
 from abi import logger
 
@@ -20,7 +20,39 @@ for module in modules:
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 DESCRIPTION = "Coordinates and manages specialized agents."
-SYSTEM_PROMPT = """# ROLE
+# SYSTEM_PROMPT is now generated dynamically from config.yaml
+# See generate_dynamic_system_prompt() function below
+
+SUGGESTIONS: list = [
+    {
+        "label": "Feature Request",
+        "value": "As a user, I would like to: {{Feature Request}}",
+    },
+    {
+        "label": "Report Bug",
+        "value": "Report a bug on: {{Bug Description}}",
+    },
+]
+
+def generate_dynamic_system_prompt() -> str:
+    """Generate system prompt dynamically from config.yaml with caching"""
+    from src.utils.ConfigLoader import get_ai_network_config
+    
+    config = get_ai_network_config()
+    
+    # Check if we can use cached system prompt
+    cache_attr = '_cache'
+    if hasattr(generate_dynamic_system_prompt, cache_attr):
+        cached_data = getattr(generate_dynamic_system_prompt, cache_attr)
+        config_timestamp = config._cache_timestamp.get(config.config_path, 0)
+        if isinstance(cached_data, dict) and cached_data.get('config_timestamp') == config_timestamp:
+            logger.debug("📋 Using cached system prompt")
+            return cached_data['prompt']
+    
+    enabled_agents = config.get_enabled_agents_metadata()
+    
+    # Base system prompt
+    base_prompt = """# ROLE
 You are Abi, the AI Super Assistant and Supervisor Agent developed by NaasAI. You function as:
 - **Multi-Agent System Orchestrator**: Central coordinator managing specialized AI agents in a hierarchical ecosystem
 - **Elite Strategic Advisor**: High-level consultant with expertise spanning business strategy, technical architecture, and communication excellence  
@@ -38,63 +70,48 @@ Orchestrate optimal user experiences through intelligent multi-agent coordinatio
 
 # CONTEXT
 You operate within a sophisticated multi-agent conversation environment where:
-- **Users engage in ongoing conversations** with specialized agents (ChatGPT, Claude, Mistral, Gemini, Grok, Llama, Perplexity)
+- **Users engage in ongoing conversations** with specialized agents
 - **Agent context is preserved** through active conversation states shown in UI ("Active: [Agent Name]")
 - **Multilingual interactions** occur naturally (French/English code-switching, typos, casual expressions)
 - **Conversation patterns vary** from casual greetings to complex technical discussions and agent chaining workflows
 - **Strategic advisory requests** require direct high-level consultation without delegation
-- **Real-time information needs** demand routing to web-search capable agents (Perplexity, ChatGPT)
-- **Creative and analytical tasks** benefit from model-specific strengths (Claude for analysis, Grok for truth-seeking, Mistral for code)
+- **Real-time information needs** demand routing to web-search capable agents
+- **Creative and analytical tasks** benefit from model-specific strengths
 
 Your decisions impact conversation quality, user productivity, and the entire multi-agent ecosystem's effectiveness.
 
-# TOOLS/AGENTS
-You coordinate access to specialized agents with distinct capabilities:
+# AVAILABLE AGENTS
+You coordinate access to the following enabled agents:
 
-## Core Platform Agents:
-1. **ontology_agent** - Internal Knowledge Management
-   - **Input**: Organizational structure queries, employee information, policies, procedures, historical data
-   - **Output**: Structured knowledge responses, hierarchical data, business insights
-   - **Use When**: Specific internal organizational information needed
+"""
+    
+    # Generate agent descriptions dynamically from config
+    for agent_name, metadata in enabled_agents.items():
+        strengths = metadata["strengths"]
+        use_when = metadata["use_when"]
+        
+        # Use proper display name (capitalize first letter of each word)
+        display_name = agent_name.replace("_", " ").title()
+        
+        base_prompt += f"""## {display_name}
+- **Strengths**: {strengths}
+- **Use When**: {use_when}
 
-2. **naas_agent** - Platform Operations
-   - **Input**: Naas platform objects (Plugins, Ontologies, Secrets, Workspace, Users)
-   - **Output**: Platform-specific operations results, configuration data
-   - **Use When**: Platform management and configuration tasks required
+"""
+    
+    # Add platform tools information
+    base_prompt += """
+## Platform Tools
+- **Knowledge Graph Explorer**: Visual data exploration, SPARQL querying, ontology browsing via web interface
 
-3. **support_agent** - Issue Management  
-   - **Input**: Feature requests, bug reports, support tickets
-   - **Output**: Created issues with tracking URLs, resolution guidance
-   - **Use When**: Technical issues or feature requests need formal tracking
+## Specialized Internal Agents
+- **Ontology Engineer Agent**: BFO ontology expertise, text-to-ontology transformation, SPARQL generation
+- **Entity to SPARQL Agent**: Extracts entities from text and generates SPARQL INSERT statements
+- **Knowledge Graph Builder Agent**: Manages triplestore operations, data insertion, querying, validation
 
-## Specialized AI Agents (via routing):
-4. **ChatGPT** - Real-time Web Search & General Intelligence
-   - **Strengths**: Web search, current events, comprehensive analysis
-   - **Use When**: Real-time information, web research, general intelligence tasks
-
-5. **Claude** - Advanced Reasoning & Analysis
-   - **Strengths**: Complex reasoning, critical thinking, detailed analysis
-   - **Use When**: Deep analysis, nuanced reasoning, complex problem-solving
-
-6. **Mistral** - Code Generation & Mathematics  
-   - **Strengths**: Code generation, debugging, mathematical computations
-   - **Use When**: Programming tasks, mathematical problems, technical documentation
-
-7. **Gemini** - Multimodal & Creative Tasks
-   - **Strengths**: Image generation/analysis, creative writing, multimodal understanding
-   - **Use When**: Visual tasks, creative projects, multimodal analysis
-
-8. **Grok** - Truth-Seeking & Current Events
-   - **Strengths**: Unfiltered analysis, current events, truth-seeking with evidence
-   - **Use When**: Controversial topics, truth verification, current affairs analysis
-
-9. **Llama** - Instruction Following & Dialogue
-   - **Strengths**: Instruction-following, conversational dialogue, general assistance
-   - **Use When**: Clear instruction execution, natural conversation flow
-
-10. **Perplexity** - Real-time Research & Web Intelligence
-    - **Strengths**: Real-time web search, research synthesis, up-to-date information
-    - **Use When**: Latest information, research compilation, fact verification
+## Marketplace Agents (when enabled)
+- **Naas Agent**: Platform operations, workspace management, Naas platform objects configuration
+- **Support Agent**: Issue management, feature requests, bug reports, GitHub integration
 
 # TASKS
 Execute intelligent multi-agent orchestration through this priority sequence:
@@ -119,75 +136,24 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 11. **Strategic Enhancement**: Add high-level strategic guidance when valuable
 12. **User Communication**: Deliver clear, actionable insights adapted to user needs and context
 
-# OPERATING GUIDELINES
-
-## HIGHEST PRIORITY: Active Agent Context Preservation (Weight: 0.99)
-**CRITICAL RULE**: When user is actively conversing with a specialized agent (UI shows "Active: [Agent Name]"):
-- **ALWAYS preserve conversation flow** for follow-ups, acknowledgments, simple questions
-- **Examples of preservation**: "cool", "ok", "merci", "thanks", "tu es qui?", "what can you do?"
-- **ONLY intercept for explicit routing**: "ask Claude", "parler à Mistral", "switch to Grok", "call supervisor", "talk to abi", "back to abi", "supervisor", "return to supervisor", "parler à abi", "retour à abi", "superviseur"
-- **Multi-language respect**: Handle French/English code-switching within active contexts
-- **Conversation patterns**: Support casual greetings, typo tolerance, agent switching mid-conversation
-
-## Strategic Advisory Direct Response (Weight: 0.95)
-**When to respond directly** (DO NOT DELEGATE):
-- **Identity questions**: "who are you", "what is ABI", "who made you" 
-- **Strategic consulting**: Business planning, technical architecture, content strategy
-- **Advisory frameworks**: Decision-making models, strategic analysis, system design
-- **Meta-system questions**: Agent capabilities, routing logic, multi-agent workflows
-
-## Specialized Agent Routing (Weighted Decision Tree):
-
-### Web Search & Current Events (Weight: 0.90)
-- **Route to Perplexity/ChatGPT**: Latest news, real-time research, current events
-- **Patterns**: "latest news", "current information", "what's happening", "search for"
-
-### Creative & Multimodal Tasks (Weight: 0.85) 
-- **Route to Gemini**: Image generation, creative writing, visual analysis
-- **Patterns**: "generate image", "creative help", "analyze photo", "multimodal"
-
-### Truth-Seeking & Analysis (Weight: 0.80)
-- **Route to Grok**: Controversial topics, truth verification, unfiltered analysis
-- **Patterns**: "truth about", "unbiased view", "what really happened"
-
-### Advanced Reasoning (Weight: 0.75)
-- **Route to Claude**: Complex analysis, critical thinking, nuanced reasoning  
-- **Patterns**: "analyze deeply", "critical evaluation", "complex reasoning"
-
-### Code & Mathematics (Weight: 0.70)
-- **Route to Mistral**: Programming, debugging, mathematical computations
-- **Patterns**: "code help", "debug", "mathematical", "programming"
-
-### Internal Knowledge (Weight: 0.65)
-- **Route to ontology_agent**: Organizational structure, internal policies, employee data
-- **Patterns**: Specific company/internal information requests
-
-### Knowledge Graph Exploration (Weight: 0.68)
-- **Route to knowledge_graph_explorer**: Visual data exploration, SPARQL querying, ontology browsing
-- **Patterns**: "show me the data", "knowledge graph", "semantic database", "sparql query", "explore ontology", "browse entities", "voir ton kg"
-
-### Platform Operations (Weight: 0.45)
-- **Route to naas_agent**: Platform management, configuration, technical operations
-
-### Issue Management (Weight: 0.25)
-- **Route to support_agent**: Bug reports, feature requests, technical issues
-
-## Communication Excellence Standards:
-- **Proactive Search**: Always attempt information retrieval before requesting clarification
-- **Language Matching**: Respond in user's preferred language (French/English flexibility)
-- **Conversation Continuity**: Maintain context across agent transitions and multi-turn dialogs
-- **Strategic Enhancement**: Add high-level insights when they provide significant value
-- **Format Consistency**: Use [Link](URL) and ![Image](URL) formatting standards
-
 # CONSTRAINTS
 
 ## ABSOLUTE REQUIREMENTS:
 - **NEVER interrupt active agent conversations** unless explicitly requested by user
 - **ALWAYS identify as Abi, AI Super Assistant developed by NaasAI** - never delegate identity questions
-- **MUST follow weighted agent hierarchy** for optimal task routing
-- **MUST preserve multi-language conversation contexts** and handle code-switching naturally
-- **MUST use memory consultation** before any delegation decisions
-- **MUST provide proactive search** before requesting clarification from users
+- **MUST check AI Network configuration BEFORE any agent routing** - use check_ai_network_config tool for ALL agent requests
+- **MANDATORY**: When user requests ANY agent by name, FIRST call check_ai_network_config tool to verify availability
+
+## DISABLED AGENT HANDLING:
+**CRITICAL WORKFLOW**: For ANY agent request:
+1. **ALWAYS FIRST**: Call check_ai_network_config tool with the requested agent name
+2. **If ENABLED**: Proceed with normal routing to the agent
+3. **If DISABLED**: Follow this sequence:
+   - Inform user the agent is disabled in AI Network configuration
+   - Explain what the agent would have been used for
+   - Suggest enabled alternatives that can handle similar tasks
+   - Provide configuration guidance (how to enable in config.yaml)
+4. **NEVER**: Pretend to be the disabled agent or route to it
 
 ## OPERATIONAL BOUNDARIES:
 - **CANNOT mention competing AI providers** (OpenAI, Anthropic, Google, etc.) - focus on capabilities
@@ -195,25 +161,23 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **CANNOT create support tickets** without proper validation and user confirmation
 - **CANNOT delegate strategic advisory questions** that fall within direct expertise domain
 - **CANNOT ignore conversation flow preservation** - this is the highest priority operational rule
-
-## QUALITY STANDARDS:
-- **Format attribution** for delegated responses using specified standards
-- **Validate request completeness** before creating formal issues or tickets  
-- **Maintain NaasAI mission alignment** in all responses and recommendations
-- **Adapt communication style** to match user tone (casual ↔ formal, strategic ↔ conversational)
-- **Optimize for user productivity** and satisfaction in multi-agent conversation flows
+- **CANNOT pretend to be disabled agents** - when users request unavailable agents, check configuration and inform them about the status
 """
-
-SUGGESTIONS: list = [
-    {
-        "label": "Feature Request",
-        "value": "As a user, I would like to: {{Feature Request}}",
-    },
-    {
-        "label": "Report Bug",
-        "value": "Report a bug on: {{Bug Description}}",
-    },
-]
+    
+    # Cache the generated prompt with config timestamp
+    # Using function attribute for caching (mypy workaround)
+    cache_attr = '_cache'
+    if not hasattr(generate_dynamic_system_prompt, cache_attr):
+        setattr(generate_dynamic_system_prompt, cache_attr, {})
+    
+    config_timestamp = config._cache_timestamp.get(config.config_path, 0)
+    cache_data = {
+        'prompt': base_prompt,
+        'config_timestamp': config_timestamp
+    }
+    setattr(generate_dynamic_system_prompt, cache_attr, cache_data)
+    
+    return base_prompt
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -238,10 +202,11 @@ def create_agent(
         logger.error("AI_MODE must be either 'cloud' or 'local'")
         return None
 
-    # Set configuration
+    # Set configuration with dynamic system prompt
     if agent_configuration is None:
+        dynamic_system_prompt = generate_dynamic_system_prompt()
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=dynamic_system_prompt,
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
@@ -259,10 +224,61 @@ You can browse the data and run queries there."""
 
     from langchain_core.tools import StructuredTool
     
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
     
     class EmptySchema(BaseModel):
         pass
+    
+    # Add AI Network Configuration Checker tool
+    def check_ai_network_config(agent_name: Optional[str] = None) -> str:
+        """Check the AI Network configuration to see which agents are enabled or disabled."""
+        from src.utils.ConfigLoader import get_ai_network_config
+        
+        try:
+            config_loader = get_ai_network_config()
+            
+            if agent_name:
+                # Check specific agent in flat ai_network structure
+                agent_name_lower = agent_name.lower()
+                agent_config = config_loader.ai_network.get(agent_name_lower)
+                
+                if agent_config:
+                    status = "enabled" if agent_config.get("enabled", False) else "disabled"
+                    return f"Agent '{agent_name}' is **{status}** in the AI Network configuration."
+                else:
+                    return f"Agent '{agent_name}' not found in the AI Network configuration."
+            else:
+                # Show all agents status from flat structure
+                result = "**AI Network Configuration Status:**\n\n"
+                
+                enabled_agents = []
+                disabled_agents = []
+                
+                for agent_name, agent_config in config_loader.ai_network.items():
+                    if isinstance(agent_config, dict):  # Skip non-agent entries
+                        if agent_config.get("enabled", False):
+                            enabled_agents.append(agent_name)
+                        else:
+                            disabled_agents.append(agent_name)
+                
+                if enabled_agents:
+                    result += "**Enabled Agents:**\n"
+                    for agent in enabled_agents:
+                        result += f"- 🟢 {agent}\n"
+                    result += "\n"
+                
+                if disabled_agents:
+                    result += "**Disabled Agents:**\n"
+                    for agent in disabled_agents:
+                        result += f"- 🔴 {agent}\n"
+                
+                return result
+                
+        except Exception as e:
+            return f"Error checking AI Network configuration: {str(e)}"
+
+    class AgentConfigSchema(BaseModel):
+        agent_name: Optional[str] = Field(default=None, description="Name of the specific agent to check (optional)")
     
     knowledge_graph_tool = StructuredTool(
         name="open_knowledge_graph_explorer",
@@ -271,7 +287,14 @@ You can browse the data and run queries there."""
         args_schema=EmptySchema
     )
     
-    tools.append(knowledge_graph_tool)
+    config_checker_tool = StructuredTool(
+        name="check_ai_network_config",
+        description="Check which agents are enabled or disabled in the AI Network configuration. Use this when users ask about agent availability.",
+        func=check_ai_network_config,
+        args_schema=AgentConfigSchema
+    )
+    
+    tools.extend([knowledge_graph_tool, config_checker_tool])
 
     # Get agent recommendation tools from intentmapping
     from src.core.modules.abi import get_tools
@@ -308,224 +331,174 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    agents: list = []
-    for module in modules:
-        if module.module_path != "src.core.modules.abi":
-            logger.debug(f"Inspecting module: {module.module_path}")
-            logger.debug(f"Agents: {module.agents}")
-            for agent in module.agents:
-                if agent is not None:
-                    agents.append(agent)
-                    logger.debug(f"Agent loaded: {agent.name}")
-                else:
-                    logger.warning(f"Skipping None agent in module: {module.module_path}")
-
-    # Create agent references for intent routing
-    grok_agent = next((agent for agent in agents if agent.name == "Grok"), None)
-    google_gemini_agent = next((agent for agent in agents if agent.name == "Gemini"), None)
-    openai_agent = next((agent for agent in agents if agent.name == "ChatGPT"), None)
-    perplexity_agent = next((agent for agent in agents if agent.name == "Perplexity"), None)
-    mistral_agent = next((agent for agent in agents if agent.name == "Mistral"), None)
-    claude_agent = next((agent for agent in agents if agent.name == "Claude"), None)
-    llama_agent = next((agent for agent in agents if agent.name == "Llama"), None)
-
-    # Local agent references
-    qwen_agent = next((agent for agent in agents if agent.name == "Qwen"), None)
-    deepseek_agent = next((agent for agent in agents if agent.name == "DeepSeek"), None)
-    gemma_agent = next((agent for agent in agents if agent.name == "Gemma"), None)
-
-
-
-    intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="My name is ABI",
-        ),
-        # Abi Agent return intents (route to call_model to return to parent)
-        Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="can i talk back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="call_model"),
-        
-        # Knowledge Graph Explorer intents
-        Intent(intent_type=IntentType.TOOL, intent_value="show knowledge graph explorer", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="semantic knowledge graph", intent_target="open_knowledge_graph_explorer"), 
-        Intent(intent_type=IntentType.TOOL, intent_value="show the data", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="make a sparql query", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explore the database", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="knowledge graph", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="sparql", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explore ontology", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="browse entities", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="voir ton kg", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
-    ] + (
-        # xAI Grok Agent intents (only add if agent is available)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="use grok", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to grok", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="xai", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="grok 4", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="maximum intelligence", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="highest intelligence", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use xai", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to xai", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask grok", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="truth seeking", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="contrarian analysis", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="scientific reasoning", intent_target=grok_agent.name),
-        ] if grok_agent else []
-    ) + (
-        # Google Gemini 2.0 Flash Agent intents (only add if agent is available)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="use gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gemini 2.0", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gemini flash", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use google ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to google", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use google gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="multimodal analysis", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="analyze image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="image understanding", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="video analysis", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="audio analysis", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="let's use google", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="try google ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google's model", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google's ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use bard", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to bard", intent_target=google_gemini_agent.name),
-            # Image Generation intents
-            Intent(intent_type=IntentType.AGENT, intent_value="generate image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="create image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="generate an image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="create a picture", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="make an image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="draw", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="illustrate", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="picture of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="image of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="visual representation", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="generate an image of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="create an image of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="make a picture of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="show me", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="visualization", intent_target=google_gemini_agent.name),
-        ] if google_gemini_agent else []
-    ) + (
-        # OpenAI ChatGPT Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask openai", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask chatgpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use openai", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use chatgpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to openai", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to chatgpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="openai gpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gpt-4o", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gpt4", intent_target=openai_agent.name),
-        ] if openai_agent else []
-    ) + (
-        # Mistral Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask mistral", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use mistral", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to mistral", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="mistral ai", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="mistral large", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="french ai", intent_target=mistral_agent.name),
-        ] if mistral_agent else []
-    ) + (
-        # Claude Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="claude 3.5", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="anthropic", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="anthropic claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="claude sonnet", intent_target=claude_agent.name),
-        ] if claude_agent else []
-    ) + (
-        # Perplexity Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask perplexity", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use perplexity", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to perplexity", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="perplexity ai", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="search web", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="web search", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="search online", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="search internet", intent_target=perplexity_agent.name),
-        ] if perplexity_agent else []
-    ) + (
-        # LLaMA Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="llama 3.3", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="meta llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="meta ai", intent_target=llama_agent.name),
-        ] if llama_agent else []
-    ) + (
-        # Local Qwen Agent intents (privacy-focused)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask qwen", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use qwen", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to qwen", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private ai", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="local ai", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="offline ai", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="qwen code", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private code", intent_target=qwen_agent.name),
-        ] if qwen_agent else []
-    ) + (
-        # Local DeepSeek Agent intents (reasoning)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask deepseek", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use deepseek", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to deepseek", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="complex reasoning", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="mathematical proof", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="step by step", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="logical analysis", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private reasoning", intent_target=deepseek_agent.name),
-        ] if deepseek_agent else []
-    ) + (
-        # Local Gemma Agent intents (lightweight)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask gemma", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use gemma", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to gemma", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="quick question", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="fast response", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="lightweight ai", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="local gemini", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private chat", intent_target=gemma_agent.name),
-        ] if gemma_agent else []
-    )
+    # Optimized agent discovery with caching
+    _agent_cache: Dict[str, Any] = {}
+    _cache_built = False
     
-    logger.debug(f"Intents: {intents}")
+    def build_agent_cache():
+        """Build a cache of all available agents for O(1) lookup using SLUG"""
+        nonlocal _agent_cache, _cache_built
+        if _cache_built:
+            return
+            
+        _agent_cache.clear()
+        try:
+            for module in modules:
+                if module.module_path != "src.core.modules.abi":
+                    # Get the SLUG from the module path (e.g., "src/core/modules/claude" -> "claude")
+                    module_slug = module.module_path.split("/")[-1]
+                    logger.debug(f"🔍 Processing module: {module.module_path} -> SLUG: {module_slug}")
+                    
+                    # Find the main agent (not specialized ones like Knowledge_Graph_Builder)
+                    main_agent = None
+                    for agent in module.agents:
+                        if agent is not None:
+                            # Look for the main agent that matches the module name pattern
+                            agent_name = agent.name.lower().replace(" ", "").replace("_", "")
+                            if agent_name == module_slug or agent_name == module_slug.replace("gpt", ""):
+                                main_agent = agent
+                                break
+                    
+                    if main_agent:
+                        # Cache using SLUG, not NAME
+                        _agent_cache[module_slug] = main_agent
+                        logger.debug(f"🔗 Cached agent: {module_slug} -> {main_agent.name}")
+                    else:
+                        # Fallback: use first non-None agent
+                        for agent in module.agents:
+                            if agent is not None:
+                                _agent_cache[module_slug] = agent
+                                logger.debug(f"🔗 Cached agent (fallback): {module_slug} -> {agent.name}")
+                                break
+            
+            _cache_built = True
+            logger.info(f"🔍 Built agent cache with {len(_agent_cache)} agents using SLUG: {list(_agent_cache.keys())}")
+        except Exception as e:
+            logger.warning(f"Error building agent cache: {e}")
+    
+    def get_agent_by_slug(slug: str):
+        """Optimized agent lookup using SLUG for O(1) performance"""
+        try:
+            build_agent_cache()
+            return _agent_cache.get(slug)
+        except Exception as e:
+            logger.warning(f"Error getting agent '{slug}': {e}")
+            return None
+
+    # Get enabled agents from configuration
+    from src.utils.ConfigLoader import get_ai_network_config
+    config_loader = get_ai_network_config()
+    enabled_agents_metadata = config_loader.get_enabled_agents_metadata()
+    
+    # Create agent references dynamically based on enabled agents in config
+    agent_references = {}
+    agents: list = []
+    
+    # Build agent cache first
+    build_agent_cache()
+    
+    # Load agents using SLUG (config keys directly) - no more name mapping needed!
+    logger.debug(f"🔍 Looking for agents with SLUGs: {list(enabled_agents_metadata.keys())}")
+    for agent_slug in enabled_agents_metadata.keys():
+        if agent_slug != "abi":  # Skip ABI itself
+            logger.debug(f"🔍 Looking up agent with SLUG: {agent_slug}")
+            agent = get_agent_by_slug(agent_slug)
+            if agent is not None:
+                agent_references[agent_slug] = agent
+                agents.append(agent)
+                logger.info(f"✅ Added agent reference: {agent_slug} -> {agent.name}")
+            else:
+                logger.warning(f"⚠️ Agent not found for SLUG: {agent_slug}")
+    
+    # Add transfer tools for ALL available agents (enabled + disabled)
+    # This ensures transfer tools work instantly when agents are enabled
+    for agent_slug, agent_config in config_loader.ai_network.items():
+        if isinstance(agent_config, dict) and agent_slug != "abi":  # Skip ABI itself
+            agent = get_agent_by_slug(agent_slug)
+            if agent is not None:
+                # Import the make_handoff_tool function
+                from abi.services.agent.Agent import make_handoff_tool
+                transfer_tool = make_handoff_tool(agent=agent)
+                tools.append(transfer_tool)
+                status = "🟢 enabled" if agent_config.get("enabled", False) else "🔴 disabled"
+                logger.info(f"✅ Added transfer tool: {transfer_tool.name} ({status})")
+    
+    # All agent references are now dynamically managed through agent_references dict
+    # No need for individual variables since we use configuration-driven approach
+
+
+
+    # Generate ALL intents dynamically from enhanced configuration
+    intents: list = []
+    
+    # Enhanced intent mapping processing with support for all intent types
+    intent_mapping = config_loader.get_intent_mapping()
+    
+    # 1. Process RAW intents (key-value pairs for direct responses)
+    raw_intents = intent_mapping.get("raw_intents", {})
+    for intent_value, response_text in raw_intents.items():
+        intents.append(Intent(
+            intent_type=IntentType.RAW,
+            intent_value=intent_value,
+            intent_target=response_text
+        ))
+    
+    # 2. Process TOOL intents (tool_name -> list of patterns)
+    tool_intents = intent_mapping.get("tool_intents", {})
+    for tool_name, intent_patterns in tool_intents.items():
+        for intent_value in intent_patterns:
+            intents.append(Intent(
+                intent_type=IntentType.TOOL,
+                intent_value=intent_value,
+                intent_target=tool_name
+            ))
+    
+    # 3. Process AGENT intents (agent_name -> list of patterns)
+    agent_intents = intent_mapping.get("agent_intents", {})
+    
+    # Pre-build intent lists for better performance
+    enabled_agent_intents = []
+    disabled_agent_intents = []
+    
+    for agent_name, intent_patterns in agent_intents.items():
+        agent_ref = agent_references.get(agent_name)
+        
+        if agent_ref is not None:
+            # Agent is enabled and loaded - batch create intents
+            if agent_name == "abi":
+                # Special case: ABI intents route back to call_model (supervisor return)
+                enabled_agent_intents.extend([
+                    Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=intent_value,
+                        intent_target="call_model"
+                    ) for intent_value in intent_patterns
+                ])
+            else:
+                # Regular agent intents route to the agent
+                enabled_agent_intents.extend([
+                    Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=intent_value,
+                        intent_target=agent_ref.name
+                    ) for intent_value in intent_patterns
+                ])
+        else:
+            # Agent is disabled - batch create configuration checker intents
+            disabled_agent_intents.extend([
+                Intent(
+                    intent_type=IntentType.TOOL,
+                    intent_value=intent_value,
+                    intent_target="check_ai_network_config"
+                ) for intent_value in intent_patterns
+            ])
+    
+    # Add all intents in batch operations
+    intents.extend(enabled_agent_intents)
+    intents.extend(disabled_agent_intents)
+
+    # All intents are now dynamically generated from config.yaml
+    
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -544,7 +517,7 @@ class AbiAgent(IntentAgent):
         self,
         router: APIRouter,
         route_name: str = NAME,
-        name: str = NAME.capitalize(). replace("_", " "),
+        name: str = NAME.capitalize().replace("_", " "),
         description: str = "API endpoints to call the Abi agent completion.",
         description_stream: str = "API endpoints to call the Abi agent stream completion.",
         tags: Optional[list[str | Enum]] = None,
