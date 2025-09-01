@@ -183,7 +183,7 @@ class AINetworkConfig:
             "format": "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
             "console_output": True,
             "file_output": False,
-            "file_path": "storage/logs/{timestamp}_abi_logs.txt"
+            "file_path": "storage/datastore/utils/logs/{timestamp}_abi_logs.txt"
         })
     
     def get_log_level(self) -> str:
@@ -191,63 +191,20 @@ class AINetworkConfig:
         logging_config = self.get_logging_config()
         return logging_config.get("level", "INFO").upper()
     
-    def get_log_file_path(self) -> str:
-        """Get the current session's log file path with timestamp"""
-        from datetime import datetime
-        
-        logging_config = self.get_logging_config()
-        log_file_path = logging_config.get("file_path", "storage/logs/{timestamp}_abi_logs.txt")
-        
-        # Replace {timestamp} with current timestamp
-        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-        return log_file_path.replace("{timestamp}", timestamp)
+    def get_logging_manager(self):
+        """Get a LoggingManager instance for this configuration"""
+        from src.utils.Logging import create_logging_manager
+        return create_logging_manager(self.get_logging_config())
     
-    def setup_logging(self) -> None:
-        """Setup logging based on configuration"""
-        import logging
-        import os
-        from pathlib import Path
+    def setup_logging(self) -> Optional[str]:
+        """
+        Setup logging based on configuration using LoggingManager
         
-        config = self.get_logging_config()
-        
-        # Configure log level
-        log_level = getattr(logging, config.get("level", "INFO").upper())
-        
-        # Setup formatters
-        formatter = logging.Formatter(config.get("format", 
-            "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"))
-        
-        # Get root logger
-        root_logger = logging.getLogger()
-        root_logger.setLevel(log_level)
-        
-        # Clear existing handlers
-        root_logger.handlers.clear()
-        
-        # Console handler
-        if config.get("console_output", True):
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            root_logger.addHandler(console_handler)
-        
-        # File handler
-        if config.get("file_output", False):
-            log_file_path = config.get("file_path", "storage/logs/{timestamp}_abi_logs.txt")
-            
-            # Replace {timestamp} with current timestamp
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-            log_file_path = log_file_path.replace("{timestamp}", timestamp)
-            
-            # Create directory if it doesn't exist
-            log_dir = Path(log_file_path).parent
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            file_handler = logging.FileHandler(log_file_path)
-            file_handler.setFormatter(formatter)
-            root_logger.addHandler(file_handler)
-            
-            logger.info(f"📝 File logging enabled: {log_file_path}")
+        Returns:
+            Optional[str]: Log file path if file logging is enabled, None otherwise
+        """
+        logging_manager = self.get_logging_manager()
+        return logging_manager.setup_logging()
     
     def validate_configuration(self) -> List[str]:
         """Validate the AI Network configuration and return any issues"""

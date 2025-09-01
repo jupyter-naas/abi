@@ -30,11 +30,11 @@ config:
 
 # Logging Configuration
 logging:
-  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: DEBUG  # Highest level of detail
   format: "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
   console_output: true
-  file_output: false
-  file_path: "storage/logs/{timestamp}_abi_logs.txt"  # {timestamp} = YYYYMMDDTHHMMSS
+  file_output: true  # Enable file logging by default - captures everything from terminal
+  file_path: "storage/datastore/utils/logs/{timestamp}_abi_logs.txt"  # {timestamp} = YYYYMMDDTHHMMSS
 
 ai_network:
   core:
