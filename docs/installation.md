@@ -8,6 +8,7 @@
 - **Configuration-Driven** - Define your entire AI Network in a single file
 - **Zero Code Changes** - Modify agent behavior through configuration
 - **Intelligent Routing** - Commands automatically reach the right agents
+- **Complete Memory** - Knowledge graphs, SQL databases, and vector storage
 - **Portable** - Run on servers, phones, tablets, and edge devices
 - **Open Source** - Complete transparency and open to community contributions
 
@@ -188,29 +189,45 @@ ai_network:
 ABI uses a single configuration file to define your AI Network:
 
 ```mermaid
-graph LR
+graph TB
     User["User Input<br/>'use claude for analysis'"] --> ABI["ABI Orchestrator<br/>Intent Routing"]
     
     ABI --> Claude["Claude Agent<br/>Analysis & Writing"]
     ABI --> ChatGPT["ChatGPT Agent<br/>General & Coding"]
     ABI --> Gemini["Gemini Agent<br/>Multimodal"]
-    ABI --> Tools["Tools<br/>Knowledge Graph<br/>Config Check"]
+    ABI --> Tools["Tools<br/>Knowledge Graph Explorer<br/>Config Check"]
     
     Config["config.yaml<br/>• Agent definitions<br/>• Intent mappings<br/>• Enable/disable"] -.-> ABI
     
-    Claude --> Response1["Detailed analysis response"]
-    ChatGPT --> Response2["Code or general response"]
-    Gemini --> Response3["Image/multimodal response"]
-    Tools --> Response4["System information"]
+    subgraph Memory["Memory Services"]
+        KG["Knowledge Graph<br/>Triple Store<br/>Ontologies & Relations"]
+        SQL["SQL Database<br/>Structured Data<br/>Agent Memory"]
+        Vector["Vector Store<br/>Embeddings<br/>(Coming Soon)"]
+    end
+    
+    Claude <--> Memory
+    ChatGPT <--> Memory
+    Gemini <--> Memory
+    Tools <--> Memory
+    
+    Claude --> Response1["Analysis with<br/>contextual knowledge"]
+    ChatGPT --> Response2["Code with<br/>learned patterns"]
+    Gemini --> Response3["Multimodal with<br/>memory context"]
+    Tools --> Response4["System info with<br/>historical data"]
     
     style ABI fill:#e1f5fe
     style Config fill:#f0f0f0
     style User fill:#e8f5e8
+    style Memory fill:#f5f5f5
+    style KG fill:#e8f5e8
+    style SQL fill:#fff3e0
+    style Vector fill:#fce4ec
 ```
 
 - **Single Source**: Your entire AI Network in one config.yaml file
 - **Intelligent Routing**: Commands automatically reach the appropriate agents
 - **Intent Mapping**: Support for direct responses, tool routing, and agent routing
+- **Memory Services**: Knowledge graphs, SQL databases, and vector storage for context
 - **Agent Control**: Enable/disable agents with a config change
 - **No Code Changes**: Modify behavior through configuration
 
