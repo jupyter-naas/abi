@@ -279,11 +279,12 @@ make
 
 ## Verification
 
-```bash
-docker ps
+In the chat, type:
+```
+check agent status
 ```
 
-You should see Oxigraph, PostgreSQL, and Dagster containers running.
+You should see 🟢 indicators for enabled agents.
 
 ## Troubleshooting
 
