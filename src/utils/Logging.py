@@ -14,6 +14,20 @@ from typing import Dict, Any, Optional, TextIO
 from abi import logger
 
 
+class GreyFormatter(logging.Formatter):
+    """Formatter that adds grey color to log messages in terminal"""
+    
+    # ANSI color codes
+    GREY = '\033[90m'  # Bright black (grey)
+    RESET = '\033[0m'  # Reset to default color
+    
+    def format(self, record):
+        # Format the message normally
+        formatted = super().format(record)
+        # Wrap in grey color for terminal display
+        return f"{self.GREY}{formatted}{self.RESET}"
+
+
 class TerminalCapture:
     """Captures terminal output and mirrors it to log file"""
     
@@ -90,10 +104,13 @@ class LoggingManager:
         # Clear existing handlers
         root_logger.handlers.clear()
         
-        # Console handler
+        # Console handler with grey color
         if self.config.get("console_output", True):
             console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
+            # Use grey formatter for console, regular formatter for file
+            grey_formatter = GreyFormatter(self.config.get("format", 
+                "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"))
+            console_handler.setFormatter(grey_formatter)
             root_logger.addHandler(console_handler)
         
         # File handler with terminal capture
