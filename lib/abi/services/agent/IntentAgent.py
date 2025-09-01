@@ -490,8 +490,25 @@ Last user message: "{last_human_message.content}"
                     return Command(goto=END, update={
                         "messages": [AIMessage(content=intent.intent_target)]
                     })
-                # elif intent.intent_type == IntentType.TOOL:
-                #     return Command(goto="model_call_tools")
+                elif intent.intent_type == IntentType.TOOL:
+                    # Create a synthetic tool call message for the mapped tool
+                    import uuid
+                    
+                    tool_call_id = str(uuid.uuid4())
+                    synthetic_message = AIMessage(
+                        content="",
+                        tool_calls=[{
+                            "name": intent.intent_target,
+                            "args": {},
+                            "id": tool_call_id,
+                            "type": "tool_call"
+                        }]
+                    )
+                    
+                    return Command(
+                        goto="call_tools",
+                        update={"messages": [synthetic_message]}
+                    )
                 elif intent.intent_type == IntentType.AGENT:
                     return Command(goto=intent.intent_target)
                 else:
