@@ -319,7 +319,7 @@ build.linux.x86_64: deps
 # -------------------------------------------------------------------------------------------------
 
 chat-abi-agent: deps
-	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
+	@ LOG_LEVEL=INFO uv run python -m src.cli
 
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
