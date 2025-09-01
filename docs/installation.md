@@ -1,6 +1,6 @@
 # ABI Installation & Configuration
 
-**ABI** (Agentic Brain Infrastructure) is an AI Network development framework. The open source platform enables intelligent, multi-agent systems that run on any device - from servers to phones to edge devices. Your entire AI Network is defined in a single configuration file.
+**ABI** (Agentic Brain Infrastructure) is an AI Network development framework. The open source platform enables intelligent, multi-agent systems that run on servers and cloud infrastructure, with mobile and edge deployment under research. Your entire AI Network is defined in a single configuration file.
 
 ## What is ABI?
 
@@ -9,14 +9,14 @@
 - **Zero Code Changes** - Modify agent behavior through configuration
 - **Intelligent Routing** - Commands automatically reach the right agents
 - **Complete Memory** - Knowledge graphs, SQL databases, and vector storage
-- **Portable** - Run on servers, phones, tablets, and edge devices
+- **Portable** - Run on servers and cloud, with mobile/edge research underway
 - **Open Source** - Complete transparency and open to community contributions
 
 ## When to Use ABI
 
 **Use ABI when you need:**
 - Custom AI agents for specific processes
-- Portable deployment across different devices
+- Local and cloud deployment capabilities
 - Local data processing for sensitive information
 - Full control over AI models and deployment
 - Development environment for platform integrations
@@ -42,10 +42,10 @@ Deploy the same configuration across different devices and environments:
 - Leverage cloud compute for heavy workloads
 - Integrate with cloud services
 
-**Mobile and Edge Devices**
-- Run on phones, tablets, and IoT devices
-- Distributed processing at the network edge
-- Bring AI capabilities closer to users
+**Mobile and Edge Devices** *(Research Stage)*
+- Exploring deployment on phones, tablets, and IoT devices
+- Research into distributed processing at the network edge
+- Future capability to bring AI closer to users
 
 The same configuration file works everywhere.
 
