@@ -224,3 +224,194 @@ def test_common_typos(agent):
     for typo, correct in typos:
         result = agent.invoke(f"talk to {typo}")
         assert result is not None, f"Failed to handle typo: {typo}"
+
+# =============================================================================
+# AI NETWORK CONFIGURATION AWARENESS TESTS
+# =============================================================================
+
+def test_disabled_agent_awareness_grok(agent):
+    """Test that ABI checks configuration and informs user when Grok is disabled"""
+    result = agent.invoke("can we talk to grok")
+    assert result is not None, result
+    
+    # Should mention that Grok is disabled in configuration
+    result_lower = result.lower()
+    assert any(keyword in result_lower for keyword in [
+        "disabled", "not enabled", "not available", "configuration"
+    ]), f"ABI should inform about disabled agent status, got: {result}"
+    
+    # Should NOT pretend to be Grok
+    assert "switching you over to grok" not in result_lower, f"ABI should not pretend to switch to disabled agent: {result}"
+
+def test_disabled_agent_awareness_perplexity(agent):
+    """Test that ABI checks configuration and informs user when Perplexity is disabled"""
+    result = agent.invoke("search the web with perplexity")
+    assert result is not None, result
+    
+    # Should mention that Perplexity is disabled
+    result_lower = result.lower()
+    assert any(keyword in result_lower for keyword in [
+        "disabled", "not enabled", "not available", "configuration"
+    ]), f"ABI should inform about disabled agent status, got: {result}"
+
+def test_disabled_agent_awareness_mistral(agent):
+    """Test that ABI checks configuration and informs user when Mistral is disabled"""
+    result = agent.invoke("ask mistral about AI")
+    assert result is not None, result
+    
+    # Should mention that Mistral is disabled
+    result_lower = result.lower()
+    assert any(keyword in result_lower for keyword in [
+        "disabled", "not enabled", "not available", "configuration"
+    ]), f"ABI should inform about disabled agent status, got: {result}"
+
+def test_enabled_agent_routing_chatgpt(agent):
+    """Test that ABI properly routes to enabled agents like ChatGPT"""
+    result = agent.invoke("ask chatgpt about python")
+    assert result is not None, result
+    
+    # Should either route to ChatGPT or mention it's available
+    result_lower = result.lower()
+    # Should not say it's disabled
+    assert "disabled" not in result_lower, f"ChatGPT should be enabled, got: {result}"
+    assert "not available" not in result_lower, f"ChatGPT should be available, got: {result}"
+
+def test_enabled_agent_routing_gemini(agent):
+    """Test that ABI properly routes to enabled agents like Gemini"""
+    result = agent.invoke("use gemini for image analysis")
+    assert result is not None, result
+    
+    # Should either route to Gemini or mention it's available
+    result_lower = result.lower()
+    # Should not say it's disabled
+    assert "disabled" not in result_lower, f"Gemini should be enabled, got: {result}"
+    assert "not available" not in result_lower, f"Gemini should be available, got: {result}"
+
+def test_configuration_checker_tool_direct(agent):
+    """Test the configuration checker tool directly"""
+    result = agent.invoke("what agents are available in the configuration?")
+    assert result is not None, result
+    
+    # Should mention enabled agents
+    result_lower = result.lower()
+    assert any(agent_name in result_lower for agent_name in [
+        "abi", "chatgpt", "gemini"
+    ]), f"Should list enabled agents, got: {result}"
+
+def test_configuration_checker_specific_agent(agent):
+    """Test checking specific agent status"""
+    result = agent.invoke("is grok enabled in the configuration?")
+    assert result is not None, result
+    
+    # Should specifically mention Grok's status
+    result_lower = result.lower()
+    assert "grok" in result_lower, f"Should mention Grok specifically, got: {result}"
+    assert any(keyword in result_lower for keyword in [
+        "disabled", "not enabled", "false"
+    ]), f"Should indicate Grok is disabled, got: {result}"
+
+def test_no_hallucination_as_disabled_agent(agent):
+    """Test that ABI never pretends to be a disabled agent"""
+    disabled_agent_requests = [
+        "hey grok, what do you think about AI?",
+        "grok, can you help me with this?",
+        "as grok, what would you say?",
+        "switch to grok mode"
+    ]
+    
+    for request in disabled_agent_requests:
+        result = agent.invoke(request)
+        assert result is not None, f"Failed for request: {request}"
+        
+        result_lower = result.lower()
+        # Should NOT respond as if it's Grok
+        hallucination_phrases = [
+            "as grok", "i'm grok", "grok here", "this is grok",
+            "speaking as grok", "grok speaking"
+        ]
+        
+        for phrase in hallucination_phrases:
+            assert phrase not in result_lower, f"ABI is hallucinating as Grok for request '{request}': {result}"
+
+def test_alternative_suggestions_for_disabled_agents(agent):
+    """Test that ABI suggests alternatives when requested agent is disabled"""
+    result = agent.invoke("I need to search the web but perplexity is what I want to use")
+    assert result is not None, result
+    
+    result_lower = result.lower()
+    # Should suggest alternatives or explain how to enable
+    assert any(keyword in result_lower for keyword in [
+        "alternative", "instead", "enable", "configuration", "available"
+    ]), f"Should suggest alternatives or explain how to enable, got: {result}"
+
+def test_configuration_modification_guidance(agent):
+    """Test that ABI can guide users on how to modify configuration"""
+    result = agent.invoke("how can I enable grok in the system?")
+    assert result is not None, result
+    
+    result_lower = result.lower()
+    # Should mention configuration file or CLI commands
+    assert any(keyword in result_lower for keyword in [
+        "config.yaml", "configuration", "enable", "cli", "network"
+    ]), f"Should provide configuration guidance, got: {result}"
+
+def test_multilingual_disabled_agent_handling(agent):
+    """Test disabled agent handling in French (real usage pattern)"""
+    result = agent.invoke("on peut parler à grok?")
+    assert result is not None, result
+    
+    # Should handle in French and mention disabled status
+    result_lower = result.lower()
+    assert any(keyword in result_lower for keyword in [
+        "désactivé", "disabled", "pas disponible", "not available", "configuration"
+    ]), f"Should handle French request and mention disabled status, got: {result}"
+
+def test_configuration_status_overview(agent):
+    """Test getting an overview of all agent statuses"""
+    result = agent.invoke("show me the status of all AI agents")
+    assert result is not None, result
+    
+    result_lower = result.lower()
+    # Should mention multiple agents and their statuses
+    assert "abi" in result_lower, f"Should mention ABI agent, got: {result}"
+    assert any(status in result_lower for status in [
+        "enabled", "disabled", "available", "not available"
+    ]), f"Should show agent statuses, got: {result}"
+
+def test_grok_disabled_config_mock(agent):
+    """Test that ABI properly handles disabled Grok agent by checking configuration"""
+    import unittest.mock
+    
+    # Mock the configuration to ensure Grok is disabled
+    mock_config = {
+        "core": [
+            {"name": "abi", "enabled": True},
+            {"name": "chatgpt", "enabled": True}, 
+            {"name": "gemini", "enabled": True},
+            {"name": "grok", "enabled": False}  # Explicitly disabled
+        ],
+        "custom": [],
+        "marketplace": []
+    }
+    
+    # Mock the get_ai_network_config function to return a config with disabled Grok
+    mock_ai_config = unittest.mock.MagicMock()
+    mock_ai_config.get_enabled_modules.return_value = mock_config
+    
+    with unittest.mock.patch('src.utils.ConfigLoader.get_ai_network_config', return_value=mock_ai_config):
+        result = agent.invoke("can we talk to grok")
+        assert result is not None, result
+        
+        result_lower = result.lower()
+        
+        # Should NOT pretend to switch to Grok
+        assert "switching you over to grok" not in result_lower, f"ABI should not pretend to switch to disabled agent: {result}"
+        assert "alright, switching" not in result_lower, f"ABI should not pretend to switch: {result}"
+        
+        # Should mention that Grok is disabled/not available
+        assert any(keyword in result_lower for keyword in [
+            "disabled", "not enabled", "not available", "configuration", "not loaded"
+        ]), f"ABI should inform about disabled agent status, got: {result}"
+        
+        # Should mention Grok specifically
+        assert "grok" in result_lower, f"Should mention Grok specifically, got: {result}"
