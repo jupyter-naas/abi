@@ -1,4 +1,4 @@
-# ABI Installation & Configuration
+# ABI Installation 
 
 **ABI** (Agentic Brain Infrastructure) is an AI Network development framework. The open source platform enables intelligent, multi-agent systems that run on servers and cloud infrastructure, with mobile and edge deployment under research. Your entire AI Network is defined in a single configuration file.
 
@@ -15,16 +15,16 @@
 ## When to Use ABI
 
 **Use ABI when you need:**
-- Custom AI agents for specific processes
-- Local and cloud deployment capabilities
-- Local data processing for sensitive information
-- Full control over AI models and deployment
-- Development environment for platform integrations
+- Full control over your AI infrastructure (local, cloud, or edge)
+- Custom AI agents and workflows
+- Seamless deployment across environments
+- Privacy-focused local processing capabilities
+- Development framework for AI applications
 
 **Use the Naas.ai cloud platform when you need:**
-- Quick start without setup
-- Team collaboration and sharing
-- Managed infrastructure and scaling
+- Managed service without infrastructure setup
+- Team collaboration and sharing features
+- Enterprise-grade scaling and support
 
 Most users start with the cloud platform and add ABI for customization later.
 
