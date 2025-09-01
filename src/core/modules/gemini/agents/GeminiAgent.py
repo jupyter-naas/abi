@@ -14,11 +14,12 @@ from abi import logger
 import os
 from datetime import datetime
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
 NAME = "Gemini"
-AVATAR_URL = (
-    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/google_gemini_logo.png"
-)
+TYPE = "core"
+SLUG = "gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
+MODEL = "google-gemini-2-5-flash"
 
 SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
 
@@ -109,6 +110,11 @@ Note: This creates production-ready image concepts. The descriptions can be used
 - Follow ethical guidelines in all interactions
 - Avoid generating harmful, biased, or misleading content
 - Maintain professional boundaries while being approachable"""
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 SUGGESTIONS = [
     {
@@ -160,6 +166,8 @@ def create_agent(
     tools: list = []
     agents: list = []
 
+
+
     # Import workflow here to avoid circular imports
     from src.core.modules.gemini.workflows.ImageGenerationStorageWorkflow import (
         ImageGenerationStorageWorkflow,
@@ -193,7 +201,6 @@ def create_agent(
         configuration=agent_configuration,
         memory=None,
     )
-
 
 class GoogleGemini2FlashAgent(IntentAgent):
     def as_api(

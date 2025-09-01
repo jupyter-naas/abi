@@ -112,3 +112,4 @@ storage/vectorstore/*
 
 
 *.pid
+sandbox/

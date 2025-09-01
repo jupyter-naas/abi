@@ -4,14 +4,19 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
+from abi.services.agent.Agent import Agent
 from src.core.modules.qwen.models.qwen3_8b import model
 from typing import Optional
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg"
 NAME = "Qwen"
+TYPE = "core"
+SLUG = "qwen"
 DESCRIPTION = "Local Qwen3 8B model via Ollama - privacy-focused AI for coding, reasoning, and multilingual tasks"
+MODEL = "qwen3-8b"
+
 SYSTEM_PROMPT = """You are Qwen, a helpful AI assistant powered by Alibaba's Qwen3 8B model running locally via Ollama.
 
 ## Your Capabilities
@@ -35,6 +40,11 @@ SYSTEM_PROMPT = """You are Qwen, a helpful AI assistant powered by Alibaba's Qwe
 
 Remember: You're running locally on this machine, ensuring complete privacy and offline functionality.
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -52,6 +62,11 @@ def create_agent(
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
+
+    from langchain_core.tools import Tool
+    from typing import List, Union
+    
+    tools: List[Union[Tool, Agent]] = []
 
     # Define Qwen-specific intents
     intents = [
@@ -83,6 +98,7 @@ def create_agent(
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
+        tools=tools,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,
