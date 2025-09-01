@@ -368,9 +368,8 @@ make ontology-backup         # Backup ontologies
 
 ## Getting Help
 
-**Documentation:**
-- [ABI Repository](https://github.com/jupyter-naas/abi) - Full documentation
-- [Agent Development](https://github.com/jupyter-naas/abi/docs) - Creating custom agents
+**Documentation:** 
+- [ABI Repository](https://github.com/jupyter-naas/abi/tree/main/docs) - Full documentation
 
 **Community Support:**
 - [GitHub Discussions](https://github.com/jupyter-naas/abi/discussions) - Community Q&A
