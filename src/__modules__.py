@@ -32,6 +32,7 @@ def get_modules():
     if not __loaded:
         start_time = time.time()
         logger.info("🚀 Starting AI Network module loading...")
+        logger.info("📋 Using configuration from: config.yaml")
         
         # Load configuration
         config = get_ai_network_config()
@@ -41,6 +42,7 @@ def get_modules():
         
         total_enabled = sum(len(modules) for modules in enabled_modules.values())
         logger.info(f"📊 Found {total_enabled} enabled modules across all categories")
+        logger.info(f"🏗️  Loading order: {' → '.join(enabled_modules.keys())}")
         
         # Load modules in the order they appear in config (natural architectural flow)
         for category, modules in enabled_modules.items():
@@ -55,7 +57,7 @@ def get_modules():
             logger.info(f"📂 Loading {len(modules)} modules from '{category}' ({category_path})")
             
             # Load modules in the order they appear in config file
-            for module_config in modules:
+            for i, module_config in enumerate(modules, 1):
                 module_name = module_config["name"]
                 description = module_config.get("description", "No description")
                 
@@ -64,7 +66,9 @@ def get_modules():
                     category, 
                     category_path, 
                     loading_settings,
-                    description
+                    description,
+                    i,
+                    len(modules)
                 )
                 
                 if not success and loading_settings.get("fail_on_error", True):
@@ -76,6 +80,12 @@ def get_modules():
         load_time = time.time() - start_time
         logger.info(f"✅ AI Network module loading completed in {load_time:.2f}s")
         logger.info(f"📈 Successfully loaded {len(__modules)} modules")
+        
+        # Show summary by category
+        for category, modules in enabled_modules.items():
+            enabled_count = len([m for m in modules if m.get("enabled", False)])
+            if enabled_count > 0:
+                logger.info(f"   📂 {category}: {enabled_count} modules")
 
     return __modules
 
@@ -85,7 +95,9 @@ def _load_single_module(
     category: str, 
     base_path: str, 
     loading_settings: Dict[str, Any],
-    description: str
+    description: str,
+    current_index: int,
+    total_count: int
 ) -> bool:
     """
     Load a single module with retry logic and error handling.
@@ -159,7 +171,7 @@ def _load_single_module(
                 logger.error(f"❌ Unknown module category: {category}")
                 return False
             
-            logger.info(f"🔄 Loading module '{module_name}' - {description}")
+            logger.info(f"🔄 [{current_index}/{total_count}] Loading '{module_name}' from {category}")
             
             # Import the module
             imported_module = importlib.import_module(module_relative_path)
@@ -171,7 +183,7 @@ def _load_single_module(
             
             __modules.append(mod)
             
-            logger.info(f"✅ Successfully loaded module '{module_name}'")
+            logger.info(f"✅ [{current_index}/{total_count}] Successfully loaded '{module_name}'")
             return True
             
         except ImportError as e:
