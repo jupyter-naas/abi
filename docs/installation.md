@@ -1,6 +1,6 @@
 # ABI Installation & Configuration
 
-**ABI** (Agentic Brain Infrastructure) is your AI Network development framework - the open source core that powers intelligent, multi-agent systems. ABI provides a configuration-driven platform where your entire AI Network is defined in a single `config.yaml` file, enabling you to build, customize, and orchestrate AI agents with zero code changes.
+**ABI** (Agentic Brain Infrastructure) is your AI Network development framework - the open source core that powers intelligent, multi-agent systems with seamless deployment across local, cloud, and edge environments. ABI provides a configuration-driven platform where your entire AI Network is defined in a single `config.yaml` file, enabling you to build once and deploy anywhere with zero code changes.
 
 ## What is ABI?
 
@@ -8,7 +8,9 @@
 - 🔧 **Configuration-Driven** - Your entire AI Network defined in config.yaml with SLUG-based routing
 - 🔄 **Zero Code Changes** - Enable/disable agents and modify behavior through configuration only
 - 🎯 **Enhanced Intent Mapping** - Support for RAW, TOOL, and AGENT intent types
-- 🏠 **Run Locally** - Keep sensitive data on your infrastructure  
+- 🌐 **Seamless Deployment** - Build once, deploy anywhere: local → cloud → edge with zero friction
+- 🔄 **Environment Agnostic** - Same config.yaml works across all deployment targets
+- 🔬 **Edge Computing Ready** - Research-backed edge deployment capabilities
 - 🚀 **Open Source** - Complete transparency and community contributions
 - 🤖 **Multi-Agent** - Orchestrate multiple specialized AI agents seamlessly
 
@@ -16,10 +18,13 @@
 
 **✅ Use ABI When You Need:**
 - Configuration-driven AI Network with instant agent activation
+- Seamless deployment across local, cloud, and edge environments
 - Custom AI agents for specific business processes
+- Build once, deploy anywhere capability
 - Local data processing for sensitive information
 - Deep customization of AI behavior through config.yaml
-- Offline capabilities without internet dependency
+- Edge computing capabilities for distributed AI
+- Environment-agnostic AI Network management
 - Full control over AI models and data
 - Development environment for building platform integrations
 
@@ -31,6 +36,30 @@
 - Immediate productivity with pre-built agents
 
 Most users start with the cloud platform and add ABI for customization later.
+
+## Seamless Multi-Environment Deployment
+
+ABI's revolutionary architecture enables effortless transitions between deployment environments:
+
+**🏠 Local Development**
+- Develop and test your AI Network locally
+- Full control over data and processing
+- Offline capabilities for sensitive workflows
+
+**☁️ Cloud Scaling**  
+- Deploy the same config.yaml to cloud infrastructure
+- Leverage cloud compute for heavy workloads
+- Integrate with cloud services seamlessly
+
+**⚡ Edge Computing**
+- Push AI capabilities to edge devices
+- Research-backed edge deployment (coming soon)
+- Distributed AI processing at the network edge
+
+**🔄 Zero-Friction Migration**
+- Same configuration file works everywhere
+- No code changes between environments
+- Seamless agent orchestration across deployment targets
 
 ## Prerequisites
 
