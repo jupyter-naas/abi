@@ -1,24 +1,21 @@
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
     
 )
-from src import secret, config
-from src.custom.modules.arxiv_agent.integrations.ArXivIntegration import (
+from src import secret
+from src.marketplace.modules.applications.arxiv.integrations.ArXivIntegration import (
     ArXivIntegration,
     ArXivIntegrationConfiguration,
 )
-from src.custom.modules.arxiv_agent.pipelines.ArXivPaperPipeline import (
+from src.marketplace.modules.applications.arxiv.pipelines.ArXivPaperPipeline import (
     ArXivPaperPipeline,
     ArXivPaperPipelineConfiguration,
 )
-from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
-    TripleStoreService__SecondaryAdaptor__Filesystem,
-)
-from abi.services.triple_store.TripleStoreService import TripleStoreService
-from src.custom.modules.arxiv_agent.workflows.ArXivQueryWorkflow import (
+from src.marketplace.modules.applications.arxiv.workflows.ArXivQueryWorkflow import (
     ArXivQueryWorkflow,
     ArXivQueryWorkflowConfiguration,
 )
@@ -42,15 +39,9 @@ Use arxiv_paper_pipeline to add important papers to the knowledge graph for futu
 Use the query tools to search for information in papers you've already added to the knowledge graph."""
 
 
-class ArXivAssistant(Agent):
-    """Assistant for interacting with ArXiv papers."""
-
-    pass
-
-
 def create_agent(
-    agent_shared_state: AgentSharedState = None,
-    agent_configuration: AgentConfiguration = None,
+    agent_shared_state: AgentSharedState | None = None,
+    agent_configuration: AgentConfiguration | None = None,
 ) -> Agent:
     """Creates an ArXiv assistant agent.
 
@@ -61,20 +52,20 @@ def create_agent(
     Returns:
         Agent: The configured ArXiv assistant agent
     """
+    from src import services
+
     # Initialize model
     model = ChatOpenAI(
-        model="gpt-4", temperature=0, api_key=secret.get("OPENAI_API_KEY")
+        model="gpt-4", 
+        temperature=0, 
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
 
     # Initialize tools
-    tools = []
+    tools: list = []
 
     # Initialize ontology store
-    triple_store = TripleStoreService(
-        TripleStoreService__SecondaryAdaptor__Filesystem(
-            store_path=config.triple_store_path
-        )
-    )
+    triple_store =  services.triple_store_service
 
     # Add ArXiv integration and pipeline tools
     arxiv_integration_config = ArXivIntegrationConfiguration()
@@ -115,3 +106,8 @@ def create_agent(
         configuration=agent_configuration,
         memory=None,
     )
+
+class ArXivAssistant(Agent):
+    """Assistant for interacting with ArXiv papers."""
+
+    pass

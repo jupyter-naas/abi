@@ -3,9 +3,15 @@
 Campaign budget allocation and management workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class BudgetManagementWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for BudgetManagementWorkflow"""
+    pass
 
 class BudgetManagementWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class BudgetManagementWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[BudgetManagementWorkflowConfiguration] = None):
         """Initialize BudgetManagementWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or BudgetManagementWorkflowConfiguration())
         logger.warning("🚧 BudgetManagementWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

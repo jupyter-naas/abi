@@ -316,7 +316,7 @@ with col1:
     st.markdown("**📍 Room Availability**")
     
     rooms = ['Conference Room A', 'Conference Room B', 'Meeting Room 1', 'Meeting Room 2', 'Board Room']
-    room_status = []
+    room_status: list[dict[str, str | int]] = []
     
     for room in rooms:
         # Mock availability
@@ -330,10 +330,10 @@ with col1:
             'Capacity': np.random.randint(4, 20)
         })
     
-    for room in room_status:
-        status_color = 'green' if room['Status'] == 'Available' else 'red'
-        st.markdown(f"**{room['Room']}** (Cap: {room['Capacity']})")
-        st.markdown(f"<span style='color: {status_color}'>{room['Status']}</span> | Next: {room['Next_Available']}", unsafe_allow_html=True)
+    for room_info in room_status:
+        status_color = 'green' if room_info['Status'] == 'Available' else 'red'
+        st.markdown(f"**{room_info['Room']}** (Cap: {room_info['Capacity']})")
+        st.markdown(f"<span style='color: {status_color}'>{room_info['Status']}</span> | Next: {room_info['Next_Available']}", unsafe_allow_html=True)
         st.markdown("---")
 
 with col2:

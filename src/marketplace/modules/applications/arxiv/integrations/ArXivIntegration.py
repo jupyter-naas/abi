@@ -4,10 +4,11 @@ import arxiv
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from abi.integration import Integration
+from abi.integration.integration import IntegrationConfiguration
 
 
 @dataclass
-class ArXivIntegrationConfiguration:
+class ArXivIntegrationConfiguration(IntegrationConfiguration):
     """Configuration for ArXiv integration."""
 
     max_results: int = 10
@@ -15,8 +16,11 @@ class ArXivIntegrationConfiguration:
 
 class ArXivIntegration(Integration):
     """Integration with the ArXiv API."""
+    
+    __configuration: ArXivIntegrationConfiguration
 
     def __init__(self, configuration: ArXivIntegrationConfiguration):
+        super().__init__(configuration)
         self.__configuration = configuration
         self.__client = arxiv.Client()
 

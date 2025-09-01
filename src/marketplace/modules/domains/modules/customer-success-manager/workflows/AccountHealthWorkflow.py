@@ -3,9 +3,15 @@
 Account health monitoring and intervention workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class AccountHealthWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for AccountHealthWorkflow"""
+    pass
 
 class AccountHealthWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class AccountHealthWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[AccountHealthWorkflowConfiguration] = None):
         """Initialize AccountHealthWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or AccountHealthWorkflowConfiguration())
         logger.warning("🚧 AccountHealthWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

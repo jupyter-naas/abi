@@ -3,9 +3,15 @@
 Comprehensive content strategy development workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class ContentStrategyWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for ContentStrategyWorkflow"""
+    pass
 
 class ContentStrategyWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class ContentStrategyWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[ContentStrategyWorkflowConfiguration] = None):
         """Initialize ContentStrategyWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or ContentStrategyWorkflowConfiguration())
         logger.warning("🚧 ContentStrategyWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

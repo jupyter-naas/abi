@@ -4,7 +4,7 @@ import urllib.parse
 from dataclasses import dataclass
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 import os
-from abi.utils.Storage import get_json, save_json, save_image
+from src.utils.Storage import get_json, save_json, save_image
 import pydash
 
 

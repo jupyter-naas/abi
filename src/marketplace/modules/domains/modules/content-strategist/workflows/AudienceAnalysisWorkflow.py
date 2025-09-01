@@ -3,9 +3,15 @@
 Target audience research and analysis workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class AudienceAnalysisWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for AudienceAnalysisWorkflow"""
+    pass
 
 class AudienceAnalysisWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class AudienceAnalysisWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[AudienceAnalysisWorkflowConfiguration] = None):
         """Initialize AudienceAnalysisWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or AudienceAnalysisWorkflowConfiguration())
         logger.warning("🚧 AudienceAnalysisWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

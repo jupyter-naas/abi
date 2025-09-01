@@ -3,9 +3,15 @@
 Content performance optimization workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class ContentOptimizationWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for ContentOptimizationWorkflow"""
+    pass
 
 class ContentOptimizationWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class ContentOptimizationWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[ContentOptimizationWorkflowConfiguration] = None):
         """Initialize ContentOptimizationWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or ContentOptimizationWorkflowConfiguration())
         logger.warning("🚧 ContentOptimizationWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:

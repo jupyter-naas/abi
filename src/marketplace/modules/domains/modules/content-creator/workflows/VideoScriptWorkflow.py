@@ -3,9 +3,15 @@
 Video script writing and storyboard creation workflow
 """
 
-from abi.workflow.workflow import Workflow
+from abi.workflow.workflow import Workflow, WorkflowConfiguration
 from typing import Dict, Any, Optional
 from abi import logger
+from dataclasses import dataclass
+
+@dataclass
+class VideoScriptWorkflowConfiguration(WorkflowConfiguration):
+    """Configuration for VideoScriptWorkflow"""
+    pass
 
 class VideoScriptWorkflow(Workflow):
     """
@@ -14,9 +20,9 @@ class VideoScriptWorkflow(Workflow):
     NOT FUNCTIONAL YET - Template only
     """
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: Optional[VideoScriptWorkflowConfiguration] = None):
         """Initialize VideoScriptWorkflow - NOT FUNCTIONAL YET"""
-        super().__init__(config or {})
+        super().__init__(config or VideoScriptWorkflowConfiguration())
         logger.warning("🚧 VideoScriptWorkflow is not functional yet - template only")
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
