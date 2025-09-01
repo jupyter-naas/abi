@@ -31,6 +31,25 @@ Most users start with the cloud platform and add ABI for customization later.
 
 Deploy the same configuration across different devices and environments:
 
+```mermaid
+graph TD
+    A["config.yaml<br/>Single Configuration File"] --> B["Development<br/>💻 Laptop/Desktop"]
+    A --> C["Cloud Infrastructure<br/>☁️ Servers"]
+    A --> D["Mobile Devices<br/>📱 Phones & Tablets"]
+    A --> E["Edge Devices<br/>⚡ IoT & Edge Hardware"]
+    
+    B --> F["Local Testing<br/>Full Control<br/>Offline Capable"]
+    C --> G["Cloud Scaling<br/>Heavy Workloads<br/>Service Integration"]
+    D --> H["Mobile AI<br/>On-Device Processing<br/>User-Centric"]
+    E --> I["Edge Computing<br/>Distributed Processing<br/>Low Latency"]
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+    style E fill:#fce4ec
+```
+
 **Development**
 - Develop and test locally on your machine
 - Full control over data and processing
