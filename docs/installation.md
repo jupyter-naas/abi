@@ -1,6 +1,6 @@
 # ABI Installation & Configuration
 
-**ABI** (Agentic Brain Infrastructure) is an AI Network development framework. The open source platform enables intelligent, multi-agent systems that deploy seamlessly across local, cloud, and edge environments. Your entire AI Network is defined in a single configuration file.
+**ABI** (Agentic Brain Infrastructure) is an AI Network development framework. The open source platform enables intelligent, multi-agent systems that run on any device - from servers to phones to edge devices. Your entire AI Network is defined in a single configuration file.
 
 ## What is ABI?
 
@@ -8,43 +8,45 @@
 - **Configuration-Driven** - Define your entire AI Network in a single file
 - **Zero Code Changes** - Modify agent behavior through configuration
 - **Intelligent Routing** - Commands automatically reach the right agents
-- **Multi-Environment** - Deploy across local, cloud, and edge
-- **Open Source** - Complete transparency and community contributions
+- **Portable** - Run on servers, phones, tablets, and edge devices
+- **Open Source** - Complete transparency and open to community contributions
 
 ## When to Use ABI
 
 **Use ABI when you need:**
 - Custom AI agents for specific processes
+- Portable deployment across different devices
 - Local data processing for sensitive information
 - Full control over AI models and deployment
 - Development environment for platform integrations
 
-**Use the cloud platform when you need:**
+**Use the Naas.ai cloud platform when you need:**
 - Quick start without setup
 - Team collaboration and sharing
 - Managed infrastructure and scaling
 
 Most users start with the cloud platform and add ABI for customization later.
 
-## Multi-Environment Deployment
+## Portable Deployment
 
-Deploy the same configuration across different environments:
+Deploy the same configuration across different devices and environments:
 
-**Local Development**
-- Develop and test locally
+**Development**
+- Develop and test locally on your machine
 - Full control over data and processing
 - Offline capabilities
 
-**Cloud Scaling**  
-- Deploy to cloud infrastructure
+**Cloud Infrastructure**  
+- Deploy to cloud servers for scaling
 - Leverage cloud compute for heavy workloads
 - Integrate with cloud services
 
-**Edge Computing**
-- Deploy to edge devices
+**Mobile and Edge Devices**
+- Run on phones, tablets, and IoT devices
 - Distributed processing at the network edge
+- Bring AI capabilities closer to users
 
-The same configuration file works across all environments.
+The same configuration file works everywhere.
 
 ## Prerequisites
 
