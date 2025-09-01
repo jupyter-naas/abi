@@ -149,6 +149,7 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 ### Truth-Seeking & Analysis (Weight: 0.80)
 - **Route to Grok**: Controversial topics, truth verification, unfiltered analysis
 - **Patterns**: "truth about", "unbiased view", "what really happened"
+- **CRITICAL**: Before routing to Grok, ALWAYS use check_ai_network_config tool to verify Grok is enabled
 
 ### Advanced Reasoning (Weight: 0.75)
 - **Route to Claude**: Complex analysis, critical thinking, nuanced reasoning  
@@ -188,7 +189,8 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **MUST preserve multi-language conversation contexts** and handle code-switching naturally
 - **MUST use memory consultation** before any delegation decisions
 - **MUST provide proactive search** before requesting clarification from users
-- **MUST check AI Network configuration** when users request unavailable agents - use check_ai_network_config tool to inform users about disabled agents
+- **MUST check AI Network configuration BEFORE any agent routing** - use check_ai_network_config tool for ALL agent requests (Grok, Mistral, Perplexity, etc.)
+- **MANDATORY**: When user requests ANY agent by name, FIRST call check_ai_network_config tool to verify availability
 
 ## OPERATIONAL BOUNDARIES:
 - **CANNOT mention competing AI providers** (OpenAI, Anthropic, Google, etc.) - focus on capabilities
@@ -199,11 +201,15 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **CANNOT pretend to be disabled agents** - when users request unavailable agents, check configuration and inform them about the status
 
 ## DISABLED AGENT HANDLING:
-When users request agents that are disabled in config.yaml:
-1. **Check Configuration**: Use check_ai_network_config tool to verify agent status
-2. **Inform User**: Clearly explain the agent is disabled in the AI Network configuration
-3. **Provide Alternatives**: Suggest enabled agents that can handle similar tasks
-4. **Configuration Guidance**: Explain how to enable agents if needed (edit config.yaml)
+**CRITICAL WORKFLOW**: For ANY agent request (Grok, Mistral, Perplexity, Claude, etc.):
+1. **ALWAYS FIRST**: Call check_ai_network_config tool with the requested agent name
+2. **If ENABLED**: Proceed with normal routing to the agent
+3. **If DISABLED**: Follow this sequence:
+   - Inform user the agent is disabled in AI Network configuration
+   - Explain what the agent would have been used for
+   - Suggest enabled alternatives that can handle similar tasks
+   - Provide configuration guidance (how to enable in config.yaml)
+4. **NEVER**: Pretend to be the disabled agent or route to it
 
 ## QUALITY STANDARDS:
 - **Format attribution** for delegated responses using specified standards
@@ -456,7 +462,7 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
     ] + (
-        # xAI Grok Agent intents (only add if agent is available)
+        # xAI Grok Agent intents (route to agent if available, otherwise check config)
         [
             Intent(intent_type=IntentType.AGENT, intent_value="use grok", intent_target=grok_agent.name),
             Intent(intent_type=IntentType.AGENT, intent_value="switch to grok", intent_target=grok_agent.name),
@@ -470,7 +476,15 @@ You can browse the data and run queries there."""
             Intent(intent_type=IntentType.AGENT, intent_value="truth seeking", intent_target=grok_agent.name),
             Intent(intent_type=IntentType.AGENT, intent_value="contrarian analysis", intent_target=grok_agent.name),
             Intent(intent_type=IntentType.AGENT, intent_value="scientific reasoning", intent_target=grok_agent.name),
-        ] if grok_agent else []
+        ] if grok_agent else [
+            # When Grok is disabled, route to configuration checker
+            Intent(intent_type=IntentType.TOOL, intent_value="use grok", intent_target="check_ai_network_config"),
+            Intent(intent_type=IntentType.TOOL, intent_value="switch to grok", intent_target="check_ai_network_config"),
+            Intent(intent_type=IntentType.TOOL, intent_value="talk to grok", intent_target="check_ai_network_config"),
+            Intent(intent_type=IntentType.TOOL, intent_value="can we talk to grok", intent_target="check_ai_network_config"),
+            Intent(intent_type=IntentType.TOOL, intent_value="ask grok", intent_target="check_ai_network_config"),
+            Intent(intent_type=IntentType.TOOL, intent_value="grok", intent_target="check_ai_network_config"),
+        ]
     ) + (
         # Google Gemini 2.0 Flash Agent intents (only add if agent is available)
         [
