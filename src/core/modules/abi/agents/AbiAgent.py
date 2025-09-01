@@ -428,37 +428,39 @@ You can browse the data and run queries there."""
 
 
 
-    # Generate intents dynamically from configuration
-    intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="My name is ABI",
-        ),
-        # Knowledge Graph Explorer intents (static tools)
-        Intent(intent_type=IntentType.TOOL, intent_value="show knowledge graph explorer", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="semantic knowledge graph", intent_target="open_knowledge_graph_explorer"), 
-        Intent(intent_type=IntentType.TOOL, intent_value="show the data", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="make a sparql query", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explore the database", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="knowledge graph", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="sparql", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explore ontology", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="browse entities", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="voir ton kg", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
-    ]
+    # Generate ALL intents dynamically from enhanced configuration
+    intents: list = []
     
-    # Optimized intent mapping processing with batch operations
+    # Enhanced intent mapping processing with support for all intent types
     intent_mapping = config_loader.get_intent_mapping()
+    
+    # 1. Process RAW intents (key-value pairs for direct responses)
+    raw_intents = intent_mapping.get("raw_intents", {})
+    for intent_value, response_text in raw_intents.items():
+        intents.append(Intent(
+            intent_type=IntentType.RAW,
+            intent_value=intent_value,
+            intent_target=response_text
+        ))
+    
+    # 2. Process TOOL intents (tool_name -> list of patterns)
+    tool_intents = intent_mapping.get("tool_intents", {})
+    for tool_name, intent_patterns in tool_intents.items():
+        for intent_value in intent_patterns:
+            intents.append(Intent(
+                intent_type=IntentType.TOOL,
+                intent_value=intent_value,
+                intent_target=tool_name
+            ))
+    
+    # 3. Process AGENT intents (agent_name -> list of patterns)
+    agent_intents = intent_mapping.get("agent_intents", {})
     
     # Pre-build intent lists for better performance
     enabled_agent_intents = []
     disabled_agent_intents = []
     
-    for agent_name, intent_patterns in intent_mapping.items():
+    for agent_name, intent_patterns in agent_intents.items():
         agent_ref = agent_references.get(agent_name)
         
         if agent_ref is not None:

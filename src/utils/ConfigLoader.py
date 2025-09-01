@@ -154,12 +154,47 @@ class AINetworkConfig:
 
         return enabled_agents
     
-    def get_intent_mapping(self) -> Dict[str, List[str]]:
-        """Get intent mapping from ABI agent configuration"""
-        abi_config = self.ai_network.get("abi", {})
-        if abi_config.get("enabled", False):
-            return abi_config.get("intent_mapping", {})
-        return {}
+    def get_intent_mapping(self) -> Dict[str, Any]:
+        """Get enhanced intent mapping from abi configuration with support for raw, tool, and agent intents"""
+        try:
+            abi_config = self.ai_network.get("abi", {})
+            if not abi_config.get("enabled", False):
+                return {"raw_intents": {}, "tool_intents": {}, "agent_intents": {}}
+                
+            intent_mapping = abi_config.get("intent_mapping", {})
+            
+            if not intent_mapping:
+                logger.warning("No intent mapping found in abi configuration")
+                return {"raw_intents": {}, "tool_intents": {}, "agent_intents": {}}
+            
+            # Ensure all intent types exist
+            enhanced_mapping = {
+                "raw_intents": intent_mapping.get("raw_intents", {}),
+                "tool_intents": intent_mapping.get("tool_intents", {}),
+                "agent_intents": intent_mapping.get("agent_intents", {})
+            }
+            
+            # For backward compatibility, if old format exists, move to agent_intents
+            for key, value in intent_mapping.items():
+                if key not in ["raw_intents", "tool_intents", "agent_intents"] and isinstance(value, list):
+                    enhanced_mapping["agent_intents"][key] = value
+            
+            total_intents = (
+                len(enhanced_mapping["raw_intents"]) +
+                sum(len(intents) for intents in enhanced_mapping["tool_intents"].values()) +
+                sum(len(intents) for intents in enhanced_mapping["agent_intents"].values())
+            )
+            
+            logger.info(f"✅ Loaded enhanced intent mapping: {total_intents} total intents")
+            logger.info(f"   - Raw intents: {len(enhanced_mapping['raw_intents'])}")
+            logger.info(f"   - Tool intents: {sum(len(intents) for intents in enhanced_mapping['tool_intents'].values())}")
+            logger.info(f"   - Agent intents: {sum(len(intents) for intents in enhanced_mapping['agent_intents'].values())}")
+            
+            return enhanced_mapping
+            
+        except Exception as e:
+            logger.error(f"Error loading intent mapping: {e}")
+            return {"raw_intents": {}, "tool_intents": {}, "agent_intents": {}}
     
     def get_logging_config(self) -> Dict[str, Any]:
         """Get logging configuration from config.yaml"""
