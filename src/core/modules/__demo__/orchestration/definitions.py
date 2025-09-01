@@ -1,8 +1,11 @@
 import dagster
 import os
 import json
-class MyAssetConfig(dagster.Config):
-    entry: dict
+from typing import Dict, Any
+from pydantic import BaseModel
+
+class MyAssetConfig(BaseModel):
+    entry: Dict[str, Any]
 
 @dagster.asset
 def my_asset(context: dagster.AssetExecutionContext, config: MyAssetConfig):
