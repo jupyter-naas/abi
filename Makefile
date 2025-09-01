@@ -70,7 +70,7 @@ fmt: deps
 # Linting, Static Analysis, Security
 #########################
 
-check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom check-marketplace
 
 check-core: deps
 	@echo ""
