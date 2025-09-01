@@ -279,35 +279,11 @@ Once configured, start ABI:
 make
 ```
 
-Here's what happens in your terminal:
+Here's what actually happens in your terminal:
 
 ```
 $ make
-
-  _____ _____ _____ _____
- |     |     |     |     |
- |  C  |  O  |  R  |  E  |
- |_____|_____|_____|_____|
-
-🔍 Running code quality checks...
-
-📝 Linting with ruff...
-All checks passed!
-
-🔍 Running static type analysis...
-Success: no issues found in 173 source files
-
-✅ CORE security checks passed!
-
 🚀 Starting ABI Agent...
-🐳 Starting Docker services...
-   - Oxigraph triple store (port 7878)
-   - PostgreSQL database (port 5432)
-   - Dagster orchestration (port 3000)
-
-🧠 Initializing knowledge graph...
-📊 Loading 7 AI agents: abi, chatgpt, gemini, claude, mistral, perplexity, grok
-
 💬 ABI Agent ready! Type your message below:
 
 ABI: Hello! I'm your ABI agent. I can help you with building custom AI agents, 
@@ -324,7 +300,7 @@ What would you like me to analyze?
 You: 
 ```
 
-The first run takes a few minutes to download Docker containers and initialize services.
+That's it! ABI starts directly without any setup steps - Docker services start automatically in the background when needed.
 
 ## Verification
 
