@@ -41,7 +41,7 @@ ai_network:
       strengths: Real-time web search, current events, comprehensive analysis
       use_when: Real-time information, web research, general intelligence tasks
     - name: claude
-      enabled: false
+      enabled: true
       strengths: Complex reasoning, critical thinking, detailed analysis
       use_when: Deep analysis, nuanced reasoning, complex problem-solving
     - name: deepseek

@@ -353,26 +353,48 @@ You can browse the data and run queries there."""
             logger.warning(f"Error getting agent '{name}': {e}")
             return None
 
-    # Create agent references for intent routing (lazy loaded)
-    grok_agent = get_agent_by_name("Grok")
-    google_gemini_agent = get_agent_by_name("Gemini") 
-    openai_agent = get_agent_by_name("ChatGPT")
-    perplexity_agent = get_agent_by_name("Perplexity")
-    mistral_agent = get_agent_by_name("Mistral")
-    claude_agent = get_agent_by_name("Claude")
-    llama_agent = get_agent_by_name("Llama")
-
-    # Local agent references
-    qwen_agent = get_agent_by_name("Qwen")
-    deepseek_agent = get_agent_by_name("DeepSeek")
-    gemma_agent = get_agent_by_name("Gemma")
-
-    # Collect all non-None agents for the IntentAgent constructor
+    # Get enabled agents from configuration
+    from src.utils.ConfigLoader import get_ai_network_config
+    config_loader = get_ai_network_config()
+    enabled_agents_metadata = config_loader.get_enabled_agents_metadata()
+    
+    # Create agent references dynamically based on enabled agents in config
+    agent_references = {}
     agents: list = []
-    for agent in [grok_agent, google_gemini_agent, openai_agent, perplexity_agent, 
-                  mistral_agent, claude_agent, llama_agent, qwen_agent, deepseek_agent, gemma_agent]:
+    
+    # Name mapping from config names to actual agent names
+    name_mapping = {
+        "abi": "Abi",
+        "chatgpt": "ChatGPT", 
+        "claude": "Claude",
+        "deepseek": "DeepSeek",
+        "gemini": "Gemini",
+        "gemma": "Gemma",
+        "grok": "Grok",
+        "llama": "Llama",
+        "mistral": "Mistral",
+        "perplexity": "Perplexity",
+        "qwen": "Qwen"
+    }
+    
+    for agent_name in enabled_agents_metadata.keys():
+        actual_agent_name = name_mapping.get(agent_name, agent_name.replace("_", " ").title())
+        agent = get_agent_by_name(actual_agent_name)
         if agent is not None:
+            agent_references[agent_name] = agent
             agents.append(agent)
+    
+    # Create individual references for backward compatibility (only if enabled)
+    grok_agent = agent_references.get("grok")
+    google_gemini_agent = agent_references.get("gemini")
+    openai_agent = agent_references.get("chatgpt") 
+    perplexity_agent = agent_references.get("perplexity")
+    mistral_agent = agent_references.get("mistral")
+    claude_agent = agent_references.get("claude")
+    llama_agent = agent_references.get("llama")
+    qwen_agent = agent_references.get("qwen")
+    deepseek_agent = agent_references.get("deepseek")
+    gemma_agent = agent_references.get("gemma")
 
 
 
