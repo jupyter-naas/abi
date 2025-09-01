@@ -5,9 +5,9 @@
 ## What is ABI?
 
 **Key Benefits:**
-- 🔧 **Configuration-Driven** - Your entire AI Network defined in config.yaml with SLUG-based routing
+- 🔧 **Configuration-Driven** - Your entire AI Network defined in a single config.yaml file
 - 🔄 **Zero Code Changes** - Enable/disable agents and modify behavior through configuration only
-- 🎯 **Enhanced Intent Mapping** - Support for RAW, TOOL, and AGENT intent types
+- 🎯 **Intelligent Intent Routing** - Natural language commands automatically route to the right agents
 - 🌐 **Seamless Deployment** - Build once, deploy anywhere: local → cloud → edge with zero friction
 - 🔄 **Environment Agnostic** - Same config.yaml works across all deployment targets
 - 🔬 **Edge Computing Ready** - Research-backed edge deployment capabilities
@@ -146,7 +146,7 @@ ABI's revolutionary approach uses a single `config.yaml` file to define your ent
 - `storage_name` and `space_name`: Storage configuration
 
 **AI Network Configuration:**
-The `ai_network` section is where the magic happens - define all your agents using SLUG-based identifiers with instant enable/disable capability:
+The `ai_network` section is where the magic happens - define all your agents with instant enable/disable capability:
 
 ```yaml
 ai_network:
@@ -201,7 +201,7 @@ ai_network:
 ABI's breakthrough configuration system transforms how AI Networks are built and managed:
 
 - **Single Source of Truth**: Your entire AI Network defined in one config.yaml file
-- **SLUG-Based Routing**: Consistent agent identification and routing system
+- **Intelligent Agent Routing**: Automatic routing of commands to the most appropriate agents
 - **Enhanced Intent Mapping**: Revolutionary support for RAW, TOOL, and AGENT intent types
 - **Instant Agent Control**: Enable/disable agents with a single config change
 - **Zero Code Modifications**: All behavior changes through configuration only
@@ -225,7 +225,7 @@ The ABI agent contains centralized intent mapping with three types:
 **Revolutionary Benefits:**
 - **Instant Agent Control**: Simply change `enabled: true/false` to activate/deactivate any agent
 - **Zero Code Modifications**: All agent behavior and intent routing controlled through config.yaml
-- **SLUG-Based Routing**: Consistent agent identification across your entire AI Network
+- **Consistent Agent Management**: Unified agent identification across your entire AI Network
 - **Dynamic Intent Mapping**: Add new intents and behaviors without touching a single line of code
 
 ## Quick Start
