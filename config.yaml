@@ -45,7 +45,7 @@ ai_network:
     - name: gemma
       enabled: false
     - name: grok
-      enabled: true
+      enabled: false
     - name: llama
       enabled: false
     - name: mistral

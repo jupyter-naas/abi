@@ -188,6 +188,7 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **MUST preserve multi-language conversation contexts** and handle code-switching naturally
 - **MUST use memory consultation** before any delegation decisions
 - **MUST provide proactive search** before requesting clarification from users
+- **MUST check AI Network configuration** when users request unavailable agents - use check_ai_network_config tool to inform users about disabled agents
 
 ## OPERATIONAL BOUNDARIES:
 - **CANNOT mention competing AI providers** (OpenAI, Anthropic, Google, etc.) - focus on capabilities
@@ -195,6 +196,14 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **CANNOT create support tickets** without proper validation and user confirmation
 - **CANNOT delegate strategic advisory questions** that fall within direct expertise domain
 - **CANNOT ignore conversation flow preservation** - this is the highest priority operational rule
+- **CANNOT pretend to be disabled agents** - when users request unavailable agents, check configuration and inform them about the status
+
+## DISABLED AGENT HANDLING:
+When users request agents that are disabled in config.yaml:
+1. **Check Configuration**: Use check_ai_network_config tool to verify agent status
+2. **Inform User**: Clearly explain the agent is disabled in the AI Network configuration
+3. **Provide Alternatives**: Suggest enabled agents that can handle similar tasks
+4. **Configuration Guidance**: Explain how to enable agents if needed (edit config.yaml)
 
 ## QUALITY STANDARDS:
 - **Format attribution** for delegated responses using specified standards
@@ -259,11 +268,76 @@ You can browse the data and run queries there."""
 
     from langchain_core.tools import StructuredTool
     
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
     
     class EmptySchema(BaseModel):
         pass
     
+    # Add AI Network Configuration Checker tool
+    def check_ai_network_config(agent_name: Optional[str] = None) -> str:
+        """Check the AI Network configuration to see which agents are enabled or disabled."""
+        from src.utils.ConfigLoader import get_ai_network_config
+        
+        try:
+            config_loader = get_ai_network_config()
+            enabled_modules = config_loader.get_enabled_modules()
+            
+            if agent_name:
+                # Check specific agent
+                agent_name_lower = agent_name.lower()
+                for category, modules in enabled_modules.items():
+                    for module in modules:
+                        if module["name"].lower() == agent_name_lower:
+                            status = "enabled" if module["enabled"] else "disabled"
+                            return f"Agent '{agent_name}' is **{status}** in the AI Network configuration (category: {category})."
+                
+                # Check if agent exists in config but is disabled
+                all_config = config_loader.ai_network
+                for category, category_config in all_config.items():
+                    if category == "loading":
+                        continue
+                    modules = category_config.get("modules", [])
+                    for module in modules:
+                        if module["name"].lower() == agent_name_lower:
+                            status = "enabled" if module.get("enabled", False) else "disabled"
+                            return f"Agent '{agent_name}' is **{status}** in the AI Network configuration (category: {category})."
+                
+                return f"Agent '{agent_name}' not found in the AI Network configuration."
+            else:
+                # Show all agents status
+                result = "**AI Network Configuration Status:**\n\n"
+                for category, modules in enabled_modules.items():
+                    if modules:
+                        result += f"**{category.title()} Agents:**\n"
+                        for module in modules:
+                            status = "✅ enabled" if module["enabled"] else "❌ disabled"
+                            result += f"- {module['name']}: {status}\n"
+                        result += "\n"
+                
+                # Also show disabled ones from full config
+                all_config = config_loader.ai_network
+                disabled_agents = []
+                for category, category_config in all_config.items():
+                    if category == "loading":
+                        continue
+                    modules = category_config.get("modules", [])
+                    for module in modules:
+                        if not module.get("enabled", False):
+                            disabled_agents.append(f"{module['name']} ({category})")
+                
+                if disabled_agents:
+                    result += "**Disabled Agents:**\n"
+                    for agent in disabled_agents:
+                        result += f"- ❌ {agent}\n"
+                
+                return result
+                
+        except Exception as e:
+            return f"Error checking AI Network configuration: {str(e)}"
+
+    class AgentConfigSchema(BaseModel):
+        agent_name: Optional[str] = Field(default=None, description="Name of the specific agent to check (optional)")
+
     knowledge_graph_tool = StructuredTool(
         name="open_knowledge_graph_explorer",
         description="Open the ABI Knowledge Graph Explorer for semantic data exploration, SPARQL queries, and ontology browsing",
@@ -271,7 +345,14 @@ You can browse the data and run queries there."""
         args_schema=EmptySchema
     )
     
-    tools.append(knowledge_graph_tool)
+    config_checker_tool = StructuredTool(
+        name="check_ai_network_config",
+        description="Check which agents are enabled or disabled in the AI Network configuration. Use this when users ask about agent availability.",
+        func=check_ai_network_config,
+        args_schema=AgentConfigSchema
+    )
+    
+    tools.extend([knowledge_graph_tool, config_checker_tool])
 
     # Get agent recommendation tools from intentmapping
     from src.core.modules.abi import get_tools
