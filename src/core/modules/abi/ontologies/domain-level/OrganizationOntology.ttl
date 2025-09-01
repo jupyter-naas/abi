@@ -1,0 +1,272 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/OrganizationOntology> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/OrganizationOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for organizations."@en ;
+    dc:license "" ;
+    dc:title "Organization Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Website a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "Website" ;
+    skos:definition "A website containing a biography, portfolio of work, and contact information, representing an organization's presence and identity on the web." ;
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .
+
+abi:Ticker a owl:Class ;
+    rdfs:subClassOf cco:ont00000958 ;
+    rdfs:label "Ticker" ;
+    skos:definition "Represents a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges." ;
+    skos:example "AAPL, GOOGL, AMZN, etc." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:Industry a owl:Class ;
+    rdfs:subClassOf cco:ont00001239 ;
+    rdfs:label "Industry" ;
+    skos:definition "A Group of Organizations that share common characteristics, activities, or business objectives" ;
+    skos:example "Technology, Finance, Healthcare, etc." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:TechnologicalCapabilities a owl:Class ;
+    rdfs:subClassOf cco:ont00000568 ; # Organization Capabilities
+    rdfs:label "Technological Capabilities"@en ;
+    skos:definition "The technological abilities, systems, and expertise possessed by an organization."@en ;
+    skos:example "AI, Cloud Computing, Data Analytics, etc." ;
+    rdfs:comment "Technological Capabilities are the technological abilities, systems, and expertise possessed by an organization." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:HumanCapabilities a owl:Class ;
+    rdfs:subClassOf cco:ont00000568 ; # Organization Capabilities
+    rdfs:label "Human Capabilities"@en ;
+    skos:definition "The human skills, knowledge, and expertise possessed by an organization's workforce."@en ;
+    skos:example "Software Development, Consulting Services, Marketing Campaigns, etc." ;
+    rdfs:comment "Human Capabilities are the skills, knowledge, and expertise possessed by an organization's workforce." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfPartnership a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Partnership"@en ;
+    skos:definition "Planned act in which two or more organizations or individuals enter into an agreement to cooperate for mutual benefit, typically to achieve shared objectives."@en ;
+    skos:example "A business partnership between two consulting firms"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfJointVenture a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Joint Venture"@en ;
+    skos:definition "Planned act wherein two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+    skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfMarketingAlliance a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Marketing Alliance"@en ;
+    skos:definition "Planned act in which two or more organizations enter into a cooperative relationship to promote and distribute products or services to a common audience."@en ;
+    skos:example "A marketing alliance between a sports team and an apparel brand"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfResearchCollaboration a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Research Collaboration"@en ;
+    skos:definition "Planned act in which two or more organizations enter into a cooperative relationship to conduct research or development projects, sharing resources, expertise, and results."@en ;
+    skos:example "A research collaboration between universities and pharmaceutical companies"@en ;
+    rdfs:comment "Research Collaborations represent formal partnerships focused on research and development activities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfTechnologyLicensing a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Technology Licensing"@en ;
+    skos:definition "Planned act in which one organization grants permission to another organization to use its intellectual property, such as patents, trademarks, or proprietary technology, in exchange for a fee or royalty."@en ;
+    skos:example "A technology licensing agreement for patented semiconductor designs"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfDistributionAgreement a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Distribution Agreement"@en ;
+    skos:definition "Planned act in which one organization agrees to distribute the products or services of another organization, typically in a specific geographic region or market segment."@en ;
+    skos:example "A distribution agreement between a manufacturer and a regional retailer"@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfOrganizationalMerger a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Organizational Merger"@en ;
+    skos:definition "An Act of Association in which two or more independent organizations unite to form a single entity, typically to enhance operational efficiency, market reach, or competitive advantage."@en ;
+    skos:example "The merger of Company A and Company B to form a new entity, AB Corporation, for the purpose of expanding their market presence and combining resources."@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfOrganizationalAcquisition a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Organizational Acquisition"@en ;
+    skos:definition "An Act of Possession in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+    skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ActOfSubsidiaryEstablishment a owl:Class ;
+    rdfs:subClassOf cco:ont00000228 ; # Planned Act
+    rdfs:label "Act of Subsidiary Establishment"@en ;
+    skos:definition "An Act of Association in which an organization creates and establishes a new legal entity, known as a subsidiary, over which it retains significant control and ownership."@en ;
+    skos:example "Global Corp establishes a new subsidiary, Tech Innovations Inc., to focus on research and development in the technology sector."@en ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:GlobalHeadquarters a owl:Class ;
+    rdfs:subClassOf cco:ont00001102 ; # Commercial Facility
+    rdfs:label "Global Headquarters"@en ;
+    skos:definition "A Facility that serves as the central office for an organization on a global scale, providing strategic direction and administrative functions across all regions where the organization operates."@en ;
+    skos:example "The global headquarters of a multinational corporation located in New York City."@en ;
+    rdfs:comment "A Facility that serves as the central office for an organization on a global scale, providing strategic direction and administrative functions across all regions where the organization operates." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:RegionalHeadquarters a owl:Class ;
+    rdfs:subClassOf cco:ont00001102 ; # Commercial Facility
+    rdfs:label "Regional Headquarters"@en ;
+    skos:definition "A Facility that serves as the central office for an organization within a specific region, overseeing operations and providing strategic direction and administrative functions for that region."@en ;
+    skos:example "The regional headquarters of a company overseeing operations in Europe, based in Berlin."@en ;
+    rdfs:comment "A Facility that serves as the central office for an organization within a specific region, overseeing operations and providing strategic direction and administrative functions for that region." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:Brand a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ; # Descriptive Information Content Entity
+    rdfs:label "Brand"@en ;
+    skos:definition "Conveys the identity, distinguishing characteristics, and reputation of a product or service offered by an organization, often associated with a name, term, design, symbol, or other feature."@en ;
+    skos:example "The brand \"Apple\" for consumer electronics"@en ,
+                 "The brand \"Nike\" for athletic apparel"@en ;
+    rdfs:comment "Brands are informational constructs that encapsulate the reputation and identity of products or services, making them suitable to be represented as Descriptive Information Content Entities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:StrategicAlliance a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ;
+    rdfs:label "Strategic Alliance"@en ;
+    skos:definition "Describes an agreement between two or more organizations to pursue a set of agreed-upon objectives while remaining independent entities."@en ;
+    skos:example "A memorandum of understanding (MOU) between a technology company and a software provider"@en ,
+                 "A strategic collaboration agreement in the automotive sector"@en ;
+    rdfs:comment "Strategic alliances are typically formalized through documents and agreements, making them apt to be represented as Descriptive Information Content Entities." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:Partnership a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Partnership"@en ;
+    skos:definition "Details a formal agreement between two or more parties to manage and operate a business and share its profits and losses."@en ;
+    skos:example "The partnership agreement document for a law firm, a business plan outlining the roles of partners in a medical practice."@en ;
+    rdfs:comment "A partnership is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:JointVenture a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Joint Venture"@en ;
+    skos:definition "Details a planned act in which two or more organizations come together to undertake a specific project or business activity, sharing resources, risks, and rewards, while maintaining their distinct legal identities."@en ;
+    skos:example "A joint venture between automotive companies to develop electric vehicles"@en ;
+    rdfs:comment "A joint venture is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:MarketingAlliance a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Marketing Alliance"@en ;
+    skos:definition "Details a planned act in which two or more organizations enter into a cooperative relationship to promote and distribute products or services to a common audience."@en ;
+    skos:example "A marketing alliance between a sports team and an apparel brand"@en ;
+    rdfs:comment "A marketing alliance is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:ResearchCollaboration a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Research Collaboration"@en ;
+    skos:definition "Details a planned act in which two or more organizations enter into a cooperative relationship to conduct research or development projects, sharing resources, expertise, and results."@en ;
+    skos:example "A research collaboration between universities and pharmaceutical companies"@en ;
+    rdfs:comment "A research collaboration is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:TechnologyLicensing a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Technology Licensing"@en ;
+    skos:definition "Details a planned act in which one organization grants permission to another organization to use its intellectual property, such as patents, trademarks, or proprietary technology, in exchange for a fee or royalty."@en ;
+    skos:example "A technology licensing agreement for patented semiconductor designs"@en ;
+    rdfs:comment "A technology licensing is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:DistributionAgreement a owl:Class ;
+    rdfs:subClassOf abi:StrategicAlliance ;
+    rdfs:label "Distribution Agreement"@en ;
+    skos:definition "Details a planned act in which one organization agrees to distribute the products or services of another organization, typically in a specific geographic region or market segment."@en ;
+    skos:example "A distribution agreement between a manufacturer and a regional retailer"@en ;
+    rdfs:comment "A distribution agreement is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:OrganizationMerger a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ;
+    rdfs:label "Organization Merger"@en ;
+    skos:definition "Details a planned act in which two or more organizations unite to form a single entity, typically to enhance operational efficiency, market reach, or competitive advantage."@en ;
+    skos:example "The merger of Company A and Company B to form a new entity, AB Corporation, for the purpose of expanding their market presence and combining resources."@en ;
+    rdfs:comment "A merger is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+abi:OrganizationAcquisition a owl:Class ;
+    rdfs:subClassOf cco:ont00000853 ;
+    rdfs:label "Organization Acquisition"@en ;
+    skos:definition "Details a planned act in which one organization gains control over another organization, acquiring its assets, operations, and management to expand its operations or market share."@en ;
+    skos:example "Company X acquires Company Y, taking control of its operations and integrating Company Y's products into its own product line."@en ;
+    rdfs:comment "An organization acquisition is often documented through agreements and plans, which makes it suitable to be represented as a Descriptive Information Content Entity." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasLegalName a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range cco:ont00001331 ;
+    rdfs:label "has legal name"@en ;
+    skos:definition "Relates an Organization to its legal name, which is a formally registered designation of the organization."@en .
+
+abi:isLegalNameOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain cco:ont00001331 ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is legal name of"@en ;
+    skos:definition "Relates a legal name to the organization it belongs to."@en .
+
+abi:hasWebsite a owl:ObjectProperty ;
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Website ;
+    rdfs:label "has website"@en ;
+    skos:definition "Relates an organization to its website."@en ;
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries."@en .
+
+abi:isWebsiteOf a owl:ObjectProperty ;
+    rdfs:domain abi:Website ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is website of"@en ;
+    skos:definition "Relates a website to the organization it represents."@en ;
+    skos:example "Microsoft's website, featuring their biography, a gallery of art pieces they've created, and a contact form for inquiries."@en .
+
+abi:hasTickerSymbol a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000101 ; # is carrier of
+    rdfs:domain cco:ont00001180 ;
+    rdfs:range abi:Ticker ;
+    rdfs:label "has ticker"@en ;
+    skos:definition "Relates an Organization to its ticker, which is a unique symbol assigned to a publicly traded company for identification purposes on stock exchanges."@en .
+
+abi:isTickerSymbolOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000084 ; # generically depends on
+    rdfs:domain abi:Ticker ;
+    rdfs:range cco:ont00001180 ;
+    rdfs:label "is ticker symbol of"@en ;
+    skos:definition "Relates a ticker symbol to the organization it belongs to."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+

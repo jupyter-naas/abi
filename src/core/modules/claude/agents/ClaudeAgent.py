@@ -12,9 +12,12 @@ from typing import Optional
 from enum import Enum
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/claude.png"
 NAME = "Claude"
-AVATAR_URL = "https://assets.anthropic.com/m/0edc05fa8e30f2f9/original/Anthropic_Glyph_Black.svg"
+TYPE = "core"
+SLUG = "claude"
 DESCRIPTION = "Anthropic's most intelligent model with best-in-class reasoning capabilities and analysis."
+MODEL = "claude-3-5-sonnet"
 SYSTEM_PROMPT = """You are Claude, a helpful, harmless, and honest AI assistant created by Anthropic.
 You excel at complex reasoning, analysis, and creative tasks with a focus on:
 - Advanced reasoning and critical thinking
@@ -40,6 +43,11 @@ When users say things like "ask claude", "parler à claude", "I want to talk to 
 
 You prioritize accuracy, helpfulness, and ethical considerations in all your responses.
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -61,6 +69,11 @@ def create_agent(
     # Init
     tools: list = []
     agents: list = []
+    
+
+    
+                    
+
     intents: list = [
         Intent(
             intent_value="what is your name",
@@ -84,7 +97,6 @@ def create_agent(
         configuration=agent_configuration,
         memory=None,
     ) 
-
 
 class ClaudeAgent(IntentAgent):
     def as_api(

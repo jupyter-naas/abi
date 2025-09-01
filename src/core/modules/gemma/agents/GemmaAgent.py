@@ -1,17 +1,22 @@
 from abi.services.agent.IntentAgent import (
-    IntentAgent, 
-    Intent, 
-    IntentType, 
-    AgentConfiguration, 
-    AgentSharedState, 
-    
+    IntentAgent,
+    Intent,
+    IntentType,
+    AgentConfiguration,
+    AgentSharedState,
 )
+from abi.services.agent.Agent import Agent
 from src.core.modules.gemma.models.gemma3_4b import model
 from typing import Optional
 from abi import logger
 
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemma.png"
 NAME = "Gemma"
+TYPE = "core"
+SLUG = "gemma"
 DESCRIPTION = "Local Gemma3 4B model via Ollama - lightweight, fast alternative to cloud Gemini"
+MODEL = "gemma3-4b"
+
 SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's open-source Gemma3 4B model running locally via Ollama.
 
 ## Your Strengths
@@ -52,6 +57,11 @@ SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's ope
 
 Remember: I'm your local, private AI assistant - fast, efficient, and completely offline!
 """
+TEMPERATURE = 0
+DATE = True
+INSTRUCTIONS_TYPE = "system"
+ONTOLOGY = True
+SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
@@ -70,6 +80,11 @@ def create_agent(
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
+
+    from langchain_core.tools import Tool
+    from typing import List, Union
+    
+    tools: List[Union[Tool, Agent]] = []
 
     # Define Gemma-specific intents
     intents = [
@@ -108,6 +123,7 @@ def create_agent(
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
+        tools=tools,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,
