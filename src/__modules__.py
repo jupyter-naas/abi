@@ -1,10 +1,15 @@
 from abi.utils.Module import IModule
+from abi import logger
 from typing import List
 import importlib
 import os
 from pathlib import Path
 
-MODULE_PATH = ["src/core/modules", "src/custom/modules"]
+MODULE_PATH: list[str] = [
+    "src/core/modules",
+    "src/custom/modules",
+    "src/marketplace/modules",
+]
 
 __modules: List[IModule] = []
 __loaded: bool = False
@@ -49,9 +54,10 @@ def get_modules():
                         __modules.append(mod)
                     except Exception as e:
                         import traceback
-
-                        print(f"❌ Error loading module {module.name}: {e}")
+                        
+                        logger.error(f"❌ Critical error loading module {module.name}: {e}")
                         traceback.print_exc()
+                        raise SystemExit(f"Application crashed due to module loading failure: {module.name}")
 
         __loaded = True
 

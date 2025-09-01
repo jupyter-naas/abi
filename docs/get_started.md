@@ -39,7 +39,7 @@ The **ABI** project aims to provide a open alternative to Palantir by offering a
 - **Event-Driven**: Actions can be triggered by events logged in the triple store.
 - **Deterministic Queries**: Deterministic SPARQL queries can be added to the ontology to used by the agents as tools without having to create any python code.
 - **Scheduling Tasks**: Tasks can be pre-processed and scheduled to avoid latency.
-- **Multi-models**: This project is model agnostic. You can use any LLM you want in your agents or workflows.
+- **Multi-models**: This project is model agnostic with built-in support for major LLM providers including OpenAI, Anthropic, Google, Meta, and Mistral. You can use any LLM you want in your agents or workflows.
 
 ## Installation
 
@@ -47,8 +47,8 @@ Get started with ABI - Install, configure and chat with your first agent.
 
 ### Pre-requisites
 
-- **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)**
-- **Install [uv](https://docs.astral.sh/uv/getting-started/installation/)**
+- **Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)** - Required for running Oxigraph and other services
+- **Install [uv](https://docs.astral.sh/uv/getting-started/installation/)** - Python package manager
 - **Create your account on [NAAS](https://naas.ai)** (Optional, only if you want to use the storage system in production)
 
 ### Installation Options
@@ -89,6 +89,12 @@ cp .env.example .env
 2. Replace placeholder values with your actual credentials
 3. Uncomment (remove #) from lines you want to activate. The variables are used to configure the assistant.
 
+**Available AI Models**: ABI supports multiple LLM providers. Configure the API keys for the models you want to use:
+- `OPENAI_API_KEY` - For GPT-4o and Llama 3.3 70B models
+- `ANTHROPIC_API_KEY` - For Claude 3.5 Sonnet model
+- `GOOGLE_API_KEY` - For Gemini 2.0 Flash model
+- `MISTRAL_API_KEY` - For Mistral Large 2 model
+
 Note: The .env file should never be committed to version control
 as it contains sensitive credentials
 
@@ -119,11 +125,17 @@ cp config.yaml.example config.yaml
 Now, the project is installed and configured, you can start chatting with the core agent by running the following command:
 
 ```bash
-make chat-supervisor-agent
+make chat-abi-agent
 ```
 
-This command will setup the environment, install the dependencies, initalize your triple store and run the supervisor agent.
-It can take a few minutes at the first time you run it.
+This command will:
+1. Setup the environment and install dependencies
+2. Initialize your .env configuration 
+3. Start the Oxigraph triple store automatically (via Docker)
+4. Initialize your knowledge graph
+5. Run the Abi agent
+
+It can take a few minutes the first time you run it as it needs to download and start the Oxigraph Docker container (though Oxigraph starts much faster than alternatives).
 
 ## Help & Support
 For any questions or support requests, please create an issue on this repository or reach out via [support@naas.ai](mailto:support@naas.ai).

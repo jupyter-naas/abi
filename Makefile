@@ -21,17 +21,14 @@ uv:
 	@ uv python find 3.10 > /dev/null || (uv python install 3.10 && uv python pin 3.10)
 
 .env:
-	@if [ ! -f .env ]; then \
-		echo "⚠️ Oops! Looks like .env is missing!\n Initializing .env file with .env.example"; \
-		cp .env.example .env; \
-		echo "✅ .env file initialized with .env.example"; \
-	fi
+	@# .env will be created dynamically by CLI during first boot
 
 .venv:
-	@ uv sync
+	@ uv sync --all-extras
 
-.venv/lib/python3.10/site-packages/abi: deps
-	@[ -L .venv/lib/python3.10/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python3.10/site-packages/abi 
+python_version=$(shell cat .python-version)
+.venv/lib/python$(python_version)/site-packages/abi: deps
+	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi 
 
 
 install: dep
@@ -53,8 +50,18 @@ path=tests/
 test:  deps
 	@ uv run python -m pytest .
 
+test-abi: deps
+	@ uv run python -m pytest lib
+
+test-api: deps
+	@ uv run python -m pytest src/api_test.py -v -s
+
+hello:
+	@echo 'hello' | make
+
+q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf)
+	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 fmt: deps
 	@ uvx ruff format
@@ -63,7 +70,7 @@ fmt: deps
 # Linting, Static Analysis, Security
 #########################
 
-check: deps .venv/lib/python3.10/site-packages/abi check-core check-custom
+check: deps .venv/lib/python$(python_version)/site-packages/abi check-core check-custom
 
 check-core: deps
 	@echo ""
@@ -121,6 +128,18 @@ trivy-container-scan: build
 api: deps
 	uv run src/api.py
 
+mcp: deps
+	@echo "🚀 Starting MCP Server (STDIO mode for Claude Desktop)..."
+	uv run mcp-server
+
+mcp-http: deps
+	@echo "🌐 Starting MCP Server (SSE mode on port 8000)..."
+	MCP_TRANSPORT=sse uv run mcp-server
+
+mcp-test: deps
+	@echo "🔍 Running MCP Server validation tests..."
+	uv run python mcp_server_test.py
+
 api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
@@ -132,8 +151,29 @@ api-dev: deps
 sparql-terminal: deps
 	@ uv run python -m src.core.apps.sparql_terminal.main	
 
+oxigraph-admin: deps
+	@ uv run python -m src.core.apps.oxigraph_admin.main
+
+oxigraph-explorer:
+	@echo "🚀 Opening Knowledge Graph Explorer..."
+	@echo "📍 Visit: http://localhost:7878/explorer/"
+	@echo "✨ Features:"
+	@echo "   • Interactive overview dashboard"
+	@echo "   • Full-featured YasGUI SPARQL editor"
+	@echo "   • Pre-built query library with explanations"
+	@command -v open >/dev/null 2>&1 && open "http://localhost:7878/explorer/" || echo "Open the URL manually in your browser"
+
+
 dvc-login: deps
 	@ uv run run python scripts/setup_dvc.py | sh
+
+datastore-pull: deps
+	@ echo "Pulling datastore..."
+	@ uv run --no-dev python scripts/datastore_pull.py | sh
+
+datastore-push: deps datastore-pull
+	@ echo "Pushing datastore..."
+	@ uv run --no-dev python scripts/datastore_push.py | sh
 
 storage-pull: deps
 	@ echo "Pulling storage..."
@@ -141,7 +181,7 @@ storage-pull: deps
 
 storage-push: deps storage-pull
 	@ echo "Pushing storage..."
-	@ docker compose run --rm --remove-orphans abi bash -c 'uv run run --no-dev python scripts/storage_push.py | sh'
+	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/storage_push.py | sh'
 
 triplestore-prod-remove: deps
 	@ echo "Removing production triplestore..."
@@ -154,6 +194,22 @@ triplestore-prod-override: deps
 triplestore-prod-pull: deps
 	@ echo "Pulling production triplestore..."
 	@ docker compose run --rm --remove-orphans abi bash -c 'uv run --no-dev python scripts/triplestore_prod_pull.py'
+
+triplestore-export-excel: deps
+	@ echo "Exporting triplestore to Excel..."
+	@ uv run python scripts/export_triplestore_excel.py
+
+triplestore-export-turtle: deps
+	@ echo "Exporting triplestore to turtle..."
+	@ uv run python scripts/export_triplestore_turtle.py
+
+docs-ontology: deps
+	@ echo "Generating ontology documentation..."
+	@ uv run python scripts/generate_docs.py
+
+publish-remote-agents: deps
+	@ echo "Publishing remote agents..."
+	@ uv run python scripts/publish_remote_agents.py
 
 clean:
 	@echo "Cleaning up build artifacts..."
@@ -177,7 +233,13 @@ help:
 	@echo "DEVELOPMENT:"
 	@echo "  api                      Start the API server on port 9879 for local development"
 	@echo "  api-prod                 Build and run the production API server in a Docker container"
+	@echo "  mcp                      Start MCP server in STDIO mode for Claude Desktop integration"
+	@echo "  mcp-http                 Start MCP server in HTTP mode on port 3000"
+	@echo "  mcp-test                 Run MCP server validation tests"
 	@echo "  sparql-terminal          Open an interactive SPARQL terminal for querying the triplestore"
+	@echo "  oxigraph-admin           Open Oxigraph administrative interface for monitoring and management"
+	@echo "  oxigraph-explorer        Open unified Knowledge Graph Explorer with iframe integration"
+	@echo ""
 	@echo ""
 	@echo "TESTING:"
 	@echo "  test                     Run all Python tests using pytest"
@@ -189,6 +251,8 @@ help:
 	@echo "  triplestore-prod-remove  Remove the production triplestore data"
 	@echo "  triplestore-prod-override Override the production triplestore with local data"
 	@echo "  triplestore-prod-pull    Pull triplestore data from production"
+	@echo "  docs-ontology            Generate ontology documentation"
+	@echo "  publish-remote-agents    Publish remote agents"
 	@echo ""
 	@echo "BUILDING:"
 	@echo "  build                    Build the Docker image (alias for build.linux.x86_64)"
@@ -196,15 +260,41 @@ help:
 	@echo ""
 	@echo "AGENTS:"
 	@echo "  chat-naas-agent          Start the Naas agent in terminal mode"
-	@echo "  chat-supervisor-agent    Start the Supervisor agent in terminal mode (default target)"
+	@echo "  chat-abi-agent           Start the Abi agent in terminal mode (default target)"
 	@echo "  chat-ontology-agent      Start the Ontology agent in terminal mode"
 	@echo "  chat-support-agent       Start the Support agent in terminal mode"
 	@echo ""
+	@echo "LOCAL AGENTS (Ollama):"
+	@echo "  chat-qwen-agent          Start Qwen3 8B agent (local, multilingual, coding)"
+	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (local, reasoning, math)"
+	@echo "  chat-gemma-agent         Start Gemma3 4B agent (local, lightweight, fast)"
+	@echo ""
+	@echo "DOCKER COMPOSE:"
+	@echo "  oxigraph-up              Start Oxigraph container"
+	@echo "  oxigraph-down            Stop Oxigraph container"
+	@echo "  oxigraph-status          Check Oxigraph container status"
+	@echo "  dev-up                   Start development services (Oxigraph, YasGUI)"
+	@echo "  dev-down                 Stop development services"
+	@echo "  container-up             Start ABI in container mode (if needed)"
+	@echo "  container-down           Stop ABI container"
+	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
+	@echo "  docker-cleanup           Clean up Docker conflicts and stuck containers"
+	@echo ""
+	@echo "TROUBLESHOOTING:"
+	@echo "  check-docker             Check if Docker is running"
+	@echo "  docker-cleanup           Fix Docker conflicts (run this if 'make' hangs)"
+	@echo ""
+	@echo "If 'make' hangs or times out:"
+	@echo "  1. Run: make docker-cleanup"
+	@echo "  2. Then: make dev-up"
+	@echo "  3. Finally: make"
+	@echo ""
+	@echo "For detailed troubleshooting: docs/troubleshooting/docker-conflicts.md"
 	@echo ""
 	@echo "DEFAULT:"
-	@echo "  The default target is help (running 'make' with no arguments displays this help menu)"
+	@echo "  The default target is chat-abi-agent (running 'make' starts ABI conversation)"
 
 # Docker Build Commands
 # -------------------
@@ -228,26 +318,95 @@ build.linux.x86_64: deps
 
 # -------------------------------------------------------------------------------------------------
 
+chat-abi-agent: deps
+	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
+
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
-
-chat-supervisor-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupervisorAgent
-
-chat-ontology-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent OntologyAgent
 
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
 pull-request-description: deps
-	@ echo "Generate the description of the pull request please." | uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
+
+# Local Ollama-based agents for privacy-focused interactions
+chat-qwen-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent QwenAgent
+
+chat-deepseek-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent DeepSeekAgent
+
+chat-gemma-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
 
 default: deps help
-.DEFAULT_GOAL := default
 
+console: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli
+
+.DEFAULT_GOAL := chat-abi-agent
+
+agent=AbiAgent
 chat: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
 
 
-.PHONY: test chat-supervisor-agent chat-support-agent api sh lock add abi-add help uv
+# Docker Compose Commands
+# -----------------------
+# These commands manage Docker containers for development
+
+# Check if Docker is running before executing docker commands
+check-docker:
+	@if ! docker info > /dev/null 2>&1; then \
+		echo "❌ Docker is not running. Please start Docker Desktop first."; \
+		echo "💡 After starting Docker, run: make docker-cleanup && make dev-up"; \
+		exit 1; \
+	fi
+
+# Enhanced cleanup with conflict detection
+docker-cleanup: check-docker
+	@echo "🧹 Running Docker cleanup to prevent conflicts..."
+	@./scripts/docker_cleanup.sh
+
+oxigraph-up: check-docker
+	@echo "Starting Oxigraph..."
+	@docker-compose --profile dev up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
+	@echo "✓ Oxigraph started on http://localhost:7878"
+
+oxigraph-down: check-docker
+	@echo "Stopping Oxigraph..."
+	@docker-compose --profile dev stop oxigraph || true
+	@echo "✓ Oxigraph stopped"
+
+oxigraph-status: check-docker
+	@echo "Oxigraph status:"
+	@docker-compose --profile dev ps oxigraph
+
+dev-up: check-docker
+	@echo "🚀 Starting development services..."
+	@if ! docker-compose --profile dev up -d --timeout 60; then \
+		echo "❌ Failed to start services. Running cleanup..."; \
+		./scripts/docker_cleanup.sh; \
+		echo "🔄 Retrying..."; \
+		docker-compose --profile dev up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+	fi
+	@echo "✓ All development containers started"
+	@echo "✓ Services available at:"
+	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
+	@echo "  - PostgreSQL (Agent Memory): localhost:5432"  
+	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
+
+dev-down: check-docker
+	@docker-compose --profile dev down --timeout 10 || true
+	@echo "✓ All development services stopped"
+
+container-up:
+	@docker-compose --profile container up -d
+	@echo "✓ ABI container started"
+
+container-down:
+	@docker-compose --profile container down
+	@echo "✓ ABI container stopped"
+
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status dev-up dev-down container-up container-down

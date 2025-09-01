@@ -1,6 +1,7 @@
 from abc import ABC
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from abi.services.agent.Agent import Agent
+from abi import logger
 from typing import Callable, List, Any
 import os
 import importlib
@@ -41,24 +42,37 @@ class IModule(ABC):
             self.__load_triggers()
             self.__load_ontologies()
         except Exception as e:
-            print(f"❌ Error loading module {self.module_import_path}: {e}")
+            logger.error(f"❌ Critical error loading module {self.module_import_path}: {e}")
+            raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")
 
     def load_agents(self):
         try:
             self.__load_agents()
         except Exception as e:
-            print(f"❌ Error loading agents for module {self.module_import_path}: {e}")
+            import traceback
+            logger.error(f"❌ Critical error loading agents for module {self.module_import_path}: {e}")
+            traceback.print_exc()
+            raise SystemExit(f"Application crashed due to agent loading failure: {self.module_import_path}")
 
     def __load_agents(self):
         # Load agents
+        self.agents = []
         agents_path = os.path.join(self.module_path, "agents")
         if os.path.exists(agents_path):
+            loaded_agent_names = set()
             for file in os.listdir(agents_path):
-                if file.endswith(".py"):
+                if file.endswith("Agent.py") and not file.endswith("Agent_test.py"):
                     agent_path = self.module_import_path + ".agents." + file[:-3]
                     module = importlib.import_module(agent_path)
                     if hasattr(module, "create_agent"):
-                        self.agents.append(module.create_agent())
+                        agent = module.create_agent()
+                        if agent is not None:
+                            agent_name = getattr(agent, "name", None)
+                            if agent_name and agent_name not in loaded_agent_names:
+                                self.agents.append(agent)
+                                loaded_agent_names.add(agent_name)
+                            else:
+                                logger.warning(f"Skipping duplicate agent: {agent_name}")
 
     def __load_triggers(self):
         if os.path.exists(os.path.join(self.module_path, "triggers.py")):

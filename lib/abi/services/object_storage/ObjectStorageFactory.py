@@ -9,6 +9,8 @@ from abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapte
     ObjectStorageSecondaryAdapterS3,
 )
 
+from abi.utils.Storage import find_storage_folder
+
 
 class ObjectStorageFactory:
     @staticmethod
@@ -16,16 +18,6 @@ class ObjectStorageFactory:
         needle: str = "storage",
     ) -> ObjectStorageService:
         import os
-
-        # Look for a "storage" folder until we reach /
-        def find_storage_folder(base_path: str) -> str:
-            if os.path.exists(os.path.join(base_path, needle)):
-                return os.path.join(base_path, needle)
-
-            if base_path == "/":
-                raise Exception("No storage folder found")
-
-            return find_storage_folder(os.path.dirname(base_path))
 
         return ObjectStorageService(
             ObjectStorageSecondaryAdapterFS(find_storage_folder(os.getcwd()))

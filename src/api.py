@@ -6,9 +6,11 @@ from fastapi.security.oauth2 import OAuth2
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
 from fastapi.security.utils import get_authorization_scheme_param
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from abi import logger
+from src import modules
 
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
@@ -19,7 +21,6 @@ from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
 
 # Automatic loading of agents from modules
-from src.__modules__ import get_modules
 
 # Init API
 TITLE = config.api_title
@@ -33,6 +34,18 @@ logo_name = os.path.basename(logo_path)
 # Set favicon path
 favicon_path = config.favicon_path
 favicon_name = os.path.basename(favicon_path)
+
+origins = config.cors_origins
+
+logger.debug(f"CORS origins: {origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Mount the static directory
 app.mount("/static", StaticFiles(directory="assets"), name="static")
@@ -123,8 +136,13 @@ workflows_router = APIRouter(
 def get_git_tag():
     try:
         tag = subprocess.check_output(["git", "describe", "--tags"]).strip().decode()
-    except subprocess.CalledProcessError:
-        tag = "v0.0.1"
+    except Exception as _:
+        # if file VERSION exists, use it
+        if os.path.exists("VERSION"):
+            with open("VERSION", "r") as f:
+                tag = f.read().strip()
+        else:
+            tag = "v0.0.1"
     return tag
 
 
@@ -171,11 +189,14 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
-
-for module in get_modules():
+for module in modules:
     for agent in module.agents:
-        logger.debug(f"Loading agent: {agent.name}")
-        agent.as_api(agents_router)
+        # Skip None agents (when API keys are missing)
+        if agent is not None:
+            logger.debug(f"Loading agent: {agent.name}")
+            agent.as_api(agents_router)
+        else:
+            logger.debug("Skipping None agent (missing API key)")
 
 # Include routers
 app.include_router(agents_router)
@@ -197,19 +218,7 @@ def api():
         )
     else:
         uvicorn.run(app, host="0.0.0.0", port=9879)
-    # uvicorn.run(app, host="0.0.0.0", port=9879, reload=True)
 
 
 if __name__ == "__main__":
     api()
-
-
-# @app.post("/telegram")
-# async def telegram(req: Request):
-#     data = await req.json()
-#     chat_id = data['message']['chat']['id']
-#     text = data['message']['text']
-
-#     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
-
-#     return data
