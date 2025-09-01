@@ -50,7 +50,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - dev
+      - local
       - prod
       - container
 
@@ -64,7 +64,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - dev
+      - local
       - prod
 
   oxigraph-proxy:
@@ -79,7 +79,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - dev
+      - local
       - prod
 
   yasgui:
@@ -94,7 +94,32 @@ services:
     networks:
       - abi-network
     profiles:
-      - dev
+      - local
+      - prod
+
+  dagster:
+    build: .
+    ports:
+      - 3001:3000  # Changed to 3001 to avoid conflict with yasgui
+    volumes:
+      - ./scripts:/app/scripts
+      - ./uv.lock:/app/uv.lock
+      - ./config.yaml:/app/config.yaml
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./src:/app/src
+      - ./lib:/app/lib
+      - ./README.md:/app/README.md
+      - venv_cache:/app/.venv
+      - dagster_home:/app/.dagster
+    platform: linux/arm64
+    environment:
+      - PYTHONPATH=/app
+      - DAGSTER_HOME=/app/.dagster
+    command: ["sh", "-c", "uv sync --frozen --all-extras && uv run python scripts/generate_dagster_command.py | xargs uv run"]
+    networks:
+      - abi-network
+    profiles:
+      - local
       - prod
 
 volumes:
@@ -102,6 +127,7 @@ volumes:
   venv_cache:
   oxigraph_data:
   postgres_data:
+  dagster_home: 
 
 networks:
   abi-network:
