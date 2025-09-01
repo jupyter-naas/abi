@@ -310,7 +310,7 @@ You can browse the data and run queries there."""
 
     class AgentConfigSchema(BaseModel):
         agent_name: Optional[str] = Field(default=None, description="Name of the specific agent to check (optional)")
-
+    
     knowledge_graph_tool = StructuredTool(
         name="open_knowledge_graph_explorer",
         description="Open the ABI Knowledge Graph Explorer for semantic data exploration, SPARQL queries, and ontology browsing",
@@ -498,7 +498,7 @@ You can browse the data and run queries there."""
 
     # All intents are now dynamically generated from config.yaml
     
-    return IntentAgent(
+    return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=selected_model.model,
