@@ -1,0 +1,270 @@
+@prefix : <http://ontology.naas.ai/messaging#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix iao: <http://purl.obolibrary.org/obo/IAO_> .
+@base <http://ontology.naas.ai/messaging> .
+
+<http://ontology.naas.ai/abi/MessageOntology> rdf:type owl:Ontology ;
+  owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/MessageOntology.ttl> ;
+  owl:imports <http://purl.obolibrary.org/obo/bfo.owl> ;
+  dc11:contributor "Maxime Jublou" ,
+                  "Florent Ravenel" ,
+                  "Jeremy Ravenel" ,
+                  "Giacomo De Colle" ;
+  dc:description "A formal ontology of message-based communication processes and roles, extending Basic Formal Ontology (BFO) 2020."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc:title "Message Communication Ontology" ;
+  rdfs:comment "This ontology provides a systematic account of messaging entities, roles, and processes in accordance with BFO 2020 design patterns." .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+###  http://purl.org/dc/elements/1.1/contributor
+dc11:contributor rdf:type owl:AnnotationProperty .
+
+
+###  http://purl.org/dc/elements/1.1/identifier
+dc11:identifier rdf:type owl:AnnotationProperty .
+
+
+###  http://purl.org/dc/terms/description
+dc:description rdf:type owl:AnnotationProperty .
+
+
+###  http://purl.org/dc/terms/license
+dc:license rdf:type owl:AnnotationProperty .
+
+
+###  http://purl.org/dc/terms/title
+dc:title rdf:type owl:AnnotationProperty .
+
+
+###  http://www.w3.org/2004/02/skos/core#definition
+skos:definition rdf:type owl:AnnotationProperty .
+
+
+###  http://www.w3.org/2004/02/skos/core#example
+skos:example rdf:type owl:AnnotationProperty .
+
+
+###  http://www.w3.org/2004/02/skos/core#scopeNote
+skos:scopeNote rdf:type owl:AnnotationProperty .
+
+
+#################################################################
+#    Object Properties
+#################################################################
+
+
+
+
+
+
+
+
+
+
+###  http://ontology.naas.ai/messaging#receives
+<http://ontology.naas.ai/messaging#receives> rdf:type owl:ObjectProperty ;
+                                             rdfs:domain [ rdf:type owl:Class ;
+                                                          owl:intersectionOf ( bfo:0000040
+                                                                             [ rdf:type owl:Restriction ;
+                                                                               owl:onProperty bfo:0000196 ;
+                                                                               owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceiverRole>
+                                                                             ]
+                                                                           )
+                                                        ] ;
+                                             rdfs:range <http://ontology.naas.ai/messaging#Message> ;
+                                             dc11:identifier "004-MSG" ;
+                                             rdfs:label "receives"@en ;
+                                             skos:definition "a receives m =Def a is an agent & a has some message receiver role & m is a message & a obtains m through participating in a message reception process"@en ;
+                                             skos:example "An email recipient receives an email message; a chat participant receives a text message"@en .
+
+
+###  http://ontology.naas.ai/messaging#transmits
+<http://ontology.naas.ai/messaging#transmits> rdf:type owl:ObjectProperty ;
+                                              rdfs:domain [ rdf:type owl:Class ;
+                                                           owl:intersectionOf ( bfo:0000040
+                                                                              [ rdf:type owl:Restriction ;
+                                                                                owl:onProperty bfo:0000196 ;
+                                                                                owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageSenderRole>
+                                                                              ]
+                                                                            )
+                                                         ] ;
+                                              rdfs:range <http://ontology.naas.ai/messaging#Message> ;
+                                              dc11:identifier "005-MSG" ;
+                                              rdfs:label "transmits"@en ;
+                                              skos:definition "a transmits m =Def a is an agent & a has some message sender role & m is a message & a sends m through participating in a message transmission process"@en ;
+                                              skos:example "An email sender transmits an email; a broadcaster transmits a radio message"@en .
+
+
+###  http://ontology.naas.ai/messaging#hasMessageInput
+<http://ontology.naas.ai/messaging#hasMessageInput> rdf:type owl:ObjectProperty ;
+                                                    rdfs:domain <http://ontology.naas.ai/messaging#MessageReceptionProcess> ;
+                                                    rdfs:range <http://ontology.naas.ai/messaging#Message> ;
+                                                    dc11:identifier "020-MSG" ;
+                                                    rdfs:label "has message input"@en ;
+                                                    skos:definition "p has message input m =Def p is a message reception process & m is a message & m is the message that serves as input to p"@en ;
+                                                    skos:example "A message reception process has message input the received email; a listening process has message input the spoken message"@en .
+
+
+###  http://ontology.naas.ai/messaging#hasMessageOutput
+<http://ontology.naas.ai/messaging#hasMessageOutput> rdf:type owl:ObjectProperty ;
+                                                     rdfs:domain <http://ontology.naas.ai/messaging#MessageTransmissionProcess> ;
+                                                     rdfs:range <http://ontology.naas.ai/messaging#Message> ;
+                                                     dc11:identifier "021-MSG" ;
+                                                     rdfs:label "has message output"@en ;
+                                                     skos:definition "p has message output m =Def p is a message transmission process & m is a message & m is the message that p produces as output"@en ;
+                                                     skos:example "A message transmission process has message output the sent email; a broadcasting process has message output the transmitted signal"@en .
+
+
+
+
+
+#################################################################
+#    Data Properties
+#################################################################
+
+###  http://ontology.naas.ai/messaging#hasContentLength
+<http://ontology.naas.ai/messaging#hasContentLength> rdf:type owl:DatatypeProperty ;
+                                                     rdfs:domain <http://ontology.naas.ai/messaging#Message> ;
+                                                     rdfs:range xsd:nonNegativeInteger ;
+                                                     dc11:identifier "007-MSG" ;
+                                                     rdfs:label "has content length"@en ;
+                                                     skos:definition "m has content length n =Def m is a message & n is a non-negative integer representing the size measurement of m when concretized"@en ;
+                                                     skos:example "A text message has content length 160 characters; an email message has content length 1024 bytes"@en .
+
+
+###  http://ontology.naas.ai/messaging#hasTextualRepresentation
+<http://ontology.naas.ai/messaging#hasTextualRepresentation> rdf:type owl:DatatypeProperty ;
+                                                            rdfs:domain <http://ontology.naas.ai/messaging#Message> ;
+                                                            rdfs:range xsd:string ;
+                                                            dc11:identifier "008-MSG" ;
+                                                            rdfs:label "has textual representation"@en ;
+                                                            skos:definition "m has textual representation s =Def m is a message & s is a string & s is the textual representation of m when concretized in text form"@en ;
+                                                            skos:example "An email message has textual representation 'Hello World'; a chat message has textual representation 'See you tomorrow'"@en .
+
+
+###  http://ontology.naas.ai/messaging#hasTimestamp
+<http://ontology.naas.ai/messaging#hasTimestamp> rdf:type owl:DatatypeProperty ;
+                                                 rdfs:domain [ owl:unionOf ( <http://ontology.naas.ai/messaging#MessageTransmissionProcess>
+                                                                             <http://ontology.naas.ai/messaging#MessageReceptionProcess>
+                                                                           )
+                                                             ] ;
+                                                 rdfs:range xsd:dateTime ;
+                                                 dc11:identifier "009-MSG" ;
+                                                 rdfs:label "has timestamp"@en ;
+                                                 skos:definition "p has timestamp t =Def p is a messaging process & t is a dateTime & t represents the temporal instant at which p occurs"@en ;
+                                                 skos:example "A message transmission process has timestamp 2024-01-15T10:30:00Z; a message reception process has timestamp 2024-01-15T10:30:01Z"@en .
+
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://ontology.naas.ai/messaging#Message
+<http://ontology.naas.ai/messaging#Message> rdf:type owl:Class ;
+                                            rdfs:subClassOf bfo:0000031 ,
+                                                            [ rdf:type owl:Restriction ;
+                                                              owl:onProperty bfo:0000084 ;
+                                                              owl:minCardinality "2"^^xsd:nonNegativeInteger
+                                                            ] ;
+                                            dc11:identifier "010-MSG" ;
+                                            rdfs:label "message"@en ;
+                                            skos:definition "b is a message =Def b is a generically dependent continuant that is concretized by at least two copies, where at least one copy is generated by an agent with the intention of having at least one other agent notice the GDC"@en ;
+                                            skos:example "An email message copied from sender's outbox to recipient's inbox; a spoken utterance that generates sound waves received by a listener; a text message transmitted between devices"@en ;
+                                            skos:scopeNote "Messages are distinguished from other GDCs by their intentional communicative purpose and requirement for multiple concretizations. Random strings without communicative intent do not qualify as messages under this definition."@en .
+
+
+
+
+
+###  http://ontology.naas.ai/messaging#MessageReceiverRole
+<http://ontology.naas.ai/messaging#MessageReceiverRole> rdf:type owl:Class ;
+                                                        rdfs:subClassOf bfo:0000023 ;
+                                                        owl:disjointWith <http://ontology.naas.ai/messaging#MessageSenderRole> ;
+                                                        dc11:identifier "012-MSG" ;
+                                                        rdfs:label "message receiver role"@en ;
+                                                        skos:definition "b is a message receiver role =Def b is a role that inheres in an agent & b is realized by processes in which that agent participates in accessing an existing concretization of a message GDC that was made available through transmission"@en ;
+                                                        skos:example "The role of being an email recipient; the role of being a chat participant who receives messages; the role of being a listener in a conversation"@en .
+
+
+###  http://ontology.naas.ai/messaging#MessageReceptionProcess
+<http://ontology.naas.ai/messaging#MessageReceptionProcess> rdf:type owl:Class ;
+                                                            rdfs:subClassOf bfo:0000015 ,
+                                                                            [ rdf:type owl:Restriction ;
+                                                              owl:onProperty bfo:0000055 ;
+                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageReceiverRole>
+                                                            ] ,
+                                                                            [ rdf:type owl:Restriction ;
+                                                              owl:onProperty <http://ontology.naas.ai/messaging#hasMessageInput> ;
+                                                              owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
+                                                            ] ;
+                                                            owl:disjointWith <http://ontology.naas.ai/messaging#MessageTransmissionProcess> ,
+                                                                             <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
+                                                            dc11:identifier "013-MSG" ;
+                                                            rdfs:label "message reception process"@en ;
+                                                            skos:definition "p is a message reception process =Def p is a process that realizes a message receiver role and takes an existing concretization of a message GDC as input, where the role inheres in an agent that participates in p by accessing and interpreting the message"@en ;
+                                                            skos:example "The process of receiving an email; the process of hearing a spoken message; the process of reading a text message"@en .
+
+
+###  http://ontology.naas.ai/messaging#MessageSenderRole
+<http://ontology.naas.ai/messaging#MessageSenderRole> rdf:type owl:Class ;
+                                                      rdfs:subClassOf bfo:0000023 ;
+                                                      dc11:identifier "014-MSG" ;
+                                                      rdfs:label "message sender role"@en ;
+                                                      skos:definition "b is a message sender role =Def b is a role that inheres in an agent & b is realized by processes in which that agent participates in creating new concretizations of a message GDC, making it available to agents with receiver roles"@en ;
+                                                      skos:example "The role of being an email sender; the role of being a broadcaster; the role of being a speaker in a conversation"@en .
+
+
+###  http://ontology.naas.ai/messaging#MessageTransmissionProcess
+<http://ontology.naas.ai/messaging#MessageTransmissionProcess> rdf:type owl:Class ;
+                                                               rdfs:subClassOf bfo:0000015 ,
+                                                                               [ rdf:type owl:Restriction ;
+                                                                 owl:onProperty bfo:0000055 ;
+                                                                 owl:someValuesFrom <http://ontology.naas.ai/messaging#MessageSenderRole>
+                                                               ] ,
+                                                                               [ rdf:type owl:Restriction ;
+                                                                 owl:onProperty <http://ontology.naas.ai/messaging#hasMessageOutput> ;
+                                                                 owl:someValuesFrom <http://ontology.naas.ai/messaging#Message>
+                                                               ] ;
+                                                               owl:disjointWith <http://ontology.naas.ai/messaging#ResponseGenerationProcess> ;
+                                                               dc11:identifier "015-MSG" ;
+                                                               rdfs:label "message transmission process"@en ;
+                                                               skos:definition "p is a message transmission process =Def p is a process that realizes a message sender role and produces a new concretization of a message GDC as output, where the role inheres in an agent that participates in p by causing the message to exist in a new location or medium"@en ;
+                                                               skos:example "The process of sending an email; the process of transmitting a radio signal; the process of speaking a message"@en .
+
+
+###  http://ontology.naas.ai/messaging#ResponseGenerationProcess
+<http://ontology.naas.ai/messaging#ResponseGenerationProcess> rdf:type owl:Class ;
+                                                              rdfs:subClassOf bfo:0000015 ;
+                                                              dc11:identifier "016-MSG" ;
+                                                              rdfs:label "response generation process"@en ;
+                                                              skos:definition "p is a response generation process =Def p is a process in which an agent generates a response message, typically following a message reception process via the BFO precedes relation"@en ;
+                                                              skos:example "The process of composing a reply email; the process of generating an automated response; the process of responding in a conversation"@en ;
+                                                              skos:scopeNote "Response generation processes typically follow message reception processes in temporal sequence. Use bfo:precedes to model the temporal relationship between reception and response generation processes."@en .
+
+
+#################################################################
+#    General axioms
+#################################################################
+
+[ rdf:type owl:AllDisjointClasses ;
+  owl:members ( <http://ontology.naas.ai/messaging#MessageTransmissionProcess>
+                <http://ontology.naas.ai/messaging#MessageReceptionProcess>
+                <http://ontology.naas.ai/messaging#ResponseGenerationProcess>
+              )
+] .
+
+
+
+
+

@@ -8,8 +8,10 @@ The Triple Store Service provides a unified interface for working with RDF (Reso
 
 The service currently supports the following adapters:
 
-- **Filesystem Adapter**: Used in local development to store RDF triples in the file system
+- **Oxigraph Adapter**: Default for local development - lightweight, high-performance SPARQL triple store
+- **Filesystem Adapter**: Alternative local storage that saves RDF triples directly to the file system
 - **Naas Adapter**: Uses Object Storage Service to store RDF triples in cloud storage
+- **AWS Neptune Adapter**: Connects to AWS Neptune graph database for enterprise-scale RDF storage
 
 This abstraction allows applications to work with semantic data in a consistent way, regardless of whether they're running in development or production environments. The service provides core operations like:
 
@@ -20,7 +22,7 @@ This abstraction allows applications to work with semantic data in a consistent 
 - Loading and managing RDF/OWL schemas
 - Event subscriptions for ontology changes
 
-The storage backend used is determined by the environment configuration, defaulting to local filesystem storage in development and using cloud storage in production environments.
+The storage backend used is determined by the environment configuration, defaulting to Oxigraph in development and using cloud storage in production environments.
 
 ## Usage
 
@@ -39,11 +41,11 @@ You can check the loading of the service in [services.py](../../../src/services.
 
 #### Development Environment
 
-In development mode (when `ENV=dev` environment variable is set), the service automatically initializes with the Filesystem adapter:
+In development mode (when `ENV=dev` environment variable is set), the service automatically initializes with the Oxigraph adapter:
 
 ```python
 # Development initialization (happens automatically)
-triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(config.triple_store_path)
+triple_store_service = TripleStoreFactory.TripleStoreServiceOxigraph()
 ```
 
 #### Production Environment
@@ -77,6 +79,23 @@ triple_store = TripleStoreFactory.TripleStoreServiceNaas(
     workspace_id="your-workspace-id",
     storage_name="your-storage-name",
     base_prefix="ontologies"  # Optional, defaults to "ontologies"
+)
+
+# Create an Oxigraph-based triple store service
+triple_store = TripleStoreFactory.TripleStoreServiceOxigraph(
+    oxigraph_url="http://localhost:7878"  # Optional, defaults to env var or localhost
+)
+
+# Create an AWS Neptune-based triple store service (with SSH tunnel)
+triple_store = TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel(
+    aws_region_name="us-east-1",
+    aws_access_key_id="YOUR_ACCESS_KEY",
+    aws_secret_access_key="YOUR_SECRET_KEY",
+    db_instance_identifier="your-neptune-instance",
+    bastion_host="bastion.example.com",
+    bastion_port=22,
+    bastion_user="ubuntu",
+    bastion_private_key="-----BEGIN RSA PRIVATE KEY-----..."
 )
 ```
 
@@ -194,6 +213,52 @@ Adapter for using Naas-managed cloud storage for RDF triples.
       workspace_id: str,
       storage_name: str,
       base_prefix: str = "ontologies"
+  )
+  ```
+
+#### Oxigraph Adapter (`Oxigraph`)
+
+Adapter for connecting to Oxigraph triple store instances. Oxigraph provides lightweight, high-performance RDF storage and SPARQL query capabilities with minimal resource footprint.
+
+- **Features**:
+  - Full SPARQL 1.1 support
+  - HTTP REST API communication
+  - Minimal memory footprint (< 100MB)
+  - Fast startup time (seconds)
+  - Native Apple Silicon support
+  - Suitable for development and production use
+
+- **Initialization**:
+  ```python
+  TripleStoreFactory.TripleStoreServiceOxigraph(
+      oxigraph_url: str = None  # Defaults to OXIGRAPH_URL env var or http://localhost:7878
+  )
+  ```
+
+- **Environment Variables**:
+  - `OXIGRAPH_URL`: Base URL of the Oxigraph instance
+
+#### AWS Neptune Adapter (`AWSNeptuneSSHTunnel`)
+
+Adapter for connecting to AWS Neptune managed graph database service. Supports SSH tunneling for secure VPC access.
+
+- **Features**:
+  - AWS IAM authentication with SigV4 signing
+  - SSH tunnel support for VPC-deployed instances
+  - Named graph management
+  - Enterprise-scale RDF storage
+
+- **Initialization**:
+  ```python
+  TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel(
+      aws_region_name: str,
+      aws_access_key_id: str,
+      aws_secret_access_key: str,
+      db_instance_identifier: str,
+      bastion_host: str,           # SSH bastion host for VPC access
+      bastion_port: int,           # SSH port (typically 22)
+      bastion_user: str,           # SSH username
+      bastion_private_key: str     # SSH private key content
   )
   ```
 

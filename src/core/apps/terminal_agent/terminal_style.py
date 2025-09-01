@@ -95,28 +95,10 @@ def clear_screen():
 def print_welcome_message(agent):
     # Set terminal title
     set_terminal_title()
-    agent_label = " ".join(
-        word.capitalize() for word in agent.name.replace("_", " ").split()
-    )
-    welcome_text = Text.assemble(
-        (f"Welcome to {agent_label}\n\n", "bold green"),
-        ("Description:\n", "yellow"),
-        (f"{agent.description}\n\n", "dim"),
-        ("System prompt:\n", "yellow"),
-        (f"{agent.configuration.system_prompt}\n\n", "dim"),
-        ("Available commands:\n", "yellow"),
-        ("- ", "dim"),
-        ("'exit' ", "cyan"),
-        ("to end the conversation\n", "dim"),
-        ("- ", "dim"),
-        ("'reset' ", "cyan"),
-        ("to start a new conversation\n", "dim"),
-        ("- ", "dim"),
-        ("'help' ", "cyan"),
-        ("to see these commands again", "dim"),
-    )
-    console.print(Panel(welcome_text, expand=False))
-    console.print()
+    
+    # Skip the welcome - we already said hello in the CLI startup
+    # Just quietly start the conversation
+    pass
 
 
 def print_divider():

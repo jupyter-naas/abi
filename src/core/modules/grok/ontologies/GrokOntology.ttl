@@ -1,0 +1,375 @@
+@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+<http://naas.ai/ontology/abi/GrokOntology> a owl:Ontology ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    dc:title "Grok AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for Grok AI models and processes"@en ;
+    dc:created "20250812T101446"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entities (WHAT/WHO)
+#################################################################
+
+abi:GrokAgent a abi:AIAgent ;
+    rdfs:label "Grok AI Agent"@en ;
+    rdfs:comment "AI Agent capable of utilizing Grok models"@en ;
+    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
+
+
+#################################################################
+#    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
+#################################################################
+
+abi:GrokBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Grok Business Proposal Process"@en ;
+    abi:hasParticipant abi:GrokAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:GrokBusinessProposalSession ;
+    abi:hasQuality abi:GrokBusinessProposalQuality .
+
+abi:GrokCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Grok Creative Writing Process"@en ;
+    abi:hasParticipant abi:GrokAgent ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasTemporalRegion abi:GrokCreativeWritingSession ;
+    abi:hasQuality abi:GrokCreativeWritingQuality .
+
+abi:GrokCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Grok Code Generation Process"@en ;
+    abi:hasParticipant abi:GrokAgent ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasTemporalRegion abi:GrokCodeGenerationSession ;
+    abi:hasQuality abi:GrokCodeGenerationQuality .
+
+#################################################################
+#    BFO Bucket 5: Temporal Regions (WHEN)
+#################################################################
+
+abi:GrokBusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Grok Business Proposal Session"@en .
+
+abi:GrokCreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Grok Creative Writing Session"@en .
+
+abi:GrokCodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Grok Code Generation Session"@en .
+
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok-1
+#################################################################
+
+abi:Grok_1 a abi:AIModelInstance ;
+    rdfs:label "Grok-1"@en ;
+    abi:modelSlug "grok-1"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_1 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 21.2 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_1 .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_1 .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_1 .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_1 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok 3 Reasoning Beta
+#################################################################
+
+abi:Grok_3_Reasoning_Beta a abi:AIModelInstance ;
+    rdfs:label "Grok 3 Reasoning Beta"@en ;
+    abi:modelSlug "grok-3-reasoning"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_3_Reasoning_Beta abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 45.6 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3_Reasoning_Beta .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_3_Reasoning_Beta .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_3_Reasoning_Beta .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_3_Reasoning_Beta .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok 3
+#################################################################
+
+abi:Grok_3 a abi:AIModelInstance ;
+    rdfs:label "Grok 3"@en ;
+    abi:modelSlug "grok-3"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_3 abi:inputTokenCost 3 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 15 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 61.82 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.713 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0.713 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 39.9 ;
+    abi:codingIndex 39.7 ;
+    abi:mathIndex 60 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3 .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_3 .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_3 .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_3 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok 3 mini Reasoning (high)
+#################################################################
+
+abi:Grok_3_mini_Reasoning_high a abi:AIModelInstance ;
+    rdfs:label "Grok 3 mini Reasoning (high)"@en ;
+    abi:modelSlug "grok-3-mini-reasoning"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_3_mini_Reasoning_high abi:inputTokenCost 0.3 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 208.096 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.636 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 10.247 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 58 ;
+    abi:codingIndex 55.1 ;
+    abi:mathIndex 96.3 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3_mini_Reasoning_high .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_3_mini_Reasoning_high .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_3_mini_Reasoning_high .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_3_mini_Reasoning_high .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok 3 mini Reasoning (Low)
+#################################################################
+
+abi:Grok_3_mini_Reasoning_Low a abi:AIModelInstance ;
+    rdfs:label "Grok 3 mini Reasoning (Low)"@en ;
+    abi:modelSlug "grok-3-mini-reasoning-low"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_3_mini_Reasoning_Low abi:inputTokenCost 0.3 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0.5 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0.35 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 162.115 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0.552 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 12.889 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 0 ;
+    abi:codingIndex 0 ;
+    abi:mathIndex 0 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_3_mini_Reasoning_Low .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_3_mini_Reasoning_Low .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_3_mini_Reasoning_Low .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_3_mini_Reasoning_Low .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok 4
+#################################################################
+
+abi:Grok_4 a abi:AIModelInstance ;
+    rdfs:label "Grok 4"@en ;
+    abi:modelSlug "grok-4"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_4 abi:inputTokenCost 3 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 15 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 6 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 70.254 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 6.419 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 6.419 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 67.5 ;
+    abi:codingIndex 63.8 ;
+    abi:mathIndex 96.7 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_4 .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_4 .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_4 .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_4 .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok Beta
+#################################################################
+
+abi:Grok_Beta a abi:AIModelInstance ;
+    rdfs:label "Grok Beta"@en ;
+    abi:modelSlug "grok-beta"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_Beta abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 26.3 ;
+    abi:codingIndex 26.8 ;
+    abi:mathIndex 42 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_Beta .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_Beta .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_Beta .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_Beta .
+
+#################################################################
+#    BFO Bucket 1: Material Entity - Grok 2 (Dec '24)
+#################################################################
+
+abi:Grok_2_Dec_24 a abi:AIModelInstance ;
+    rdfs:label "Grok 2 (Dec '24)"@en ;
+    abi:modelSlug "grok-2-1212"@en ;
+    abi:provider "xAI"@en ;
+    abi:sourceAPI "artificial_analysis"@en .
+
+#################################################################
+#    BFO Bucket 2: Qualities - Performance & Cost Metrics
+#################################################################
+
+abi:Grok_2_Dec_24 abi:inputTokenCost 0 ;
+    abi:inputTokenCostCurrency "USD"@en ;
+    abi:outputTokenCost 0 ;
+    abi:outputTokenCostCurrency "USD"@en ;
+    abi:blendedCost 0 ;
+    abi:blendedCostCurrency "USD"@en ;
+    abi:outputSpeed 0 ;
+    abi:outputSpeedUnit "tokens_per_second"@en ;
+    abi:timeToFirstToken 0 ;
+    abi:timeToFirstTokenUnit "seconds"@en ;
+    abi:timeToFirstAnswerToken 0 ;
+    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
+    abi:intelligenceIndex 28 ;
+    abi:codingIndex 27.6 ;
+    abi:mathIndex 45.6 .
+
+#################################################################
+#    Relationships - Agent/Process/Model Network
+#################################################################
+
+abi:GrokAgent abi:canUtilizeModel abi:Grok_2_Dec_24 .
+abi:GrokBusinessProposalProcess abi:utilizesModel abi:Grok_2_Dec_24 .
+abi:GrokCreativeWritingProcess abi:utilizesModel abi:Grok_2_Dec_24 .
+abi:GrokCodeGenerationProcess abi:utilizesModel abi:Grok_2_Dec_24 .
