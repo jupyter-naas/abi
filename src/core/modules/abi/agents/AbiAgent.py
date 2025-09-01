@@ -260,7 +260,7 @@ You can browse the data and run queries there."""
                     if modules:
                         result += f"**{category.title()} Agents:**\n"
                         for module in modules:
-                            status = "✅ enabled" if module["enabled"] else "❌ disabled"
+                            status = "🟢 enabled" if module["enabled"] else "🟠 disabled"
                             result += f"- {module['name']}: {status}\n"
                         result += "\n"
                 
@@ -384,45 +384,19 @@ You can browse the data and run queries there."""
             agent_references[agent_name] = agent
             agents.append(agent)
     
-    # Create individual references for backward compatibility (only if enabled)
-    grok_agent = agent_references.get("grok")
-    google_gemini_agent = agent_references.get("gemini")
-    openai_agent = agent_references.get("chatgpt") 
-    perplexity_agent = agent_references.get("perplexity")
-    mistral_agent = agent_references.get("mistral")
-    claude_agent = agent_references.get("claude")
-    llama_agent = agent_references.get("llama")
-    qwen_agent = agent_references.get("qwen")
-    deepseek_agent = agent_references.get("deepseek")
-    gemma_agent = agent_references.get("gemma")
+    # All agent references are now dynamically managed through agent_references dict
+    # No need for individual variables since we use configuration-driven approach
 
 
 
+    # Generate intents dynamically from configuration
     intents: list = [
         Intent(
             intent_value="what is your name",
             intent_type=IntentType.RAW,
             intent_target="My name is ABI",
         ),
-        # Abi Agent return intents (route to call_model to return to parent)
-        Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="can i talk back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="call_model"),
-        
-        # Knowledge Graph Explorer intents
+        # Knowledge Graph Explorer intents (static tools)
         Intent(intent_type=IntentType.TOOL, intent_value="show knowledge graph explorer", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="semantic knowledge graph", intent_target="open_knowledge_graph_explorer"), 
         Intent(intent_type=IntentType.TOOL, intent_value="show the data", intent_target="open_knowledge_graph_explorer"),
@@ -436,167 +410,43 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
-    ] + (
-        # xAI Grok Agent intents (route to agent if available, otherwise check config)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="use grok", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to grok", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="xai", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="grok 4", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="maximum intelligence", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="highest intelligence", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use xai", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to xai", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask grok", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="truth seeking", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="contrarian analysis", intent_target=grok_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="scientific reasoning", intent_target=grok_agent.name),
-        ] if grok_agent else [
-            # When Grok is disabled, route to configuration checker
-            Intent(intent_type=IntentType.TOOL, intent_value="use grok", intent_target="check_ai_network_config"),
-            Intent(intent_type=IntentType.TOOL, intent_value="switch to grok", intent_target="check_ai_network_config"),
-            Intent(intent_type=IntentType.TOOL, intent_value="talk to grok", intent_target="check_ai_network_config"),
-            Intent(intent_type=IntentType.TOOL, intent_value="can we talk to grok", intent_target="check_ai_network_config"),
-            Intent(intent_type=IntentType.TOOL, intent_value="ask grok", intent_target="check_ai_network_config"),
-            Intent(intent_type=IntentType.TOOL, intent_value="grok", intent_target="check_ai_network_config"),
-        ]
-    ) + (
-        # Google Gemini 2.0 Flash Agent intents (only add if agent is available)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="use gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gemini 2.0", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gemini flash", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use google ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to google", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use google gemini", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="multimodal analysis", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="analyze image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="image understanding", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="video analysis", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="audio analysis", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="let's use google", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="try google ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google's model", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="google's ai", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use bard", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to bard", intent_target=google_gemini_agent.name),
-            # Image Generation intents
-            Intent(intent_type=IntentType.AGENT, intent_value="generate image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="create image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="generate an image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="create a picture", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="make an image", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="draw", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="illustrate", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="picture of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="image of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="visual representation", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="generate an image of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="create an image of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="make a picture of", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="show me", intent_target=google_gemini_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="visualization", intent_target=google_gemini_agent.name),
-        ] if google_gemini_agent else []
-    ) + (
-        # OpenAI ChatGPT Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask openai", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="ask chatgpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use openai", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use chatgpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to openai", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to chatgpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="openai gpt", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gpt-4o", intent_target=openai_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="gpt4", intent_target=openai_agent.name),
-        ] if openai_agent else []
-    ) + (
-        # Mistral Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask mistral", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use mistral", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to mistral", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="mistral ai", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="mistral large", intent_target=mistral_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="french ai", intent_target=mistral_agent.name),
-        ] if mistral_agent else []
-    ) + (
-        # Claude Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="claude 3.5", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="anthropic", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="anthropic claude", intent_target=claude_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="claude sonnet", intent_target=claude_agent.name),
-        ] if claude_agent else []
-    ) + (
-        # Perplexity Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask perplexity", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use perplexity", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to perplexity", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="perplexity ai", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="search web", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="web search", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="search online", intent_target=perplexity_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="search internet", intent_target=perplexity_agent.name),
-        ] if perplexity_agent else []
-    ) + (
-        # LLaMA Agent intents
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="llama 3.3", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="meta llama", intent_target=llama_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="meta ai", intent_target=llama_agent.name),
-        ] if llama_agent else []
-    ) + (
-        # Local Qwen Agent intents (privacy-focused)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask qwen", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use qwen", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to qwen", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private ai", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="local ai", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="offline ai", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="qwen code", intent_target=qwen_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private code", intent_target=qwen_agent.name),
-        ] if qwen_agent else []
-    ) + (
-        # Local DeepSeek Agent intents (reasoning)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask deepseek", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use deepseek", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to deepseek", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="complex reasoning", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="mathematical proof", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="step by step", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="logical analysis", intent_target=deepseek_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private reasoning", intent_target=deepseek_agent.name),
-        ] if deepseek_agent else []
-    ) + (
-        # Local Gemma Agent intents (lightweight)
-        [
-            Intent(intent_type=IntentType.AGENT, intent_value="ask gemma", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="use gemma", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="switch to gemma", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="quick question", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="fast response", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="lightweight ai", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="local gemini", intent_target=gemma_agent.name),
-            Intent(intent_type=IntentType.AGENT, intent_value="private chat", intent_target=gemma_agent.name),
-        ] if gemma_agent else []
-    )
+    ]
     
-    logger.debug(f"Intents: {intents}")
-    return AbiAgent(
+    # Add dynamic agent intents from ABI's intent mapping configuration
+    intent_mapping = config_loader.get_intent_mapping()
+    
+    for agent_name, intent_patterns in intent_mapping.items():
+        agent_ref = agent_references.get(agent_name)
+        
+        if agent_ref is not None:
+            # Agent is enabled and loaded - route to agent
+            for intent_value in intent_patterns:
+                if agent_name == "abi":
+                    # Special case: ABI intents route back to call_model (supervisor return)
+                    intents.append(Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=intent_value,
+                        intent_target="call_model"
+                    ))
+                else:
+                    # Regular agent intents route to the agent
+                    intents.append(Intent(
+                        intent_type=IntentType.AGENT,
+                        intent_value=intent_value,
+                        intent_target=agent_ref.name
+                    ))
+        else:
+            # Agent is disabled - route to configuration checker
+            for intent_value in intent_patterns:
+                intents.append(Intent(
+                    intent_type=IntentType.TOOL,
+                    intent_value=intent_value,
+                    intent_target="check_ai_network_config"
+                ))
+
+    # All intents are now dynamically generated from config.yaml
+    
+    return IntentAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=selected_model.model,
@@ -614,7 +464,7 @@ class AbiAgent(IntentAgent):
         self,
         router: APIRouter,
         route_name: str = NAME,
-        name: str = NAME.capitalize(). replace("_", " "),
+        name: str = NAME.capitalize().replace("_", " "),
         description: str = "API endpoints to call the Abi agent completion.",
         description_stream: str = "API endpoints to call the Abi agent stream completion.",
         tags: Optional[list[str | Enum]] = None,

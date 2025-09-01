@@ -115,11 +115,11 @@ class AINetworkConfig:
     def get_enabled_agents_metadata(self) -> Dict[str, Dict[str, str]]:
         """Get metadata for all enabled agents for dynamic system prompt generation"""
         enabled_agents = {}
-        
+
         for category, config in self.ai_network.items():
             if not config.get("enabled", False):
                 continue
-                
+
             modules = config.get("modules", [])
             for module in modules:
                 if module.get("enabled", False):
@@ -129,8 +129,19 @@ class AINetworkConfig:
                         "strengths": module.get("strengths", "General AI capabilities"),
                         "use_when": module.get("use_when", "General assistance tasks")
                     }
-        
+
         return enabled_agents
+    
+    def get_intent_mapping(self) -> Dict[str, List[str]]:
+        """Get intent mapping configuration for ABI's orchestration"""
+        # Intent mapping is stored under the ABI module configuration
+        for category_name, category_config in self.ai_network.items():
+            if category_config.get("enabled", False):
+                modules = category_config.get("modules", [])
+                for module in modules:
+                    if module.get("name") == "abi" and module.get("enabled", False):
+                        return module.get("intent_mapping", {})
+        return {}
     
     def validate_configuration(self) -> List[str]:
         """Validate the AI Network configuration and return any issues"""
