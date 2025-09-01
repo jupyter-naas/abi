@@ -1,65 +1,50 @@
 # ABI Installation & Configuration
 
-**ABI** (Agentic Brain Infrastructure) is your AI Network development framework - the open source core that powers intelligent, multi-agent systems with seamless deployment across local, cloud, and edge environments. ABI provides a configuration-driven platform where your entire AI Network is defined in a single `config.yaml` file, enabling you to build once and deploy anywhere with zero code changes.
+**ABI** (Agentic Brain Infrastructure) is an AI Network development framework. The open source platform enables intelligent, multi-agent systems that deploy seamlessly across local, cloud, and edge environments. Your entire AI Network is defined in a single configuration file.
 
 ## What is ABI?
 
 **Key Benefits:**
-- 🔧 **Configuration-Driven** - Your entire AI Network defined in a single config.yaml file
-- 🔄 **Zero Code Changes** - Enable/disable agents and modify behavior through configuration only
-- 🎯 **Intelligent Intent Routing** - Natural language commands automatically route to the right agents
-- 🌐 **Seamless Deployment** - Build once, deploy anywhere: local → cloud → edge with zero friction
-- 🔄 **Environment Agnostic** - Same config.yaml works across all deployment targets
-- 🔬 **Edge Computing Ready** - Research-backed edge deployment capabilities
-- 🚀 **Open Source** - Complete transparency and community contributions
-- 🤖 **Multi-Agent** - Orchestrate multiple specialized AI agents seamlessly
+- **Configuration-Driven** - Define your entire AI Network in a single file
+- **Zero Code Changes** - Modify agent behavior through configuration
+- **Intelligent Routing** - Commands automatically reach the right agents
+- **Multi-Environment** - Deploy across local, cloud, and edge
+- **Open Source** - Complete transparency and community contributions
 
 ## When to Use ABI
 
-**✅ Use ABI When You Need:**
-- Configuration-driven AI Network with instant agent activation
-- Seamless deployment across local, cloud, and edge environments
-- Custom AI agents for specific business processes
-- Build once, deploy anywhere capability
+**Use ABI when you need:**
+- Custom AI agents for specific processes
 - Local data processing for sensitive information
-- Deep customization of AI behavior through config.yaml
-- Edge computing capabilities for distributed AI
-- Environment-agnostic AI Network management
-- Full control over AI models and data
-- Development environment for building platform integrations
+- Full control over AI models and deployment
+- Development environment for platform integrations
 
-**🌐 Use Cloud Platform When You Need:**
-- Quick start without any setup
+**Use the cloud platform when you need:**
+- Quick start without setup
 - Team collaboration and sharing
 - Managed infrastructure and scaling
-- Browser-based interface for non-technical users
-- Immediate productivity with pre-built agents
 
 Most users start with the cloud platform and add ABI for customization later.
 
-## Seamless Multi-Environment Deployment
+## Multi-Environment Deployment
 
-ABI's revolutionary architecture enables effortless transitions between deployment environments:
+Deploy the same configuration across different environments:
 
-**🏠 Local Development**
-- Develop and test your AI Network locally
+**Local Development**
+- Develop and test locally
 - Full control over data and processing
-- Offline capabilities for sensitive workflows
+- Offline capabilities
 
-**☁️ Cloud Scaling**  
-- Deploy the same config.yaml to cloud infrastructure
+**Cloud Scaling**  
+- Deploy to cloud infrastructure
 - Leverage cloud compute for heavy workloads
-- Integrate with cloud services seamlessly
+- Integrate with cloud services
 
-**⚡ Edge Computing**
-- Push AI capabilities to edge devices
-- Research-backed edge deployment (coming soon)
-- Distributed AI processing at the network edge
+**Edge Computing**
+- Deploy to edge devices
+- Distributed processing at the network edge
 
-**🔄 Zero-Friction Migration**
-- Same configuration file works everywhere
-- No code changes between environments
-- Seamless agent orchestration across deployment targets
+The same configuration file works across all environments.
 
 ## Prerequisites
 
@@ -137,7 +122,7 @@ MISTRAL_API_KEY=your-mistral-api-key
 
 ### 2. Configure AI Network
 
-ABI's revolutionary approach uses a single `config.yaml` file to define your entire AI Network. This configuration-driven architecture eliminates hardcoded agents and enables instant modifications. The main sections include:
+ABI uses a single `config.yaml` file to define your AI Network. The main sections include:
 
 **System Configuration:**
 - `workspace_id`: Naas Platform workspace ID for storage and publishing
@@ -146,7 +131,7 @@ ABI's revolutionary approach uses a single `config.yaml` file to define your ent
 - `storage_name` and `space_name`: Storage configuration
 
 **AI Network Configuration:**
-The `ai_network` section is where the magic happens - define all your agents with instant enable/disable capability:
+The `ai_network` section defines your agents:
 
 ```yaml
 ai_network:
@@ -196,16 +181,15 @@ ai_network:
     use_when: "Private tasks"
 ```
 
-## Revolutionary Configuration-Driven Architecture
+## Configuration-Driven Architecture
 
-ABI's breakthrough configuration system transforms how AI Networks are built and managed:
+ABI uses a single configuration file to define your AI Network:
 
-- **Single Source of Truth**: Your entire AI Network defined in one config.yaml file
-- **Intelligent Agent Routing**: Automatic routing of commands to the most appropriate agents
-- **Enhanced Intent Mapping**: Revolutionary support for RAW, TOOL, and AGENT intent types
-- **Instant Agent Control**: Enable/disable agents with a single config change
-- **Zero Code Modifications**: All behavior changes through configuration only
-- **Complete Flexibility**: Add new agents and intents without touching code
+- **Single Source**: Your entire AI Network in one config.yaml file
+- **Intelligent Routing**: Commands automatically reach the appropriate agents
+- **Intent Mapping**: Support for direct responses, tool routing, and agent routing
+- **Agent Control**: Enable/disable agents with a config change
+- **No Code Changes**: Modify behavior through configuration
 
 ### Agent Definition Structure
 
@@ -222,11 +206,11 @@ The ABI agent contains centralized intent mapping with three types:
 - **tool_intents**: Route to specific tools/functions
 - **agent_intents**: Route to specific agents
 
-**Revolutionary Benefits:**
-- **Instant Agent Control**: Simply change `enabled: true/false` to activate/deactivate any agent
-- **Zero Code Modifications**: All agent behavior and intent routing controlled through config.yaml
-- **Consistent Agent Management**: Unified agent identification across your entire AI Network
-- **Dynamic Intent Mapping**: Add new intents and behaviors without touching a single line of code
+**Benefits:**
+- **Agent Control**: Change `enabled: true/false` to activate/deactivate agents
+- **Configuration-Based**: All agent behavior controlled through config.yaml
+- **Consistent Management**: Unified agent identification across your AI Network
+- **Dynamic Mapping**: Add new intents and behaviors through configuration
 
 ## Quick Start
 
