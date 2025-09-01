@@ -53,7 +53,7 @@ The same configuration file works everywhere.
 
 Before installing ABI, ensure you have:
 
-- **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** - Required for Oxigraph triple store
+- **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** - Required for Oxigraph triple store, Dagster, and PostgreSQL
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** - Python package manager
 - **Python 3.11+** - For running ABI components
 - **Git** - For cloning repositories
@@ -264,11 +264,11 @@ make chat-abi-agent
 
 This command will:
 1. Set up the environment and install Python dependencies
-2. Start Docker services (Oxigraph triple store)
+2. Start Docker services (Oxigraph triple store, PostgreSQL, Dagster)
 3. Initialize the knowledge graph with base ontologies
 4. Launch the interactive agent in your terminal
 
-The first run may take a few minutes as it downloads and starts the Oxigraph Docker container.
+The first run may take a few minutes as it downloads and starts the Docker containers.
 
 ### Expected Output
 
@@ -309,7 +309,10 @@ make api
 docker ps
 ```
 
-You should see the Oxigraph container running on port 7878.
+You should see containers running for:
+- Oxigraph (port 7878) - Knowledge graph triple store
+- PostgreSQL (port 5432) - Agent memory and structured data
+- Dagster (port 3000) - Workflow orchestration
 
 ## Troubleshooting
 
