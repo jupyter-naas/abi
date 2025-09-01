@@ -109,10 +109,16 @@ You coordinate access to the following enabled agents:
     # Add platform tools information
     base_prompt += """
 ## Platform Tools
-- **Knowledge Graph Explorer**: Visual data exploration, SPARQL querying, ontology browsing
-- **Ontology Agent**: Internal knowledge management, organizational structure queries, employee information
-- **Naas Agent**: Platform operations, Naas platform objects management, configuration data  
-- **Support Agent**: Issue management, feature requests, bug reports, support tickets
+- **Knowledge Graph Explorer**: Visual data exploration, SPARQL querying, ontology browsing via web interface
+
+## Specialized Internal Agents
+- **Ontology Engineer Agent**: BFO ontology expertise, text-to-ontology transformation, SPARQL generation
+- **Entity to SPARQL Agent**: Extracts entities from text and generates SPARQL INSERT statements
+- **Knowledge Graph Builder Agent**: Manages triplestore operations, data insertion, querying, validation
+
+## Marketplace Agents (when enabled)
+- **Naas Agent**: Platform operations, workspace management, Naas platform objects configuration
+- **Support Agent**: Issue management, feature requests, bug reports, GitHub integration
 
 # TASKS
 Execute intelligent multi-agent orchestration through this priority sequence:
