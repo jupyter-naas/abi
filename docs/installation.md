@@ -1,22 +1,24 @@
 # ABI Installation & Configuration
 
-**ABI** (Agentic Brain Infrastructure) is your local AI development framework - the open source core that powers intelligent, multi-agent systems. ABI provides a configuration-driven platform for building, customizing, and orchestrating AI agents tailored to your specific needs.
+**ABI** (Agentic Brain Infrastructure) is your AI Network development framework - the open source core that powers intelligent, multi-agent systems. ABI provides a configuration-driven platform where your entire AI Network is defined in a single `config.yaml` file, enabling you to build, customize, and orchestrate AI agents with zero code changes.
 
 ## What is ABI?
 
 **Key Benefits:**
-- 🔧 **Customize Everything** - Build custom agents for specific business processes
+- 🔧 **Configuration-Driven** - Your entire AI Network defined in config.yaml with SLUG-based routing
+- 🔄 **Zero Code Changes** - Enable/disable agents and modify behavior through configuration only
+- 🎯 **Enhanced Intent Mapping** - Support for RAW, TOOL, and AGENT intent types
 - 🏠 **Run Locally** - Keep sensitive data on your infrastructure  
-- ⚙️ **Full Control** - Modify, extend, and integrate however you want
 - 🚀 **Open Source** - Complete transparency and community contributions
 - 🤖 **Multi-Agent** - Orchestrate multiple specialized AI agents seamlessly
 
 ## When to Use ABI
 
 **✅ Use ABI When You Need:**
+- Configuration-driven AI Network with instant agent activation
 - Custom AI agents for specific business processes
 - Local data processing for sensitive information
-- Deep customization of AI behavior and tools
+- Deep customization of AI behavior through config.yaml
 - Offline capabilities without internet dependency
 - Full control over AI models and data
 - Development environment for building platform integrations
@@ -106,7 +108,7 @@ MISTRAL_API_KEY=your-mistral-api-key
 
 ### 2. Configure AI Network
 
-ABI uses a single `config.yaml` file for all configuration. The main sections include:
+ABI's revolutionary approach uses a single `config.yaml` file to define your entire AI Network. This configuration-driven architecture eliminates hardcoded agents and enables instant modifications. The main sections include:
 
 **System Configuration:**
 - `workspace_id`: Naas Platform workspace ID for storage and publishing
@@ -115,7 +117,7 @@ ABI uses a single `config.yaml` file for all configuration. The main sections in
 - `storage_name` and `space_name`: Storage configuration
 
 **AI Network Configuration:**
-The `ai_network` section defines all your agents using SLUG-based identifiers:
+The `ai_network` section is where the magic happens - define all your agents using SLUG-based identifiers with instant enable/disable capability:
 
 ```yaml
 ai_network:
@@ -165,15 +167,16 @@ ai_network:
     use_when: "Private tasks"
 ```
 
-## Configuration-Driven Architecture
+## Revolutionary Configuration-Driven Architecture
 
-ABI's configuration system provides:
+ABI's breakthrough configuration system transforms how AI Networks are built and managed:
 
-- **Configuration-Driven Architecture**: All agents and intents defined in config.yaml
+- **Single Source of Truth**: Your entire AI Network defined in one config.yaml file
 - **SLUG-Based Routing**: Consistent agent identification and routing system
-- **Enhanced Intent Mapping**: Support for RAW, TOOL, and AGENT intent types
-- **Dynamic Agent Loading**: Enable/disable agents without code changes
-- **Zero Hardcoded Elements**: Complete flexibility through configuration
+- **Enhanced Intent Mapping**: Revolutionary support for RAW, TOOL, and AGENT intent types
+- **Instant Agent Control**: Enable/disable agents with a single config change
+- **Zero Code Modifications**: All behavior changes through configuration only
+- **Complete Flexibility**: Add new agents and intents without touching code
 
 ### Agent Definition Structure
 
@@ -190,10 +193,11 @@ The ABI agent contains centralized intent mapping with three types:
 - **tool_intents**: Route to specific tools/functions
 - **agent_intents**: Route to specific agents
 
-**Key Benefits:**
-- **Instant Agent Control**: Change `enabled: true/false` to activate/deactivate agents
-- **Zero Code Changes**: All agent behavior controlled through configuration
-- **SLUG-Based Routing**: Consistent agent identification across the system
+**Revolutionary Benefits:**
+- **Instant Agent Control**: Simply change `enabled: true/false` to activate/deactivate any agent
+- **Zero Code Modifications**: All agent behavior and intent routing controlled through config.yaml
+- **SLUG-Based Routing**: Consistent agent identification across your entire AI Network
+- **Dynamic Intent Mapping**: Add new intents and behaviors without touching a single line of code
 
 ## Quick Start
 
