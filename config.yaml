@@ -37,7 +37,7 @@ ai_network:
     - name: chatgpt
       enabled: true
     - name: claude
-      enabled: true
+      enabled: false
     - name: deepseek
       enabled: false
     - name: gemini
@@ -45,7 +45,7 @@ ai_network:
     - name: gemma
       enabled: false
     - name: grok
-      enabled: false
+      enabled: true
     - name: llama
       enabled: false
     - name: mistral
@@ -62,11 +62,11 @@ ai_network:
     enabled: true
     modules:
     - name: software-engineer
-      enabled: true
+      enabled: false
     - name: data-engineer
-      enabled: true
+      enabled: false
     - name: devops-engineer
-      enabled: true
+      enabled: false
     - name: project-manager
       enabled: false
     - name: content-strategist
@@ -102,13 +102,13 @@ ai_network:
     - name: private-investigator
       enabled: false
     - name: github
-      enabled: true
+      enabled: false
     - name: git
-      enabled: true
+      enabled: false
     - name: naas
-      enabled: true
+      enabled: false
     - name: support
-      enabled: true
+      enabled: false
     - name: arxiv
       enabled: false
     - name: gladia
