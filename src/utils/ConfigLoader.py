@@ -112,6 +112,26 @@ class AINetworkConfig:
         
         return None
     
+    def get_enabled_agents_metadata(self) -> Dict[str, Dict[str, str]]:
+        """Get metadata for all enabled agents for dynamic system prompt generation"""
+        enabled_agents = {}
+        
+        for category, config in self.ai_network.items():
+            if not config.get("enabled", False):
+                continue
+                
+            modules = config.get("modules", [])
+            for module in modules:
+                if module.get("enabled", False):
+                    agent_name = module["name"]
+                    enabled_agents[agent_name] = {
+                        "category": category,
+                        "strengths": module.get("strengths", "General AI capabilities"),
+                        "use_when": module.get("use_when", "General assistance tasks")
+                    }
+        
+        return enabled_agents
+    
     def validate_configuration(self) -> List[str]:
         """Validate the AI Network configuration and return any issues"""
         issues = []

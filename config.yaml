@@ -34,30 +34,53 @@ ai_network:
     modules:
     - name: abi
       enabled: true
+      strengths: Multi-agent orchestration, strategic advisory, conversation flow management
+      use_when: Identity questions, strategic consulting, meta-system questions, agent coordination
     - name: chatgpt
       enabled: true
+      strengths: Real-time web search, current events, comprehensive analysis
+      use_when: Real-time information, web research, general intelligence tasks
     - name: claude
       enabled: false
+      strengths: Complex reasoning, critical thinking, detailed analysis
+      use_when: Deep analysis, nuanced reasoning, complex problem-solving
     - name: deepseek
       enabled: false
+      strengths: Advanced reasoning, mathematical computations, code analysis
+      use_when: Complex mathematical problems, advanced reasoning tasks
     - name: gemini
       enabled: true
+      strengths: Multimodal understanding, image generation/analysis, creative writing
+      use_when: Visual tasks, creative projects, multimodal analysis
     - name: gemma
       enabled: false
+      strengths: Lightweight reasoning, efficient processing, general assistance
+      use_when: Quick queries, lightweight tasks, resource-constrained environments
     - name: grok
       enabled: false
+      strengths: Unfiltered analysis, current events, truth-seeking with evidence
+      use_when: Controversial topics, truth verification, current affairs analysis
     - name: llama
       enabled: false
+      strengths: Instruction-following, conversational dialogue, general assistance
+      use_when: Clear instruction execution, natural conversation flow
     - name: mistral
       enabled: false
+      strengths: Code generation, debugging, mathematical computations
+      use_when: Programming tasks, mathematical problems, technical documentation
     - name: perplexity
       enabled: false
+      strengths: Real-time web search, research synthesis, up-to-date information
+      use_when: Latest information, research compilation, fact verification
     - name: qwen
       enabled: false
+      strengths: Multilingual processing, reasoning, general intelligence
+      use_when: Multilingual tasks, cross-cultural communication, diverse reasoning
   custom:
     auto_discover: true
     enabled: true
     modules: []
+
   marketplace:
     enabled: true
     modules:
