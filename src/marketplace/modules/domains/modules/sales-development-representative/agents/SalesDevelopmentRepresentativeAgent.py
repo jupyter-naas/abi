@@ -5,8 +5,6 @@ Expert sales development representative specializing in lead generation, prospec
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

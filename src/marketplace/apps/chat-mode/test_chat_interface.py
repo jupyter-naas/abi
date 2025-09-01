@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
-
+from streamlit.testing.v1 import AppTest
 # Load environment first
 load_dotenv()
 
@@ -21,8 +21,6 @@ os.chdir(str(project_root))
 # Set environment for development
 os.environ['ENV'] = 'dev'
 os.environ['LOG_LEVEL'] = 'ERROR'
-
-from streamlit.testing.v1 import AppTest
 
 def test_chat_interface_initialization():
     """Test that the chat interface initializes properly"""

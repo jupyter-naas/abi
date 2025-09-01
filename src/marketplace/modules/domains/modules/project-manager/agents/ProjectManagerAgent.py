@@ -5,8 +5,6 @@ Project planning, resource management, risk mitigation, stakeholder communicatio
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

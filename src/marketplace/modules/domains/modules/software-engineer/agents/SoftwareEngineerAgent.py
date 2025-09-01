@@ -5,8 +5,6 @@ Software development, architecture design, code review, testing strategies speci
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

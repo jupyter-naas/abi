@@ -5,12 +5,9 @@ Expert inside sales representative specializing in remote sales, phone prospecti
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )
-from abi.services.agent.Agent import Agent
 from typing import Optional
 from abi import logger
 

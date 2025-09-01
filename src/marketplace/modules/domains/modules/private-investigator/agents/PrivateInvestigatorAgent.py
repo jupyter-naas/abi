@@ -5,8 +5,6 @@ Expert private investigator specializing in investigation planning, evidence ana
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

@@ -5,8 +5,6 @@ Expert content creator specializing in copywriting, social media content, video 
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

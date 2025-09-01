@@ -5,12 +5,9 @@ Expert content analyst specializing in content performance analysis, audience in
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )
-from abi.services.agent.Agent import Agent
 from typing import Optional
 from abi import logger
 

@@ -8,7 +8,7 @@
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix cco: <https://www.commoncoreontologies.org/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
-@prefix linkedin: <http://ontology.naas.ai/abi/linkedin#> .
+@prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
 
 <http://ontology.naas.ai/abi/linkedin.ttl> rdf:type owl:Ontology ;
     dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;

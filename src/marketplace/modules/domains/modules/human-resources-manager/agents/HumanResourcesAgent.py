@@ -5,8 +5,6 @@ Expert HR professional specializing in recruitment, employee relations, policy d
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )
