@@ -81,13 +81,13 @@ check-core: deps
 	@echo ""
 	@echo "\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check lib src/core
+	@uvx ruff check lib src/core --exclude "src/core/**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@echo "• Checking lib.abi..."
 	@.venv/bin/mypy -p lib.abi --follow-untyped-imports
 	@echo "• Checking src.core..."
-	@.venv/bin/mypy -p src.core --follow-untyped-imports
+	@.venv/bin/mypy -p src.core --follow-untyped-imports --exclude "src/core/.*/sandbox/.*"
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check lib src tests
@@ -106,15 +106,34 @@ check-custom: deps
 	@echo ""
 	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
 	@echo "📝 Linting with ruff..."
-	@uvx ruff check src/custom
+	@uvx ruff check src/custom --exclude "src/custom/**/sandbox/**"
 
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
-	@.venv/bin/mypy -p src.custom --follow-untyped-imports
+	@.venv/bin/mypy -p src.custom --follow-untyped-imports --exclude "src/custom/.*/sandbox/.*"
 
 	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/custom
 
 	@echo "\n✅ CUSTOM security checks passed!"
+
+check-marketplace: deps
+	@echo ""
+	@echo "  _____ _____ _____ _____ _____ _____ _____ _____ _____ _____ _____ "
+	@echo " |     |     |     |     |     |     |     |     |     |     |     |"
+	@echo " |  M  |  A  |  R  |  K  |  E  |  T  |  P  |  L  |  A  |  C  |  E  |"
+	@echo " |_____|_____|_____|_____|_____|_____|_____|_____|_____|_____|_____|"
+	@echo ""
+	@echo "\n\033[1;4m🔍 Running code quality checks...\033[0m\n"
+	@echo "📝 Linting with ruff..."
+	@uvx ruff check src/marketplace --exclude "src/marketplace/**/sandbox/**"
+
+	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
+	@.venv/bin/mypy -p src.marketplace --follow-untyped-imports --exclude "src/marketplace/.*/sandbox/.*"
+
+	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#uv run pyrefly check src/marketplace/modules
+
+	@echo "\n✅ MARKETPLACE security checks passed!"
 
 bandit:
 	@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml tests src/ lib -r

@@ -5,12 +5,9 @@ Expert business development representative specializing in partnership developme
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )
-from abi.services.agent.Agent import Agent
 from typing import Optional
 from abi import logger
 

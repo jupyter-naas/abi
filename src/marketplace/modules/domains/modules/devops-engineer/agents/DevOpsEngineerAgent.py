@@ -5,8 +5,6 @@ Expert DevOps engineer specializing in CI/CD pipelines, infrastructure automatio
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

@@ -105,7 +105,7 @@ def check_interface_status(port):
     try:
         response = requests.get(f"http://localhost:{port}", timeout=2)
         return "🟢 Online" if response.status_code == 200 else "🟡 Issues"
-    except:
+    except Exception:
         return "🔴 Offline"
 
 # Group by category

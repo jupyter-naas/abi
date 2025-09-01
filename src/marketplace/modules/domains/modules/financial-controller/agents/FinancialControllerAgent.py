@@ -5,8 +5,6 @@ Expert financial controller specializing in financial planning, budgeting, cost 
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

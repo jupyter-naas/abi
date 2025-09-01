@@ -285,7 +285,7 @@ def get_app_status(port: int) -> str:
     try:
         response = requests.get(f"http://localhost:{port}", timeout=2)
         return "running" if response.status_code == 200 else "stopped"
-    except:
+    except Exception:
         return "stopped"
 
 def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict[str, Any]]:

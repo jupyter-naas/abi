@@ -5,8 +5,6 @@ Expert OSINT researcher specializing in open source intelligence, information ga
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

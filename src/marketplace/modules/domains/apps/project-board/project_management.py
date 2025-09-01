@@ -14,8 +14,8 @@ import numpy as np
 st.set_page_config(page_title="Project Board", page_icon="📋", layout="wide")
 
 # Configure port for this interface
-import os
 if __name__ == "__main__":
+    import os
     os.environ["STREAMLIT_SERVER_PORT"] = "8503"
 
 # Sidebar controls

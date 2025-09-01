@@ -5,8 +5,6 @@ Data pipeline design, ETL processes, data architecture, performance optimization
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

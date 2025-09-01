@@ -5,8 +5,6 @@ Expert customer success manager specializing in customer onboarding, retention s
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

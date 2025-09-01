@@ -5,8 +5,6 @@ Expert content strategist specializing in content strategy, editorial planning, 
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )

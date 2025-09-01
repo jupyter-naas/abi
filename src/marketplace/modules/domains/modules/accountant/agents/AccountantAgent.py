@@ -5,8 +5,6 @@ Expert accountant specializing in financial accounting, bookkeeping, tax prepara
 
 from abi.services.agent.IntentAgent import (
     IntentAgent,
-    Intent,
-    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )
