@@ -339,31 +339,40 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    agents: list = []
-    for module in modules:
-        if module.module_path != "src.core.modules.abi":
-            logger.debug(f"Inspecting module: {module.module_path}")
-            logger.debug(f"Agents: {module.agents}")
-            for agent in module.agents:
-                if agent is not None:
-                    agents.append(agent)
-                    logger.debug(f"Agent loaded: {agent.name}")
-                else:
-                    logger.warning(f"Skipping None agent in module: {module.module_path}")
+    # Lazy loading function to get agent references when needed
+    def get_agent_by_name(name: str):
+        """Lazy loading of agent references to avoid circular dependency during module loading"""
+        try:
+            for module in modules:
+                if module.module_path != "src.core.modules.abi":
+                    for agent in module.agents:
+                        if agent is not None and hasattr(agent, 'name') and agent.name == name:
+                            return agent
+            return None
+        except Exception as e:
+            logger.warning(f"Error getting agent '{name}': {e}")
+            return None
 
-    # Create agent references for intent routing
-    grok_agent = next((agent for agent in agents if agent.name == "Grok"), None)
-    google_gemini_agent = next((agent for agent in agents if agent.name == "Gemini"), None)
-    openai_agent = next((agent for agent in agents if agent.name == "ChatGPT"), None)
-    perplexity_agent = next((agent for agent in agents if agent.name == "Perplexity"), None)
-    mistral_agent = next((agent for agent in agents if agent.name == "Mistral"), None)
-    claude_agent = next((agent for agent in agents if agent.name == "Claude"), None)
-    llama_agent = next((agent for agent in agents if agent.name == "Llama"), None)
+    # Create agent references for intent routing (lazy loaded)
+    grok_agent = get_agent_by_name("Grok")
+    google_gemini_agent = get_agent_by_name("Gemini") 
+    openai_agent = get_agent_by_name("ChatGPT")
+    perplexity_agent = get_agent_by_name("Perplexity")
+    mistral_agent = get_agent_by_name("Mistral")
+    claude_agent = get_agent_by_name("Claude")
+    llama_agent = get_agent_by_name("Llama")
 
     # Local agent references
-    qwen_agent = next((agent for agent in agents if agent.name == "Qwen"), None)
-    deepseek_agent = next((agent for agent in agents if agent.name == "DeepSeek"), None)
-    gemma_agent = next((agent for agent in agents if agent.name == "Gemma"), None)
+    qwen_agent = get_agent_by_name("Qwen")
+    deepseek_agent = get_agent_by_name("DeepSeek")
+    gemma_agent = get_agent_by_name("Gemma")
+
+    # Collect all non-None agents for the IntentAgent constructor
+    agents: list = []
+    for agent in [grok_agent, google_gemini_agent, openai_agent, perplexity_agent, 
+                  mistral_agent, claude_agent, llama_agent, qwen_agent, deepseek_agent, gemma_agent]:
+        if agent is not None:
+            agents.append(agent)
 
 
 
