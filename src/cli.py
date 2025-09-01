@@ -29,13 +29,13 @@ def append_to_dotenv(key, value):
     with open(".env", "a") as f:
         f.write(f"\n{key}={value}\n")
 
-def ensure_dev_services_running():
-    """Ensure all development services (Oxigraph, PostgreSQL, etc.) are running."""
+def ensure_local_services_running():
+    """Ensure all local services (Oxigraph, PostgreSQL, etc.) are running."""
     import subprocess
     
     oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
     
-    # Check if Oxigraph is accessible (indicates dev services are running)
+    # Check if Oxigraph is accessible (indicates local services are running)
     services_running = False
     try:
         r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
@@ -45,11 +45,11 @@ def ensure_dev_services_running():
         pass
     
     if not services_running:
-        console.print("⚠️ Development services not running. Attempting to start...", style="yellow")
+        console.print("⚠️ Local services not running. Attempting to start...", style="yellow")
         try:
             # Try to start services with automatic cleanup on failure
             result = subprocess.run(
-                ["make", "dev-up"],
+                ["make", "local-up"],
                 capture_output=True,
                 text=True,
                 timeout=120  # 2 minute timeout
@@ -57,16 +57,16 @@ def ensure_dev_services_running():
             
             if result.returncode != 0:
                 console.print("❌ Failed to start services automatically.", style="red")
-                console.print("🔧 Try running: make docker-cleanup && make dev-up", style="cyan")
+                console.print("🔧 Try running: make docker-cleanup && make local-up", style="cyan")
                 console.print("💡 Or start services manually and restart this command.", style="dim")
                 return
         except subprocess.TimeoutExpired:
             console.print("⏱️ Service startup timed out. Docker may be stuck.", style="yellow")
-            console.print("🔧 Try: make docker-cleanup && make dev-up", style="cyan")
+            console.print("🔧 Try: make docker-cleanup && make local-up", style="cyan")
             return
         except subprocess.CalledProcessError:
-            console.print("❌ Could not start development services.", style="yellow")
-            console.print("🔧 Try: make docker-cleanup && make dev-up", style="cyan")
+            console.print("❌ Could not start local services.", style="yellow")
+            console.print("🔧 Try: make docker-cleanup && make local-up", style="cyan")
             return
             
             # Wait for services to be ready
@@ -75,7 +75,7 @@ def ensure_dev_services_running():
                 try:
                     r = requests.get(f"{oxigraph_url}/query", params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"}, timeout=2)
                     if r.status_code == 200:
-                        console.print("✓ Development services are ready!", style="bright_green")
+                        console.print("✓ Local services are ready!", style="bright_green")
                         console.print("✓ Oxigraph (Knowledge Graph): http://localhost:7878", style="dim")
                         console.print("✓ PostgreSQL (Agent Memory): localhost:5432", style="dim")
                         console.print("✓ YasGUI (SPARQL Editor): http://localhost:3000", style="dim")
@@ -84,10 +84,10 @@ def ensure_dev_services_running():
                     pass
                 time.sleep(2)
                 if attempt == max_attempts - 1:
-                    console.print("⚠️ Development services are taking longer than expected to start", style="yellow")
+                    console.print("⚠️ Local services are taking longer than expected to start", style="yellow")
         except subprocess.CalledProcessError:
-            console.print("⚠️ Could not start development services. Make sure Docker is running.", style="yellow")
-            console.print("You can start them manually with: make dev-up", style="dim")
+            console.print("⚠️ Could not start local services. Make sure Docker is running.", style="yellow")
+            console.print("You can start them manually with: make local-up", style="dim")
 
 def ensure_ollama_running():
     dv = dotenv_values()
@@ -206,7 +206,7 @@ def define_oxigraph_url():
     if "OXIGRAPH_URL" in dv:
         return
     
-    # Default to local Oxigraph in development
+    # Default to local Oxigraph in local mode
     oxigraph_url = "http://localhost:7878"
     append_to_dotenv("OXIGRAPH_URL", oxigraph_url)
 
@@ -257,10 +257,10 @@ def main():
     for key, value in dotenv_values().items():
         os.environ[key] = value
     
-    os.environ['ENV'] = 'dev'  # Force development mode to avoid network calls
+    os.environ['ENV'] = 'dev'  # Force local mode to avoid network calls
     
-    # Ensure all development services are running (Oxigraph, PostgreSQL, etc.)
-    ensure_dev_services_running()
+    # Ensure all local services are running (Oxigraph, PostgreSQL, etc.)
+    ensure_local_services_running()
     
     from src.core.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("AbiAgent")
