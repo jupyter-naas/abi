@@ -146,6 +146,7 @@ def ensure_ollama_running():
 
 
 def personnal_information():
+    dv = dotenv_values()
     if "FIRST_NAME" in dv:
         return
     
@@ -167,6 +168,7 @@ def personnal_information():
 
 
 def define_ai_mode():
+    dv = dotenv_values()
     if "AI_MODE" in dv:
         return
     
@@ -180,6 +182,7 @@ def define_ai_mode():
     append_to_dotenv("AI_MODE", ai_mode)
 
 def define_naas_api_key():
+    dv = dotenv_values()
     if "NAAS_API_KEY" in dv:
         return
 
@@ -203,6 +206,7 @@ def define_naas_api_key():
     
 
 def define_abi_api_key():
+    dv = dotenv_values()
     if "ABI_API_KEY" in dv:
         return
     
@@ -212,6 +216,7 @@ def define_abi_api_key():
     append_to_dotenv("ABI_API_KEY", api_key)
 
 def define_oxigraph_url():
+    dv = dotenv_values()
     if "OXIGRAPH_URL" in dv:
         return
     
@@ -220,6 +225,7 @@ def define_oxigraph_url():
     append_to_dotenv("OXIGRAPH_URL", oxigraph_url)
 
 def define_postgres_url():
+    dv = dotenv_values()
     if "POSTGRES_URL" in dv:
         return
     
@@ -229,6 +235,7 @@ def define_postgres_url():
     append_to_dotenv("POSTGRES_URL", postgres_url)
 
 def define_cloud_api_keys():
+    dv = dotenv_values()
     if "AI_MODE" not in dv or dv["AI_MODE"] == "local":
         return
     
@@ -291,9 +298,8 @@ def cmd_ai_network_list(args):
                 
             for module in modules:
                 name = module["name"]
-                priority = module.get("priority", "N/A")
                 description = module.get("description", "No description")
-                console.print(f"   ✅ {name} (priority: {priority})", style="green")
+                console.print(f"   ✅ {name}", style="green")
                 console.print(f"      {description}", style="dim")
         
         # Show disabled modules if requested
@@ -597,14 +603,14 @@ Examples:
     network_enable_parser = network_subparsers.add_parser('enable', help='Enable a specific module')
     network_enable_parser.add_argument('module', help='Module name to enable')
     network_enable_parser.add_argument('category', help='Module category', 
-                                      choices=['core_models', 'domain_experts', 'applications', 'custom_modules'])
+                                      choices=['core', 'custom', 'marketplace'])
     network_enable_parser.set_defaults(func=cmd_ai_network_enable)
     
     # Network disable
     network_disable_parser = network_subparsers.add_parser('disable', help='Disable a specific module')
     network_disable_parser.add_argument('module', help='Module name to disable')
     network_disable_parser.add_argument('category', help='Module category',
-                                       choices=['core_models', 'domain_experts', 'applications', 'custom_modules'])
+                                       choices=['core', 'custom', 'marketplace'])
     network_disable_parser.set_defaults(func=cmd_ai_network_disable)
     
     # Network validate

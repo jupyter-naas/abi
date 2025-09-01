@@ -42,17 +42,21 @@ def get_modules():
         total_enabled = sum(len(modules) for modules in enabled_modules.values())
         logger.info(f"📊 Found {total_enabled} enabled modules across all categories")
         
-        # Load modules by category in priority order
+        # Load modules in the order they appear in config (natural architectural flow)
         for category, modules in enabled_modules.items():
             if not modules:
                 continue
                 
-            category_path = module_paths[category]
+            category_path = module_paths.get(category)
+            if not category_path:
+                logger.warning(f"⚠️ Unknown category '{category}', skipping")
+                continue
+                
             logger.info(f"📂 Loading {len(modules)} modules from '{category}' ({category_path})")
             
+            # Load modules in the order they appear in config file
             for module_config in modules:
                 module_name = module_config["name"]
-                priority = module_config.get("priority", 999)
                 description = module_config.get("description", "No description")
                 
                 success = _load_single_module(
@@ -60,7 +64,6 @@ def get_modules():
                     category, 
                     category_path, 
                     loading_settings,
-                    priority,
                     description
                 )
                 
@@ -82,7 +85,6 @@ def _load_single_module(
     category: str, 
     base_path: str, 
     loading_settings: Dict[str, Any],
-    priority: int,
     description: str
 ) -> bool:
     """
@@ -93,7 +95,6 @@ def _load_single_module(
         category: Category of the module (core_models, domain_experts, etc.)
         base_path: Base path where the module is located
         loading_settings: Loading configuration settings
-        priority: Module priority for loading order
         description: Module description for logging
         
     Returns:
@@ -105,11 +106,21 @@ def _load_single_module(
     for attempt in range(retry_attempts):
         try:
             # Determine the actual module path based on category
-            if category == "domain_experts":
-                # Domain experts are in subdirectories
-                module_path = Path(base_path) / module_name
+            if category == "marketplace":
+                # Marketplace modules need special handling for domains vs applications
+                if module_name in ["software-engineer", "data-engineer", "devops-engineer", "project-manager", 
+                                   "content-strategist", "content-creator", "content-analyst", "campaign-manager",
+                                   "community-manager", "account-executive", "sales-development-representative",
+                                   "inside-sales representative", "business-development-representative", 
+                                   "customer-success-manager", "accountant", "financial-controller", "treasurer",
+                                   "human-resources-manager", "osint-researcher", "private-investigator"]:
+                    # Domain expert modules
+                    module_path = Path(base_path) / "domains" / "modules" / module_name
+                else:
+                    # Application modules
+                    module_path = Path(base_path) / "applications" / module_name
             else:
-                # Other modules are direct subdirectories
+                # Core and custom modules are direct subdirectories
                 module_path = Path(base_path) / module_name
             
             # Check if module directory exists
@@ -129,19 +140,26 @@ def _load_single_module(
                 return True
             
             # Build import path
-            if category == "domain_experts":
-                module_relative_path = f"src.marketplace.modules.domains.modules.{module_name}"
-            elif category == "applications":
-                module_relative_path = f"src.marketplace.modules.applications.{module_name}"
-            elif category == "core_models":
+            if category == "marketplace":
+                # Determine if it's a domain expert or application
+                if module_name in ["software-engineer", "data-engineer", "devops-engineer", "project-manager", 
+                                   "content-strategist", "content-creator", "content-analyst", "campaign-manager",
+                                   "community-manager", "account-executive", "sales-development-representative",
+                                   "inside-sales representative", "business-development-representative", 
+                                   "customer-success-manager", "accountant", "financial-controller", "treasurer",
+                                   "human-resources-manager", "osint-researcher", "private-investigator"]:
+                    module_relative_path = f"src.marketplace.modules.domains.modules.{module_name}"
+                else:
+                    module_relative_path = f"src.marketplace.modules.applications.{module_name}"
+            elif category == "core":
                 module_relative_path = f"src.core.modules.{module_name}"
-            elif category == "custom_modules":
+            elif category == "custom":
                 module_relative_path = f"src.custom.modules.{module_name}"
             else:
                 logger.error(f"❌ Unknown module category: {category}")
                 return False
             
-            logger.info(f"🔄 Loading module '{module_name}' (priority: {priority}) - {description}")
+            logger.info(f"🔄 Loading module '{module_name}' - {description}")
             
             # Import the module
             imported_module = importlib.import_module(module_relative_path)

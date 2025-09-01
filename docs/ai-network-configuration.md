@@ -32,49 +32,33 @@ User-defined modules in `src/custom/modules`
 
 ```yaml
 ai_network:
-  # Core AI Models - Foundation language models
-  core_models:
+  # Core AI Models - Foundation language models  
+  core:
     enabled: true
     modules:
       - name: "abi"
         enabled: true
-        priority: 1
-        description: "Core ABI system with ontology management"
       - name: "chatgpt"
         enabled: true
-        priority: 2
-        description: "OpenAI GPT models integration"
       - name: "claude"
         enabled: false
-        priority: 3
-        description: "Anthropic Claude models integration"
 
-  # Domain Expert Agents - Specialized business roles
-  domain_experts:
+  # Custom Modules - User-defined extensions
+  custom:
+    enabled: true
+    auto_discover: true
+    modules: []
+
+  # Marketplace - All marketplace content (domains + applications)
+  marketplace:
     enabled: true
     modules:
       - name: "software-engineer"
         enabled: true
-        priority: 1
-        description: "Software development and architecture expert"
       - name: "data-engineer"
         enabled: false
-        priority: 2
-        description: "Data pipeline and infrastructure expert"
-
-  # Application Integrations - External service integrations
-  applications:
-    enabled: true
-    modules:
       - name: "github"
         enabled: true
-        priority: 1
-        description: "GitHub repository and project management integration"
-
-  # Custom Modules - User-defined modules
-  custom_modules:
-    enabled: true
-    auto_discover: true # Automatically discover modules in src/custom/modules
     modules: []
 
   # Module Loading Settings
@@ -98,10 +82,10 @@ python src/cli.py network list --show-disabled  # Include disabled modules
 ### Enable/Disable Modules
 ```bash
 # Enable a module
-python src/cli.py network enable gemini core_models
+python src/cli.py network enable gemini core
 
 # Disable a module  
-python src/cli.py network disable claude core_models
+python src/cli.py network disable claude core
 ```
 
 ### Validate Configuration
@@ -135,10 +119,10 @@ python src/cli.py network --help
 
 | Category | File System Path | Description |
 |----------|------------------|-------------|
-| `core_models` | `src/core/modules/` | Foundation AI models |
-| `domain_experts` | `src/marketplace/modules/domains/modules/` | Business role specialists |
+| `core` | `src/core/modules/` | Foundation AI models |
+| `marketplace` | `src/marketplace/modules/domains/modules/` | Business role specialists |
 | `applications` | `src/marketplace/modules/applications/` | External integrations |
-| `custom_modules` | `src/custom/modules/` | User-defined modules |
+| `custom` | `src/custom/modules/` | User-defined modules |
 
 ## Configuration Management
 
@@ -146,39 +130,37 @@ python src/cli.py network --help
 ```yaml
 # In config.yaml
 ai_network:
-  core_models:
+  core:
     modules:
       - name: "claude"
         enabled: true
-        priority: 3
         description: "Anthropic Claude models integration"
 ```
 
 ### CLI Management
 ```bash
-python src/cli.py network enable claude core_models
-python src/cli.py network disable claude core_models
+python src/cli.py network enable claude core
+python src/cli.py network disable claude core
 python src/cli.py network list  # View current status
 ```
 
 ## Advanced Features
 
-### Priority-Based Loading
-Modules are loaded in priority order (lower number = higher priority):
+### Natural Configuration Flow
+Modules load in the exact order they appear in your `config.yaml` file:
 
-```yaml
-modules:
-  - name: "abi"
-    priority: 1  # Loads first
-  - name: "chatgpt"  
-    priority: 2  # Loads second
-```
+- **Categories** load in the order defined in the YAML structure
+- **Modules** within each category load in their configuration sequence
+- **No artificial priorities** or hardcoded loading rules
+- **Simple reordering** - just move entries up/down in the config file
+
+This approach provides predictable, intuitive module management without complex priority systems.
 
 ### Category-Level Control
 Disable entire categories:
 
 ```yaml
-domain_experts:
+marketplace:
   enabled: false  # Disables all domain expert modules
 ```
 
@@ -186,7 +168,7 @@ domain_experts:
 For custom modules, enable auto-discovery to automatically load any modules found:
 
 ```yaml
-custom_modules:
+custom:
   enabled: true
   auto_discover: true  # Automatically finds modules in src/custom/modules
 ```
@@ -215,8 +197,8 @@ print(f"Loaded {len(modules)} modules")
 ```python
 from src.__modules__ import get_modules_by_category
 
-core_modules = get_modules_by_category("core_models")
-domain_experts = get_modules_by_category("domain_experts")
+core_modules = get_modules_by_category("core")
+marketplace = get_modules_by_category("marketplace")
 ```
 
 ### Reload Modules (Development)

@@ -1,194 +1,18 @@
-ai_network:
-  applications:
-    enabled: true
-    modules:
-    - description: GitHub repository and project management integration
-      enabled: true
-      name: github
-      priority: 1
-    - description: Git version control integration
-      enabled: true
-      name: git
-      priority: 2
-    - description: Naas platform integration
-      enabled: true
-      name: naas
-      priority: 3
-    - description: Customer support and ticketing system
-      enabled: true
-      name: support
-      priority: 4
-    - description: ArXiv research paper integration
-      enabled: false
-      name: arxiv
-      priority: 5
-    - description: Gladia audio/video processing integration
-      enabled: false
-      name: gladia
-      priority: 6
-    - description: Microsoft PowerPoint integration
-      enabled: false
-      name: powerpoint
-      priority: 7
-    - description: Algolia search integration
-      enabled: false
-      name: algolia
-      priority: 8
-    - description: Amazon Web Services integration
-      enabled: false
-      name: aws
-      priority: 9
-    - description: Microsoft Azure integration
-      enabled: false
-      name: azure
-      priority: 10
-    - description: Google Cloud Platform integration
-      enabled: false
-      name: google
-      priority: 11
-    - description: Microsoft Office integration
-      enabled: false
-      name: microsoft
-      priority: 12
-  core_models:
-    enabled: true
-    modules:
-    - description: Core ABI system with ontology management
-      enabled: true
-      name: abi
-      priority: 1
-    - description: OpenAI GPT models integration
-      enabled: true
-      name: chatgpt
-      priority: 2
-    - description: Anthropic Claude models integration
-      enabled: true
-      name: claude
-      priority: 3
-    - description: DeepSeek R1 models integration
-      enabled: false
-      name: deepseek
-      priority: 4
-    - description: Google Gemini models integration
-      enabled: true
-      name: gemini
-      priority: 5
-    - description: Google Gemma models integration
-      enabled: false
-      name: gemma
-      priority: 6
-    - description: xAI Grok models integration
-      enabled: false
-      name: grok
-      priority: 7
-    - description: Meta Llama models integration
-      enabled: false
-      name: llama
-      priority: 8
-    - description: Mistral AI models integration
-      enabled: false
-      name: mistral
-      priority: 9
-    - description: Perplexity AI models integration
-      enabled: false
-      name: perplexity
-      priority: 10
-    - description: Alibaba Qwen models integration
-      enabled: false
-      name: qwen
-      priority: 11
-  custom_modules:
-    auto_discover: true
-    enabled: true
-    modules: []
-  domain_experts:
-    enabled: true
-    modules:
-    - description: Software development and architecture expert
-      enabled: true
-      name: software-engineer
-      priority: 1
-    - description: Data pipeline and infrastructure expert
-      enabled: true
-      name: data-engineer
-      priority: 2
-    - description: DevOps and infrastructure automation expert
-      enabled: true
-      name: devops-engineer
-      priority: 3
-    - description: Project planning and management expert
-      enabled: false
-      name: project-manager
-      priority: 4
-    - description: Content strategy and planning expert
-      enabled: false
-      name: content-strategist
-      priority: 5
-    - description: Content creation and copywriting expert
-      enabled: false
-      name: content-creator
-      priority: 6
-    - description: Content analysis and optimization expert
-      enabled: false
-      name: content-analyst
-      priority: 7
-    - description: Marketing campaign management expert
-      enabled: false
-      name: campaign-manager
-      priority: 8
-    - description: Community building and engagement expert
-      enabled: false
-      name: community-manager
-      priority: 9
-    - description: Account management and sales expert
-      enabled: false
-      name: account-executive
-      priority: 10
-    - description: Lead generation and sales development expert
-      enabled: false
-      name: sales-development-representative
-      priority: 11
-    - description: Inside sales and CRM management expert
-      enabled: false
-      name: inside-sales representative
-      priority: 12
-    - description: Business development and partnerships expert
-      enabled: false
-      name: business-development-representative
-      priority: 13
-    - description: Customer success and retention expert
-      enabled: false
-      name: customer-success-manager
-      priority: 14
-    - description: Accounting and financial reporting expert
-      enabled: false
-      name: accountant
-      priority: 15
-    - description: Financial controls and budgeting expert
-      enabled: false
-      name: financial-controller
-      priority: 16
-    - description: Treasury and cash management expert
-      enabled: false
-      name: treasurer
-      priority: 17
-    - description: HR policies and employee management expert
-      enabled: false
-      name: human-resources-manager
-      priority: 18
-    - description: Open source intelligence research expert
-      enabled: false
-      name: osint-researcher
-      priority: 19
-    - description: Investigation and evidence analysis expert
-      enabled: false
-      name: private-investigator
-      priority: 20
-  loading:
-    fail_on_error: true
-    parallel_loading: false
-    retry_attempts: 3
-    timeout_seconds: 30
+# =============================================================================
+# ABI System Configuration
+# =============================================================================
+#
+# Production configuration for the NaasAI ABI System.
+# Defines system settings, AI network topology, and operational pipelines.
+#
+# Structure:
+#   config      - Core system parameters and API configuration
+#   ai_network  - Module definitions with natural loading order
+#   pipelines   - Scheduled automation workflows
+#
+# Module loading follows YAML order
+# =============================================================================
+
 config:
   api_description: API for ABI, your Artifical Business Intelligence
   api_title: ABI API
@@ -203,6 +27,110 @@ config:
   storage_name: abi
   triple_store_path: storage/triplestore
   workspace_id: 96ce7ee7-e5f5-4bca-acf9-9d5d41317f81
+
+ai_network:
+  core:
+    enabled: true
+    modules:
+    - name: abi
+      enabled: true
+    - name: chatgpt
+      enabled: true
+    - name: claude
+      enabled: true
+    - name: deepseek
+      enabled: false
+    - name: gemini
+      enabled: true
+    - name: gemma
+      enabled: false
+    - name: grok
+      enabled: false
+    - name: llama
+      enabled: false
+    - name: mistral
+      enabled: false
+    - name: perplexity
+      enabled: false
+    - name: qwen
+      enabled: false
+  custom:
+    auto_discover: true
+    enabled: true
+    modules: []
+  marketplace:
+    enabled: true
+    modules:
+    - name: software-engineer
+      enabled: true
+    - name: data-engineer
+      enabled: true
+    - name: devops-engineer
+      enabled: true
+    - name: project-manager
+      enabled: false
+    - name: content-strategist
+      enabled: false
+    - name: content-creator
+      enabled: false
+    - name: content-analyst
+      enabled: false
+    - name: campaign-manager
+      enabled: false
+    - name: community-manager
+      enabled: false
+    - name: account-executive
+      enabled: false
+    - name: sales-development-representative
+      enabled: false
+    - name: inside-sales representative
+      enabled: false
+    - name: business-development-representative
+      enabled: false
+    - name: customer-success-manager
+      enabled: false
+    - name: accountant
+      enabled: false
+    - name: financial-controller
+      enabled: false
+    - name: treasurer
+      enabled: false
+    - name: human-resources-manager
+      enabled: false
+    - name: osint-researcher
+      enabled: false
+    - name: private-investigator
+      enabled: false
+    - name: github
+      enabled: true
+    - name: git
+      enabled: true
+    - name: naas
+      enabled: true
+    - name: support
+      enabled: true
+    - name: arxiv
+      enabled: false
+    - name: gladia
+      enabled: false
+    - name: powerpoint
+      enabled: false
+    - name: algolia
+      enabled: false
+    - name: aws
+      enabled: false
+    - name: azure
+      enabled: false
+    - name: google
+      enabled: false
+    - name: microsoft
+      enabled: false
+  loading:
+    fail_on_error: true
+    parallel_loading: false
+    retry_attempts: 3
+    timeout_seconds: 30
+
 pipelines:
 - cron: 0 0 * * *
   name: github.GithubIssuesPipeline

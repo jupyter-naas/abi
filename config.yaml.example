@@ -1,101 +1,75 @@
+# Example ABI Configuration
+# Copy this to config.yaml and customize for your needs
+
 config:
-  workspace_id: # Naas workspace ID
-  github_project_repository: # Github repository name (e.g. jupyter-naas/abi)
-  github_support_repository: # Github repository name (e.g. jupyter-naas/abi)
-  github_project_id: # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
-  triple_store_path: "storage/triplestore" # Path to the ontology store
-  api_title: "ABI API" # API title
-  api_description: "API for ABI, your Artifical Business Intelligence" # API description
-  logo_path: "assets/logo.png" # Path to the logo
-  favicon_path: "assets/favicon.ico" # Path to the favicon
-  storage_name: "abi" # Name of the storage
-  space_name: "abi" # Name of the space
+  workspace_id: "your-workspace-id"
+  storage_name: "abi"
+  github_project_repository: "your-org/your-repo"
+  github_support_repository: "your-org/support-repo"
+  github_project_id: 1
+  triple_store_path: "storage/triplestore"
+  api_title: "ABI API"
+  api_description: "API for ABI, your Artificial Business Intelligence"
+  logo_path: "assets/logo.png"
+  favicon_path: "assets/favicon.ico"
+  space_name: "abi"
   cors_origins:
     - "http://localhost:9879"
 
-# AI Network Configuration - Define which modules to load and their priorities
-# This replaces the old "disabled" prefix system with a centralized configuration approach
+# AI Network Configuration
 ai_network:
   # Core AI Models - Foundation language models
-  core_models:
+  core:
     enabled: true
     modules:
       - name: "abi"
         enabled: true
-        priority: 1
-        description: "Core ABI system with ontology management"
       - name: "chatgpt"
         enabled: true # Set to false to disable ChatGPT integration
-        priority: 2
-        description: "OpenAI GPT models integration"
       - name: "claude"
         enabled: true # Set to false to disable Claude integration
-        priority: 3
-        description: "Anthropic Claude models integration"
       # Add other models as needed - set enabled: true to activate them
       - name: "deepseek"
         enabled: false
-        priority: 4
-        description: "DeepSeek R1 models integration"
       - name: "gemini"
         enabled: false
-        priority: 5
-        description: "Google Gemini models integration"
 
-  # Domain Expert Agents - Specialized business roles
-  domain_experts:
-    enabled: true # Set to false to disable all domain experts
+  # Custom Modules - User-defined extensions
+  custom:
+    enabled: true
+    auto_discover: true
+    modules: []
+
+  # Marketplace - All marketplace content (domains + applications)
+  marketplace:
+    enabled: true # Set to false to disable all marketplace modules
     modules:
-      # Enable the domain experts you need for your use case
+      # Domain experts - Enable the ones you need for your use case
       - name: "software-engineer"
         enabled: true # Essential for development teams
-        priority: 1
-        description: "Software development and architecture expert"
       - name: "data-engineer"
-        enabled: false # Enable if you need data pipeline expertise
-        priority: 2
-        description: "Data pipeline and infrastructure expert"
+        enabled: true
       - name: "project-manager"
-        enabled: false # Enable for project management capabilities
-        priority: 3
-        description: "Project planning and management expert"
-      # Add more domain experts as needed
-
-  # Application Integrations - External service integrations
-  applications:
-    enabled: true
-    modules:
+        enabled: false
+      
+      # Applications - External service integrations
       - name: "github"
-        enabled: true # Essential for GitHub integration
-        priority: 1
-        description: "GitHub repository and project management integration"
+        enabled: true
       - name: "naas"
-        enabled: true # Essential for Naas platform integration
-        priority: 2
-        description: "Naas platform integration"
-      # Enable other applications as needed
+        enabled: true
       - name: "arxiv"
-        enabled: false # Enable for research paper integration
-        priority: 3
-        description: "ArXiv research paper integration"
-
-  # Custom Modules - User-defined modules
-  custom_modules:
-    enabled: true
-    auto_discover: true # Automatically discover modules in src/custom/modules
-    modules: [] # Add specific custom modules here if auto_discover is false
+        enabled: false
 
   # Module Loading Settings
   loading:
     fail_on_error: true # Stop loading if a module fails
-    parallel_loading: false # Load modules in parallel (experimental)
-    timeout_seconds: 30 # Timeout for module loading
+    parallel_loading: false # Load modules sequentially for now
     retry_attempts: 3 # Number of retry attempts for failed modules
-  
+    timeout_seconds: 30 # Timeout for module loading
+
+# Scheduled Pipelines
 pipelines:
-  - name: github.GithubIssuesPipeline
-    cron: "0 0 * * *"
+  - name: "github.GithubIssuesPipeline"
+    cron: "0 0 * * *" # Daily at midnight
     parameters:
-      - github_repository: "https://github.com/jupyter-naas/abi"
-      - github_repository: "https://github.com/jupyter-naas/docs"
-      - github_repository: "https://github.com/jupyter-naas/naaspython"
+      - github_repository: "https://github.com/your-org/your-repo"

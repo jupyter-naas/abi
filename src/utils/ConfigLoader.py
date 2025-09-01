@@ -35,32 +35,29 @@ class AINetworkConfig:
             return {}
     
     def get_enabled_modules(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Get all enabled modules organized by category"""
-        enabled_modules = {
-            "core_models": [],
-            "domain_experts": [],
-            "applications": [],
-            "custom_modules": []
-        }
+        """Get all enabled modules organized by category in config file order"""
+        enabled_modules = {}
         
-        # Process each category
-        for category in enabled_modules.keys():
-            category_config = self.ai_network.get(category, {})
-            
+        # Process categories in the order they appear in config
+        for category, category_config in self.ai_network.items():
+            if category == "loading":  # Skip loading settings
+                continue
+                
+            if not isinstance(category_config, dict):
+                continue
+                
             if not category_config.get("enabled", False):
                 logger.info(f"📴 Category '{category}' is disabled")
+                enabled_modules[category] = []
                 continue
                 
             modules = category_config.get("modules", [])
             
-            # Filter enabled modules and sort by priority
+            # Filter enabled modules (maintain config file order)
             enabled_in_category = [
                 module for module in modules 
                 if module.get("enabled", False)
             ]
-            
-            # Sort by priority (lower number = higher priority)
-            enabled_in_category.sort(key=lambda x: x.get("priority", 999))
             
             enabled_modules[category] = enabled_in_category
             
@@ -71,10 +68,9 @@ class AINetworkConfig:
     def get_module_paths(self) -> Dict[str, str]:
         """Get the file system paths for each module category"""
         return {
-            "core_models": "src/core/modules",
-            "domain_experts": "src/marketplace/modules/domains/modules",
-            "applications": "src/marketplace/modules/applications",
-            "custom_modules": "src/custom/modules"
+            "core": "src/core/modules",
+            "custom": "src/custom/modules",
+            "marketplace": "src/marketplace/modules"
         }
     
     def should_load_module(self, module_name: str, category: str) -> bool:
@@ -125,7 +121,7 @@ class AINetworkConfig:
             return issues
         
         # Check required categories
-        required_categories = ["core_models", "domain_experts", "applications", "custom_modules"]
+        required_categories = ["core", "custom", "marketplace"]
         for category in required_categories:
             if category not in self.ai_network:
                 issues.append(f"Missing required category: {category}")
