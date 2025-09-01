@@ -183,13 +183,24 @@ class AINetworkConfig:
             "format": "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s",
             "console_output": True,
             "file_output": False,
-            "file_path": "logs/abi.log"
+            "file_path": "storage/logs/{timestamp}_abi_logs.txt"
         })
     
     def get_log_level(self) -> str:
         """Get the configured log level"""
         logging_config = self.get_logging_config()
         return logging_config.get("level", "INFO").upper()
+    
+    def get_log_file_path(self) -> str:
+        """Get the current session's log file path with timestamp"""
+        from datetime import datetime
+        
+        logging_config = self.get_logging_config()
+        log_file_path = logging_config.get("file_path", "storage/logs/{timestamp}_abi_logs.txt")
+        
+        # Replace {timestamp} with current timestamp
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        return log_file_path.replace("{timestamp}", timestamp)
     
     def setup_logging(self) -> None:
         """Setup logging based on configuration"""
@@ -221,7 +232,12 @@ class AINetworkConfig:
         
         # File handler
         if config.get("file_output", False):
-            log_file_path = config.get("file_path", "storage/logs/abi.log")
+            log_file_path = config.get("file_path", "storage/logs/{timestamp}_abi_logs.txt")
+            
+            # Replace {timestamp} with current timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+            log_file_path = log_file_path.replace("{timestamp}", timestamp)
             
             # Create directory if it doesn't exist
             log_dir = Path(log_file_path).parent
