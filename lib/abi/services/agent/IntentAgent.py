@@ -275,7 +275,7 @@ class IntentAgent(Agent):
 
 Your task is to filter out any intent that is not logically compatible with the last user message.
 
-You must examine whether the user’s message and the mapped intent match **in meaning and logical structure**. You should exclude intents where:
+You must examine whether the user's message and the mapped intent match **in meaning and logical structure**. You should exclude intents where:
 - The intent contains named entities (like people or organizations) that are not mentioned in the user message.
 - The intent refers to actions or goals not implied by the user message.
 - The intent is more specific than the user message in a way that changes the meaning (e.g., user asks for a general phone number but the intent asks for the phone number of a specific person).
@@ -286,7 +286,7 @@ You will be shown:
 - The list of mapped intents
 - The last user message
 
-You must call the tool `filter_intents` once and only once with a list of booleans. Each boolean corresponds to whether the mapped intent at that index is logically relevant to the user message.
+CRITICAL: You MUST call the tool `filter_intents` with a list of booleans. Each boolean corresponds to whether the mapped intent at that index is logically relevant to the user message. This is not optional - you must use the tool to provide your filtering decision.
 
 Be strict — include only intents that directly and logically correspond to the user's actual request.
 
@@ -294,7 +294,7 @@ Example:
 - User says: "Give me the personal email address"
 - Intent: "Give me the personal email address of John Doe" → This should be **excluded** (not logically equivalent, adds information not present in prompt)
 
-Now, analyze and apply this reasoning to the intents.
+Now, analyze and apply this reasoning to the intents. Remember: You MUST use the filter_intents tool to provide your answer.
 
 Mapped intents:
 ```mapped_intents
@@ -315,6 +315,12 @@ Last user message: "{last_human_message.content}"
         logger.debug(f"filter_out_intents response: {response}")
         
         filtered_intents : list[Intent] = []
+        
+        # Check if the LLM called the tool
+        if not response.tool_calls or len(response.tool_calls) == 0:
+            logger.warning("LLM did not call filter_intents tool, falling back to keeping all intents")
+            # Fallback: keep all intents if LLM doesn't call the tool
+            return Command(update={"intent_mapping": {"intents": mapped_intents}})
         
         assert isinstance(response.tool_calls, list), response.tool_calls
         assert len(response.tool_calls) > 0, response.tool_calls
