@@ -578,21 +578,36 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
     """
     
     console_loader = ConsoleLoader()
-    console_loader.start("Loading")
     
-    assert agent_class is not None, "Agent class is required"
+    # Add signal handler for proper cleanup
+    import signal
+    def cleanup_handler(signum, frame):
+        console_loader.stop()
+        print("\n👋 Goodbye!")
+        exit(0)
     
-    agent = load_agent(agent_class)
+    signal.signal(signal.SIGINT, cleanup_handler)
+    signal.signal(signal.SIGTERM, cleanup_handler)
     
-    console_loader.stop()
-    
-    if agent is None:
-        print(f"Agent {agent_class} not found")
-        list_available_agents()
+    try:
+        console_loader.start("Loading")
         
-        return
-    
-    run_agent(agent)
+        assert agent_class is not None, "Agent class is required"
+        
+        agent = load_agent(agent_class)
+        
+        console_loader.stop()
+        
+        if agent is None:
+            print(f"Agent {agent_class} not found")
+            list_available_agents()
+            
+            return
+        
+        run_agent(agent)
+    except Exception as e:
+        console_loader.stop()
+        raise e
 
 
 if __name__ == "__main__":

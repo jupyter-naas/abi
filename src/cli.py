@@ -446,13 +446,6 @@ def _update_module_status(module_name: str, category: str, enabled: bool) -> boo
 
 def cmd_agent_chat(args):
     """Start interactive chat with ABI agent"""
-    # Initialize logging first
-    from src.utils.ConfigLoader import get_ai_network_config
-    config = get_ai_network_config()
-    log_file = config.setup_logging()
-    if log_file:
-        console.print(f"📝 Session logging enabled: {log_file}", style="dim")
-    
     # Run the setup checks first
     for f in checks:
         f()
