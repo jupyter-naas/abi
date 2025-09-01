@@ -189,6 +189,7 @@ ai_network:
 ABI uses a single configuration file to define your AI Network:
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor': '#f8fafc', 'primaryTextColor': '#1e293b', 'primaryBorderColor': '#e2e8f0', 'lineColor': '#64748b'}}}%%
 graph TB
     User["User Input<br/>'use claude for analysis'"] --> ABI["ABI Orchestrator<br/>Intent Routing"]
     
@@ -199,29 +200,45 @@ graph TB
     
     Config["config.yaml<br/>• Agent definitions<br/>• Intent mappings<br/>• Enable/disable"] -.-> ABI
     
-    subgraph Memory["Memory Services"]
+    subgraph "Memory Services"
         KG["Knowledge Graph<br/>Triple Store<br/>Ontologies & Relations"]
         SQL["SQL Database<br/>Structured Data<br/>Agent Memory"]
         Vector["Vector Store<br/>Embeddings<br/>(Coming Soon)"]
     end
     
-    Claude <--> Memory
-    ChatGPT <--> Memory
-    Gemini <--> Memory
-    Tools <--> Memory
+    Claude <--> KG
+    Claude <--> SQL
+    Claude <--> Vector
+    ChatGPT <--> KG
+    ChatGPT <--> SQL
+    ChatGPT <--> Vector
+    Gemini <--> KG
+    Gemini <--> SQL
+    Gemini <--> Vector
+    Tools <--> KG
+    Tools <--> SQL
+    Tools <--> Vector
     
     Claude --> Response1["Analysis with<br/>contextual knowledge"]
     ChatGPT --> Response2["Code with<br/>learned patterns"]
     Gemini --> Response3["Multimodal with<br/>memory context"]
     Tools --> Response4["System info with<br/>historical data"]
     
-    style ABI fill:#e1f5fe
-    style Config fill:#f0f0f0
-    style User fill:#e8f5e8
-    style Memory fill:#f5f5f5
-    style KG fill:#e8f5e8
-    style SQL fill:#fff3e0
-    style Vector fill:#fce4ec
+    %% Standard class definitions
+    classDef userExp fill:#e8f5e8,stroke:#4caf50,stroke-width:2px,color:#2e7d32
+    classDef platform fill:#e3f2fd,stroke:#2196f3,stroke-width:1px,color:#1565c0
+    classDef aiEngine fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#e65100
+    classDef dataLayer fill:#f3e5f5,stroke:#9c27b0,stroke-width:1px,color:#4a148c
+    classDef infrastructure fill:#fce4ec,stroke:#e91e63,stroke-width:1px,color:#880e4f
+    
+    %% Apply classes to nodes
+    class User userExp
+    class ABI platform
+    class Claude,ChatGPT,Gemini aiEngine
+    class Tools platform
+    class Config infrastructure
+    class KG,SQL,Vector dataLayer
+    class Response1,Response2,Response3,Response4 userExp
 ```
 
 - **Single Source**: Your entire AI Network in one config.yaml file
