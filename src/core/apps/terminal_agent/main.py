@@ -579,16 +579,6 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
     
     console_loader = ConsoleLoader()
     
-    # Add signal handler for proper cleanup
-    import signal
-    def cleanup_handler(signum, frame):
-        console_loader.stop()
-        print("\n👋 Goodbye!")
-        exit(0)
-    
-    signal.signal(signal.SIGINT, cleanup_handler)
-    signal.signal(signal.SIGTERM, cleanup_handler)
-    
     try:
         console_loader.start("Loading")
         
