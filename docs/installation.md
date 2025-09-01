@@ -279,26 +279,9 @@ make
 
 ## Verification
 
-### Test Core Functionality
-
-Try these commands to verify your installation:
-
 ```bash
-# Test agent interaction
-echo "What agents are available?" | make chat-abi-agent-prompt
-
-# Test API server (in another terminal)
-make api
-# Then visit http://localhost:8000/docs
-
-# Check services are running
 docker ps
 ```
-
-You should see containers running for:
-- Oxigraph (port 7878) - Knowledge graph triple store
-- PostgreSQL (port 5432) - Agent memory and structured data
-- Dagster (port 3000) - Workflow orchestration
 
 ## Troubleshooting
 
