@@ -271,36 +271,11 @@ The ABI agent contains centralized intent mapping with three types:
 
 ## Quick Start
 
-### Start Your First Agent
-
-Once configured, start ABI:
+### Start ABI
 
 ```bash
 make
 ```
-
-Here's what actually happens in your terminal:
-
-```
-$ make
-🚀 Starting ABI Agent...
-💬 ABI Agent ready! Type your message below:
-
-ABI: Hello! I'm your ABI agent. I can help you with building custom AI agents, 
-managing knowledge graphs, and orchestrating multi-agent workflows.
-
-What would you like to work on today?
-
-You: use claude for analysis
-ABI: Transferring to Claude for detailed analysis...
-
-Claude: I'm Claude, ready to help with thoughtful analysis and writing tasks. 
-What would you like me to analyze?
-
-You: 
-```
-
-That's it! ABI starts directly without any setup steps - Docker services start automatically in the background when needed.
 
 ## Verification
 
