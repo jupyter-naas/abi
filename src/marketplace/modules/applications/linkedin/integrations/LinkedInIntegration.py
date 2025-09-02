@@ -6,7 +6,13 @@ from lib.abi.integration.integration import Integration, IntegrationConnectionEr
 import os
 from src.utils.Storage import get_json, save_json, save_image
 import pydash
+from abi.services.cache.CacheFactory import CacheFactory
+from lib.abi.services.cache.CachePort import DataType
+import datetime
+from abi import logger
+# from abi.utils.String import create_hash_from_string
 
+cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
 @dataclass
 class LinkedInIntegrationConfiguration(IntegrationConfiguration):
@@ -77,12 +83,7 @@ class LinkedInIntegration(Integration):
                 response = requests.get(image_url)
                 save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
 
-
-    def __get_cached_data(self, prefix: str, filename: str) -> Dict:
-        """Get data from cache if it exists."""
-        return get_json(os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
-
-    def __save_to_cache(self, prefix: str, filename: str, data: dict) -> Dict:
+    def __save_json(self, prefix: str, filename: str, data: dict, save_image=True) -> Dict:
         """Save data to cache."""
         save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
         
@@ -107,11 +108,15 @@ class LinkedInIntegration(Integration):
             entity_urn = include.get("entityUrn")
             if len(get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
                 save_json(include, output_dir_dict_type, f"{entity_urn}.json")
-            for key in ["logo", "backgroundImage", "profile"]:
-                if include.get(key):
-                    self.__save_images(include, key, output_dir_dict_type)
+            if save_image:
+                for key in ["logo", "backgroundImage", "profile"]:
+                    if include.get(key):
+                        self.__save_images(include, key, output_dir_dict_type)
+                    else:
+                        save_json({}, output_dir_dict_type, f"{entity_urn}.json")
         return data
 
+    @cache(lambda self, prefix, filename, method, endpoint, params: method + "_" + endpoint + ("_".join(f"{k}_{v}" for k,v in params.items()) if params else ""), cache_type=DataType.JSON, ttl=datetime.timedelta(days=7))
     def _make_request(
         self,
         prefix: str,
@@ -120,15 +125,11 @@ class LinkedInIntegration(Integration):
         endpoint: str, 
         params: Dict | None = None,
     ) -> Dict:
-        """Make HTTP request to LinkedIn API."""
-        # Get data from cache
-        data = self.__get_cached_data(prefix=prefix, filename=filename)
-        if len(data) > 0 and self.__configuration.use_cache:
-            return data
-        
+        """Make HTTP request to LinkedIn API."""        
         # Make request
         url = f"{self.__configuration.base_url}{endpoint}"
         try:
+            logger.info(f"Making request to {url} with method {method} and params {params}")
             response = requests.request(
                 method=method,
                 url=url,
@@ -137,7 +138,7 @@ class LinkedInIntegration(Integration):
                 params=params
             )
             response.raise_for_status()
-            return self.__save_to_cache(prefix=prefix, filename=filename, data=response.json()) if response.content else {}
+            return self.__save_json(prefix=prefix, filename=filename, data=response.json()) if response.content else {}
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
 
@@ -153,18 +154,8 @@ class LinkedInIntegration(Integration):
         elif "/showcase/" in url:
             return url.rsplit("/showcase/")[-1].rsplit("/")[0]
         else:
-            raise ValueError("URL must contain /company/, /school/ or /showcase/")
-        
-    def get_profile_id(self, linkedin_url: str) -> str:
-        """Extract profile ID from LinkedIn URL.
-        
-        Handles profile URLs with or without the /in/ prefix.
-        """
-        if "/in/" in linkedin_url:  
-            return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
-        else:
-            raise ValueError("URL must contain /in/")
-        
+            raise ValueError(f"Invalid LinkedIn URL: {url}")
+    
     def get_organization_info(self, linkedin_url: str) -> Dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
         
@@ -189,6 +180,15 @@ class LinkedInIntegration(Integration):
         data = self._make_request(prefix=prefix, filename=org_id, method="GET", endpoint=endpoint)
         return data
     
+    def get_profile_id(self, linkedin_url: str) -> str:
+        """Extract profile ID from LinkedIn URL.
+        
+        Handles profile URLs with or without the /in/ prefix.
+        """
+        if "/in/" in linkedin_url:  
+            return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
+        return ""
+    
     def get_profile_view(self, linkedin_url: str) -> Dict:
         """Get profile view for a LinkedIn organization.
         
@@ -206,6 +206,161 @@ class LinkedInIntegration(Integration):
         data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
         return data
 
+    def get_profile_top_card(self, linkedin_url: str) -> Dict:
+        """Get profile top card information for a LinkedIn profile.
+        
+        Args:
+            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            
+        Returns:
+            Dict: Raw profile top card data from LinkedIn API
+        """
+        # Get profile ID
+        profile_id = self.get_profile_id(linkedin_url)
+        prefix = os.path.join("get_profile_top_card", profile_id)
+        
+        endpoint = f"/graphql?variables=(vanityName:{profile_id})&queryId=voyagerIdentityDashProfiles.0bc93b66ba223b9d30d1cb5c05ff031a"
+        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        return data
+    
+    def get_activity_id(self, linkedin_url: str) -> str:
+        """Extract activity ID from LinkedIn URL.
+        
+        Handles activity URLs with or without the -activity- or :activity: prefix.
+        """
+        if "-activity-" in linkedin_url:
+            return linkedin_url.split("-activity-")[-1].split("-")[0]
+        elif ":activity:" in linkedin_url:
+            return linkedin_url.split(":activity:")[-1].split("/")[0]
+        return ""
+    
+    def get_post_stats(self, linkedin_url: str) -> Dict:
+        """Get activity for a LinkedIn activity.
+        
+        Args:
+            linkedin_url (str): LinkedIn activity URL. It must contain -activity- in the URL.
+
+        Returns:
+            Dict: Raw post stats data from LinkedIn API
+        """
+        # Get activity ID
+        activity_id = self.get_activity_id(linkedin_url)
+        prefix = os.path.join("get_post_stats", activity_id)
+            
+        endpoint = f"/feed/updates/urn:li:activity:{activity_id}"
+        data = self._make_request(prefix=prefix, filename=activity_id, method="GET", endpoint=endpoint)
+        return data
+    
+    def get_post_reactions(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1) -> Dict:
+        """Get reactions for a LinkedIn post.
+        
+        Args:
+            activity_id (str): LinkedIn activity ID.
+            start (int, optional): Start index for pagination. Defaults to 0.
+            count (int, optional): Number of reactions to fetch per request. Defaults to 100.
+            limit (int, optional): Maximum number of reactions to return. Defaults to -1 (no limit).
+        """
+        # Get activity ID
+        activity_id = self.get_activity_id(linkedin_url)
+        prefix = os.path.join("get_post_reactions", activity_id)
+        filename = f"{activity_id}_{start}_{count}"
+
+        params = {
+            "q": "reactionType",
+            "start": start,
+            "count": count,
+            "threadUrn": f"urn:li:activity:{activity_id}",
+        }
+        endpoint = f"/feed/reactions?{urllib.parse.urlencode(params, doseq=True)}"
+
+        all_data = None
+        while True:
+            if limit != -1 and limit < count:
+                count = limit
+                
+            params["start"] = start
+            params["count"] = count
+            filename = f"{activity_id}_{start}_{count}"
+            
+            data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
+            
+            if not all_data:
+                all_data = data
+            else:
+                all_data["included"].extend(data.get("included", []))
+                all_data["data"]["*elements"].extend(data["data"]["*elements"])
+            
+            total = data.get("data", {}).get("paging", {}).get("total", 0)
+            fetched = start + len(data.get("data", {}).get("*elements", []))
+            
+            if fetched >= total:
+                break
+                
+            if limit != -1:
+                limit -= count
+                if limit <= 0:
+                    break
+                    
+            start += count
+            
+        return all_data
+    
+    def get_post_comments(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1) -> Dict:
+        """Get comments for a LinkedIn post.
+        
+        Args:
+            activity_id (str): LinkedIn activity ID.
+            start (int, optional): Start index for pagination. Defaults to 0.
+            count (int, optional): Number of comments to fetch per request. Defaults to 100.
+            limit (int, optional): Maximum number of comments to return. Defaults to -1 (no limit).
+        """
+        # Get activity ID
+        activity_id = self.get_activity_id(linkedin_url)
+        prefix = os.path.join("get_post_comments", activity_id)
+        filename = f"{activity_id}_{start}_{count}"
+
+        # Request
+        params = {
+            "q": "comments",
+            "start": start,
+            "count": count,
+            "updateId": f"activity:{activity_id}",
+            "sortOrder": "RECENT",
+        }
+        endpoint = f"/feed/comments?{urllib.parse.urlencode(params, safe='(),')}"
+        
+        all_data = None
+        while True:
+            if limit != -1 and limit < count:
+                count = limit
+                
+            params["start"] = start
+            params["count"] = count
+            filename = f"{activity_id}_{start}_{count}"
+            
+            data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
+            
+            if not all_data:
+                all_data = data
+            else:
+                all_data["included"].extend(data.get("included", []))
+                all_data["data"]["*elements"].extend(data["data"]["*elements"])
+            
+            total = data.get("data", {}).get("paging", {}).get("total", 0)
+            fetched = start + len(data.get("data", {}).get("*elements", []))
+            
+            if fetched >= total:
+                break
+                
+            if limit != -1:
+                limit -= count
+                if limit <= 0:
+                    break
+                    
+            start += count
+            
+        return all_data
+    
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
@@ -214,10 +369,24 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
     integration = LinkedInIntegration(configuration)
 
     class GetOrganizationInfoSchema(BaseModel):
-        linkedin_url: str = Field(..., description="LinkedIn organization URL", pattern=r"https://www\.linkedin\.com/(company|school|showcase)/[^/]+/")
+        linkedin_url: str = Field(
+            ..., 
+            description="LinkedIn organization URL", 
+            pattern=r"https://www\.linkedin\.com/(company|school|showcase)/[^/]+/"
+        )
 
-    class GetProfileViewSchema(BaseModel):
-        linkedin_url: str = Field(..., description="LinkedIn profile URL", pattern=r"https://www\.linkedin\.com/in/[^/]+/")
+    class GetProfileSchema(BaseModel):
+        linkedin_url: str = Field(
+            ..., 
+            description="LinkedIn profile URL", 
+            pattern=r"https://www\.linkedin\.com/in/[^/]+/"
+        )
+
+    class GetActivitySchema(BaseModel):
+        linkedin_url: str = Field(
+            ..., 
+            description="LinkedIn activity ID extracted from the URL", 
+        )
 
     return [
         StructuredTool(
@@ -230,6 +399,24 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             name="linkedin_get_profile_view",
             description="Get profile view for a LinkedIn organization",
             func=lambda linkedin_url: integration.get_profile_view(linkedin_url),
-            args_schema=GetProfileViewSchema
+            args_schema=GetProfileSchema
         ),
+        StructuredTool(
+            name="linkedin_get_post_stats",
+            description="Get post stats for a LinkedIn activity",
+            func=lambda linkedin_url: integration.get_post_stats(linkedin_url),
+            args_schema=GetActivitySchema
+        ),
+        StructuredTool(
+            name="linkedin_get_post_comments",
+            description="Get comments for a LinkedIn activity",
+            func=lambda linkedin_url: integration.get_post_comments(linkedin_url),
+            args_schema=GetActivitySchema
+        ),
+        StructuredTool(
+            name="linkedin_get_post_reactions",
+            description="Get reactions for a LinkedIn activity",
+            func=lambda linkedin_url: integration.get_post_reactions(linkedin_url),
+            args_schema=GetActivitySchema
+        )
     ]

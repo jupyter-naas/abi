@@ -1,0 +1,145 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix ppt: <http://ontology.naas.ai/abi/powerpoint/> .
+
+<http://ontology.naas.ai/abi/PowerPointOntology> rdf:type owl:Ontology ;
+    dc11:contributor "Florent Ravenel" ;
+    dc:description "Domain ontology for PowerPoint."@en ;
+    dc:title "PowerPoint Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+ppt:Presentation a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "PowerPoint Presentation" ;
+    skos:definition "A digital slide deck created using software such as Microsoft PowerPoint, used to display information in a visually engaging format, often supporting oral presentations."@en ;
+    skos:example "A sales pitch presentation with charts and graphs"@en ,
+                 "A conference talk presentation with bullet points and images"@en .
+
+ppt:Slide a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Slide" ;
+    skos:definition "An individual component of a PowerPoint presentation, typically containing a combination of text, images, and other media."@en ;
+    skos:example "A slide with a title, a subtitle, and a body of text"@en ,
+                 "A slide with a chart and a graph"@en .
+
+ppt:Shape a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Shape" ;
+    skos:definition "A graphical element within a slide, which can include text boxes, images, charts, and other visual objects."@en ;
+    skos:example "A text box with a title"@en ,
+                 "An image with a caption"@en ,
+                 "A chart with a title and axis labels"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+ppt:hasPresentation a owl:ObjectProperty ;
+    rdfs:domain cco:ont00001180 ; # Organization
+    rdfs:range ppt:Presentation ;
+    rdfs:label "has presentation" ;
+    skos:definition "Relates an Organization to a PowerPoint Presentation that it owns or is associated with."@en ;
+    skos:example "The organization 'Air Liquide' has the presentation 'Annual Report'"@en .
+
+ppt:isPresentationOf a owl:ObjectProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range cco:ont00001180 ; # Organization
+    rdfs:label "is presentation of" ;
+    skos:definition "Relates a PowerPoint Presentation to the Organization that owns or is associated with it."@en ;
+    skos:example "The presentation 'Annual Report' is associated with the organization 'Air Liquide'"@en .
+
+ppt:hasSlide a owl:ObjectProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range ppt:Slide ;
+    rdfs:label "has slide" ;
+    skos:definition "Relates a PowerPoint Presentation to its individual slides."@en ;
+    skos:example "The presentation 'Sales Pitch' has the slides 'Introduction', 'Body', and 'Conclusion'"@en .
+
+ppt:isSlideOf a owl:ObjectProperty ;
+    rdfs:domain ppt:Slide ;
+    rdfs:range ppt:Presentation ;
+    rdfs:label "is slide of" ;
+    skos:definition "Relates a Slide to the PowerPoint Presentation it is a part of."@en ;
+    skos:example "The slide 'Introduction' is part of the presentation 'Sales Pitch'"@en .
+
+ppt:hasShape a owl:ObjectProperty ;
+    rdfs:domain ppt:Slide ;
+    rdfs:range ppt:Shape ;
+    rdfs:label "has shape" ;
+    skos:definition "Relates a Slide to its individual shapes."@en ;
+    skos:example "The slide 'Introduction' has the shapes 'Title', 'Subtitle', and 'Body'"@en .
+
+ppt:isShapeOf a owl:ObjectProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range ppt:Slide ;
+    rdfs:label "is shape of" ;
+    skos:definition "Relates a Shape to the Slide it is a part of."@en ;
+    skos:example "The shape 'Title' is part of the slide 'Introduction'"@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+ppt:shape_id a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:integer ;
+    rdfs:label "shape id" ;
+    skos:definition "A unique identifier for a shape within a slide."@en .
+
+ppt:shape_type a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ; 
+    rdfs:range xsd:integer ;
+    rdfs:label "shape type" ;
+    skos:definition "The type of shape, represented as an integer code (e.g. 13 for image, 14 for text box)."@en .
+
+ppt:shape_alt_text a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:string ;
+    rdfs:label "shape alt text" ;
+    skos:definition "Alternative text description of the shape for accessibility purposes."@en .
+
+ppt:shape_text a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:string ;
+    rdfs:label "shape text" ;
+    skos:definition "The text content contained within the shape."@en .
+
+ppt:shape_position_left a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "shape position left" ;
+    skos:definition "The horizontal position of the left edge of the shape from the left side of the slide."@en .
+
+ppt:shape_position_top a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "shape top position" ;
+    skos:definition "The vertical position of the top edge of the shape from the top of the slide."@en .
+
+ppt:shape_size_width a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "shape size width" ;
+    skos:definition "The width of the shape."@en .
+
+ppt:shape_size_height a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "shape size height" ;
+    skos:definition "The height of the shape."@en .
+
+ppt:shape_rotation_angle a owl:DatatypeProperty ;
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "shape rotation angle" ;
+    skos:definition "The rotation angle of the shape in degrees."@en .
