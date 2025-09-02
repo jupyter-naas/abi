@@ -2,7 +2,8 @@ import glob
 
 command = "dagster dev --host 0.0.0.0 --port 3000"
 
+# Discover all orchestration modules dynamically
 for df in glob.glob("src/**/orchestration/definitions.py", recursive=True):
-    command += f" -m {df} ".replace('/', '.').replace('.py', '')
+    command += f" -m {df}".replace('/', '.').replace('.py', '')
     
 print(command)
