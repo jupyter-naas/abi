@@ -8,34 +8,45 @@ from pathlib import Path
 MODULE_PATH: list[str] = [
     "src/core/modules",
     "src/custom/modules",
-    "src/marketplace/modules",
+    "src/marketplace/modules/applications",
+    "src/marketplace/modules/domains"
 ]
 
 __modules: List[IModule] = []
 __loaded: bool = False
 
+def get_modules(config=None):
+    """Loads and returns all enabled modules from the module directories.
 
-def get_modules():
-    """Loads and returns all enabled modules from the src/modules directory.
-
-    This method scans the src/modules directory and dynamically loads each module found.
+    This method scans all MODULE_PATH directories and dynamically loads each module found.
     Modules are autonomous and self-contained - they can be added by simply dropping them
-    into the modules directory without modifying other code. A module can be disabled
-    by adding "disabled" to its directory name (e.g. "opendata_disabled").
+    into the appropriate modules directory without modifying other code.
 
     The modules are only loaded once - subsequent calls return the cached modules list.
+
+    Args:
+        config: Configuration object containing module settings
 
     Returns:
         List[IModule]: List of loaded module instances
     """
     global __modules, __loaded
     if not __loaded:
+        # Get enabled modules from config if provided
+        enabled_modules = []
+        if config is not None and hasattr(config, 'modules'):
+            enabled_modules = [m.path for m in config.modules if m.enabled]
+            logger.info(f"Loading modules: {enabled_modules}")
+        
         for modulepath in MODULE_PATH:
             for module in Path(modulepath).glob("*/"):
+                module_path_str = str(module)
+                logger.info(f"Loading module: {module_path_str}")
                 if (
                     module.is_dir()
                     and module.name != "__pycache__"
                     and "disabled" not in module.name
+                    and (not enabled_modules or module_path_str in enabled_modules)
                 ):
                     try:
                         module_relative_path = ".".join(

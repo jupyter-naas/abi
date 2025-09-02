@@ -35,6 +35,10 @@ class PipelineConfig:
     cron: str
     parameters: List[dict]
 
+@dataclass
+class ModuleConfig:
+    path: str
+    enabled: bool
 
 @dataclass
 class Config:
@@ -51,6 +55,7 @@ class Config:
     pipelines: List[PipelineConfig]
     space_name: str
     cors_origins: List[str]
+    modules: List[ModuleConfig]
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> "Config":
@@ -63,6 +68,12 @@ class Config:
                         name=p["name"], cron=p["cron"], parameters=p["parameters"]
                     )
                     for p in data["pipelines"]
+                ]
+                module_configs = [
+                    ModuleConfig(
+                        path=m["path"], enabled=m["enabled"]
+                    )
+                    for m in data["modules"]
                 ]
                 return cls(
                     workspace_id=config_data.get("workspace_id"),
@@ -78,6 +89,7 @@ class Config:
                     pipelines=pipeline_configs,
                     space_name=config_data.get("space_name"),
                     cors_origins=config_data.get("cors_origins"),
+                    modules=module_configs,
                 )
         except FileNotFoundError:
             return cls(
@@ -94,6 +106,7 @@ class Config:
                 pipelines=[],
                 space_name="",
                 cors_origins=[],
+                modules=[],
             )
 
 
@@ -108,7 +121,7 @@ naas_api_url = os.getenv("NAAS_API_URL", None)
 logger.debug(
     "Loading secrets into environment variables. Priority: Environment variables > .env > Naas Secrets"
 )
-secrets = {}
+secrets: dict = {}
 if naas_api_key is not None:
     naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
     base64_adapter = Base64Secret.Base64Secret(
@@ -154,7 +167,7 @@ modules_loaded = False
 def load_modules():
     global services
     logger.debug("Loading modules")
-    _modules = get_modules()
+    _modules = get_modules(config)
 
     ontology_filepaths = []
 
