@@ -1,255 +1,184 @@
-# Data Orchestration Capability
+# Demo Orchestration - Global News Intelligence
 
 ## Overview
 
-This module provides data orchestration capabilities for the ABI demo, implementing automated data collection, processing, and storage workflows. The orchestration system handles complex data pipelines with scheduling, monitoring, and error handling.
+Strategic global news monitoring system that collects real-time news from major outlets across the United States, France, and United Kingdom. This demo showcases ABI's orchestration capabilities while providing valuable market intelligence and current events awareness.
 
-## Current Implementation
+## Purpose
 
-**Engine**: Dagster  
-**Purpose**: RSS feed monitoring and data collection  
-**Scope**: Demonstration of orchestration patterns for ABI
+**GLOBAL NEWS INTELLIGENCE**: This orchestration system provides comprehensive news monitoring across three major markets:
 
-## Features
-
-### RSS Feed Processing Pipeline
-
-- **15 Data Sources**: Monitors RSS feeds from technology companies, AI topics, and key personalities
-- **Real-time Processing**: 30-second polling intervals for timely data collection
-- **Structured Storage**: Converts RSS entries to JSON with timestamp-based organization
-- **Error Handling**: Robust error handling and retry logic for reliable operation
-
-### Monitored Sources
-
-**Technology Topics:**
-- AI, LLM, Ontology, OpenAI
-
-**Companies:**
-- Google, Meta, Microsoft, Apple, Amazon
-- Tesla, SpaceX, NASA, Palantir
-
-**Personalities:**
-- Elon Musk, Donald Trump
+- **United States**: CNN, BBC US, Reuters, AP News, NPR, ABC News, WSJ, Bloomberg, CNBC, Forbes, TechCrunch, Wired, Ars Technica
+- **France**: Le Monde, Le Figaro, Libération, France24, RFI, Les Échos, La Tribune, 01net, Numerama  
+- **United Kingdom**: BBC, The Guardian, The Telegraph, The Times, Sky News, Financial Times, Reuters UK, The Register
 
 ## Architecture
 
-### Components
-
-1. **Assets**: Data processing units that transform RSS entries into structured JSON
-2. **Sensors**: Monitoring components that detect new RSS content and trigger processing
-3. **Jobs**: Orchestrated workflows that coordinate asset execution
-4. **Configuration**: Flexible configuration system for different data sources
-
-### Data Flow
-
+### Code-Data Symmetry
 ```
-RSS Sources → Sensors → Jobs → Assets → Storage
-     ↓           ↓        ↓       ↓        ↓
-  External    Monitor   Queue  Process   JSON
-   Feeds      Changes   Tasks   Data     Files
-```
-
-### Storage Structure
-
-```
-storage/datastore/core/modules/__demo__/rss_feed/
-├── 20250115T103045_AI_Breakthrough_in_Machine_Learning.txt
-├── 20250115T103112_Tesla_Quarterly_Earnings_Report.txt
-├── 20250115T103200_Palantir_Government_Contract_News.txt
-└── ... (query-aware timestamped JSON files)
+Code Structure:                           Data Structure:
+src/marketplace/modules/applications/     storage/datastore/marketplace/modules/applications/
+__demo__/orchestration/                   __demo__/orchestration/global_news/
+├── definitions.py                        ├── us/
+├── __init__.py                           │   ├── mainstream/     # CNN, BBC US, Reuters, AP, NPR, ABC
+└── README.md                             │   ├── business/       # WSJ, Bloomberg, CNBC, Forbes
+                                          │   └── tech/           # TechCrunch, Wired, Ars Technica
+                                          ├── france/
+                                          │   ├── mainstream/     # Le Monde, Le Figaro, Libération, France24, RFI
+                                          │   ├── business/       # Les Échos, La Tribune
+                                          │   └── tech/           # 01net, Numerama
+                                          └── uk/
+                                              ├── mainstream/     # BBC, Guardian, Telegraph, Times, Sky News
+                                              ├── business/       # Financial Times, Reuters UK
+                                              └── tech/           # The Register
 ```
 
-### Filename Format
+### Intelligence Categories
 
-**Pattern**: `YYYYMMDDTHHMMSS_QueryTerm_Title.txt`
+**1. Mainstream News**
+- **US**: CNN, BBC US, Reuters, AP News, NPR, ABC News
+- **France**: Le Monde, Le Figaro, Libération, France24, RFI
+- **UK**: BBC, The Guardian, The Telegraph, The Times, Sky News
 
-**Benefits**:
-- **Chronological Sorting**: ISO 8601 compact timestamp ensures perfect time ordering
-- **Query Context**: Immediately identify which sensor/topic generated the data
-- **Easy Filtering**: `ls *_Palantir_*` shows all Palantir-related articles
-- **Analytics Ready**: Group by query term for trend analysis
-- **Debugging**: Trace data back to specific sensors and time periods
+**2. Business News**
+- **US**: Wall Street Journal, Bloomberg, CNBC, Forbes
+- **France**: Les Échos, La Tribune
+- **UK**: Financial Times, Reuters UK
 
-**Examples**:
-```bash
-# Filter by query term
-ls storage/datastore/core/modules/__demo__/rss_feed/*_AI_*
-ls storage/datastore/core/modules/__demo__/rss_feed/*_Tesla_*
+**3. Technology News**
+- **US**: TechCrunch, Wired, Ars Technica
+- **France**: 01net, Numerama
+- **UK**: The Register
 
-# Filter by date range
-ls storage/datastore/core/modules/__demo__/rss_feed/20250115T*
+## Sensors & Monitoring
 
-# Combined filtering
-ls storage/datastore/core/modules/__demo__/rss_feed/20250115T*_Palantir_*
+**30+ Strategic News Sensors** monitoring RSS feeds every 15 minutes:
+- **13 US outlets** across mainstream, business, and tech
+- **9 French outlets** covering major news categories
+- **7 UK outlets** from leading British media
+
+Each sensor processes up to 10 most recent entries to capture breaking news and major stories.
+
+## Data Structure
+
+Each collected news item includes:
+
+```json
+{
+  "metadata": {
+    "collected_at": "2025-09-02T09:45:00",
+    "country": "us|france|uk",
+    "outlet_type": "mainstream|business|tech", 
+    "outlet_name": "CNN",
+    "intelligence_type": "global_news"
+  },
+  "content": {
+    "title": "Article title",
+    "summary": "Article summary",
+    "published": "Publication date",
+    "link": "Source URL",
+    // ... full RSS entry data
+  }
+}
 ```
 
 ## Usage
 
-### Prerequisites
-
-Before starting orchestration, ensure Docker is running and local services are up:
-
+### Start Global News Monitoring
 ```bash
-# Start all local services (Oxigraph, PostgreSQL, Dagster)
-make local-up
-
-# This will automatically:
-# - Start Oxigraph (Knowledge Graph) on http://localhost:7878
-# - Start YasGUI (SPARQL Editor) on http://localhost:3000
-# - Start PostgreSQL (Agent Memory) on localhost:5432
-# - Start Dagster (Orchestration) on http://localhost:3001
-```
-
-### Starting Orchestration
-
-```bash
-# Start orchestration in background
+# Via Docker (recommended) - discovers both ABI and Demo orchestration
 make dagster-up
 
-# Check status
-make dagster-status
+# Or directly
+export DAGSTER_HOME=/Users/jrvmac/abi/.dagster
+uv run python scripts/generate_dagster_command.py | xargs uv run
 
-# View web interface
-make dagster-ui
-# Or open directly: http://localhost:3001
+# Web interface
+open http://localhost:3000
 ```
 
-### Monitoring
-
+### Monitor Global News
 ```bash
-# View logs
-make dagster-logs
+# Check collected news by country
+ls storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/us/mainstream/
+ls storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/france/business/
+ls storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/uk/tech/
 
-# Stop orchestration
-make dagster-down
-
-# Stop all local services (including Dagster and Oxigraph)
-make local-down
+# Count news by category
+find storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/us -name "*.json" | wc -l
+find storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/france -name "*.json" | wc -l
+find storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/uk -name "*.json" | wc -l
 ```
 
-### Manual Asset Execution
-
+### Search Global News
 ```bash
-# Materialize all assets
-make dagster-materialize
+# Search for specific topics across all countries
+grep -r "inflation" storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/
+grep -r "election" storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/
+grep -r "AI" storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/
 
-# Or run in development mode (foreground)
-make dagster-dev
+# Search by country
+grep -r "Brexit" storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/uk/
+grep -r "Macron" storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/france/
+grep -r "Trump" storage/datastore/marketplace/modules/applications/__demo__/orchestration/global_news/us/
 ```
 
-## Configuration
+## Strategic Value
 
-### Adding New RSS Sources
+**MARKET INTELLIGENCE**:
+- Real-time monitoring of global economic and political developments
+- Cross-country news analysis and trend identification
+- Early detection of market-moving events
+- Geopolitical risk assessment
 
-To add new RSS feeds to monitor:
+**CURRENT EVENTS AWARENESS**:
+- Comprehensive coverage of major news across three key markets
+- Business and technology trend monitoring
+- Political development tracking
+- Cultural and social trend analysis
 
-1. Edit `definitions.py`
-2. Add new URL to the RSS sources list
-3. The system automatically creates sensors and processing jobs
-
-```python
-# Example: Adding a new RSS source
-"https://www.bing.com/news/search?format=RSS&q=NewTopic"
-```
-
-### Customizing Processing
-
-The asset processing logic can be customized in the `my_asset` function:
-
-- Modify filename generation
-- Change data transformation logic
-- Adjust storage location
-- Add validation rules
+**COMPETITIVE INTELLIGENCE**:
+- Media sentiment analysis across different countries
+- Breaking news detection and alert capabilities
+- Cross-border story correlation and analysis
+- Market reaction prediction based on news flow
 
 ## Integration with ABI
 
-### Relationship to ABI Pipelines
+This demo orchestration works alongside ABI's strategic AI intelligence:
 
-The orchestration layer complements ABI's semantic pipelines:
+1. **ABI Module** → AI industry intelligence (labs, models, research, funding)
+2. **Demo Module** → Global news intelligence (US, France, UK across mainstream, business, tech)
+3. **Combined Intelligence** → Comprehensive market and technology landscape monitoring
 
-- **Orchestration**: Handles scheduling, monitoring, and operational concerns
-- **ABI Pipelines**: Focus on semantic transformation and knowledge graph population
-- **Separation**: Clean separation allows each system to excel at its purpose
+## Modular Architecture Benefits
 
-### Future Integration
+**AUTOMATIC DISCOVERY**: The system automatically discovers and loads both orchestration modules:
+- `src/core/modules/abi/orchestration/` - AI industry intelligence
+- `src/marketplace/modules/applications/__demo__/orchestration/` - Global news intelligence
 
-Planned enhancements for deeper ABI integration:
-
-1. **Semantic Processing**: Route orchestrated data through ABI semantic pipelines
-2. **Ontology Population**: Automatically populate knowledge graphs from orchestrated data
-3. **Agent Integration**: Provide orchestrated data as context for ABI agents
-4. **Workflow Coordination**: Coordinate between orchestration and semantic processing
-
-## Development
-
-### Testing
-
-```bash
-# Test orchestration components
-uv run python -c "from src.core.modules.__demo__.orchestration import definitions; print('✅ Import successful')"
-
-# Check Dagster container status
-make oxigraph-status
+**SCALABLE DESIGN**: Any module can add orchestration by creating the standard structure:
+```
+src/{path}/orchestration/
+├── __init__.py
+├── definitions.py  
+└── README.md
 ```
 
-### Debugging
+**ZERO CONFIGURATION**: New orchestration modules work immediately without system changes.
 
-1. **Web Interface**: Use http://localhost:3001 for visual debugging
-2. **Logs**: Check `dagster.log` for detailed execution logs
-3. **Asset Status**: Use `make dagster-status` for current state
+## Future Enhancements
 
-### Extending
+**SEMANTIC INTEGRATION**:
+- Connect news data to ABI semantic pipelines
+- Store news intelligence in knowledge graph as RDF triples
+- Enable SPARQL queries for complex cross-country news analysis
+- Create AI agent workflows for automated news analysis and summarization
 
-To add new orchestration capabilities:
+**ADVANCED ANALYTICS**:
+- Sentiment analysis across countries and outlets
+- Topic modeling and trend detection
+- Cross-border story correlation
+- Real-time news alert system based on keywords and importance
 
-1. Create new assets in `definitions.py`
-2. Add corresponding sensors for triggering
-3. Update configuration as needed
-4. Test with `make dagster-status`
-
-## Performance Considerations
-
-- **Polling Frequency**: 30-second intervals balance timeliness with resource usage
-- **Concurrent Processing**: Multiple sensors can trigger simultaneously
-- **Storage Efficiency**: JSON files with timestamp organization for easy retrieval
-- **Error Recovery**: Automatic retry logic prevents data loss
-
-## Security
-
-- **Input Validation**: RSS content is validated before processing
-- **File System**: Controlled write access to designated storage areas
-- **Network**: Only outbound connections to configured RSS sources
-- **Isolation**: Orchestration runs in isolated processes
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Import Errors**: Ensure dependencies are installed with `uv sync`
-2. **Port Conflicts**: Check if port 3001 is available for web interface
-3. **Storage Permissions**: Verify write access to `storage/datastore/core/modules/__demo__/`
-4. **Network Issues**: Check connectivity to RSS sources
-5. **Docker Issues**: If services fail to start:
-   ```bash
-   # Check if Docker is running
-   make check-docker
-   
-   # Clean up Docker conflicts
-   make docker-cleanup
-   
-   # Restart services
-   make local-up
-   ```
-
-### Diagnostics
-
-```bash
-# Check orchestration health
-make dagster-status
-
-# View recent logs
-make dagster-logs
-
-# Test basic functionality
-make dagster-materialize
-```
+This demo showcases ABI's orchestration capabilities while providing real strategic value through comprehensive global news monitoring across major markets.

@@ -49,6 +49,9 @@ wheels/
 # Docker
 .docker/
 
+# Dagster
+.dagster/
+
 # Logs
 *.log
 
