@@ -40,7 +40,7 @@ Be sure to follow the chain of thought:
 You MUST be sure to validate all input arguments before executing any tool.
 Be clear and concise in your responses.
 """
-SUGGESTIONS = [
+SUGGESTIONS: list = [
     {
         "label": "Feature Request",
         "value": "As a user, I would like to: [Feature Request]",
@@ -78,11 +78,11 @@ def create_agent(
     from src.marketplace.modules.applications.github.integrations.GitHubIntegration import (
         GitHubIntegrationConfiguration,
     )
-    from src.marketplace.modules.applications.support.workflows.ReportBugWorkflow import (
+    from src.marketplace.modules.domains.support.workflows.ReportBugWorkflow import (
         ReportBugWorkflow,
         ReportBugWorkflowConfiguration,
     )
-    from src.marketplace.modules.applications.support.workflows.FeatureRequestWorkflow import (
+    from src.marketplace.modules.domains.support.workflows.FeatureRequestWorkflow import (
         FeatureRequestWorkflow,
         FeatureRequestWorkflowConfiguration,
     )
