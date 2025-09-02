@@ -2,9 +2,8 @@ import dagster
 import os
 import json
 from typing import Dict, Any
-from pydantic import BaseModel
 
-class MyAssetConfig(BaseModel):
+class MyAssetConfig(dagster.Config):
     entry: Dict[str, Any]
 
 @dagster.asset
