@@ -8,7 +8,7 @@ from src.marketplace.modules.applications.github.integrations.GitHubIntegration 
     GitHubIntegration,
     GitHubIntegrationConfiguration,
 )
-from src import load_modules
+from src import load_modules, config
 from fastapi import APIRouter
 
 def publish_remote_agent(
@@ -38,7 +38,7 @@ def publish_remote_agent(
 
     # Get all agents from the modules
     load_modules()
-    modules = get_modules()
+    modules = get_modules(config)
     for module in modules:
         logger.info(f"=> Getting agents from module: {module.module_path}")
         for agent in module.agents:
