@@ -85,6 +85,21 @@ ls storage/datastore/core/modules/__demo__/rss_feed/20250115T*_Palantir_*
 
 ## Usage
 
+### Prerequisites
+
+Before starting orchestration, ensure Docker is running and local services are up:
+
+```bash
+# Start all local services (Oxigraph, PostgreSQL, Dagster)
+make local-up
+
+# This will automatically:
+# - Start Oxigraph (Knowledge Graph) on http://localhost:7878
+# - Start YasGUI (SPARQL Editor) on http://localhost:3000
+# - Start PostgreSQL (Agent Memory) on localhost:5432
+# - Start Dagster (Orchestration) on http://localhost:3001
+```
+
 ### Starting Orchestration
 
 ```bash
@@ -95,7 +110,8 @@ make dagster-up
 make dagster-status
 
 # View web interface
-open http://localhost:3000
+make dagster-ui
+# Or open directly: http://localhost:3001
 ```
 
 ### Monitoring
@@ -106,13 +122,19 @@ make dagster-logs
 
 # Stop orchestration
 make dagster-down
+
+# Stop all local services (including Dagster and Oxigraph)
+make local-down
 ```
 
 ### Manual Asset Execution
 
 ```bash
-# Materialize specific assets
+# Materialize all assets
 make dagster-materialize
+
+# Or run in development mode (foreground)
+make dagster-dev
 ```
 
 ## Configuration
@@ -165,11 +187,14 @@ Planned enhancements for deeper ABI integration:
 ```bash
 # Test orchestration components
 uv run python -c "from src.core.modules.__demo__.orchestration import definitions; print('✅ Import successful')"
+
+# Check Dagster container status
+make oxigraph-status
 ```
 
 ### Debugging
 
-1. **Web Interface**: Use http://localhost:3000 for visual debugging
+1. **Web Interface**: Use http://localhost:3001 for visual debugging
 2. **Logs**: Check `dagster.log` for detailed execution logs
 3. **Asset Status**: Use `make dagster-status` for current state
 
@@ -201,9 +226,20 @@ To add new orchestration capabilities:
 ### Common Issues
 
 1. **Import Errors**: Ensure dependencies are installed with `uv sync`
-2. **Port Conflicts**: Check if port 3000 is available for web interface
+2. **Port Conflicts**: Check if port 3001 is available for web interface
 3. **Storage Permissions**: Verify write access to `storage/datastore/core/modules/__demo__/`
 4. **Network Issues**: Check connectivity to RSS sources
+5. **Docker Issues**: If services fail to start:
+   ```bash
+   # Check if Docker is running
+   make check-docker
+   
+   # Clean up Docker conflicts
+   make docker-cleanup
+   
+   # Restart services
+   make local-up
+   ```
 
 ### Diagnostics
 
