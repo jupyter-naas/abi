@@ -57,12 +57,21 @@ class IModule(ABC):
     def __load_agents(self):
         # Load agents
         self.agents = []
-        agents_path = os.path.join(self.module_path, "agents")
-        if os.path.exists(agents_path):
-            loaded_agent_names = set()
-            for file in os.listdir(agents_path):
+        loaded_agent_names = set()
+
+        # Find all agent files recursively
+        for root, _, files in os.walk(self.module_path):
+            for file in files:
                 if file.endswith("Agent.py") and not file.endswith("Agent_test.py"):
-                    agent_path = self.module_import_path + ".agents." + file[:-3]
+                    # Get relative path from module root to agent file
+                    rel_path = os.path.relpath(root, self.module_path)
+                    # Convert path to import format
+                    import_path = rel_path.replace(os.sep, ".")
+                    if import_path == ".":
+                        agent_path = self.module_import_path + "." + file[:-3]
+                    else:
+                        agent_path = self.module_import_path + "." + import_path + "." + file[:-3]
+
                     module = importlib.import_module(agent_path)
                     if hasattr(module, "create_agent"):
                         agent = module.create_agent()
