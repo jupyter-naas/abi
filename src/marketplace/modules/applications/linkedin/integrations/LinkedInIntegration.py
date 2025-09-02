@@ -10,7 +10,6 @@ from abi.services.cache.CacheFactory import CacheFactory
 from lib.abi.services.cache.CachePort import DataType
 import datetime
 from abi import logger
-# from abi.utils.String import create_hash_from_string
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
@@ -83,7 +82,7 @@ class LinkedInIntegration(Integration):
                 response = requests.get(image_url)
                 save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
 
-    def __save_json(self, prefix: str, filename: str, data: dict, save_image=True) -> Dict:
+    def __save_json(self, prefix: str, filename: str, data: dict, save_image=False) -> Dict:
         """Save data to cache."""
         save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
         
@@ -372,14 +371,14 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         linkedin_url: str = Field(
             ..., 
             description="LinkedIn organization URL", 
-            pattern=r"https://www\.linkedin\.com/(company|school|showcase)/[^/]+/"
+            pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
         )
 
     class GetProfileSchema(BaseModel):
         linkedin_url: str = Field(
             ..., 
             description="LinkedIn profile URL", 
-            pattern=r"https://www\.linkedin\.com/in/[^/]+/"
+            pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+"
         )
 
     class GetActivitySchema(BaseModel):
