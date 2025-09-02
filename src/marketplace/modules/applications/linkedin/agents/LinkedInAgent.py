@@ -12,7 +12,7 @@ from pydantic import SecretStr
 from enum import Enum
 from src import secret
 
-NAME = "LinkedIn Agent"
+NAME = "LinkedIn"
 DESCRIPTION = "Access LinkedIn through your account."
 MODEL = "gpt-4o"
 TEMPERATURE = 0
@@ -35,20 +35,25 @@ You operate within a secure environment with authenticated access to LinkedIn's 
 - `linkedin_get_post_stats`: Get post performance metrics (views, likes, shares, comments count)
 - `linkedin_get_post_comments`: Get all comments and replies for a specific post
 - `linkedin_get_post_reactions`: Get all reactions (likes, celebrates, supports, etc.) for a specific post
+- `linkedin_json_cleaner`: Clean JSON data to make it LLM-friendly by removing unnecessary fields, flattening structures, and extracting image URLs
+- `googlesearch_linkedin_organization`: Search Google for a LinkedIn organization
+- `googlesearch_linkedin_profile`: Search Google for a LinkedIn profile
 
 ## Tasks
+- Search Google for a LinkedIn organization or profile
 - Retrieve profile information
 - Retrieve organization information
 - Retrieve post statistics, comments, and reactions
 - For any other request not covered by the tools, just say you don't have access to the feature but the user can contact support@naas.ai to get access to the feature.
 
 ## Operating Guidelines
-- Verify you have access to the tools, otherwise ask the user to set li_at and JSESSIONID cookies in their .env file
-- Analyze the user request and determine the best tool to use
+- If LinkedIn URL is not provided, use `googlesearch_linkedin_organization` or `googlesearch_linkedin_profile` to search Google for a LinkedIn organization or profile.
+If multiple results are found, ask the user to select the correct one.
+- Get data from LinkedIn using the tools provided
+- Use `linkedin_json_cleaner` tool to clean the JSON data before using it
 - Provide the data in a clear, professional format with context and explanations
 
 ## Constraints
-- Make sure you have the access to the tools, otherwise ask the user to set li_at and JSESSIONID cookies in their .env file
 - Be concise and to the point
 - Only work with valid LinkedIn URLs (company, profile, or post URLs)
 - Respect LinkedIn's data usage policies and rate limits
@@ -83,31 +88,36 @@ def create_agent(
     from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 
     tools: list = []
-    li_at = secret.get('li_at', '')  # Default to empty string
-    JSESSIONID = secret.get('JSESSIONID', '')  # Default to empty string
-    if not li_at or not JSESSIONID:
-        naas_api_key = secret.get('NAAS_API_KEY')
-        if naas_api_key:
-            naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
-            li_at_response = NaasIntegration(naas_integration_config).get_secret('li_at')
-            li_at = li_at_response.get('secret', {}).get('value', '') if li_at_response else ''  # Default to empty string
-            jsessionid_response = NaasIntegration(naas_integration_config).get_secret('JSESSIONID')
-            JSESSIONID = jsessionid_response.get('secret', {}).get('value', '') if jsessionid_response else ''  # Default to empty string
-            if li_at and JSESSIONID:
-                linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
-                from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import as_tools
-                tools += as_tools(linkedin_integration_config)
+    naas_api_key = secret.get('NAAS_API_KEY')
+    if naas_api_key:
+        naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
+        li_at = NaasIntegration(naas_integration_config).get_secret('li_at').get('secret').get('value')
+        JSESSIONID = NaasIntegration(naas_integration_config).get_secret('JSESSIONID').get('secret').get('value')
+        if li_at and JSESSIONID:
+            linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+            from src.marketplace.modules.applications.linkedin.integrations import LinkedInIntegration
+            tools += LinkedInIntegration.as_tools(linkedin_integration_config)
+
+            from src.marketplace.modules.applications.linkedin.workflows.LinkedInJSONCleanerWorkflow import (
+                LinkedInJSONCleanerWorkflow, 
+                LinkedInJSONCleanerWorkflowConfiguration
+            )
+            tools += LinkedInJSONCleanerWorkflow(LinkedInJSONCleanerWorkflowConfiguration()).as_tools()
+
+            from src.marketplace.modules.applications.google_search.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
+            from src.marketplace.modules.applications.google_search.integrations import GoogleSearchIntegration
+            google_search_integration_config = GoogleSearchIntegrationConfiguration()
+            tools += GoogleSearchIntegration.as_tools(google_search_integration_config)
 
     intents: list = [
-        Intent(intent_value="What do you know about this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_view"),
-        Intent(intent_value="What do you know about this company?", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
-        Intent(intent_value="What do you know about this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
-        Intent(intent_value="Who reacted to this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
-        Intent(intent_value="Who commented on this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
+        Intent(intent_value="Search Google for a LinkedIn organization", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_organization"),
+        Intent(intent_value="Search Google for a LinkedIn profile", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_profile"),
         Intent(intent_value="www.linkedin.com/in/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_view"),
         Intent(intent_value="www.linkedin.com/company/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="www.linkedin.com/showcase/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="www.linkedin.com/school/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
+        Intent(intent_value="Who reacted to this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
+        Intent(intent_value="Who commented on this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
     ]
 
     return LinkedInAgent(
