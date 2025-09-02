@@ -5,6 +5,7 @@
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
 
 <http://ontology.naas.ai/abi/DataSourceOntology> a owl:Ontology ;
     owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/DataSourceOntology.ttl> ;
