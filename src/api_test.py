@@ -72,12 +72,15 @@ def test_api_authentication():
 def test_api_agent_routes():
     """Test that each agent has both /completion and /stream-completion endpoints."""
     try:
+        from src import config, load_modules
+        from src.__modules__ import get_modules
         from src.api import app
-        from src import get_modules
+
         from fastapi import APIRouter
         client = TestClient(app)
 
-        modules = get_modules()
+        load_modules()
+        modules = get_modules(config)
         
         # Get OpenAPI schema to check routes
         response = client.get("/openapi.json")
@@ -128,8 +131,8 @@ def test_api_agent_routes():
         print(f"  - Total agent routes in API: {len(agent_routes)}")
         
         # Verify we have some structure
-        assert len(paths) > 0, "No API paths found"
-        assert len(loaded_modules) > 0, "No modules loaded"
+        assert len(paths) > 0, f"No API paths found in the OpenAPI schema: {paths}"
+        assert len(loaded_modules) > 0, f"No modules loaded: {loaded_modules}"
         
         # Check that each agent has both required endpoints
         if total_agents > 0:
