@@ -34,41 +34,46 @@ def get_modules(config=None):
     if not __loaded:
         # Get enabled modules from config if provided
         enabled_modules = []
+        
         if config is not None and hasattr(config, 'modules'):
             enabled_modules = [m.path for m in config.modules if m.enabled]
-            logger.debug(f"Loading modules: {enabled_modules}")
         
-        for modulepath in MODULE_PATH:
-            for module in Path(modulepath).glob("*/"):
-                module_path_str = str(module)
-                if (
-                    module.is_dir()
-                    and module.name != "__pycache__"
-                    and "disabled" not in module.name
-                    and (not enabled_modules or module_path_str in enabled_modules)
+        logger.debug(f"Loading modules: {enabled_modules}")
+        for modulepath in enabled_modules:
+            module = Path(modulepath)
+            module_path_str = str(module)
+            
+            if not module.is_dir():
+                error_message = f"Module {modulepath} does not exist! This message is showing because you have a module in your config.yaml that does not exist. Please either remove it, set enabled to false or fix the path."
+                logger.error(error_message)
+                raise ValueError(error_message)
+            
+            if (
+                module.name != "__pycache__"
+                and "disabled" not in module.name
                 ):
-                    try:
-                        logger.debug(f"Loading module: {module_path_str}")
-                        module_relative_path = ".".join(
-                            modulepath.split("/") + [module.name]
-                        )
+                try:
+                    logger.debug(f"Loading module: {module_path_str}")
+                    module_relative_path = ".".join(
+                        modulepath.split("/")
+                    )
 
-                        # We import the module for it to be initialized.
-                        imported_module = importlib.import_module(module_relative_path)
+                    # We import the module for it to be initialized.
+                    imported_module = importlib.import_module(module_relative_path)
 
-                        module_path = os.path.join(modulepath, module.name)
-                        module_import_path = ".".join(module_path.split("/"))
+                    module_path = os.path.join(modulepath, module.name)
+                    module_import_path = ".".join(module_path.split("/"))
 
-                        mod = IModule(module_path, module_import_path, imported_module)
-                        mod.load()
+                    mod = IModule(module_path, module_import_path, imported_module)
+                    mod.load()
 
-                        __modules.append(mod)
-                    except Exception as e:
-                        import traceback
-                        
-                        logger.error(f"❌ Critical error loading module {module.name}: {e}")
-                        traceback.print_exc()
-                        raise SystemExit(f"Application crashed due to module loading failure: {module.name}")
+                    __modules.append(mod)
+                except Exception as e:
+                    import traceback
+                    
+                    logger.error(f"❌ Critical error loading module {module.name}: {e}")
+                    traceback.print_exc()
+                    raise SystemExit(f"Application crashed due to module loading failure: {module.name}")
 
         __loaded = True
 
