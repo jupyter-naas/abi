@@ -8,6 +8,7 @@ from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegrat
 
 DEFAULT_COMPANY_URL = 'https://www.linkedin.com/company/naas-ai/'
 DEFAULT_PROFILE_URL = 'https://www.linkedin.com/in/florent-ravenel/'
+DEFAULT_PROFILE_ID = "ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog"
 DEFAULT_POST_URL = 'https://www.linkedin.com/posts/jeremyravenel_do-you-know-that-one-of-the-most-impactful-activity-7244092056774610944-_5eh?utm_source=share&utm_medium=member_desktop&rcm=ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog'
 
 @pytest.fixture
@@ -51,6 +52,27 @@ def test_get_profile_view(integration: LinkedInIntegration):
 def test_get_profile_top_card(integration: LinkedInIntegration):
     data = integration.get_profile_top_card(DEFAULT_PROFILE_URL)
     
+    assert data is not None, data
+    assert data.get('data') is not None, data
+    assert data.get('included') is not None, data
+
+def test_get_profile_skills(integration: LinkedInIntegration):
+    data = integration.get_profile_skills(DEFAULT_PROFILE_URL)
+
+    assert data is not None, data
+    assert data.get('data') is not None, data
+    assert data.get('included') is not None, data
+
+def test_get_profile_network_info(integration: LinkedInIntegration):
+    data = integration.get_profile_network_info(DEFAULT_PROFILE_URL)
+
+    assert data is not None, data
+    assert data.get('data') is not None, data
+    assert data.get('included') is not None, data
+
+def test_get_profile_posts_feed(integration: LinkedInIntegration):
+    data = integration.get_profile_posts_feed(DEFAULT_PROFILE_ID, count=1)
+
     assert data is not None, data
     assert data.get('data') is not None, data
     assert data.get('included') is not None, data

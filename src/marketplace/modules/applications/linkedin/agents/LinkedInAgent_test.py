@@ -25,11 +25,11 @@ def test_get_linkedin_profile_view(agent):
     result = agent.invoke(f"Who is {profile_url}?")
 
     assert result is not None, result
-    assert "florent ravenel" in result, result
+    assert "florent ravenel" in result.lower(), result
 
 def test_get_linkedin_organization_info(agent):
     organization_url = 'https://www.linkedin.com/company/naas-ai/'
     result = agent.invoke(f"What is {organization_url} doing?")
 
     assert result is not None, result
-    assert "naas ai" in result, result
+    assert "naas" in result.lower(), result

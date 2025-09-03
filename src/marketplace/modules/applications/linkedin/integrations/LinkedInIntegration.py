@@ -256,7 +256,7 @@ class LinkedInIntegration(Integration):
                     save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
         return urls
 
-    def __save_json(self, prefix: str, filename: str, data: dict, save_images=False) -> Dict:
+    def __save_json(self, prefix: str, filename: str, data: dict, save_details=False) -> Dict:
         """Save data to cache."""
         save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
         
@@ -274,18 +274,20 @@ class LinkedInIntegration(Integration):
         included = data.get("included", [])
         if len(get_json(output_dir_included, f"{filename}_included.json")) == 0:
             save_json(included, output_dir_included, f"{filename}_included.json")
-        for include in included:
-            dict_type = include.get("$type")
-            dict_label = dict_type.split(".")[-1].strip()
-            output_dir_dict_type = os.path.join(output_dir_included, dict_label)
-            entity_urn = include.get("entityUrn")
-            if len(get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
-                save_json(include, output_dir_dict_type, f"{entity_urn}.json")
-            for key in ["logo", "backgroundImage", "profile", "backgroundCoverImage"]:
-                if include.get(key):
-                    self.__get_images(include, key, output_dir_dict_type, save_images=save_images)
-                else:
-                    save_json({}, output_dir_dict_type, f"{entity_urn}.json")
+
+        if save_details:
+            for include in included:
+                dict_type = include.get("$type")
+                dict_label = dict_type.split(".")[-1].strip()
+                output_dir_dict_type = os.path.join(output_dir_included, dict_label)
+                entity_urn = include.get("entityUrn")
+                if len(get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
+                    save_json(include, output_dir_dict_type, f"{entity_urn}.json")
+                for key in ["logo", "backgroundImage", "profile", "backgroundCoverImage"]:
+                    if include.get(key):
+                        self.__get_images(include, key, output_dir_dict_type, save_images=save_details)
+                    else:
+                        save_json({}, output_dir_dict_type, f"{entity_urn}.json")
         return data
 
     @cache(lambda self, prefix, filename, method, endpoint, params: method + "_" + endpoint + ("_".join(f"{k}_{v}" for k,v in params.items()) if params else ""), cache_type=DataType.JSON, ttl=datetime.timedelta(days=7))
@@ -393,6 +395,67 @@ class LinkedInIntegration(Integration):
         
         endpoint = f"/graphql?variables=(vanityName:{profile_id})&queryId=voyagerIdentityDashProfiles.0bc93b66ba223b9d30d1cb5c05ff031a"
         data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        return data
+
+    def get_profile_skills(self, linkedin_url: str) -> Dict:
+        """Get profile skills for a LinkedIn profile.
+        
+        Args:
+            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            
+        Returns:
+            Dict: Raw profile skills data from LinkedIn API
+        """
+        # Get profile ID
+        profile_id = self.get_profile_id(linkedin_url)
+        prefix = os.path.join("get_profile_skills", profile_id)
+        
+        endpoint = f"/identity/profiles/{profile_id}/skillCategory"
+        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        return data
+    
+    def get_profile_network_info(self, linkedin_url: str) -> Dict:
+        """Get network information for a LinkedIn profile.
+        
+        Args:
+            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            
+        Returns:
+            Dict: Raw network information data from LinkedIn API
+        """
+        # Get profile ID
+        profile_id = self.get_profile_id(linkedin_url)
+        prefix = os.path.join("get_network_info", profile_id)
+        
+        endpoint = f"/identity/profiles/{profile_id}/networkinfo"
+        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        return data
+    
+    def get_profile_posts_feed(self, profile_id: str, count: int = 1) -> Dict:
+        """Get posts feed for a LinkedIn profile.
+        
+        Args:
+            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            start (int, optional): Start index for pagination. Defaults to 0.
+            count (int, optional): Number of posts to fetch per request. Defaults to 10.
+            limit (int, optional): Maximum number of posts to return. Defaults to -1 (no limit).
+            
+        Returns:
+            Dict: Raw posts feed data from LinkedIn API
+        """
+        # Get profile ID
+        prefix = os.path.join("get_profile_posts_feed", profile_id)
+        filename = f"{profile_id}_{count}"
+
+        params = {
+            "count": count,
+            "includeLongTermHistory": "true", 
+            "moduleKey": "member-shares:phone",
+            "profileUrn": f"urn:li:fsd_profile:{profile_id}",
+            "q": "memberShareFeed",
+        }
+        endpoint = f"/identity/profileUpdatesV2?{urllib.parse.urlencode(params, doseq=True)}"
+        data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
         return data
     
     def get_activity_id(self, linkedin_url: str) -> str:
@@ -554,6 +617,17 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+"
         )
 
+    class GetProfilePostsFeedSchema(BaseModel):
+        linkedin_url: str = Field(
+            ..., 
+            description="LinkedIn profile URL", 
+            pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+"
+        )
+        count: int = Field(
+            1,
+            description="Number of posts to fetch", 
+        )
+
     class GetActivitySchema(BaseModel):
         linkedin_url: str = Field(
             ..., 
@@ -563,31 +637,49 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
     return [
         StructuredTool(
             name="linkedin_get_organization_info",
-            description="Get organization information for a LinkedIn organization",
+            description="Get organization information for a LinkedIn organization.",
             func=lambda linkedin_url: integration.clean_json(integration.get_organization_info(linkedin_url)),
             args_schema=GetOrganizationInfoSchema
         ),
         StructuredTool(
             name="linkedin_get_profile_view",
-            description="Get profile view for a LinkedIn organization",
+            description="Get profile view for a LinkedIn organization.",
             func=lambda linkedin_url: integration.clean_json(integration.get_profile_view(linkedin_url)),
             args_schema=GetProfileSchema
         ),
         StructuredTool(
+            name="linkedin_get_profile_skills",
+            description="Get profile skills for a LinkedIn profile.",
+            func=lambda linkedin_url: integration.clean_json(integration.get_profile_skills(linkedin_url)),
+            args_schema=GetProfileSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_profile_network_info",
+            description="Get network information for a LinkedIn profile.",
+            func=lambda linkedin_url: integration.clean_json(integration.get_profile_network_info(linkedin_url)),
+            args_schema=GetProfileSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_profile_posts_feed",
+            description="Get posts feed for a LinkedIn profile.",
+            func=lambda linkedin_url, count: integration.clean_json(integration.get_profile_posts_feed(linkedin_url, count)),
+            args_schema=GetProfilePostsFeedSchema
+        ),
+        StructuredTool(
             name="linkedin_get_post_stats",
-            description="Get post stats for a LinkedIn activity",
+            description="Get post stats for a LinkedIn activity.",
             func=lambda linkedin_url: integration.clean_json(integration.get_post_stats(linkedin_url)),
             args_schema=GetActivitySchema
         ),
         StructuredTool(
             name="linkedin_get_post_comments",
-            description="Get comments for a LinkedIn activity",
+            description="Get comments for a LinkedIn activity.",
             func=lambda linkedin_url: integration.clean_json(integration.get_post_comments(linkedin_url)),
             args_schema=GetActivitySchema
         ),
         StructuredTool(
             name="linkedin_get_post_reactions",
-            description="Get reactions for a LinkedIn activity",
+            description="Get reactions for a LinkedIn activity.",
             func=lambda linkedin_url: integration.clean_json(integration.get_post_reactions(linkedin_url)),
             args_schema=GetActivitySchema
         )

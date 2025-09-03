@@ -17,7 +17,7 @@ DESCRIPTION = "Access LinkedIn through your account."
 MODEL = "gpt-4o"
 TEMPERATURE = 0
 AVATAR_URL = "https://content.linkedin.com/content/dam/me/business/en-us/amp/brand-site/v2/bg/LI-Bug.svg.original.svg"
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 ## Role
 You are a LinkedIn Professional Agent, an expert assistant specialized in LinkedIn data extraction, analysis, and professional networking insights. 
 
@@ -27,11 +27,15 @@ You transform raw LinkedIn data into actionable insights for professional networ
 You help users dig into LinkedIn data extraction to find the most relevant information for their needs.
 
 ## Context
-You operate within a secure environment with authenticated access to LinkedIn's internal APIs through cookie-based authentication (li_at and JSESSIONID). 
+You operate within a secure environment with authenticated access to LinkedIn's internal APIs through cookie-based authentication (li_at and JSESSIONID).
+You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 
 ## Tools
 - `linkedin_get_organization_info`: Get comprehensive company information including details, metrics, and metadata
 - `linkedin_get_profile_view`: Get detailed profile view data including experience, education, and connections
+- `linkedin_get_profile_skills`: Get profile skills for a LinkedIn profile
+- `linkedin_get_profile_network_info`: Get network information for a LinkedIn profile
+- `linkedin_get_profile_posts_feed`: Get posts feed for a LinkedIn profile
 - `linkedin_get_post_stats`: Get post performance metrics (views, likes, shares, comments count)
 - `linkedin_get_post_comments`: Get all comments and replies for a specific post
 - `linkedin_get_post_reactions`: Get all reactions (likes, celebrates, supports, etc.) for a specific post
@@ -96,20 +100,16 @@ def create_agent(
     from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 
     tools: list = []
-    naas_api_key = secret.get('NAAS_API_KEY')
-    if naas_api_key:
-        naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
-        li_at = NaasIntegration(naas_integration_config).get_secret('li_at').get('secret', {}).get('value')
-        JSESSIONID = NaasIntegration(naas_integration_config).get_secret('JSESSIONID').get('secret', {}).get('value')
-        if li_at is not None and JSESSIONID is not None:
-            linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
-            from src.marketplace.modules.applications.linkedin.integrations import LinkedInIntegration
-            tools += LinkedInIntegration.as_tools(linkedin_integration_config)
+    li_at = secret.get('li_at')
+    JSESSIONID = secret.get('JSESSIONID')
+    linkedin_integration_config = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
+    from src.marketplace.modules.applications.linkedin.integrations import LinkedInIntegration
+    tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
-            from src.marketplace.modules.applications.google_search.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
-            from src.marketplace.modules.applications.google_search.integrations import GoogleSearchIntegration
-            google_search_integration_config = GoogleSearchIntegrationConfiguration()
-            tools += GoogleSearchIntegration.as_tools(google_search_integration_config)
+    from src.marketplace.modules.applications.google_search.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
+    from src.marketplace.modules.applications.google_search.integrations import GoogleSearchIntegration
+    google_search_integration_config = GoogleSearchIntegrationConfiguration()
+    tools += GoogleSearchIntegration.as_tools(google_search_integration_config)
 
     intents: list = [
         Intent(intent_value="Search Google for a LinkedIn organization", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_organization"),
