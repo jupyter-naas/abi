@@ -36,12 +36,11 @@ def get_modules(config=None):
         enabled_modules = []
         if config is not None and hasattr(config, 'modules'):
             enabled_modules = [m.path for m in config.modules if m.enabled]
-            logger.info(f"Loading modules: {enabled_modules}")
+            logger.debug(f"Loading modules: {enabled_modules}")
         
         for modulepath in MODULE_PATH:
             for module in Path(modulepath).glob("*/"):
                 module_path_str = str(module)
-                logger.info(f"Loading module: {module_path_str}")
                 if (
                     module.is_dir()
                     and module.name != "__pycache__"
@@ -49,6 +48,7 @@ def get_modules(config=None):
                     and (not enabled_modules or module_path_str in enabled_modules)
                 ):
                     try:
+                        logger.debug(f"Loading module: {module_path_str}")
                         module_relative_path = ".".join(
                             modulepath.split("/") + [module.name]
                         )
