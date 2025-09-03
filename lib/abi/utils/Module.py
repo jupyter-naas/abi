@@ -36,8 +36,15 @@ class IModule(ABC):
         self.ontologies = []
         self.agents = []
 
+    def check_requirements(self):
+        if hasattr(self.imported_module, "requirements"):
+            if not self.imported_module.requirements():
+                logger.error(f"❌ Module {self.module_import_path} failed to meet requirements.")
+                raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")
+        
     def load(self):
         try:
+            self.check_requirements()
             # self.__load_agents()
             self.__load_triggers()
             self.__load_ontologies()
