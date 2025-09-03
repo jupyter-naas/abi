@@ -50,11 +50,12 @@ def get_modules(config=None):
                     module_relative_path = ".".join(
                         modulepath.split("/")
                     )
+                    
 
                     # We import the module for it to be initialized.
                     imported_module = importlib.import_module(module_relative_path)
 
-                    module_path = os.path.join(modulepath, module.name)
+                    module_path = modulepath
                     module_import_path = ".".join(module_path.split("/"))
 
                     mod = IModule(module_path, module_import_path, imported_module)
