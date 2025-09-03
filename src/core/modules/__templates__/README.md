@@ -50,11 +50,7 @@ src/core/modules/module_name/
 │   └── model_name2.py                
 ├── ontologies/                     
 │   ├── ModuleOntology.py            
-│   └── ModuleSparqlQueries.py           
-├── sandbox/                        
-│   ├── examples/                  
-│   ├── notebooks/                 
-│   └── research/                 
+│   └── ModuleSparqlQueries.py                          
 ├── workflows/   
 │   │── ModuleSparqlQueries_test.py                      
 │   │── ModuleWorkflow_test.py      
