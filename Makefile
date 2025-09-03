@@ -34,7 +34,7 @@ python_version=$(shell cat .python-version)
 install: dep
 	@ uv sync
 
-dev-build: deps
+local-build: deps
 	@ docker compose build
 
 abi-add: deps
@@ -163,9 +163,9 @@ api-prod: deps
 	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
-api-dev: deps
-	@ docker build -t abi-dev -f Dockerfile.linux.x86_64 . --platform linux/amd64
-	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-dev
+api-local: deps
+	@ docker build -t abi-local -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-local
 
 sparql-terminal: deps
 	@ uv run python -m src.core.apps.sparql_terminal.main	
@@ -238,6 +238,7 @@ clean:
 	docker compose down
 	docker compose rm -f
 	rm -rf src/core/modules/common/integrations/siteanalyzer/target
+	rm -f dagster.pid dagster.log
 
 help:
 	@echo "ABI Project Makefile Help"
@@ -246,7 +247,7 @@ help:
 	@echo "ENVIRONMENT SETUP:"
 	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
 	@echo "  install                  Install all dependencies (similar to .venv)"
-	@echo "  dev-build                Build all Docker containers defined in docker-compose.yml"
+	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
 	@echo "  lock                     Update the Poetry lock file without installing packages"
 	@echo ""
 	@echo "DEVELOPMENT:"
@@ -292,10 +293,19 @@ help:
 	@echo "  oxigraph-up              Start Oxigraph container"
 	@echo "  oxigraph-down            Stop Oxigraph container"
 	@echo "  oxigraph-status          Check Oxigraph container status"
-	@echo "  dev-up                   Start development services (Oxigraph, YasGUI)"
-	@echo "  dev-down                 Stop development services"
+	@echo "  local-up                 Start all local services (Oxigraph, Dagster)"
+	@echo "  local-down               Stop all local services"
 	@echo "  container-up             Start ABI in container mode (if needed)"
 	@echo "  container-down           Stop ABI container"
+	@echo ""
+	@echo "DAGSTER (DATA ORCHESTRATION):"
+	@echo "  dagster-dev              Start Dagster development server (foreground)"
+	@echo "  dagster-up               Start Dagster in background"
+	@echo "  dagster-down             Stop background Dagster"
+	@echo "  dagster-logs             View Dagster logs"
+	@echo "  dagster-ui               Start Dagster web interface only"
+	@echo "  dagster-status           Check Dagster assets status"
+	@echo "  dagster-materialize      Materialize all Dagster assets"
 	@echo ""
 	@echo "CLEANUP:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
@@ -307,7 +317,7 @@ help:
 	@echo ""
 	@echo "If 'make' hangs or times out:"
 	@echo "  1. Run: make docker-cleanup"
-	@echo "  2. Then: make dev-up"
+	@echo "  2. Then: make local-up"
 	@echo "  3. Finally: make"
 	@echo ""
 	@echo "For detailed troubleshooting: docs/troubleshooting/docker-conflicts.md"
@@ -338,7 +348,7 @@ build.linux.x86_64: deps
 # -------------------------------------------------------------------------------------------------
 
 chat-abi-agent: deps
-	@ LOG_LEVEL=CRITICAL uv run python -m src.cli
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli
 
 chat-naas-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
@@ -379,7 +389,7 @@ chat: deps
 check-docker:
 	@if ! docker info > /dev/null 2>&1; then \
 		echo "❌ Docker is not running. Please start Docker Desktop first."; \
-		echo "💡 After starting Docker, run: make docker-cleanup && make dev-up"; \
+		echo "💡 After starting Docker, run: make docker-cleanup && make local-up"; \
 		exit 1; \
 	fi
 
@@ -389,36 +399,46 @@ docker-cleanup: check-docker
 	@./scripts/docker_cleanup.sh
 
 oxigraph-up: check-docker
-	@echo "Starting Oxigraph..."
-	@docker-compose --profile dev up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
+	@docker-compose --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
 oxigraph-down: check-docker
-	@echo "Stopping Oxigraph..."
-	@docker-compose --profile dev stop oxigraph || true
+	@docker-compose --profile local stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
 oxigraph-status: check-docker
 	@echo "Oxigraph status:"
-	@docker-compose --profile dev ps oxigraph
+	@docker-compose --profile local ps oxigraph
 
-dev-up: check-docker
-	@echo "🚀 Starting development services..."
-	@if ! docker-compose --profile dev up -d --timeout 60; then \
+local-up: check-docker
+	@echo "🚀 Starting local services..."
+	@if ! docker-compose --profile local up -d --timeout 60; then \
 		echo "❌ Failed to start services. Running cleanup..."; \
 		./scripts/docker_cleanup.sh; \
 		echo "🔄 Retrying..."; \
-		docker-compose --profile dev up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+		docker-compose --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
-	@echo "✓ All development containers started"
+	@echo "✓ Local containers started"
+	@make dagster-up
+	@echo ""
+	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
 	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
-	@echo "  - PostgreSQL (Agent Memory): localhost:5432"  
 	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
+	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
+	@echo "  - Dagster (Orchestration): http://localhost:3001"
 
-dev-down: check-docker
-	@docker-compose --profile dev down --timeout 10 || true
-	@echo "✓ All development services stopped"
+local-logs: check-docker
+	@docker-compose --profile local logs -f
+
+local-stop: check-docker
+	@docker-compose --profile local stop
+	@echo "✓ All local services stopped"
+
+local-down: check-docker
+	@make dagster-down
+	@docker-compose --profile local down --timeout 10 || true
+	@echo "✓ All local services stopped"
 
 container-up:
 	@docker-compose --profile container up -d
@@ -428,4 +448,37 @@ container-down:
 	@docker-compose --profile container down
 	@echo "✓ ABI container stopped"
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status dev-up dev-down container-up container-down
+dagster-dev:
+	@echo "🚀 Starting Dagster development server..."
+	@docker-compose --profile local up dagster
+
+dagster-up:
+	@echo "🚀 Starting Dagster in background..."
+	@docker-compose --profile local up -d dagster
+	@echo "✓ Dagster started on http://localhost:3001"
+	@echo "📝 Logs: make dagster-logs"
+
+dagster-down:
+	@echo "🛑 Stopping Dagster..."
+	@docker-compose --profile local down dagster
+	@echo "✓ Dagster stopped"
+
+dagster-logs:
+	@echo "📄 Showing Dagster logs..."
+	@docker-compose --profile local logs -f dagster
+
+dagster-ui:
+	@echo "🌐 Opening Dagster web interface..."
+	@echo "📍 Visit: http://localhost:3001"
+	@command -v open >/dev/null 2>&1 && open "http://localhost:3001" || echo "Open the URL manually in your browser"
+	@docker-compose --profile local up dagster
+
+dagster-status:
+	@echo "📊 Checking Dagster asset status..."
+	@docker-compose --profile local exec dagster uv run dagster asset list -m src.core.modules.__demo__.orchestration.definitions
+
+dagster-materialize:
+	@echo "⚙️ Materializing all Dagster assets..."
+	@docker-compose --profile local exec dagster uv run dagster asset materialize --select "*" -m src.core.modules.__demo__.orchestration.definitions
+
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
