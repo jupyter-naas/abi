@@ -200,6 +200,7 @@ def load_modules():
         module.on_initialized()
 
     for module in _modules:
+        logger.debug(f"Loading agents for module {module.module_import_path}")
         module.load_agents()
 
     return _modules
