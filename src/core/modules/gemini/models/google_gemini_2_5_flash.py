@@ -14,23 +14,20 @@ OWNER = "google"
 
 model: Optional[ChatModel] = None
 google_api_key = secret.get("GOOGLE_API_KEY")
-if google_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatGoogleGenerativeAI(
-            model=NAME,
-            temperature=1.0,
-            max_tokens=None,
-            timeout=None,
-            max_retries=2,
-            api_key=SecretStr(google_api_key),
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ Gemini 2.5 Flash model loaded successfully via Google")
-else:
-    logger.error("Gemini 2.5 Flash model not available - missing Google API key")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatGoogleGenerativeAI(
+        model=NAME,
+        temperature=1.0,
+        max_tokens=None,
+        timeout=None,
+        max_retries=2,
+        api_key=SecretStr(google_api_key),
+    ),
+    context_window=CONTEXT_WINDOW,
+)
+logger.debug("✅ Gemini 2.5 Flash model loaded successfully via Google")
