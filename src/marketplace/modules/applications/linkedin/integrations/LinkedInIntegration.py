@@ -252,7 +252,7 @@ class LinkedInIntegration(Integration):
                 image_url = f"{root_url}{file_url}"
                 urls.append(image_url)
                 response = requests.get(image_url)
-                if save_images:
+                if save_images and output_dir:
                     save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
         return urls
 
