@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Union
 from enum import Enum
 import json
 from collections.abc import MutableMapping
-from collections import defaultdict
 import pydash as _
 
 
@@ -55,7 +54,7 @@ class LinkedInJSONCleanerWorkflow(Workflow):
             dict: The flattened dictionary.
         """
         if isinstance(data, dict):
-            items = []
+            items: list = []
             for k, v in data.items():
                 new_key = f"{parent_key}{sep}{k}" if parent_key else k
                 if isinstance(v, MutableMapping):
@@ -117,19 +116,23 @@ class LinkedInJSONCleanerWorkflow(Workflow):
         Returns:
             dict: The parsed and cleaned data.
         """
-        results = {}
+        results: dict = {}
         included = _.get(data, "included", [])
+        if len(included) == 0:
+            return results
         
         for include in included:
             _type = include.get("$type")
-            if not _type or (_type.endswith("View") or _type.endswith("Group")):
+            if _type is None or (_type.endswith("View") or _type.endswith("Group")):
                 continue
                 
             if _type not in results:
-                entities = []
+                entities: list = []
                 results[_type] = entities
             else:
-                entities = results.get(_type)
+                entities = results.get(_type, [])
+                if entities is None:
+                    entities = []
             
             # Add Image URL full if requested
             if include_images:
@@ -168,10 +171,14 @@ class LinkedInJSONCleanerWorkflow(Workflow):
             cleaned_data = self._clean_dict(raw_data)
             
             # Parse and extract structured data
-            parsed_data = self._parse_clean(cleaned_data, parameters.include_images)
+            if isinstance(cleaned_data, dict):
+                parsed_data = self._parse_clean(cleaned_data, self.__configuration.include_images)
+            else:
+                # If cleaned_data is not a dict, return empty structure
+                parsed_data = {}
             
             # Flatten if requested
-            if parameters.flatten_result:
+            if self.__configuration.flatten_result:
                 final_data = self._flatten_dict(parsed_data)
             else:
                 final_data = parsed_data
@@ -219,10 +226,6 @@ class LinkedInJSONCleanerWorkflow(Workflow):
         name: str = "",
         description: str = "",
         description_stream: str = "",
-        tags: List[Union[str, Enum]] = None,
+        tags: list[str | Enum] | None = None,
     ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+        pass

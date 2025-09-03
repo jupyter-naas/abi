@@ -7,17 +7,9 @@ from src.marketplace.modules.applications.linkedin.workflows.LinkedInJSONCleaner
 
 @pytest.fixture
 def workflow() -> LinkedInJSONCleanerWorkflow:
-    from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import (
-        LinkedInIntegrationConfiguration
-    )
-
-    integration_configuration = LinkedInIntegrationConfiguration(
-        li_at="test_li_at",
-        JSESSIONID="test_jsessionid"
-    )
-
     workflow_configuration = LinkedInJSONCleanerWorkflowConfiguration(
-        integration_config=integration_configuration
+        flatten_result=True,
+        include_images=True
     )
 
     return LinkedInJSONCleanerWorkflow(workflow_configuration)
@@ -47,10 +39,8 @@ def test_workflow_json_cleaning(workflow: LinkedInJSONCleanerWorkflow):
     
     json_string = json.dumps(test_data)
     
-    result = workflow.run_workflow(LinkedInJSONCleanerWorkflowParameters(
+    result = workflow.clean_json(LinkedInJSONCleanerWorkflowParameters(
         json_data=json_string,
-        flatten_result=True,
-        include_images=True
     ))
 
     assert result is not None, result
@@ -59,10 +49,8 @@ def test_workflow_json_cleaning(workflow: LinkedInJSONCleanerWorkflow):
     assert "com.linkedin.voyager.identity.profile.Profile" in result["cleaned_data"], result
 
 def test_workflow_invalid_json(workflow: LinkedInJSONCleanerWorkflow):
-    result = workflow.run_workflow(LinkedInJSONCleanerWorkflowParameters(
-        json_data="invalid json",
-        flatten_result=True,
-        include_images=True
+    result = workflow.clean_json(LinkedInJSONCleanerWorkflowParameters(
+        json_data="invalid json"
     ))
 
     assert result is not None, result
