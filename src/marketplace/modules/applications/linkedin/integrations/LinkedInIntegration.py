@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 import os
 from src.utils.Storage import get_json, save_json, save_image
-import pydash
 from abi.services.cache.CacheFactory import CacheFactory
 from lib.abi.services.cache.CachePort import DataType
 import datetime
 from abi import logger
+from typing import Union, Any, List, MutableMapping
+import json
+import pydash as _
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
@@ -56,7 +58,146 @@ class LinkedInIntegration(Integration):
             "X-Restli-Protocol-Version": "2.0.0"
         }
 
-    def __save_images(self, data: dict, key: str, output_dir: str):
+    def _flatten_dict(self, data: Union[Dict, Any], parent_key: str = '', sep: str = '_') -> Dict:
+        """
+        Flattens a nested dictionary.
+
+        Args:
+            data (dict): The dictionary to flatten.
+            parent_key (str, optional): The base key for the flattened dictionary. Defaults to ''.
+            sep (str, optional): The separator to use between keys. Defaults to '_'.
+
+        Returns:
+            dict: The flattened dictionary.
+        """
+        if isinstance(data, dict):
+            items: list = []
+            for k, v in data.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, MutableMapping):
+                    items.extend(self._flatten_dict(v, new_key, sep=sep).items())
+                else:
+                    items.append((new_key, v))
+            return dict(items)
+        return data
+
+    def _clean_dict(self, data: Union[Dict, List, Any]) -> Union[Dict, List, Any]:
+        """
+        Recursively cleans a dictionary by removing keys that start with '*' or contain 'urn'.
+
+        Args:
+            data (dict or list): The dictionary or list to clean.
+
+        Returns:
+            dict or list: The cleaned dictionary or list.
+        """
+        if not isinstance(data, (dict, list)):
+            return data
+        if isinstance(data, list):
+            return [val for val in (self._clean_dict(x) for x in data) if val is not None]
+        return {
+            k: val 
+            for k, val in ((k, self._clean_dict(v)) for k, v in data.items()) 
+            if val is not None and not k.startswith("*") and "urn" not in k.lower()
+        }
+
+    def _parse_clean(self, data: Dict, include_images: bool = True) -> Dict:
+        """
+        Parses and cleans LinkedIn profile data.
+
+        Args:
+            data (dict): The raw LinkedIn profile data.
+            include_images (bool): Whether to process and include image URLs.
+
+        Returns:
+            dict: The parsed and cleaned data.
+        """
+        results: dict = {}
+        included = _.get(data, "included", [])
+        if len(included) == 0:
+            return results
+        
+        for include in included:
+            _type = include.get("$type")
+            if _type is None or (_type.endswith("View") or _type.endswith("Group")):
+                continue
+                
+            if _type not in results:
+                entities: list = []
+                results[_type] = entities
+            else:
+                entities = results.get(_type, [])
+                if entities is None:
+                    entities = []
+            
+            # Add Image URL full if requested
+            if include_images:
+                for image in ["logo", "picture", "backgroundImage", "backgroundCoverImage"]:
+                    if image in include:
+                        picture_urls = self.__get_images(include, image)
+                        if picture_urls:
+                            include[image] = picture_urls[-1]  # Take the last (highest quality) URL
+            
+            # Pop useless values
+            if "trackingId" in include:
+                include.pop("trackingId")
+            
+            # Add new entities
+            if include:
+                entities.append(include)
+                results[_type] = entities
+                
+        return results
+
+    def clean_json(self, json_data: dict) -> Dict[str, Any]:
+        """
+        Execute the JSON cleaning workflow.
+        
+        Args:
+            parameters: Workflow parameters containing JSON data and options
+            
+        Returns:
+            Dict: Cleaned and processed data ready for LLM consumption
+        """
+        try:       
+            # Get entity urn
+            entity_urn = json_data.get("data", {}).get("entityUrn")
+            if entity_urn:
+                profile_id = entity_urn.split(":")[-1]
+                data_type = entity_urn.split("urn:li:")[1].split(":")[0]
+                prefix = os.path.join("cleaned_json", profile_id)
+            else:
+                prefix = "cleaned_json"
+                
+            # Clean the data
+            cleaned_data = self._clean_dict(json_data)
+            
+            # Parse and extract structured data
+            if isinstance(cleaned_data, dict):
+                parsed_data = self._parse_clean(cleaned_data, True)
+            else:
+                # If cleaned_data is not a dict, return empty structure
+                parsed_data = {}
+            
+            # Flatten dict
+            final_data = self._flatten_dict(parsed_data)
+            save_json(final_data, os.path.join(self.__configuration.data_store_path, prefix), f"{data_type}.json") 
+            return final_data
+            
+        except json.JSONDecodeError as e:
+            return {
+                "status": "error",
+                "error": f"Invalid JSON data: {str(e)}",
+                "cleaned_data": None
+            }
+        except Exception as e:
+            return {
+                "status": "error", 
+                "error": f"Processing failed: {str(e)}",
+                "cleaned_data": None
+            }
+
+    def __get_images(self, data: dict, key: str, output_dir: str = None, save_images: bool = False) -> List[str]:
         """
         Extracts picture URLs from a nested dictionary.
 
@@ -64,25 +205,32 @@ class LinkedInIntegration(Integration):
             data (dict): The dictionary containing picture data.
             key (str): The key to extract picture URLs from.
             output_dir (str): The directory to save the images to.
+            save_images (bool): Whether to save the images to the output directory.
 
         Returns:
             list: A list of picture URLs.
         """
+        urls = []
         entity_urn = data.get("entityUrn")
-        if key == "logo":
-            root_url = pydash.get(data, f"{key}.image.rootUrl")
-            artifacts = pydash.get(data, f"{key}.image.artifacts", [])
+
+        if _.get(data, f"{key}.image"):
+            root_url = _.get(data, f"{key}.image.rootUrl")
+            artifacts = _.get(data, f"{key}.image.artifacts", [])
         else:
-            root_url = pydash.get(data, f"{key}.rootUrl")
-            artifacts = pydash.get(data, f"{key}.artifacts", [])
+            root_url = _.get(data, f"{key}.rootUrl")
+            artifacts = _.get(data, f"{key}.artifacts", [])
+            
         if root_url:
             for x in artifacts:
                 file_url = x.get("fileIdentifyingUrlPathSegment")
                 image_url = f"{root_url}{file_url}"
+                urls.append(image_url)
                 response = requests.get(image_url)
-                save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
+                if save_images:
+                    save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
+        return urls
 
-    def __save_json(self, prefix: str, filename: str, data: dict, save_image=False) -> Dict:
+    def __save_json(self, prefix: str, filename: str, data: dict, save_images=False) -> Dict:
         """Save data to cache."""
         save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
         
@@ -107,12 +255,11 @@ class LinkedInIntegration(Integration):
             entity_urn = include.get("entityUrn")
             if len(get_json(output_dir_dict_type, f"{entity_urn}.json")) == 0:
                 save_json(include, output_dir_dict_type, f"{entity_urn}.json")
-            if save_image:
-                for key in ["logo", "backgroundImage", "profile"]:
-                    if include.get(key):
-                        self.__save_images(include, key, output_dir_dict_type)
-                    else:
-                        save_json({}, output_dir_dict_type, f"{entity_urn}.json")
+            for key in ["logo", "backgroundImage", "profile", "backgroundCoverImage"]:
+                if include.get(key):
+                    self.__get_images(include, key, output_dir_dict_type, save_images=save_images)
+                else:
+                    save_json({}, output_dir_dict_type, f"{entity_urn}.json")
         return data
 
     @cache(lambda self, prefix, filename, method, endpoint, params: method + "_" + endpoint + ("_".join(f"{k}_{v}" for k,v in params.items()) if params else ""), cache_type=DataType.JSON, ttl=datetime.timedelta(days=7))
@@ -391,31 +538,31 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_organization_info",
             description="Get organization information for a LinkedIn organization",
-            func=lambda linkedin_url: integration.get_organization_info(linkedin_url),
+            func=lambda linkedin_url: integration.clean_json(integration.get_organization_info(linkedin_url)),
             args_schema=GetOrganizationInfoSchema
         ),
         StructuredTool(
             name="linkedin_get_profile_view",
             description="Get profile view for a LinkedIn organization",
-            func=lambda linkedin_url: integration.get_profile_view(linkedin_url),
+            func=lambda linkedin_url: integration.clean_json(integration.get_profile_view(linkedin_url)),
             args_schema=GetProfileSchema
         ),
         StructuredTool(
             name="linkedin_get_post_stats",
             description="Get post stats for a LinkedIn activity",
-            func=lambda linkedin_url: integration.get_post_stats(linkedin_url),
+            func=lambda linkedin_url: integration.clean_json(integration.get_post_stats(linkedin_url)),
             args_schema=GetActivitySchema
         ),
         StructuredTool(
             name="linkedin_get_post_comments",
             description="Get comments for a LinkedIn activity",
-            func=lambda linkedin_url: integration.get_post_comments(linkedin_url),
+            func=lambda linkedin_url: integration.clean_json(integration.get_post_comments(linkedin_url)),
             args_schema=GetActivitySchema
         ),
         StructuredTool(
             name="linkedin_get_post_reactions",
             description="Get reactions for a LinkedIn activity",
-            func=lambda linkedin_url: integration.get_post_reactions(linkedin_url),
+            func=lambda linkedin_url: integration.clean_json(integration.get_post_reactions(linkedin_url)),
             args_schema=GetActivitySchema
         )
     ]

@@ -75,3 +75,18 @@ def test_get_post_reactions(integration: LinkedInIntegration):
     assert data is not None, data
     assert data.get('data') is not None, data
     assert data.get('included') is not None, data
+
+def test_get_organization_info_cleaned(integration: LinkedInIntegration):
+    data = integration.clean_json(integration.get_organization_info(DEFAULT_COMPANY_URL))
+
+    assert data is not None, data
+
+def test_get_profile_view_cleaned(integration: LinkedInIntegration):
+    data = integration.clean_json(integration.get_profile_view(DEFAULT_PROFILE_URL))
+
+    assert data is not None, data
+
+def test_get_profile_top_card_cleaned(integration: LinkedInIntegration):
+    data = integration.clean_json(integration.get_profile_top_card(DEFAULT_PROFILE_URL))
+
+    assert data is not None, data
