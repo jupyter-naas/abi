@@ -60,7 +60,7 @@ def create_checkpointer() -> BaseCheckpointSaver:
             from psycopg import Connection
             from psycopg.rows import dict_row
             import time
-            logger.info(f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}")
+            logger.debug(f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}")
             
             # Try connection with retries (PostgreSQL might still be starting)
             max_retries = 3
@@ -77,33 +77,33 @@ def create_checkpointer() -> BaseCheckpointSaver:
                     
                     # Setup tables if they don't exist
                     checkpointer.setup()
-                    logger.info("PostgreSQL checkpointer tables initialized")
+                    logger.debug("PostgreSQL checkpointer tables initialized")
                     
                     return checkpointer
                     
                 except Exception as conn_error:
                     if attempt < max_retries - 1:
-                        logger.info(f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds...")
+                        logger.warning(f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds...")
                         time.sleep(2)
                     else:
                         raise conn_error
                         
         except ImportError:
-            logger.warning("PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory.")
+            logger.error("PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory.")
         except Exception as e:
             # Provide more helpful error messages
             error_msg = str(e)
             if "nodename nor servname provided" in error_msg:
                 logger.error(f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}")
-                logger.info("Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL")
+                logger.error("Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL")
             else:
                 logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
-            logger.info("Falling back to in-memory checkpointer")
+            logger.error("Falling back to in-memory checkpointer")
         
         # Fallback to in-memory checkpointer
         return MemorySaver()
     else:
-        logger.info("Using in-memory checkpointer (set POSTGRES_URL for persistent memory)")
+        logger.debug("Using in-memory checkpointer (set POSTGRES_URL for persistent memory)")
         return MemorySaver()
 
 class AgentSharedState:
@@ -404,7 +404,7 @@ class Agent(Expose):
                 SystemMessage(content=self._system_prompt),
             ] + messages
 
-        logger.info(f"messages: {messages}")
+        logger.debug(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         if (
