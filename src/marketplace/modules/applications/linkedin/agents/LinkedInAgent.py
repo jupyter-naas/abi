@@ -96,7 +96,6 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
     
-    from src.marketplace.modules.applications.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
     from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import LinkedInIntegrationConfiguration
 
     tools: list = []
