@@ -73,9 +73,11 @@ def test_api_agent_routes():
     """Test that each agent has both /completion and /stream-completion endpoints."""
     try:
         from src.api import app
-        from src import modules
+        from src import get_modules
         from fastapi import APIRouter
         client = TestClient(app)
+
+        modules = get_modules()
         
         # Get OpenAPI schema to check routes
         response = client.get("/openapi.json")
