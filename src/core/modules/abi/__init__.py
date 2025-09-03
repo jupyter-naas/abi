@@ -5,6 +5,9 @@ workflows: list = []
 tools: list = []
 loaded = False
 
+def requirements():
+    return True
+
 
 def get_workflows():
     return workflows
