@@ -106,12 +106,6 @@ def create_agent(
             from src.marketplace.modules.applications.linkedin.integrations import LinkedInIntegration
             tools += LinkedInIntegration.as_tools(linkedin_integration_config)
 
-            from src.marketplace.modules.applications.linkedin.workflows.LinkedInJSONCleanerWorkflow import (
-                LinkedInJSONCleanerWorkflow, 
-                LinkedInJSONCleanerWorkflowConfiguration
-            )
-            tools += LinkedInJSONCleanerWorkflow(LinkedInJSONCleanerWorkflowConfiguration()).as_tools()
-
             from src.marketplace.modules.applications.google_search.integrations.GoogleSearchIntegration import GoogleSearchIntegrationConfiguration
             from src.marketplace.modules.applications.google_search.integrations import GoogleSearchIntegration
             google_search_integration_config = GoogleSearchIntegrationConfiguration()
