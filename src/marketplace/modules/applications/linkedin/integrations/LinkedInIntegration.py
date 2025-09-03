@@ -208,7 +208,7 @@ class LinkedInIntegration(Integration):
                 "cleaned_data": None
             }
 
-    def __get_images(self, data: dict, key: str, output_dir: str = None, save_images: bool = False) -> List[str]:
+    def __get_images(self, data: dict, key: str, output_dir: str | None = None, save_images: bool = False) -> List[str]:
         """
         Extracts picture URLs from a nested dictionary.
 

@@ -38,7 +38,7 @@ view_mode = st.sidebar.selectbox(
 
 # SOP Section in Sidebar
 st.sidebar.markdown("---")
-if st.sidebar.button("📖 View SOP", width="stretch"):
+if st.sidebar.button("📖 View SOP", use_container_width=True):
     st.session_state.page = "sop"
     st.rerun()
 
@@ -238,7 +238,7 @@ elif view_mode == "Resource View":
             return 'background-color: lightgreen'
     
     styled_capacity = capacity_data.style.applymap(color_utilization, subset=['Utilization'])
-    st.dataframe(styled_capacity, width="stretch")
+    st.dataframe(styled_capacity, use_container_width=True)
 
 elif view_mode == "Sprint View":
     st.subheader("🏃‍♂️ Sprint Planning")
@@ -283,19 +283,19 @@ st.subheader("⚡ Project Actions")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    if st.button("➕ Create New Project", width="stretch"):
+    if st.button("➕ Create New Project", use_container_width=True):
         st.success("New project creation form opened")
 
 with col2:
-    if st.button("📊 Generate Report", width="stretch"):
+    if st.button("📊 Generate Report", use_container_width=True):
         st.info("Project status report generated")
 
 with col3:
-    if st.button("🔄 Sync with Jira", width="stretch"):
+    if st.button("🔄 Sync with Jira", use_container_width=True):
         st.success("Synchronization with Jira completed")
 
 with col4:
-    if st.button("📧 Send Updates", width="stretch"):
+    if st.button("📧 Send Updates", use_container_width=True):
         st.success("Status updates sent to stakeholders")
 
 # Detailed project table
@@ -304,7 +304,7 @@ st.subheader("📊 Project Details")
 # Add selection capability
 selected_projects = st.dataframe(
     filtered_projects[['Project_ID', 'Title', 'Status', 'Priority', 'Team', 'Assignee', 'Progress', 'Days_Remaining']],
-    width="stretch",
+    use_container_width=True,
     hide_index=True
 )
 

@@ -373,7 +373,7 @@ if ttl_files:
     # Display with filtering
     st.dataframe(
         df[['name', 'category', 'module', 'path', 'size']],
-        width="stretch",
+        use_container_width=True,
         column_config={
             'name': 'File Name',
             'category': 'Category', 
@@ -387,7 +387,7 @@ else:
 
 # SOP Section
 st.sidebar.markdown("---")
-if st.sidebar.button("📖 View SOP", width="stretch"):
+if st.sidebar.button("📖 View SOP", use_container_width=True):
     st.session_state.page = "sop"
     st.rerun()
 
