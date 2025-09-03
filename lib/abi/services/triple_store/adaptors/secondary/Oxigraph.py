@@ -165,7 +165,7 @@ class Oxigraph(ITripleStorePort):
             headers={
                 "Content-Type": "application/sparql-update"
             },
-            data=insert_query,
+            data=insert_query.encode("utf-8"),
             timeout=self.timeout
         )
         
@@ -196,7 +196,7 @@ class Oxigraph(ITripleStorePort):
             headers={
                 "Content-Type": "application/sparql-update"
             },
-            data=delete_query,
+            data=delete_query.encode("utf-8"),
             timeout=self.timeout
         )
         
@@ -292,7 +292,7 @@ class Oxigraph(ITripleStorePort):
                 headers={
                     "Content-Type": "application/sparql-update"
                 },
-                data=query,
+                data=query.encode("utf-8"),
                 timeout=self.timeout
             )
         else:
@@ -303,7 +303,7 @@ class Oxigraph(ITripleStorePort):
                     "Content-Type": "application/sparql-query",
                     "Accept": "application/sparql-results+json,application/n-triples"
                 },
-                data=query,
+                data=query.encode("utf-8"),
                 timeout=self.timeout
             )
         
