@@ -5,13 +5,6 @@ import importlib
 import os
 from pathlib import Path
 
-MODULE_PATH: list[str] = [
-    "src/core/modules",
-    "src/custom/modules",
-    "src/marketplace/modules/applications",
-    "src/marketplace/modules/domains"
-]
-
 __modules: List[IModule] = []
 __loaded: bool = False
 
