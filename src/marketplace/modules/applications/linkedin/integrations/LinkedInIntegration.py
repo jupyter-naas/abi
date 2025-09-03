@@ -132,15 +132,25 @@ class LinkedInIntegration(Integration):
             
             # Add Image URL full if requested
             if include_images:
-                for image in ["logo", "picture", "backgroundImage", "backgroundCoverImage"]:
-                    if image in include:
-                        picture_urls = self.__get_images(include, image)
+                for key in include:
+                    if any(img in key.lower() for img in ["logo", "picture", "image"]):
+                        picture_urls = self.__get_images(include, key)
                         if picture_urls:
-                            include[image] = picture_urls[-1]  # Take the last (highest quality) URL
+                            include[key] = picture_urls[-1]  # Take the last (highest quality) URL
             
-            # Pop useless values
-            if "trackingId" in include:
-                include.pop("trackingId")
+            # Pop useless values recursively
+            def pop_keys(d):
+                if isinstance(d, dict):
+                    for key in ["trackingId", "$recipeTypes", "paging"]:
+                        if key in d:
+                            d.pop(key)
+                    for v in d.values():
+                        pop_keys(v)
+                elif isinstance(d, list):
+                    for item in d:
+                        pop_keys(item)
+            
+            pop_keys(include)
             
             # Add new entities
             if include:
@@ -164,10 +174,11 @@ class LinkedInIntegration(Integration):
             entity_urn = json_data.get("data", {}).get("entityUrn")
             if entity_urn:
                 profile_id = entity_urn.split(":")[-1]
-                data_type = entity_urn.split("urn:li:")[1].split(":")[0]
+                file_name = entity_urn.split("urn:li:")[1].split(":")[0] + ".json"
                 prefix = os.path.join("cleaned_json", profile_id)
             else:
-                prefix = "cleaned_json"
+                prefix = os.path.join("cleaned_json", "unknown")
+                file_name = "cleaned_json.json"
                 
             # Clean the data
             cleaned_data = self._clean_dict(json_data)
@@ -181,7 +192,7 @@ class LinkedInIntegration(Integration):
             
             # Flatten dict
             final_data = self._flatten_dict(parsed_data)
-            save_json(final_data, os.path.join(self.__configuration.data_store_path, prefix), f"{data_type}.json") 
+            save_json(final_data, os.path.join(self.__configuration.data_store_path, prefix), file_name) 
             return final_data
             
         except json.JSONDecodeError as e:
@@ -213,13 +224,28 @@ class LinkedInIntegration(Integration):
         urls = []
         entity_urn = data.get("entityUrn")
 
-        if _.get(data, f"{key}.image"):
-            root_url = _.get(data, f"{key}.image.rootUrl")
-            artifacts = _.get(data, f"{key}.image.artifacts", [])
-        else:
-            root_url = _.get(data, f"{key}.rootUrl")
-            artifacts = _.get(data, f"{key}.artifacts", [])
-            
+        def find_keys_in_dict(d, target_keys):
+            """Recursively find target keys in nested dictionary"""
+            results = {}
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    if k in target_keys:
+                        results[k] = v
+                    if isinstance(v, (dict, list)):
+                        nested_results = find_keys_in_dict(v, target_keys)
+                        results.update(nested_results)
+            elif isinstance(d, list):
+                for item in d:
+                    nested_results = find_keys_in_dict(item, target_keys)
+                    results.update(nested_results)
+            return results
+
+        # Find rootUrl and artifacts in the entire dictionary structure
+        target_data = find_keys_in_dict(data.get(key, {}), ["rootUrl", "artifacts"])
+        
+        root_url = target_data.get("rootUrl")
+        artifacts = target_data.get("artifacts", [])
+
         if root_url:
             for x in artifacts:
                 file_url = x.get("fileIdentifyingUrlPathSegment")
