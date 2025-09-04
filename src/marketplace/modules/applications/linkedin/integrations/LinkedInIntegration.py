@@ -174,7 +174,7 @@ class LinkedInIntegration(Integration):
             entity_urn = json_data.get("data", {}).get("entityUrn")
             if entity_urn:
                 profile_id = entity_urn.split(":")[-1]
-                file_name = entity_urn.split("urn:li:")[1].split(":")[0] + ".json"
+                file_name = entity_urn.split("urn:li:")[1].split(profile_id)[0] + ".json"
                 prefix = os.path.join("cleaned_json", profile_id)
             else:
                 prefix = os.path.join("cleaned_json", "unknown")
@@ -354,7 +354,7 @@ class LinkedInIntegration(Integration):
         data = self._make_request(prefix=prefix, filename=org_id, method="GET", endpoint=endpoint)
         return data
     
-    def get_profile_id(self, linkedin_url: str) -> str:
+    def get_profile_public_id(self, linkedin_url: str) -> str:
         """Extract profile ID from LinkedIn URL.
         
         Handles profile URLs with or without the /in/ prefix.
@@ -362,6 +362,14 @@ class LinkedInIntegration(Integration):
         if "/in/" in linkedin_url:  
             return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
         return ""
+    
+    def get_profile_id(self, linkedin_url: str) -> str:
+        """Extract profile ID from LinkedIn URL.
+        
+        Handles profile URLs with or without the /in/ prefix.
+        """
+        data = self.get_profile_view(linkedin_url)
+        return f"{data.get('data', {}).get('*profile', {}).replace('urn:li:fs_profile:', '')}"
     
     def get_profile_view(self, linkedin_url: str) -> Dict:
         """Get profile view for a LinkedIn organization.
@@ -373,7 +381,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw profile view data from LinkedIn API
         """
         # Get organization ID
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_profile_public_id(linkedin_url)
         prefix = os.path.join("get_profile_view", profile_id)
         
         endpoint = f"/identity/profiles/{profile_id}/profileView"
@@ -390,7 +398,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw profile top card data from LinkedIn API
         """
         # Get profile ID
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_profile_public_id(linkedin_url)
         prefix = os.path.join("get_profile_top_card", profile_id)
         
         endpoint = f"/graphql?variables=(vanityName:{profile_id})&queryId=voyagerIdentityDashProfiles.0bc93b66ba223b9d30d1cb5c05ff031a"
@@ -407,7 +415,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw profile skills data from LinkedIn API
         """
         # Get profile ID
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_profile_public_id(linkedin_url)
         prefix = os.path.join("get_profile_skills", profile_id)
         
         endpoint = f"/identity/profiles/{profile_id}/skillCategory"
@@ -424,7 +432,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw network information data from LinkedIn API
         """
         # Get profile ID
-        profile_id = self.get_profile_id(linkedin_url)
+        profile_id = self.get_profile_public_id(linkedin_url)
         prefix = os.path.join("get_network_info", profile_id)
         
         endpoint = f"/identity/profiles/{profile_id}/networkinfo"
@@ -618,10 +626,10 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         )
 
     class GetProfilePostsFeedSchema(BaseModel):
-        linkedin_url: str = Field(
+        profile_id: str = Field(
             ..., 
             description="LinkedIn profile URL", 
-            pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+"
+            pattern=r"^ACoAA.+"
         )
         count: int = Field(
             1,
@@ -640,6 +648,12 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             description="Get organization information for a LinkedIn organization.",
             func=lambda linkedin_url: integration.clean_json(integration.get_organization_info(linkedin_url)),
             args_schema=GetOrganizationInfoSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_profile_id",
+            description="Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA.",
+            func=lambda linkedin_url: integration.get_profile_id(linkedin_url),
+            args_schema=GetProfileSchema
         ),
         StructuredTool(
             name="linkedin_get_profile_view",
@@ -662,7 +676,7 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_profile_posts_feed",
             description="Get posts feed for a LinkedIn profile.",
-            func=lambda linkedin_url, count: integration.clean_json(integration.get_profile_posts_feed(linkedin_url, count)),
+            func=lambda profile_id, count: integration.clean_json(integration.get_profile_posts_feed(profile_id, count)),
             args_schema=GetProfilePostsFeedSchema
         ),
         StructuredTool(
