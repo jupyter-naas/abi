@@ -544,7 +544,7 @@ class AbiAgent(IntentAgent):
         self,
         router: APIRouter,
         route_name: str = NAME,
-        name: str = NAME.capitalize(). replace("_", " "),
+        name: str = NAME,
         description: str = "API endpoints to call the Abi agent completion.",
         description_stream: str = "API endpoints to call the Abi agent stream completion.",
         tags: Optional[list[str | Enum]] = None,
