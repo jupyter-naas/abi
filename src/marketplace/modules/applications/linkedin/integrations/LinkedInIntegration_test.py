@@ -112,3 +112,20 @@ def test_get_profile_top_card_cleaned(integration: LinkedInIntegration):
     data = integration.clean_json(integration.get_profile_top_card(DEFAULT_PROFILE_URL))
 
     assert data is not None, data
+
+def test_get_profile_posts_feed_cleaned(integration: LinkedInIntegration):
+    data = integration.clean_json(integration.get_profile_posts_feed(DEFAULT_PROFILE_ID, count=1))
+
+    assert data is not None, data
+
+def test_get_profile_public_id(integration: LinkedInIntegration):
+    data = integration.get_profile_public_id(DEFAULT_PROFILE_URL)
+
+    assert data is not None, data
+    assert data == "florent-ravenel", data
+
+def test_get_profile_id(integration: LinkedInIntegration):
+    data = integration.get_profile_id(DEFAULT_PROFILE_URL)
+
+    assert data is not None, data
+    assert data == "ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog", data

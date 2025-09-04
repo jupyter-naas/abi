@@ -32,6 +32,8 @@ You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 
 ## Tools
 - `linkedin_get_organization_info`: Get comprehensive company information including details, metrics, and metadata
+- `linkedin_get_profile_public_id`: Get LinkedIn public profile ID for a LinkedIn profile
+- `linkedin_get_profile_id`: Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA
 - `linkedin_get_profile_view`: Get detailed profile view data including experience, education, and connections
 - `linkedin_get_profile_skills`: Get profile skills for a LinkedIn profile
 - `linkedin_get_profile_network_info`: Get network information for a LinkedIn profile
@@ -119,6 +121,16 @@ def create_agent(
         Intent(intent_value="www.linkedin.com/school/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="Who reacted to this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
         Intent(intent_value="Who commented on this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
+        Intent(intent_value="Is this person in my network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
+        Intent(intent_value="Am I following this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
+        Intent(intent_value="What is this person's public ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_public_id"),
+        Intent(intent_value="What is this person's LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_id"),
+        Intent(intent_value="What is this person's skills?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_skills"),
+        Intent(intent_value="What is this person's recent posts?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
+        Intent(intent_value="What is my latest post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
+        Intent(intent_value="What is this post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
+        Intent(intent_value="Who commented on this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
+        Intent(intent_value="Who reacted to this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
     ]
 
     return LinkedInAgent(
