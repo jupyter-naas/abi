@@ -609,5 +609,9 @@ Last user message: "{last_human_message.content}"
             graph = patcher(graph)
         
         self.graph = graph.compile(checkpointer=self._checkpointer)     
+
+    @property
+    def intents(self) -> list[Intent]:
+        return self._intents
         
         
