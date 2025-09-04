@@ -285,7 +285,7 @@ def get_app_status(port: int) -> str:
     try:
         response = requests.get(f"http://localhost:{port}", timeout=2)
         return "running" if response.status_code == 200 else "stopped"
-    except:
+    except Exception:
         return "stopped"
 
 def load_modules_from_path(path: Path, module_type: str = "module") -> List[Dict[str, Any]]:
@@ -360,7 +360,7 @@ def get_modules() -> List[Dict[str, Any]]:
     return modules
 
 # Apps data
-apps_data = [
+apps_data: list[dict[str, str | int]] = [
     {"name": "Dashboard", "port": 8500, "icon": "🎛️", "description": "Central control hub with system monitoring"},
     {"name": "Chat API", "port": 8511, "icon": "💬", "description": "API-based chat interface with multi-agent support"},
     {"name": "Table Mode", "port": 8503, "icon": "📊", "description": "Advanced data table interface with filtering"},
@@ -375,7 +375,7 @@ apps_data = [
 
 # Add status to apps
 for app in apps_data:
-    app["status"] = get_app_status(app["port"])
+    app["status"] = get_app_status(int(app["port"]))
     app["type"] = "app"
 
 # Header

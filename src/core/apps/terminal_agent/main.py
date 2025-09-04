@@ -542,6 +542,7 @@ class ConsoleLoader:
         
         # Start the animation
         self.loader_thread = threading.Thread(target=startup_loader)
+        self.loader_thread.daemon = True  # Make thread die when main thread exits
         self.loader_thread.start()
         
         # Suppress all logging during module loading

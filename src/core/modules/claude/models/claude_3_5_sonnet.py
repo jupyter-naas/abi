@@ -17,24 +17,21 @@ MAX_RETRIES = 2
 
 model: Optional[ChatModel] = None
 anthropic_api_key = secret.get("ANTHROPIC_API_KEY")
-if anthropic_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatAnthropic(
-            model_name=ID,
-            temperature=TEMPERATURE,
-            max_tokens_to_sample=MAX_TOKENS,
-            timeout=None,
-            max_retries=MAX_RETRIES,
-            stop=None,
-            api_key=SecretStr(anthropic_api_key),
-        ),
-        context_window=CONTEXT_WINDOW,
-    ) 
-    logger.debug("✅ Claude 3.5 Sonnet model loaded successfully via Anthropic")
-else:
-    logger.error("Claude 3.5 Sonnet model not available - missing Anthropic API key")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatAnthropic(
+        model_name=ID,
+        temperature=TEMPERATURE,
+        max_tokens_to_sample=MAX_TOKENS,
+        timeout=None,
+        max_retries=MAX_RETRIES,
+        stop=None,
+        api_key=SecretStr(anthropic_api_key),
+    ),
+    context_window=CONTEXT_WINDOW,
+) 
+logger.debug("✅ Claude 3.5 Sonnet model loaded successfully via Anthropic")

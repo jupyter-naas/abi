@@ -8,7 +8,6 @@ import requests
 import os
 import re
 from datetime import datetime
-from pathlib import Path
 
 # Load environment
 from dotenv import load_dotenv
@@ -246,7 +245,7 @@ def get_conversation_threads():
                                         break
                             if title != f"Thread {thread_id}":
                                 break
-                    except:
+                    except Exception:
                         continue
                 
                 conversations.append({
@@ -321,7 +320,7 @@ def load_conversation_from_db(thread_id: str):
                                         "agent": agent_name,
                                         "timestamp": datetime.now()
                                     })
-                except Exception as e:
+                except Exception:
                     continue
             
             # Remove duplicates while preserving order
@@ -370,7 +369,7 @@ def check_api_status() -> bool:
     try:
         response = requests.get(f"{ABI_API_BASE}/openapi.json", timeout=3)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 def call_abi_api(agent_name: str, prompt: str, thread_id: int = 1) -> dict:

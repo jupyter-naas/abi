@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
 # SOP Section in Sidebar
 st.sidebar.markdown("---")
-if st.sidebar.button("📖 View SOP", width="stretch"):
+if st.sidebar.button("📖 View SOP", use_container_width=True):
     st.session_state.page = "sop"
     st.rerun()
 
@@ -218,7 +218,8 @@ else:
 
 # Pagination
 if page_size != "All":
-    page_size_int = int(page_size)
+    assert isinstance(page_size, int), "page_size should be an int when not 'All'"
+    page_size_int = page_size
     total_pages = len(display_df) // page_size_int + (1 if len(display_df) % page_size_int > 0 else 0)
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -239,7 +240,7 @@ else:
 if view_mode == "Standard Table":
     st.dataframe(
         paginated_df,
-        width="stretch",
+        use_container_width=True,
         hide_index=not show_index,
         height=400 if not compact_view else 300
     )
@@ -248,7 +249,7 @@ elif view_mode == "Editable Grid":
     st.info("📝 Editable mode - Changes are highlighted but not persisted in this demo")
     edited_df = st.data_editor(
         paginated_df,
-        width="stretch",
+        use_container_width=True,
         hide_index=not show_index,
         height=400 if not compact_view else 300,
         key="editable_table"
@@ -263,7 +264,7 @@ elif view_mode == "Summary View":
             'Progress': 'mean' if 'Progress' in display_df.columns else 'count'
         }).round(2)
         summary.columns = ['Count', 'Total Budget', 'Avg Progress']
-        st.dataframe(summary, width="stretch")
+        st.dataframe(summary, use_container_width=True)
     else:
         st.warning("Summary view requires a 'Category' column")
 
@@ -296,7 +297,7 @@ elif view_mode == "Pivot Table":
                     aggfunc='mean',
                     fill_value=0
                 )
-                st.dataframe(pivot_table, width="stretch")
+                st.dataframe(pivot_table, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating pivot table: {str(e)}")
         else:

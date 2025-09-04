@@ -37,8 +37,8 @@ class AlgoliaIntegration(Integration):
         )
 
     async def search(
-        self, index_name: str, query: str, hits_per_page: int = 50, filters: str = None
-    ) -> Dict:
+        self, index_name: str, query: str, hits_per_page: int = 50, filters: str | None = None
+    ):
         """Search records in a specified index.
 
         Args:
@@ -66,7 +66,7 @@ class AlgoliaIntegration(Integration):
         response = await self.__client.search(search_method_params=search_params)
         return response
 
-    def create_index(self, index_name: str, settings: Dict = None) -> Dict:
+    def create_index(self, index_name: str, settings: Dict | None = None) -> Dict:
         """Create a new index in Algolia.
 
         Args:
@@ -76,16 +76,16 @@ class AlgoliaIntegration(Integration):
         Returns:
             Dict: Response from Algolia containing the created index information
         """
-        index = self.__client.init_index(index_name)
+        index = self.__client.init_index(index_name)  # type: ignore
         if settings:
             index.set_settings(settings)
         return {"name": index_name, "settings": index.get_settings()}
 
-    def list_indexes(self) -> Dict:
+    def list_indexes(self):
         """List all indexes in Algolia.
 
         Returns:
-            Dict: List of indexes from Algolia
+            List of indexes from Algolia
         """
         return self.__client.list_indices()
 
@@ -98,10 +98,10 @@ class AlgoliaIntegration(Integration):
         Returns:
             Dict: Response from Algolia containing task ID
         """
-        index = self.__client.init_index(index_name)
+        index = self.__client.init_index(index_name)  # type: ignore
         return index.delete()
 
-    async def update_index(self, index_name: str, records: list) -> Dict:
+    async def update_index(self, index_name: str, records: list):
         """Update records in a specified index.
 
         Args:
@@ -119,7 +119,7 @@ class AlgoliaIntegration(Integration):
             responses.append(response)
         return responses
 
-    async def delete_all_records(self, index_name: str) -> Dict:
+    async def delete_all_records(self, index_name: str):
         """Delete all records from a specified index.
 
         Args:
@@ -141,14 +141,14 @@ def as_tools(configuration: AlgoliaIntegrationConfiguration):
     class AlgoliaSearchSchema(BaseModel):
         index_name: str = Field(..., description="Name of the Algolia index to search")
         query: str = Field(..., description="Search query string")
-        filters: str = Field(
+        filters: str | None = Field(
             None,
             description="Optional filter string. Example: 'category:Book AND price < 100'",
         )
 
     class AlgoliaCreateIndexSchema(BaseModel):
         index_name: str = Field(..., description="Name of the Algolia index to create")
-        settings: Dict[str, Any] = Field(
+        settings: Dict[str, Any] | None = Field(
             None, description="Optional configuration settings for the index"
         )
 

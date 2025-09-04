@@ -17,22 +17,19 @@ MAX_RETRIES = 2
 
 model: Optional[ChatModel] = None
 mistral_api_key = secret.get("MISTRAL_API_KEY")
-if mistral_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatMistralAI(
-            model_name=ID,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-            max_retries=MAX_RETRIES,
-            api_key=SecretStr(mistral_api_key),
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ Mistral Large 2 model loaded successfully via Mistral")
-else:
-    logger.error("Mistral Large 2 model not available - missing Mistral API key")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatMistralAI(
+        model_name=ID,
+        temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+        max_retries=MAX_RETRIES,
+        api_key=SecretStr(mistral_api_key),
+    ),
+    context_window=CONTEXT_WINDOW,
+)
+logger.debug("✅ Mistral Large 2 model loaded successfully via Mistral")
