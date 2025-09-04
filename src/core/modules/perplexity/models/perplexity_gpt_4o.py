@@ -15,20 +15,17 @@ OWNER = "openai"
 model: Optional[ChatModel] = None
 openai_api_key = secret.get("OPENAI_API_KEY")
 perplexity_api_key = secret.get("PERPLEXITY_API_KEY")
-if openai_api_key and perplexity_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatOpenAI(
-            model=ID,
-            temperature=0,
-            api_key=SecretStr(openai_api_key)
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ Perplexity GPT-4o model loaded successfully via OpenAI")
-else:
-    logger.error("Perplexity Agent not available - missing OpenAI API key to load model or Perplexity API key to load Perplexity Integration")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatOpenAI(
+        model=ID,
+        temperature=0,
+        api_key=SecretStr(openai_api_key)
+    ),
+    context_window=CONTEXT_WINDOW,
+)
+logger.debug("✅ Perplexity GPT-4o model loaded successfully via OpenAI")

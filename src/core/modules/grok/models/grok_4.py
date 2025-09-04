@@ -19,26 +19,23 @@ CONTEXT_WINDOW = 200000
 model: Optional[ChatModel] = None
 
 xai_api_key = secret.get("XAI_API_KEY")
-if xai_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        context_window=CONTEXT_WINDOW,
-        model=ChatXAI(
-            model=ID,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-            api_key=SecretStr(xai_api_key),
-            # Enable Live Search for real-time information
-            search_parameters={
-                "mode": SEARCH_MODE,
-                "max_search_results": MAX_SEARCH_RESULTS,
-            },
-        )
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    context_window=CONTEXT_WINDOW,
+    model=ChatXAI(
+        model=ID,
+        temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+        api_key=SecretStr(xai_api_key),
+        # Enable Live Search for real-time information
+        search_parameters={
+            "mode": SEARCH_MODE,
+            "max_search_results": MAX_SEARCH_RESULTS,
+        },
     )
-    logger.debug("✅ Grok 4 model loaded successfully via xAI")
-else:
-    logger.error("Grok 4 model not available - missing XAI API key")
+)
+logger.debug("✅ Grok 4 model loaded successfully via xAI")

@@ -6,6 +6,7 @@ import pickle
 import base64
 import inspect
 from collections import OrderedDict
+from abi import logger
 
 class ForceRefresh(Exception):
     pass
@@ -71,7 +72,7 @@ class CacheService(ICacheService):
             >>> result2 = get_user_data(123, True)  # Returns from cache
         """
         
-        print(f"Cache decorator called with key_builder: {key_builder}, auto_cache: {auto_cache}, cache_type: {cache_type}, ttl: {ttl}")
+        logger.debug(f"Cache decorator called with key_builder: {key_builder}, auto_cache: {auto_cache}, cache_type: {cache_type}, ttl: {ttl}")
         def decorator(func):
             def wrapper(*args, **kwargs):
                 

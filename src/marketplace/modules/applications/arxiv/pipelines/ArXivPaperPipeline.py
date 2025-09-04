@@ -3,18 +3,19 @@ import os
 import uuid
 import re
 import requests
-from rdflib import Graph
-from pydantic import BaseModel, Field
-from langchain_core.tools import StructuredTool
+from rdflib import Graph, Literal
+from pydantic import Field
+from langchain_core.tools import StructuredTool, BaseTool
 from fastapi import APIRouter
 
-from abi.pipeline import Pipeline, PipelineConfiguration
+from abi.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from abi.utils.Graph import ABIGraph, ABI, BFO
-from src.custom.modules.arxiv_agent.integrations.ArXivIntegration import (
+from src.marketplace.modules.applications.arxiv.integrations.ArXivIntegration import (
     ArXivIntegration,
     ArXivIntegrationConfiguration,
 )
 from abi.services.triple_store.TripleStorePorts import ITripleStoreService
+from enum import Enum
 
 
 @dataclass
@@ -27,7 +28,7 @@ class ArXivPaperPipelineConfiguration(PipelineConfiguration):
     pdf_storage_path: str = "datastore/application-level/arxiv"
 
 
-class ArXivPaperPipelineParameters(BaseModel):
+class ArXivPaperPipelineParameters(PipelineParameters):
     """Parameters for ArXivPaperPipeline."""
 
     paper_id: str = Field(..., description="ArXiv paper ID")
@@ -36,6 +37,8 @@ class ArXivPaperPipelineParameters(BaseModel):
 
 class ArXivPaperPipeline(Pipeline):
     """Pipeline for adding ArXiv papers to the ontology."""
+    
+    __configuration: ArXivPaperPipelineConfiguration
 
     def __init__(self, configuration: ArXivPaperPipelineConfiguration):
         super().__init__(configuration)
@@ -47,8 +50,11 @@ class ArXivPaperPipeline(Pipeline):
         # Ensure storage directories exist
         os.makedirs(self.__configuration.storage_base_path, exist_ok=True)
         os.makedirs(self.__configuration.pdf_storage_path, exist_ok=True)
-
-    def run(self, parameters: ArXivPaperPipelineParameters) -> Graph:
+        
+    def run(self, parameters: PipelineParameters) -> Graph:
+        if not isinstance(parameters, ArXivPaperPipelineParameters):
+            raise ValueError("Parameters must be of type ArXivPaperPipelineParameters")
+            
         # Init graph
         graph = ABIGraph()
 
@@ -125,7 +131,7 @@ class ArXivPaperPipeline(Pipeline):
                 )
 
                 # Add PDF file path to graph
-                graph.add((paper, ABI.localFilePath, pdf_filepath))
+                graph.add((paper, ABI.localFilePath, Literal(pdf_filepath)))
 
                 response = requests.get(paper_data["pdf_url"], stream=True)
                 response.raise_for_status()
@@ -144,7 +150,7 @@ class ArXivPaperPipeline(Pipeline):
 
         return graph
 
-    def as_tools(self) -> list[StructuredTool]:
+    def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool(
                 name="arxiv_paper_pipeline",
@@ -154,9 +160,15 @@ class ArXivPaperPipeline(Pipeline):
             )
         ]
 
-    def as_api(self, router: APIRouter) -> None:
-        """Adds API endpoints for this pipeline to the given router."""
-
-        @router.post("/arxiv/paper")
-        def run(parameters: ArXivPaperPipelineParameters):
-            return self.run(parameters).serialize(format="turtle")
+    def as_api(
+        self,
+        router: APIRouter,
+        route_name: str = "",
+        name: str = "",
+        description: str = "",
+        description_stream: str = "",
+        tags: list[str | Enum] | None = None,
+    ) -> None:
+        if tags is None:
+            tags = []
+        return None

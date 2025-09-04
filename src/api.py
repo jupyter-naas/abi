@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from abi import logger
-from src import modules
+# from src import modules
+from src.__modules__ import get_modules
 
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
@@ -18,7 +19,7 @@ from typing import Annotated
 
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
-from src import config
+from src import config, load_modules
 
 # Automatic loading of agents from modules
 
@@ -189,6 +190,8 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
+load_modules()
+modules = get_modules(config)
 for module in modules:
     for agent in module.agents:
         # Skip None agents (when API keys are missing)

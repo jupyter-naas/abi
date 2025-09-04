@@ -11,7 +11,6 @@ def find_storage_folder(base_path: str, needle: str = "storage") -> str:
 
     return find_storage_folder(os.path.dirname(base_path))
 
-
 def ensure_data_directory(module_name: str, component: str) -> str:
     """
     Ensures the data directory exists for a module component following Code-Data Symmetry.

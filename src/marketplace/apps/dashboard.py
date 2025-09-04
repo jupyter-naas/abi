@@ -17,7 +17,7 @@ st.title("🎛️ ABI Interface Dashboard")
 st.markdown("**Central hub for all ABI user interfaces**")
 
 # Interface definitions
-interfaces = [
+interfaces: list[dict[str, str | int | list[str]]] = [
     {
         "name": "Chat Interface (API)",
         "description": "API-based chat interface with multi-agent support",
@@ -105,13 +105,13 @@ def check_interface_status(port):
     try:
         response = requests.get(f"http://localhost:{port}", timeout=2)
         return "🟢 Online" if response.status_code == 200 else "🟡 Issues"
-    except:
+    except Exception:
         return "🔴 Offline"
 
 # Group by category
-categories = {}
+categories: dict[str, list[dict[str, str | int | list[str]]]] = {}
 for interface in interfaces:
-    category = interface["category"]
+    category = str(interface["category"])
     if category not in categories:
         categories[category] = []
     categories[category].append(interface)
@@ -137,8 +137,10 @@ for category, category_interfaces in categories.items():
                 
                 # Features
                 st.write("**Features:**")
-                for feature in interface['features']:
-                    st.write(f"• {feature}")
+                features = interface['features']
+                if isinstance(features, list):
+                    for feature in features:
+                        st.write(f"• {feature}")
                 
                 # Launch button
                 if st.button(f"🚀 Launch {interface['name']}", key=f"launch_{interface['port']}"):

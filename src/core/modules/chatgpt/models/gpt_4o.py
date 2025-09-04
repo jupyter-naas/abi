@@ -14,20 +14,17 @@ OWNER = "openai"
 
 model: Optional[ChatModel] = None
 openai_api_key = secret.get("OPENAI_API_KEY")
-if openai_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatOpenAI(
-            model=ID,
-            temperature=0,
-            api_key=SecretStr(openai_api_key),
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ GPT-4o model loaded successfully via OpenAI")
-else:
-    logger.error("GPT-4o model not available - missing OpenAI API key")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatOpenAI(
+        model=ID,
+        temperature=0,
+        api_key=SecretStr(openai_api_key),
+    ),
+    context_window=CONTEXT_WINDOW,
+)
+logger.debug("✅ GPT-4o model loaded successfully via OpenAI")
