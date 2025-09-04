@@ -113,6 +113,7 @@ def create_agent(
     tools += GoogleSearchIntegration.as_tools(google_search_integration_config)
 
     intents: list = [
+        Intent(intent_value="Who am I?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_view"),
         Intent(intent_value="Search Google for a LinkedIn organization", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_organization"),
         Intent(intent_value="Search Google for a LinkedIn profile", intent_type=IntentType.TOOL, intent_target="googlesearch_linkedin_profile"),
         Intent(intent_value="www.linkedin.com/in/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_view"),
