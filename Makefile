@@ -89,11 +89,11 @@ check-core: deps
 	@echo "• Checking src.core..."
 	@.venv/bin/mypy -p src.core --follow-untyped-imports --exclude "src/core/.*/sandbox/.*"
 
-	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check lib src/core
 
-	@echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
-	@echo "⚠️ Skipping bandit... (disabled)"
+	@#echo "\n\033[1;4m🔍 Running security checks...\033[0m\n"
+	@#echo "⚠️ Skipping bandit... (disabled)"
 	@#@docker run --rm -v `pwd`:/data --workdir /data ghcr.io/pycqa/bandit/bandit -c bandit.yaml src/core lib -r
 	@echo "\n✅ CORE security checks passed!"
 
@@ -111,7 +111,7 @@ check-custom: deps
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@.venv/bin/mypy -p src.custom --follow-untyped-imports --exclude "src/custom/.*/sandbox/.*"
 
-	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/custom
 
 	@echo "\n✅ CUSTOM security checks passed!"
@@ -130,7 +130,7 @@ check-marketplace: deps
 	@echo "\n\033[1;4m🔍 Running static type analysis...\033[0m\n"
 	@.venv/bin/mypy -p src.marketplace --follow-untyped-imports --exclude "src/marketplace/.*/sandbox/.*"
 
-	@echo "\n⚠️ Skipping pyrefly checks (disabled)"
+	@#echo "\n⚠️ Skipping pyrefly checks (disabled)"
 	@#uv run pyrefly check src/marketplace
 
 	@echo "\n✅ MARKETPLACE security checks passed!"
