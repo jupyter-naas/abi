@@ -1055,11 +1055,11 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         """
         assert self.neptune_sparql_endpoint is not None
 
-        def new_getaddrinfo(*args):
-            if args[0] == self.neptune_sparql_endpoint:
-                return ORIGINAL_GETADDRINFO("127.0.0.1", *args[1:])
+        def new_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+            if host == self.neptune_sparql_endpoint:
+                return ORIGINAL_GETADDRINFO("127.0.0.1", port, family, type, proto, flags)
             else:
-                return ORIGINAL_GETADDRINFO(*args)
+                return ORIGINAL_GETADDRINFO(host, port, family, type, proto, flags)
 
         socket.getaddrinfo = new_getaddrinfo
 
