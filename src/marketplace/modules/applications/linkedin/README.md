@@ -59,6 +59,7 @@ company_data = integration.get_organization_info("https://www.linkedin.com/compa
 
 ```
 src/marketplace/modules/applications/linkedin/
+├── __init__.py                     # Module initialization and requirements
 ├── agents/                         # AI agents for LinkedIn interactions
 │   ├── LinkedInAgent.py           # Main LinkedIn AI agent
 │   └── LinkedInAgent_test.py      # Agent integration tests
@@ -107,6 +108,7 @@ An AI-powered conversational agent that provides natural language access to Link
 | Tool | Description | Usage |
 |------|-------------|-------|
 | `linkedin_get_organization_info` | Extract comprehensive company data | Organization analysis, competitive research |
+| `linkedin_get_profile_id` | Get LinkedIn unique profile ID (starts with AcoAA) | Profile identification, API calls |
 | `linkedin_get_profile_view` | Retrieve detailed profile information | Professional background analysis |
 | `linkedin_get_profile_skills` | Get profile skills and endorsements | Skills assessment, talent matching |
 | `linkedin_get_profile_network_info` | Access network and connection data | Network analysis, relationship mapping |
@@ -114,9 +116,8 @@ An AI-powered conversational agent that provides natural language access to Link
 | `linkedin_get_post_stats` | Extract post performance metrics | Engagement analysis, content optimization |
 | `linkedin_get_post_comments` | Retrieve all post comments | Sentiment analysis, audience insights |
 | `linkedin_get_post_reactions` | Get post reactions and likes | Engagement patterns, content resonance |
-| `linkedin_json_cleaner` | Clean and optimize data for AI | Data preprocessing, LLM consumption |
-| `googlesearch_linkedin_organization` | Find company LinkedIn URLs | Organization discovery |
-| `googlesearch_linkedin_profile` | Find personal LinkedIn URLs | Profile discovery |
+| `googlesearch_linkedin_organization` | Find company LinkedIn URLs (via Google Search) | Organization discovery |
+| `googlesearch_linkedin_profile` | Find personal LinkedIn URLs (via Google Search) | Profile discovery |
 
 #### Testing
 
@@ -140,6 +141,8 @@ Core integration providing authenticated access to LinkedIn's internal APIs thro
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
 | `get_organization_info(linkedin_url)` | Company/school/showcase URL | Organization data | Comprehensive company information |
+| `get_profile_id(linkedin_url)` | Profile URL | Profile ID string | LinkedIn unique profile ID (starts with AcoAA) |
+| `get_profile_public_id(linkedin_url)` | Profile URL | Public ID string | LinkedIn public profile identifier |
 | `get_profile_view(linkedin_url)` | Profile URL | Profile data | Detailed profile with experience/education |
 | `get_profile_skills(linkedin_url)` | Profile URL | Skills data | Professional skills and endorsements |
 | `get_profile_network_info(linkedin_url)` | Profile URL | Network data | Connection and network information |
@@ -296,9 +299,10 @@ pydash                          # Data manipulation utilities
 ```
 
 ### External Modules
-- `google_search`: LinkedIn URL discovery through Google search
-- `storage`: Data persistence and caching layer
-- `secret`: Secure credential management
+- `google_search` module: LinkedIn URL discovery through Google search integration
+- `abi.services.cache`: Data persistence and caching layer
+- `src.secret`: Secure credential management
+- `src.utils.Storage`: File storage utilities for cached data
 
 ### AI Models
 - **Primary Model**: GPT-4o for natural language processing
@@ -351,9 +355,6 @@ pydash                          # Data manipulation utilities
    uv run python -m pytest src/marketplace/modules/applications/linkedin/agents/ -v
    uv run python -m pytest src/marketplace/modules/applications/linkedin/integrations/ -v
    ```
-
-3. **Development Sandbox**:
-   Explore the `sandbox/` directory for development utilities and examples.
 
 ### Contributing Guidelines
 
