@@ -41,6 +41,16 @@ def publish_remote_agent(
     modules = get_modules(config)
     for module in modules:
         logger.info(f"=> Getting agents from module: {module.module_path}")
+        if "core" in module.module_path:
+            agent_type = "CORE"
+        elif "custom" in module.module_path:
+            agent_type = "CUSTOM"
+        elif "domains" in module.module_path:
+            agent_type = "DOMAIN"
+        # elif "applications" in module.module_path:
+        #     agent_type = "APPLICATION"
+        else:
+            agent_type = "CUSTOM"
         for agent in module.agents:
             name = getattr(agent, "name", "")
             if len(agents_to_publish) > 0 and name not in agents_to_publish:
@@ -99,7 +109,7 @@ def publish_remote_agent(
                 "prompt_type": "system",
                 "model": model,
                 "temperature": temperature,
-                "type": "CUSTOM",
+                "type": agent_type,
                 "remote": {
                     "url": f"{api_base_url}/{route_name}"
                 },
