@@ -1,5 +1,7 @@
 import os
 
+class NoStorageFolderFound(Exception):
+    pass
 
 # Look for a "storage" folder until we reach /
 def find_storage_folder(base_path: str, needle: str = "storage") -> str:
@@ -7,7 +9,7 @@ def find_storage_folder(base_path: str, needle: str = "storage") -> str:
         return os.path.join(base_path, needle)
 
     if base_path == "/":
-        raise Exception("No storage folder found")
+        raise NoStorageFolderFound("No storage folder found")
 
     return find_storage_folder(os.path.dirname(base_path))
 
