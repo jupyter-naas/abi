@@ -164,7 +164,7 @@ config = Config.from_yaml()
 
 modules_loaded = False
 
-def load_modules(config):
+def load_modules():
     global services
     logger.debug("Loading modules")
     _modules = get_modules(config)
@@ -206,6 +206,6 @@ def load_modules(config):
     return _modules
 
 services = LazyLoader(lambda: init_services(config, secret))
-modules = LazyLoader(lambda: load_modules(config))
+modules = LazyLoader(lambda: load_modules)
 
 
