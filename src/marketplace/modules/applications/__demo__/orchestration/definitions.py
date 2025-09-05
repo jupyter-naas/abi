@@ -3,7 +3,7 @@ import os
 import json
 from typing import Dict, Any
 
-class MyAssetConfig(dagster.Config):
+class MyAssetConfig(dagster.Config):  # type: ignore
     entry: Dict[str, Any]
 
 @dagster.asset
