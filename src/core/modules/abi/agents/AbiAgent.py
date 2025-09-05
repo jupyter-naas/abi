@@ -5,9 +5,7 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from fastapi import APIRouter
 from typing import Optional
-from enum import Enum
 from abi import logger
 
 NAME = "Abi"
@@ -253,14 +251,12 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    # Define agents
+    # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
     from src.__modules__ import get_modules
     modules = get_modules()
     for module in modules:
-        logger.debug(f"Loading agents for module: {module.module_import_path}")
-        if module.module_import_path != "src.core.modules.abi":
-            module.load_agents()
+        logger.debug(f"Getting agents from module: {module.module_import_path}")
         if hasattr(module, 'agents'):
             for agent in module.agents:
                 if agent is not None and agent.name != "Abi":
@@ -422,17 +418,4 @@ You can browse the data and run queries there."""
 
 
 class AbiAgent(IntentAgent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME,
-        description: str = "API endpoints to call the Abi agent completion.",
-        description_stream: str = "API endpoints to call the Abi agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass
