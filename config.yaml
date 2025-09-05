@@ -18,84 +18,84 @@ modules:
     enabled: true
   - path: src/core/modules/chatgpt
     enabled: true
-  - path: src/core/modules/claude
-    enabled: true
-  - path: src/core/modules/deepseek
-    enabled: true
-  - path: src/core/modules/gemini
-    enabled: true
-  - path: src/core/modules/gemma
-    enabled: true
-  - path: src/core/modules/grok
-    enabled: true
-  - path: src/core/modules/llama
-    enabled: true
-  - path: src/core/modules/mistral
-    enabled: true
-  - path: src/core/modules/perplexity
-    enabled: true
-  - path: src/core/modules/qwen
-    enabled: true
-  - path: src/marketplace/modules/applications/algolia
-    enabled: false
-  - path: src/marketplace/modules/applications/arxiv
-    enabled: false
-  - path: src/marketplace/modules/applications/git
-    enabled: false
-  - path: src/marketplace/modules/applications/github
-    enabled: true
-  - path: src/marketplace/modules/applications/google_search
-    enabled: false
-  - path: src/marketplace/modules/applications/linkedin
-    enabled: true
-  - path: src/marketplace/modules/applications/naas
-    enabled: true
-  - path: src/marketplace/modules/applications/postgres
-    enabled: true
-  - path: src/marketplace/modules/applications/powerpoint
-    enabled: false
-  - path: src/marketplace/modules/domains/account-executive
-    enabled: false
-  - path: src/marketplace/modules/domains/accountant
-    enabled: false
-  - path: src/marketplace/modules/domains/business-development-representative
-    enabled: false
-  - path: src/marketplace/modules/domains/campaign-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/community-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/content-analyst
-    enabled: false
-  - path: src/marketplace/modules/domains/content-creator
-    enabled: false
-  - path: src/marketplace/modules/domains/content-strategist
-    enabled: false
-  - path: src/marketplace/modules/domains/customer-success-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/data-engineer
-    enabled: false
-  - path: src/marketplace/modules/domains/devops-engineer
-    enabled: false
-  - path: src/marketplace/modules/domains/financial-controller
-    enabled: false
-  - path: src/marketplace/modules/domains/human-resources-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/inside-sales representative
-    enabled: false
-  - path: src/marketplace/modules/domains/osint-researcher
-    enabled: false
-  - path: src/marketplace/modules/domains/private-investigator
-    enabled: false
-  - path: src/marketplace/modules/domains/project-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/sales-development-representative
-    enabled: false
-  - path: src/marketplace/modules/domains/software-engineer
-    enabled: false
-  - path: src/marketplace/modules/domains/support
-    enabled: true
-  - path: src/marketplace/modules/domains/treasurer
-    enabled: false
+  # - path: src/core/modules/claude
+  #   enabled: true
+  # - path: src/core/modules/deepseek
+  #   enabled: true
+  # - path: src/core/modules/gemini
+  #   enabled: true
+  # - path: src/core/modules/gemma
+  #   enabled: true
+  # - path: src/core/modules/grok
+  #   enabled: true
+  # - path: src/core/modules/llama
+  #   enabled: true
+  # - path: src/core/modules/mistral
+  #   enabled: true
+  # - path: src/core/modules/perplexity
+  #   enabled: true
+  # - path: src/core/modules/qwen
+  #   enabled: true
+  # - path: src/marketplace/modules/applications/algolia
+  #   enabled: false
+  # - path: src/marketplace/modules/applications/arxiv
+  #   enabled: false
+  # - path: src/marketplace/modules/applications/git
+  #   enabled: false
+  # - path: src/marketplace/modules/applications/github
+  #   enabled: true
+  # - path: src/marketplace/modules/applications/google_search
+  #   enabled: false
+  # - path: src/marketplace/modules/applications/linkedin
+  #   enabled: true
+  # - path: src/marketplace/modules/applications/naas
+  #   enabled: true
+  # - path: src/marketplace/modules/applications/postgres
+  #   enabled: true
+  # - path: src/marketplace/modules/applications/powerpoint
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/account-executive
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/accountant
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/business-development-representative
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/campaign-manager
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/community-manager
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/content-analyst
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/content-creator
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/content-strategist
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/customer-success-manager
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/data-engineer
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/devops-engineer
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/financial-controller
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/human-resources-manager
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/inside-sales representative
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/osint-researcher
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/private-investigator
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/project-manager
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/sales-development-representative
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/software-engineer
+  #   enabled: false
+  # - path: src/marketplace/modules/domains/support
+  #   enabled: true
+  # - path: src/marketplace/modules/domains/treasurer
+  #   enabled: false
 
 pipelines:
   - name: github.GithubIssuesPipeline

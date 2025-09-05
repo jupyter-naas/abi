@@ -11,22 +11,17 @@ CONTEXT_WINDOW = 8192
 OWNER = "ollama"
 
 model: Optional[ChatModel] = None
-
-try:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatOllama(
-            model=ID,
-            temperature=0.4,  # Balanced creativity for general conversation
-            # num_predict=2048,  # Reasonable output length for 4B model
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ Gemma3 4B model loaded successfully via Ollama")
-except Exception as e:
-    logger.error(f"⚠️  Error loading Gemma3 4B model: {e}")
-    logger.error("   Make sure Ollama is running and 'gemma3:4b' model is pulled.")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatOllama(
+        model=ID,
+        temperature=0.4,  # Balanced creativity for general conversation
+        # num_predict=2048,  # Reasonable output length for 4B model
+    ),
+    context_window=CONTEXT_WINDOW,
+)
+logger.debug("✅ Gemma3 4B model loaded successfully via Ollama")

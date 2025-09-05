@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from abi import logger
-from src.__modules__ import get_modules
 
 # Authentication
 from fastapi.security import OAuth2PasswordRequestForm
@@ -18,7 +17,7 @@ from typing import Annotated
 
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
-from src import config
+from src import config, modules
 
 # Automatic loading of agents from modules
 
@@ -190,7 +189,7 @@ def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
 # Add agents to the API
-modules = get_modules(config)
+# modules = get_modules(config)
 
 # Collect all agents first
 all_agents: list = []

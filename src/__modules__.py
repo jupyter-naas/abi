@@ -34,25 +34,53 @@ def analyze_module_dependencies(module_paths: List[str]) -> Dict[str, Set[str]]:
                 # Parse the file to find import statements and function calls
                 tree = ast.parse(content)
                 
-                # Check for get_modules() calls - if found, this module needs ALL other modules
+                # Check for get_modules() calls or "from src import modules" - if found, this module needs ALL other modules
                 get_modules_found = False
+                modules_imported = False
+                
+                # First check for "from src import modules" import statement
                 for node in ast.walk(tree):
-                    if isinstance(node, ast.Call):
-                        if isinstance(node.func, ast.Name) and node.func.id == 'get_modules':
-                            get_modules_found = True
-                            logger.debug(f"Found get_modules() call in {py_file}")
+                    if isinstance(node, ast.ImportFrom):
+                        if node.module == 'src' and node.names:
+                            for alias in node.names:
+                                if alias.name == 'modules':
+                                    modules_imported = True
+                                    logger.debug(f"'from src import modules' found in {py_file}")
+                                    break
+                        if modules_imported:
                             break
-                        elif isinstance(node.func, ast.Attribute) and node.func.attr == 'get_modules':
+                
+                # If modules is imported, check if it's used (making this module depend on all others)
+                if modules_imported:
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.Name) and node.id == 'modules':
                             get_modules_found = True
-                            logger.debug(f"Found get_modules() call in {py_file}")
+                            logger.debug(f"Imported 'modules' is used in {py_file}")
                             break
+                        elif isinstance(node, ast.For) and isinstance(node.iter, ast.Name) and node.iter.id == 'modules':
+                            get_modules_found = True
+                            logger.debug(f"Imported 'modules' is iterated over in {py_file}")
+                            break
+                
+                # Also check for get_modules() function calls
+                if not get_modules_found:
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.Call):
+                            if isinstance(node.func, ast.Name) and (node.func.id == 'get_modules' or node.func.id == 'modules'):
+                                get_modules_found = True
+                                logger.debug(f"All modules are called in {py_file}")
+                                break
+                            elif isinstance(node.func, ast.Attribute) and (node.func.attr == 'get_modules' or node.func.attr == 'modules'):
+                                get_modules_found = True
+                                logger.debug(f"All modules are called in {py_file}")
+                                break
                 
                 # If get_modules() is found, this module depends on ALL other modules
                 if get_modules_found:
                     for other_module in module_paths:
                         if other_module != module_path:
                             dependencies[module_path].add(other_module)
-                    logger.info(f"Module {module_path} calls get_modules() - depends on ALL other modules")
+                    logger.info(f"Module {module_path} depends on ALL other modules")
                 else:
                     # Regular dependency analysis for import statements
                     for node in ast.walk(tree):

@@ -5,7 +5,7 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from typing import Optional
+from typing import Optional, List, Callable
 from abi import logger
 
 NAME = "Abi"
@@ -175,7 +175,7 @@ def create_agent(
     from src import secret
 
     # Define model
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
+    ai_mode = secret.get("AI_MODE", "cloud")  # Default to cloud if not set
     if ai_mode == "cloud":
         if not cloud_model:
             logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
@@ -251,18 +251,24 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    # Define agents - all agents are now loaded automatically during module loading
-    agents: list = []
-    from src.__modules__ import get_modules
-    modules = get_modules()
-    for module in modules:
-        logger.debug(f"Getting agents from module: {module.module_import_path}")
-        if hasattr(module, 'agents'):
-            for agent in module.agents:
-                if agent is not None and agent.name != "Abi":
-                    logger.debug(f"Adding agent: {agent.name}")
-                    agents.append(agent)
-    logger.debug(f"Agents: {agents}")
+    # Define agents - defer loading until needed to avoid circular dependency
+    def get_agents() -> List[IntentAgent]:
+        agents: List[IntentAgent] = []
+        from src import modules
+        for module in modules:
+            logger.debug(f"Getting agents from module: {module.module_import_path}")
+            if hasattr(module, 'agents'):
+                # Handle both list and function cases
+                module_agents = module.agents() if callable(module.agents) else module.agents
+                for agent in module_agents:
+                    if agent is not None and agent.name != "Abi":
+                        logger.debug(f"Adding agent: {agent.name}")
+                        agents.append(agent)
+        logger.debug(f"Agents: {agents}")
+        return agents
+    
+    # Use lazy loading for agents to prevent circular dependency
+    agents: Callable[[], List[IntentAgent]] = get_agents
 
     # Define intents
     intents: list = [
@@ -354,7 +360,7 @@ You can browse the data and run queries there."""
     }
 
     # Add intents for each agent (using agent names directly to avoid recursion)
-    for agent in agents:
+    for agent in agents():
         logger.debug(f"Adding intents for agent: {agent.name}")
         if agent.name in agent_intents_map:
             # Add default intents for agent name and description
@@ -399,7 +405,7 @@ You can browse the data and run queries there."""
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
+            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents()])),
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
@@ -409,7 +415,7 @@ You can browse the data and run queries there."""
         description=DESCRIPTION,
         chat_model=selected_model.model,
         tools=tools,
-        agents=agents,  # Empty list for now
+        agents=agents,
         intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
