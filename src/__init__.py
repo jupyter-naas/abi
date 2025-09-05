@@ -22,6 +22,7 @@ from abi.utils.LazyLoader import LazyLoader
 import atexit
 import os
 
+
 @atexit.register
 def shutdown_services():
     global services
@@ -35,10 +36,12 @@ class PipelineConfig:
     cron: str
     parameters: List[dict]
 
+
 @dataclass
 class ModuleConfig:
     path: str
     enabled: bool
+
 
 @dataclass
 class Config:
@@ -159,12 +162,9 @@ for key, value in secrets.items():
 secret = Secret(secrets_adapters)
 config = Config.from_yaml()
 
-
 modules_loaded = False
 
-
-
-def load_modules():
+def load_modules(config):
     global services
     logger.debug("Loading modules")
     _modules = get_modules(config)
@@ -206,6 +206,6 @@ def load_modules():
     return _modules
 
 services = LazyLoader(lambda: init_services(config, secret))
-modules = LazyLoader(load_modules)
+modules = LazyLoader(lambda: load_modules(config))
 
 
