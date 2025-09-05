@@ -64,6 +64,7 @@ I found the following LinkedIn organizations:
 Which one do you want to use?
 ```
 - Get data from LinkedIn using the tools provided
+- To get linkedin_get_profile_posts_feed you need to use the linkedin_get_profile_id tool to get the profile ID first.
 - Use `linkedin_json_cleaner` tool to clean the JSON data before using it
 - Provide the data in a clear, professional format with context and explanations
 
@@ -120,18 +121,16 @@ def create_agent(
         Intent(intent_value="www.linkedin.com/company/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="www.linkedin.com/showcase/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
         Intent(intent_value="www.linkedin.com/school/...", intent_type=IntentType.TOOL, intent_target="linkedin_get_organization_info"),
-        Intent(intent_value="Who reacted to this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
-        Intent(intent_value="Who commented on this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
-        Intent(intent_value="Is this person in my network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
-        Intent(intent_value="Am I following this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
-        Intent(intent_value="What is this person's public ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_public_id"),
+        Intent(intent_value="Is this person in my LinkedIn network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
+        Intent(intent_value="Am I following this person on LinkedIn?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_network_info"),
+        Intent(intent_value="What is this person's public LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_public_id"),
         Intent(intent_value="What is this person's LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_id"),
         Intent(intent_value="What is this person's skills?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_skills"),
-        Intent(intent_value="What is this person's recent posts?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
-        Intent(intent_value="What is my latest post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
-        Intent(intent_value="What is this post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
-        Intent(intent_value="Who commented on this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
-        Intent(intent_value="Who reacted to this post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
+        Intent(intent_value="What is this person's recent LinkedIn posts?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
+        Intent(intent_value="What is my latest LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
+        Intent(intent_value="What is this LinkedIn post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
+        Intent(intent_value="Who commented on this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
+        Intent(intent_value="Who reacted to this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
     ]
 
     return LinkedInAgent(
