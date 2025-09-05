@@ -35,6 +35,7 @@ class IModule(ABC):
         self.triggers = []
         self.ontologies = []
         self.agents = []
+        self.loaded = False
 
     def check_requirements(self):
         if hasattr(self.imported_module, "requirements"):
@@ -43,14 +44,16 @@ class IModule(ABC):
                 raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")
         
     def load(self):
-        try:
-            self.check_requirements()
-            # self.__load_agents()
-            self.__load_triggers()
-            self.__load_ontologies()
-        except Exception as e:
-            logger.error(f"❌ Critical error loading module {self.module_import_path}: {e}")
-            raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")
+        if self.loaded is False:
+            try:
+                self.check_requirements()
+                self.__load_agents()
+                self.__load_triggers()
+                self.__load_ontologies()
+                self.loaded = True
+            except Exception as e:
+                logger.error(f"❌ Critical error loading module {self.module_import_path}: {e}")
+                raise SystemExit(f"Application crashed due to module loading failure: {self.module_import_path}")
 
     def load_agents(self):
         try:
