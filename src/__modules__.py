@@ -2,7 +2,6 @@ from abi.utils.Module import IModule
 from abi import logger
 from typing import List
 import importlib
-import os
 from pathlib import Path
 
 __modules: List[IModule] = []
@@ -31,7 +30,7 @@ def get_modules(config=None):
         if config is not None and hasattr(config, 'modules'):
             enabled_modules = [m.path for m in config.modules if m.enabled]
         
-        logger.debug(f"Loading modules: {enabled_modules}")
+        logger.debug(f"Modules from config.yaml: {enabled_modules}")
         for modulepath in enabled_modules:
             module = Path(modulepath)
             module_path_str = str(module)
