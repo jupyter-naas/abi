@@ -169,6 +169,7 @@ def load_modules():
     logger.debug("Loading modules")
     _modules = get_modules(config)
 
+    logger.debug("Loading ontologies")
     ontology_filepaths = []
 
     for module in _modules:
@@ -199,13 +200,9 @@ def load_modules():
     for module in _modules:
         module.on_initialized()
 
-    for module in _modules:
-        logger.debug(f"Loading agents for module {module.module_import_path}")
-        module.load_agents()
-
     return _modules
 
 services = LazyLoader(lambda: init_services(config, secret))
-modules = LazyLoader(lambda: load_modules)
+modules = LazyLoader(lambda: load_modules())
 
 
