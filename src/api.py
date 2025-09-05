@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
 from abi import logger
-# from src import modules
 from src.__modules__ import get_modules
 
 # Authentication
@@ -19,7 +18,7 @@ from typing import Annotated
 
 # Docs
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
-from src import config, load_modules
+from src import config
 
 # Automatic loading of agents from modules
 
@@ -190,16 +189,22 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
-load_modules()
+# Add agents to the API
 modules = get_modules(config)
+
+# Collect all agents first
+all_agents: list = []
 for module in modules:
     for agent in module.agents:
-        # Skip None agents (when API keys are missing)
         if agent is not None:
-            logger.debug(f"Loading agent: {agent.name}")
-            agent.as_api(agents_router)
+            all_agents.append(agent)
         else:
-            logger.debug("Skipping None agent (missing API key)")
+            logger.warning(f"Skipping {agent.name} agent (missing API key)")
+
+# Sort agents by name and add to router
+for agent in sorted(all_agents, key=lambda a: a.name):
+    logger.debug(f"Adding agent to API: {agent.name}")
+    agent.as_api(agents_router)
 
 # Include routers
 app.include_router(agents_router)
