@@ -738,6 +738,14 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             description="LinkedIn profile ID starting with ACoAA", 
             pattern=r"^ACoAA.+"
         )
+        start: int = Field(
+            0,
+            description="Start index for pagination. Defaults to 0.",
+        )
+        current_company_id: str = Field(
+            "",
+            description="LinkedIn company ID. Defaults to \"\".",
+        )
 
     return [
         StructuredTool(
@@ -797,7 +805,7 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_mutual_connexions",
             description="Get mutual connections for a LinkedIn profile.",
-            func=lambda profile_id: integration.get_mutual_connexions(profile_id, return_cleaned_json=True),
+            func=lambda profile_id, start, current_company_id: integration.get_mutual_connexions(profile_id, start, current_company_id, return_cleaned_json=True),
             args_schema=GetMutualConnectionsSchema
         )
     ]
