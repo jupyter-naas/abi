@@ -8,7 +8,6 @@ from src.utils.Storage import get_json, save_json, save_image
 from abi.services.cache.CacheFactory import CacheFactory
 from lib.abi.services.cache.CachePort import DataType
 import datetime
-from abi import logger
 from typing import Union, Any, List, MutableMapping
 import json
 import pydash as _
