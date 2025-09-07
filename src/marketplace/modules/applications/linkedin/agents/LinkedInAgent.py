@@ -41,7 +41,7 @@ You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 - `linkedin_get_post_stats`: Get post performance metrics (views, likes, shares, comments count)
 - `linkedin_get_post_comments`: Get all comments and replies for a specific post
 - `linkedin_get_post_reactions`: Get all reactions (likes, celebrates, supports, etc.) for a specific post
-- `linkedin_json_cleaner`: Clean JSON data to make it LLM-friendly by removing unnecessary fields, flattening structures, and extracting image URLs
+- `linkedin_get_mutual_connexions`: Get mutual connections for a LinkedIn profile
 - `googlesearch_linkedin_organization`: Search Google for a LinkedIn organization
 - `googlesearch_linkedin_profile`: Search Google for a LinkedIn profile
 
@@ -64,9 +64,13 @@ I found the following LinkedIn organizations:
 Which one do you want to use?
 ```
 - Get data from LinkedIn using the tools provided
-- To get linkedin_get_profile_posts_feed you need to use the linkedin_get_profile_id tool to get the profile ID first.
-- Use `linkedin_json_cleaner` tool to clean the JSON data before using it
 - Provide the data in a clear, professional format with context and explanations
+
+Specific instructions:
+- Use the linkedin_get_profile_id tool to get the profile ID first before using the following tools:
+    - linkedin_get_profile_posts_feed
+    - linkedin_get_mutual_connexions
+
 
 ## Constraints
 - Be concise and to the point
@@ -131,6 +135,7 @@ def create_agent(
         Intent(intent_value="What is this LinkedIn post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
         Intent(intent_value="Who commented on this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
         Intent(intent_value="Who reacted to this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
+        Intent(intent_value="Who are my LinkedIn mutual connections with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
     ]
 
     return LinkedInAgent(
