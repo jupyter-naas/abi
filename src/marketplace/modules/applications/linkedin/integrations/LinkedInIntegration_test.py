@@ -1,6 +1,6 @@
 import pytest
-from typing import Optional
 
+import pydash as _
 from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import (
     LinkedInIntegration, 
     LinkedInIntegrationConfiguration
@@ -10,28 +10,13 @@ DEFAULT_COMPANY_URL = 'https://www.linkedin.com/company/naas-ai/'
 DEFAULT_PROFILE_URL = 'https://www.linkedin.com/in/florent-ravenel/'
 DEFAULT_PROFILE_ID = "ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog"
 DEFAULT_POST_URL = 'https://www.linkedin.com/posts/jeremyravenel_do-you-know-that-one-of-the-most-impactful-activity-7244092056774610944-_5eh?utm_source=share&utm_medium=member_desktop&rcm=ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog'
+DEFAULT_MUTUAL_CONNECTIONS_PROFILE_ID = "ACoAAAJHE7sB5OxuKHuzguZ9L6lfDHqw--cdnJg"
 
 @pytest.fixture
 def integration() -> LinkedInIntegration:
     from src import secret
-    from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
-        NaasIntegration, 
-        NaasIntegrationConfiguration
-    )
-    naas_api_key = secret.get('NAAS_API_KEY')
-    li_at: Optional[str] = None
-    JSESSIONID: Optional[str] = None
-    
-    if naas_api_key:
-        naas_integration_config = NaasIntegrationConfiguration(api_key=naas_api_key)
-        li_at_response = NaasIntegration(naas_integration_config).get_secret('li_at')
-        li_at = li_at_response.get('secret', {}).get('value') if li_at_response else None
-        jsessionid_response = NaasIntegration(naas_integration_config).get_secret('JSESSIONID')
-        JSESSIONID = jsessionid_response.get('secret', {}).get('value') if jsessionid_response else None
-
-    if li_at is None or JSESSIONID is None:
-        pytest.skip("LinkedIn credentials not available")
-
+    li_at: str = secret.get('li_at')
+    JSESSIONID: str = secret.get('JSESSIONID')
     configuration = LinkedInIntegrationConfiguration(li_at=li_at, JSESSIONID=JSESSIONID)
     return LinkedInIntegration(configuration)
 
@@ -99,22 +84,22 @@ def test_get_post_reactions(integration: LinkedInIntegration):
     assert data.get('included') is not None, data
 
 def test_get_organization_info_cleaned(integration: LinkedInIntegration):
-    data = integration.clean_json(integration.get_organization_info(DEFAULT_COMPANY_URL))
+    data = integration.get_organization_info(DEFAULT_COMPANY_URL, return_cleaned_json=True)
 
     assert data is not None, data
 
 def test_get_profile_view_cleaned(integration: LinkedInIntegration):
-    data = integration.clean_json(integration.get_profile_view(DEFAULT_PROFILE_URL))
+    data = integration.get_profile_view(DEFAULT_PROFILE_URL, return_cleaned_json=True)
 
     assert data is not None, data
 
 def test_get_profile_top_card_cleaned(integration: LinkedInIntegration):
-    data = integration.clean_json(integration.get_profile_top_card(DEFAULT_PROFILE_URL))
+    data = integration.get_profile_top_card(DEFAULT_PROFILE_URL, return_cleaned_json=True)
 
     assert data is not None, data
 
 def test_get_profile_posts_feed_cleaned(integration: LinkedInIntegration):
-    data = integration.clean_json(integration.get_profile_posts_feed(DEFAULT_PROFILE_ID, count=1))
+    data = integration.get_profile_posts_feed(DEFAULT_PROFILE_ID, count=1, return_cleaned_json=True)
 
     assert data is not None, data
 
@@ -129,3 +114,17 @@ def test_get_profile_id(integration: LinkedInIntegration):
 
     assert data is not None, data
     assert data == "ACoAABCNSioBW3YZHc2lBHVG0E_TXYWitQkmwog", data
+
+def test_get_mutual_connexions(integration: LinkedInIntegration):
+    data = integration.get_mutual_connexions(DEFAULT_MUTUAL_CONNECTIONS_PROFILE_ID)
+
+    assert data is not None, data
+    assert data.get('data') is not None, data
+    assert data.get('included') is not None, data
+    total_results = _.get(data, 'data.data.searchDashClustersByAll.metadata.totalResultCount', 0)
+    assert total_results > 0, f"Expected total results to be greater than 0, got {total_results}"
+
+def test_get_mutual_connexions_cleaned(integration: LinkedInIntegration):
+    data = integration.get_mutual_connexions(DEFAULT_MUTUAL_CONNECTIONS_PROFILE_ID, return_cleaned_json=True)
+
+    assert data is not None, data

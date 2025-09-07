@@ -24,13 +24,11 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
         JSESSIONID (str): LinkedIn JSESSIONID cookie value for authentication
         base_url (str): Base URL for LinkedIn API
         data_store_path (str): Path to store cached data
-        use_cache (bool): Whether to use cache
     """
     li_at: str
     JSESSIONID: str
     base_url: str = "https://www.linkedin.com/voyager/api"
     data_store_path: str = "datastore/linkedin"
-    use_cache: bool = True
 
 class LinkedInIntegration(Integration):
     """LinkedIn API integration client focused on organization information."""
@@ -50,14 +48,13 @@ class LinkedInIntegration(Integration):
         }
         
         self.headers = {
-            "X-Li-Lang": "en_US",
-            "Accept": "application/vnd.linkedin.normalized+json+2.1",
-            "Cache-Control": "no-cache", 
-            "csrf-Token": self.__configuration.JSESSIONID,
-            "X-Requested-With": "XMLHttpRequest",
-            "X-Restli-Protocol-Version": "2.0.0"
+            "x-li-lan": "en_US",
+            "accept": "application/vnd.linkedin.normalized+json+2.1",
+            "csrf-token": self.__configuration.JSESSIONID,
+            "x-restli-protocol-version": "2.0.0"
         }
 
+        
     def _flatten_dict(self, data: Union[Dict, Any], parent_key: str = '', sep: str = '_') -> Dict:
         """
         Flattens a nested dictionary.
@@ -159,29 +156,25 @@ class LinkedInIntegration(Integration):
                 
         return results
 
-    def clean_json(self, json_data: dict) -> Dict[str, Any]:
+    def clean_json(self, prefix: str, filename: str, data: dict) -> Dict[str, Any]:
         """
         Execute the JSON cleaning workflow.
         
         Args:
-            parameters: Workflow parameters containing JSON data and options
-            
+            prefix (str): The prefix to use for the file name.
+            filename (str): The file name to use for the cleaned data.
+            json_data (dict): The JSON data to clean.
+
         Returns:
             Dict: Cleaned and processed data ready for LLM consumption
         """
-        try:       
-            # Get entity urn
-            entity_urn = json_data.get("data", {}).get("entityUrn")
-            if entity_urn:
-                profile_id = entity_urn.split(":")[-1]
-                file_name = entity_urn.split("urn:li:")[1].split(profile_id)[0] + ".json"
-                prefix = os.path.join("cleaned_json", profile_id)
-            else:
-                prefix = os.path.join("cleaned_json", "unknown")
-                file_name = "cleaned_json.json"
-                
+        if not filename.endswith("_cleaned.json") and filename.endswith(".json"):
+            filename = filename[:-5] + "_cleaned.json"
+        elif not filename.endswith("_cleaned.json") and not filename.endswith(".json"):
+            filename = filename + "_cleaned.json"
+        try:                       
             # Clean the data
-            cleaned_data = self._clean_dict(json_data)
+            cleaned_data = self._clean_dict(data)
             
             # Parse and extract structured data
             if isinstance(cleaned_data, dict):
@@ -192,7 +185,7 @@ class LinkedInIntegration(Integration):
             
             # Flatten dict
             final_data = self._flatten_dict(parsed_data)
-            save_json(final_data, os.path.join(self.__configuration.data_store_path, prefix), file_name) 
+            save_json(final_data, os.path.join(self.__configuration.data_store_path, prefix), filename) 
             return final_data
             
         except json.JSONDecodeError as e:
@@ -256,25 +249,40 @@ class LinkedInIntegration(Integration):
                     save_image(response.content, output_dir, f"{entity_urn}_{key}_{file_url.split('/')[0]}.png")
         return urls
 
-    def __save_json(self, prefix: str, filename: str, data: dict, save_details=False) -> Dict:
-        """Save data to cache."""
-        save_json(data, os.path.join(self.__configuration.data_store_path, prefix), filename + ".json")
+    def __save_json(
+        self, 
+        prefix: str, 
+        filename: str, 
+        data: dict, 
+        save_details: bool = False,
+    ) -> Dict:
+        """Save data to cache.
         
-        # Initialize output directory
-        output_dir = os.path.join(self.__configuration.data_store_path, prefix)
+        Args:
+            prefix (str): The prefix to use for the file name.
+            filename (str): The file name to use for the data.
+            data (dict): The data to save.
+            save_details (bool): Whether to save the details of the data.
 
-        # Save dict data
+        Returns:
+            Dict: The saved data.
+        """
+        # Save response json
+        output_dir = os.path.join(self.__configuration.data_store_path, prefix)
+        save_json(data, output_dir, filename + ".json")
+
+        # Save dict data from response json in a separate file
         output_dir_data = os.path.join(output_dir, "data")
         data_dict = data.get("data", {})
         if len(get_json(output_dir_data, f"{filename}_data.json")) == 0:
             save_json(data_dict, output_dir_data, f"{filename}_data.json")
 
-        # Save dict included
+        # Save dict included from response json in a separate file
         output_dir_included = os.path.join(output_dir, "included")
         included = data.get("included", [])
         if len(get_json(output_dir_included, f"{filename}_included.json")) == 0:
             save_json(included, output_dir_included, f"{filename}_included.json")
-
+    
         if save_details:
             for include in included:
                 dict_type = include.get("$type")
@@ -290,11 +298,9 @@ class LinkedInIntegration(Integration):
                         save_json({}, output_dir_dict_type, f"{entity_urn}.json")
         return data
 
-    @cache(lambda self, prefix, filename, method, endpoint, params: method + "_" + endpoint + ("_".join(f"{k}_{v}" for k,v in params.items()) if params else ""), cache_type=DataType.JSON, ttl=datetime.timedelta(days=7))
+    @cache(lambda self, method, endpoint, params: method + "_" + endpoint + ("_".join(f"{k}_{v}" for k,v in params.items()) if params else ""), cache_type=DataType.JSON, ttl=datetime.timedelta(days=1))
     def _make_request(
         self,
-        prefix: str,
-        filename: str,
         method: str, 
         endpoint: str, 
         params: Dict | None = None,
@@ -303,7 +309,6 @@ class LinkedInIntegration(Integration):
         # Make request
         url = f"{self.__configuration.base_url}{endpoint}"
         try:
-            logger.info(f"Making request to {url} with method {method} and params {params}")
             response = requests.request(
                 method=method,
                 url=url,
@@ -312,7 +317,9 @@ class LinkedInIntegration(Integration):
                 params=params
             )
             response.raise_for_status()
-            return self.__save_json(prefix=prefix, filename=filename, data=response.json()) if response.content else {}
+            if response.content:
+                return response.json()
+            return {}
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
 
@@ -330,7 +337,7 @@ class LinkedInIntegration(Integration):
         else:
             raise ValueError(f"Invalid LinkedIn URL: {url}")
     
-    def get_organization_info(self, linkedin_url: str) -> Dict:
+    def get_organization_info(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
         
         Args:
@@ -351,7 +358,10 @@ class LinkedInIntegration(Integration):
         }
         
         endpoint = f"/organization/companies?{urllib.parse.urlencode(params)}"
-        data = self._make_request(prefix=prefix, filename=org_id, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, org_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, org_id, data)
         return data
     
     def get_profile_public_id(self, linkedin_url: str) -> str:
@@ -371,7 +381,7 @@ class LinkedInIntegration(Integration):
         data = self.get_profile_view(linkedin_url)
         return f"{data.get('data', {}).get('*profile', {}).replace('urn:li:fs_profile:', '')}"
     
-    def get_profile_view(self, linkedin_url: str) -> Dict:
+    def get_profile_view(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile view for a LinkedIn organization.
         
         Args:
@@ -385,10 +395,13 @@ class LinkedInIntegration(Integration):
         prefix = os.path.join("get_profile_view", profile_id)
         
         endpoint = f"/identity/profiles/{profile_id}/profileView"
-        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, profile_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, profile_id, data)
         return data
 
-    def get_profile_top_card(self, linkedin_url: str) -> Dict:
+    def get_profile_top_card(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile top card information for a LinkedIn profile.
         
         Args:
@@ -402,10 +415,13 @@ class LinkedInIntegration(Integration):
         prefix = os.path.join("get_profile_top_card", profile_id)
         
         endpoint = f"/graphql?variables=(vanityName:{profile_id})&queryId=voyagerIdentityDashProfiles.0bc93b66ba223b9d30d1cb5c05ff031a"
-        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, profile_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, profile_id, data)
         return data
 
-    def get_profile_skills(self, linkedin_url: str) -> Dict:
+    def get_profile_skills(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile skills for a LinkedIn profile.
         
         Args:
@@ -419,10 +435,13 @@ class LinkedInIntegration(Integration):
         prefix = os.path.join("get_profile_skills", profile_id)
         
         endpoint = f"/identity/profiles/{profile_id}/skillCategory"
-        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, profile_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, profile_id, data)
         return data
     
-    def get_profile_network_info(self, linkedin_url: str) -> Dict:
+    def get_profile_network_info(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get network information for a LinkedIn profile.
         
         Args:
@@ -436,14 +455,17 @@ class LinkedInIntegration(Integration):
         prefix = os.path.join("get_network_info", profile_id)
         
         endpoint = f"/identity/profiles/{profile_id}/networkinfo"
-        data = self._make_request(prefix=prefix, filename=profile_id, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, profile_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, profile_id, data)
         return data
     
-    def get_profile_posts_feed(self, profile_id: str, count: int = 1) -> Dict:
+    def get_profile_posts_feed(self, profile_id: str, count: int = 1, return_cleaned_json: bool = False) -> Dict:
         """Get posts feed for a LinkedIn profile.
         
         Args:
-            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            profile_id (str): LinkedIn profile ID (e.g., "ACoAAX0AADoBAAA5V9mHvH1a8_9Nc_fEk3D-wZf4cVU")
             start (int, optional): Start index for pagination. Defaults to 0.
             count (int, optional): Number of posts to fetch per request. Defaults to 10.
             limit (int, optional): Maximum number of posts to return. Defaults to -1 (no limit).
@@ -463,7 +485,10 @@ class LinkedInIntegration(Integration):
             "q": "memberShareFeed",
         }
         endpoint = f"/identity/profileUpdatesV2?{urllib.parse.urlencode(params, doseq=True)}"
-        data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, filename, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, filename, data)
         return data
     
     def get_activity_id(self, linkedin_url: str) -> str:
@@ -477,7 +502,7 @@ class LinkedInIntegration(Integration):
             return linkedin_url.split(":activity:")[-1].split("/")[0]
         return ""
     
-    def get_post_stats(self, linkedin_url: str) -> Dict:
+    def get_post_stats(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get activity for a LinkedIn activity.
         
         Args:
@@ -491,10 +516,13 @@ class LinkedInIntegration(Integration):
         prefix = os.path.join("get_post_stats", activity_id)
             
         endpoint = f"/feed/updates/urn:li:activity:{activity_id}"
-        data = self._make_request(prefix=prefix, filename=activity_id, method="GET", endpoint=endpoint)
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, activity_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, activity_id, data)
         return data
     
-    def get_post_reactions(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1) -> Dict:
+    def get_post_reactions(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1, return_cleaned_json: bool = False) -> Dict:
         """Get reactions for a LinkedIn post.
         
         Args:
@@ -546,9 +574,12 @@ class LinkedInIntegration(Integration):
                     
             start += count
             
+        self.__save_json(prefix, filename, all_data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, filename, all_data)
         return all_data
     
-    def get_post_comments(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1) -> Dict:
+    def get_post_comments(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1, return_cleaned_json: bool = False) -> Dict:
         """Get comments for a LinkedIn post.
         
         Args:
@@ -602,7 +633,37 @@ class LinkedInIntegration(Integration):
                     
             start += count
             
+        self.__save_json(prefix, filename, all_data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, filename, all_data)
         return all_data
+    
+    def get_mutual_connexions(self, profile_id: str, return_cleaned_json: bool = False) -> Dict:
+        """Get mutual connections for a LinkedIn profile.
+        
+        Args:
+            profile_id (str): LinkedIn profile ID.
+        """
+        prefix = os.path.join("get_mutual_connexions", profile_id)
+
+        # Full URL with query parameters directly embedded
+        endpoint = (
+            "/graphql?"
+            "includeWebMetadata=true&"
+            "queryId=voyagerSearchDashClusters.c0f8645a22a6347486d76d5b9d985fd7&"
+            "variables=(start:0,"
+            "origin:MEMBER_PROFILE_CANNED_SEARCH,"
+            "query:(flagshipSearchIntent:SEARCH_SRP,"
+            f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
+            "(key:network,value:List(F)),"
+            "(key:resultType,value:List(PEOPLE))),"
+            "includeFiltersInResponse:false))"
+        )
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, profile_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, profile_id, data)
+        return data
     
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
@@ -642,11 +703,18 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             description="LinkedIn activity ID extracted from the URL", 
         )
 
+    class GetMutualConnectionsSchema(BaseModel):
+        profile_id: str = Field(
+            ..., 
+            description="LinkedIn profile ID starting with ACoAA", 
+            pattern=r"^ACoAA.+"
+        )
+
     return [
         StructuredTool(
             name="linkedin_get_organization_info",
             description="Get organization information for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_organization_info(linkedin_url)),
+            func=lambda linkedin_url: integration.get_organization_info(linkedin_url, return_cleaned_json=True),
             args_schema=GetOrganizationInfoSchema
         ),
         StructuredTool(
@@ -658,43 +726,49 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_profile_view",
             description="Get profile view for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_profile_view(linkedin_url)),
+            func=lambda linkedin_url: integration.get_profile_view(linkedin_url, return_cleaned_json=True),
             args_schema=GetProfileSchema
         ),
         StructuredTool(
             name="linkedin_get_profile_skills",
             description="Get profile skills for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_profile_skills(linkedin_url)),
+            func=lambda linkedin_url: integration.get_profile_skills(linkedin_url, return_cleaned_json=True),
             args_schema=GetProfileSchema
         ),
         StructuredTool(
             name="linkedin_get_profile_network_info",
             description="Get network information for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_profile_network_info(linkedin_url)),
+            func=lambda linkedin_url: integration.get_profile_network_info(linkedin_url, return_cleaned_json=True),
             args_schema=GetProfileSchema
         ),
         StructuredTool(
             name="linkedin_get_profile_posts_feed",
             description="Get posts feed for a LinkedIn profile.",
-            func=lambda profile_id, count: integration.clean_json(integration.get_profile_posts_feed(profile_id, count)),
+            func=lambda profile_id, count: integration.get_profile_posts_feed(profile_id, count, return_cleaned_json=True),
             args_schema=GetProfilePostsFeedSchema
         ),
         StructuredTool(
             name="linkedin_get_post_stats",
             description="Get post stats for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_post_stats(linkedin_url)),
+            func=lambda linkedin_url: integration.get_post_stats(linkedin_url, return_cleaned_json=True),
             args_schema=GetActivitySchema
         ),
         StructuredTool(
             name="linkedin_get_post_comments",
             description="Get comments for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_post_comments(linkedin_url)),
+            func=lambda linkedin_url: integration.get_post_comments(linkedin_url, return_cleaned_json=True),
             args_schema=GetActivitySchema
         ),
         StructuredTool(
             name="linkedin_get_post_reactions",
             description="Get reactions for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.clean_json(integration.get_post_reactions(linkedin_url)),
+            func=lambda linkedin_url: integration.get_post_reactions(linkedin_url, return_cleaned_json=True),
             args_schema=GetActivitySchema
+        ),
+        StructuredTool(
+            name="linkedin_get_mutual_connexions",
+            description="Get mutual connections for a LinkedIn profile.",
+            func=lambda profile_id: integration.get_mutual_connexions(profile_id, return_cleaned_json=True),
+            args_schema=GetMutualConnectionsSchema
         )
     ]
