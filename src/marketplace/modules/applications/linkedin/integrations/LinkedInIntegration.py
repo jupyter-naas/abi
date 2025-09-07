@@ -638,23 +638,33 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, filename, all_data)
         return all_data
     
-    def get_mutual_connexions(self, profile_id: str, return_cleaned_json: bool = False) -> Dict:
+    def get_mutual_connexions(
+        self, 
+        profile_id: str, 
+        start: int = 0,
+        current_company_id: str = "", 
+        return_cleaned_json: bool = False
+    ) -> Dict:
         """Get mutual connections for a LinkedIn profile.
+        It will return the total number of connections and the first 10 profiles.
         
         Args:
             profile_id (str): LinkedIn profile ID.
+            start (int, optional): Start index for pagination. Defaults to 0.
+            current_company_id (str, optional): LinkedIn company ID. Defaults to "".
+            return_cleaned_json (bool, optional): Whether to return cleaned JSON data. Defaults to False.
         """
         prefix = os.path.join("get_mutual_connexions", profile_id)
 
         # Full URL with query parameters directly embedded
         endpoint = (
             "/graphql?"
-            "includeWebMetadata=true&"
             "queryId=voyagerSearchDashClusters.c0f8645a22a6347486d76d5b9d985fd7&"
-            "variables=(start:0,"
-            "origin:MEMBER_PROFILE_CANNED_SEARCH,"
+            f"variables=(start:{str(start)},"
+            "origin:FACETED_SEARCH,"
             "query:(flagshipSearchIntent:SEARCH_SRP,"
             f"queryParameters:List((key:connectionOf,value:List({profile_id})),"
+            f"(key:currentCompany,value:List({current_company_id})),"
             "(key:network,value:List(F)),"
             "(key:resultType,value:List(PEOPLE))),"
             "includeFiltersInResponse:false))"
@@ -662,7 +672,26 @@ class LinkedInIntegration(Integration):
         data = self._make_request(method="GET", endpoint=endpoint)
         self.__save_json(prefix, profile_id, data)
         if return_cleaned_json:
-            return self.clean_json(prefix, profile_id, data)
+            cleaned_data = self.clean_json(prefix, profile_id, data)
+            total_connections = _.get(data, 'data.data.searchDashClustersByAll.metadata.totalResultCount', 0)
+            # Extract only relevant entity information
+            entities = []
+            for entity in cleaned_data.get('com.linkedin.voyager.dash.search.EntityResultViewModel', []):
+                entities.append({
+                    'name': _.get(entity, 'title.text'),
+                    'headline': _.get(entity, 'primarySubtitle.text'),
+                    'location': _.get(entity, 'secondarySubtitle.text'),
+                    'profile_url': _.get(entity, 'navigationUrl'),
+                    'profile_picture': _.get(entity, 'image.attributes[0].detailData.nonEntityProfilePicture.vectorImage.artifacts[0].fileIdentifyingUrlPathSegment'),
+                    'connection_degree': _.get(entity, 'entityCustomTrackingInfo.memberDistance')
+                })
+            
+            final_data = {
+                'total_connections': total_connections,
+                'connections': entities
+            }
+            save_json(final_data, os.path.join(self.__configuration.data_store_path, prefix), f"{profile_id}_final_data.json")
+            return final_data
         return data
     
 def as_tools(configuration: LinkedInIntegrationConfiguration):
