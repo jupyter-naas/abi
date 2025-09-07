@@ -323,7 +323,7 @@ class LinkedInIntegration(Integration):
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"LinkedIn API request failed: {str(e)}")
 
-    def get_organization_id(self, url: str) -> str:
+    def get_organization_public_id(self, url: str) -> str:
         """Extract organization ID from LinkedIn URL.
         
         Handles company, school and showcase pages.
@@ -336,6 +336,18 @@ class LinkedInIntegration(Integration):
             return url.rsplit("/showcase/")[-1].rsplit("/")[0]
         else:
             raise ValueError(f"Invalid LinkedIn URL: {url}")
+        
+    def get_organization_id(self, linkedin_url: str) -> str:
+        """Get organization ID from LinkedIn public ID.
+        
+        Args:
+            linkedin_url (str): LinkedIn organization URL.
+        """
+        data = self.get_organization_info(linkedin_url)
+        elements = data.get('data', {}).get('*elements', [])
+        if not elements:
+            raise ValueError(f"No organization found for URL: {linkedin_url}")
+        return elements[0].replace('urn:li:fs_normalized_company:', '')
     
     def get_organization_info(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
@@ -347,7 +359,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw organization data from LinkedIn API
         """
         # Get organization ID
-        org_id = self.get_organization_id(linkedin_url)
+        org_id = self.get_organization_public_id(linkedin_url)
         prefix = os.path.join("get_organization_info", org_id)
         
         # Set up parameters for the request
@@ -745,9 +757,16 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         current_company_id: str = Field(
             "",
             description="LinkedIn company ID. Defaults to \"\".",
+            pattern=r"^[0-9]+$"
         )
 
     return [
+        StructuredTool(
+            name="linkedin_get_organization_id",
+            description="Get LinkedIn organization ID for a LinkedIn organization.",
+            func=lambda linkedin_url: integration.get_organization_id(linkedin_url),
+            args_schema=GetOrganizationInfoSchema
+        ),
         StructuredTool(
             name="linkedin_get_organization_info",
             description="Get organization information for a LinkedIn organization.",
