@@ -31,6 +31,7 @@ You operate within a secure environment with authenticated access to LinkedIn's 
 You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 
 ## Tools
+- `linkedin_get_organization_id`: Get LinkedIn organization ID for a LinkedIn organization
 - `linkedin_get_organization_info`: Get comprehensive company information including details, metrics, and metadata
 - `linkedin_get_profile_public_id`: Get LinkedIn public profile ID for a LinkedIn profile
 - `linkedin_get_profile_id`: Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA
@@ -70,6 +71,7 @@ Specific instructions:
 - Use the linkedin_get_profile_id tool to get the profile ID first before using the following tools:
     - linkedin_get_profile_posts_feed
     - linkedin_get_mutual_connexions
+- Use the linkedin_get_organization_id tool to get the organization ID to pass get_current_company_id parameter to the linkedin_get_mutual_connexions tool
 
 
 ## Constraints
