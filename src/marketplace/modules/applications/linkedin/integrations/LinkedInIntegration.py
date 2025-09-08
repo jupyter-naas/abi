@@ -115,7 +115,7 @@ class LinkedInIntegration(Integration):
         
         for include in included:
             _type = include.get("$type")
-            if _type is None or (_type.endswith("View") or _type.endswith("Group")):
+            if _type is None or (_type.endswith("View") or _type.endswith("Group") or _type.endswith("Action")):
                 continue
                 
             if _type not in results:
@@ -171,7 +171,12 @@ class LinkedInIntegration(Integration):
             filename = filename[:-5] + "_cleaned.json"
         elif not filename.endswith("_cleaned.json") and not filename.endswith(".json"):
             filename = filename + "_cleaned.json"
-        try:                       
+        try: 
+            # Get existing data
+            final_data = get_json(prefix, filename)
+            if len(final_data) > 0:
+                return final_data
+            
             # Clean the data
             cleaned_data = self._clean_dict(data)
             
@@ -709,6 +714,7 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
+    from typing import Annotated
 
     integration = LinkedInIntegration(configuration)
 
@@ -744,20 +750,21 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         )
 
     class GetMutualConnectionsSchema(BaseModel):
-        profile_id: str = Field(
-            ..., 
-            description="LinkedIn profile ID starting with ACoAA", 
+        profile_id: Annotated[str, Field(
+            ...,
+            description=(
+                "LinkedIn profile ID of the person you want to get mutual connections. "
+                "If you don't have the profile ID, use the linkedin_get_profile_id tool to get it."
+            ),
             pattern=r"^ACoAA.+"
-        )
-        start: int = Field(
-            0,
-            description="Start index for pagination. Defaults to 0.",
-        )
-        current_company_id: str = Field(
-            "",
-            description="LinkedIn company ID. Defaults to \"\".",
-            pattern=r"^[0-9]+$"
-        )
+        )]
+        current_company_id: Annotated[str, Field(
+            default="",  # 👈 enforce default
+            description=(
+                "LinkedIn company ID to filter the mutual connections. "
+                "If you don't have the company ID, use the linkedin_get_organization_id tool to get it."
+            ),
+        )]
 
     return [
         StructuredTool(
@@ -823,7 +830,7 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         StructuredTool(
             name="linkedin_get_mutual_connexions",
             description="Get mutual connections for a LinkedIn profile.",
-            func=lambda profile_id, start, current_company_id: integration.get_mutual_connexions(profile_id, start, current_company_id, return_cleaned_json=True),
+            func=lambda profile_id, current_company_id: integration.get_mutual_connexions(profile_id=profile_id, current_company_id=current_company_id, return_cleaned_json=True),
             args_schema=GetMutualConnectionsSchema
         )
     ]
