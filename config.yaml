@@ -36,16 +36,18 @@ modules:
     enabled: true
   - path: src/core/modules/qwen
     enabled: true
+  - path: src/core/modules/templatablesparqlquery
+    enabled: true
   - path: src/marketplace/modules/applications/algolia
     enabled: false
   - path: src/marketplace/modules/applications/arxiv
     enabled: false
   - path: src/marketplace/modules/applications/git
-    enabled: false
+    enabled: true
   - path: src/marketplace/modules/applications/github
     enabled: true
   - path: src/marketplace/modules/applications/google_search
-    enabled: false
+    enabled: true
   - path: src/marketplace/modules/applications/linkedin
     enabled: true
   - path: src/marketplace/modules/applications/naas

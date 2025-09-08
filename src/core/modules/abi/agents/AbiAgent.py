@@ -217,7 +217,7 @@ You can browse the data and run queries there."""
     tools.append(knowledge_graph_tool)
 
     # Get tools
-    from src.core.modules.abi import get_tools
+    from src.core.modules.templatablesparqlquery import get_tools
     agent_recommendation_tools = [
         "find_business_proposal_agents",
         "find_coding_agents", 
@@ -384,7 +384,7 @@ You can browse the data and run queries there."""
                     intent_target=agent.name
                 ))
                 
-        if hasattr(agent, 'intents'):
+        if hasattr(agent, 'intents') and agent.name not in agent_intents_map:
             for intent in agent.intents:
                 # Create new intent with target set to agent name
                 new_intent = Intent(
