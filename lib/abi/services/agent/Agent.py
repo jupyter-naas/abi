@@ -718,7 +718,7 @@ class Agent(Expose):
 
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
-            thread_id: str = Field(
+            thread_id: str | int = Field(
                 ..., description="The thread ID to use for the conversation"
             )
 
@@ -729,6 +729,9 @@ class Agent(Expose):
             tags=tags,
         )
         def completion(query: CompletionQuery):
+            if isinstance(query.thread_id, int):
+                query.thread_id = str(query.thread_id)
+
             new_agent = self.duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return new_agent.invoke(query.prompt)
@@ -740,6 +743,9 @@ class Agent(Expose):
             tags=tags,
         )
         async def stream_completion(query: CompletionQuery):
+            if isinstance(query.thread_id, int):
+                query.thread_id = str(query.thread_id)
+
             new_agent = self.duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
