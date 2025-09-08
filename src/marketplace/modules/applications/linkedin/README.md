@@ -101,21 +101,29 @@ An AI-powered conversational agent that provides natural language access to Link
 # Post analytics
 "Analyze engagement for this LinkedIn post"
 "Who commented on this post?"
+
+# Mutual connections
+"Who are my mutual connections with this person?"
+"How many mutual connections do I have with John Doe?"
 ```
 
 #### Available Tools
 
 | Tool | Description | Usage |
 |------|-------------|-------|
+| `linkedin_get_organization_id` | Get LinkedIn organization ID from URL | Organization identification, API calls |
 | `linkedin_get_organization_info` | Extract comprehensive company data | Organization analysis, competitive research |
+| `linkedin_get_profile_public_id` | Get LinkedIn public profile ID (e.g., "florent-ravenel") | Profile identification, URL parsing |
 | `linkedin_get_profile_id` | Get LinkedIn unique profile ID (starts with AcoAA) | Profile identification, API calls |
 | `linkedin_get_profile_view` | Retrieve detailed profile information | Professional background analysis |
+| `linkedin_get_profile_top_card` | Get profile top card information | Quick profile overview |
 | `linkedin_get_profile_skills` | Get profile skills and endorsements | Skills assessment, talent matching |
 | `linkedin_get_profile_network_info` | Access network and connection data | Network analysis, relationship mapping |
 | `linkedin_get_profile_posts_feed` | Fetch user's recent posts | Content analysis, thought leadership tracking |
 | `linkedin_get_post_stats` | Extract post performance metrics | Engagement analysis, content optimization |
 | `linkedin_get_post_comments` | Retrieve all post comments | Sentiment analysis, audience insights |
 | `linkedin_get_post_reactions` | Get post reactions and likes | Engagement patterns, content resonance |
+| `linkedin_get_mutual_connexions` | Get mutual connections between profiles | Network analysis, relationship discovery |
 | `googlesearch_linkedin_organization` | Find company LinkedIn URLs (via Google Search) | Organization discovery |
 | `googlesearch_linkedin_profile` | Find personal LinkedIn URLs (via Google Search) | Profile discovery |
 
@@ -131,6 +139,8 @@ uv run python -m pytest src/marketplace/modules/applications/linkedin/agents/Lin
 - Profile view data extraction and validation
 - Organization information retrieval
 - Engagement metrics analysis and processing
+- Mutual connections discovery and filtering
+- Profile top card information retrieval
 
 ### 🔧 LinkedIn Integration
 
@@ -140,17 +150,19 @@ Core integration providing authenticated access to LinkedIn's internal APIs thro
 
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
+| `get_organization_id(linkedin_url)` | Company/school/showcase URL | Organization ID string | LinkedIn organization ID for API calls |
 | `get_organization_info(linkedin_url)` | Company/school/showcase URL | Organization data | Comprehensive company information |
+| `get_profile_public_id(linkedin_url)` | Profile URL | Public ID string | LinkedIn public profile identifier (e.g., "florent-ravenel") |
 | `get_profile_id(linkedin_url)` | Profile URL | Profile ID string | LinkedIn unique profile ID (starts with AcoAA) |
-| `get_profile_public_id(linkedin_url)` | Profile URL | Public ID string | LinkedIn public profile identifier |
 | `get_profile_view(linkedin_url)` | Profile URL | Profile data | Detailed profile with experience/education |
+| `get_profile_top_card(linkedin_url)` | Profile URL | Profile card data | Quick profile overview information |
 | `get_profile_skills(linkedin_url)` | Profile URL | Skills data | Professional skills and endorsements |
 | `get_profile_network_info(linkedin_url)` | Profile URL | Network data | Connection and network information |
 | `get_profile_posts_feed(profile_id, count)` | Profile ID, post count | Posts data | Recent posts from profile |
 | `get_post_stats(linkedin_url)` | Post URL | Analytics data | Post performance metrics |
 | `get_post_comments(linkedin_url)` | Post URL | Comments data | All comments and replies |
 | `get_post_reactions(linkedin_url)` | Post URL | Reactions data | Likes, celebrates, supports, etc. |
-| `clean_json(data)` | Raw JSON data | Cleaned data | LLM-optimized data structure |
+| `get_mutual_connexions(profile_id, current_company_id)` | Profile ID, Company ID (optional) | Mutual connections data | Shared connections between profiles |
 
 #### Configuration
 
@@ -184,9 +196,10 @@ uv run python -m pytest src/marketplace/modules/applications/linkedin/integratio
 ```
 
 **Test Coverage:**
-- Organization information extraction
-- Profile data retrieval (view, skills, network)
+- Organization information extraction (including organization ID retrieval)
+- Profile data retrieval (view, top card, skills, network, public/unique IDs)
 - Post analytics (stats, comments, reactions)
+- Mutual connections discovery and filtering
 - Data cleaning and validation
 - Authentication and error handling
 
@@ -233,26 +246,20 @@ LinkedIn data is automatically cached and organized in a structured hierarchy:
 
 ```
 storage/datastore/linkedin/
-├── cleaned_json/                   # Processed, LLM-ready data
-│   └── {profile_id}/
-│       └── {entity_type}.json
-├── get_organization_info/          # Company data cache
-│   └── {org_id}/
-│       ├── {org_id}.json
-│       ├── data/
-│       └── included/
 ├── get_profile_view/               # Profile data cache
+├── get_profile_top_card/           # Profile top card cache
 ├── get_profile_skills/             # Skills data cache
 ├── get_profile_network_info/       # Network data cache
 ├── get_profile_posts_feed/         # Posts feed cache
 ├── get_post_stats/                 # Post analytics cache
 ├── get_post_comments/              # Comments data cache
-└── get_post_reactions/             # Reactions data cache
+├── get_post_reactions/             # Reactions data cache
+└── get_mutual_connexions/          # Mutual connections cache
 ```
 
 ### Cache Features
 
-- **TTL Management**: 7-day default cache expiration
+- **Time Management**: 1-day default cache expiration
 - **Automatic Cleanup**: Intelligent cache invalidation
 - **Structured Storage**: Hierarchical organization by data type
 - **Image Processing**: Automatic image URL extraction and storage
@@ -280,22 +287,22 @@ storage/datastore/linkedin/
 ### Core Dependencies
 ```python
 # Integration framework
-abi.integration                    # Base integration framework
-abi.services.agent                # AI agent framework
-abi.services.cache                # Caching system
+lib.abi.integration.integration   # Base integration framework
+abi.services.agent               # AI agent framework
+abi.services.cache               # Caching system
 
 # AI & Language Processing
-langchain_core                    # Tool integration for AI agents
-langchain_openai                  # OpenAI integration for NLP
+langchain_core                   # Tool integration for AI agents
+langchain_openai                 # OpenAI integration for ChatGPT models
 
 # Web & API
-fastapi                          # API router for agent endpoints
-requests                         # HTTP client for LinkedIn API calls
-urllib.parse                     # URL parsing and manipulation
+fastapi                         # API router for agent endpoints
+requests                        # HTTP client for LinkedIn API calls
+urllib.parse                    # URL parsing and manipulation
 
 # Data Processing
-pydantic                         # Data validation and serialization
-pydash                          # Data manipulation utilities
+pydantic                        # Data validation and serialization
+pydash                         # Data manipulation utilities (imported as _)
 ```
 
 ### External Modules
@@ -305,9 +312,9 @@ pydash                          # Data manipulation utilities
 - `src.utils.Storage`: File storage utilities for cached data
 
 ### AI Models
-- **Primary Model**: GPT-4o for natural language processing
-- **Temperature**: 0 (deterministic responses)
-- **Use Case**: Data analysis, insight generation, conversational AI
+- **Primary Model**: GPT-4o for natural language processing and tool orchestration
+- **Temperature**: 0 (deterministic responses for consistent behavior)
+- **Use Case**: Data analysis, insight generation, conversational AI, intent recognition
 
 ## Use Cases & Applications
 

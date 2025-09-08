@@ -71,7 +71,7 @@ def create_agent(
     tools: list = []
 
     # Get tools from intentmapping
-    from src.core.modules.abi import get_tools
+    from src.core.modules.templatablesparqlquery import get_tools
     templates_tools = [
         "search_class"
     ]

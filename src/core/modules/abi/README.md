@@ -1,19 +1,19 @@
 # Abi Agent Module
 
-> **Multi-Agent Orchestrator and Strategic Advisory System**
+> **Multi-Agent Orchestrator and Knowledge Graph Management System**
 
-The Abi agent is the **central coordinator** for the ABI ecosystem, managing specialized AI agents and knowledge graph operations while providing strategic advisory capabilities.
+The Abi module is the **central coordination hub** for the ABI ecosystem, featuring a sophisticated multi-agent orchestrator, specialized knowledge graph agents, and comprehensive ontology management capabilities.
 
 ## 🎯 Purpose & Role
 
-**Abi** (*Agentic Brain Infrastructure*) orchestrates multi-agent workflows by:
+**Abi** (*Agentic Brain Infrastructure*) provides comprehensive AI orchestration and knowledge management through:
 
-- **Coordinating** specialized AI agents (ChatGPT, Claude, Mistral, Gemini, Grok, Llama, Perplexity)
-- **Managing** conversation context and agent transitions
-- **Routing** requests based on weighted decision hierarchy
-- **Providing** strategic advisory through direct consultation
-- **Supporting** multilingual interactions (English/French)
-- **Integrating** knowledge graph exploration and SPARQL querying
+- **Multi-Agent Orchestration**: Central coordinator managing specialized AI agents (ChatGPT, Claude, Mistral, Gemini, Grok, Llama, Perplexity, Qwen, DeepSeek, Gemma)
+- **Knowledge Graph Operations**: Complete CRUD operations for semantic data management
+- **Ontology Engineering**: BFO-compliant entity extraction and SPARQL generation
+- **Intelligent Routing**: Weighted decision hierarchy with context preservation
+- **Multilingual Support**: Native French/English interactions with cultural awareness
+- **Production Integration**: Event-driven triggers and YAML ontology publishing
 
 ## 🏗️ Architecture
 
@@ -21,20 +21,42 @@ The Abi agent is the **central coordinator** for the ABI ecosystem, managing spe
 ```
 src/core/modules/abi/
 ├── agents/                  # Agent implementations
-│   ├── AbiAgent.py         # Main orchestrator
-│   ├── AbiAgent_test.py    # Test suite
-│   ├── EntitytoSPARQLAgent.py
-│   ├── KnowledgeGraphBuilderAgent.py
-│   └── OntologyEngineerAgent.py
+│   ├── AbiAgent.py         # Main multi-agent orchestrator
+│   ├── AbiAgent_test.py    # Comprehensive test suite
+│   ├── EntitytoSPARQLAgent.py        # BFO entity extraction & SPARQL generation
+│   ├── EntitytoSPARQLAgent_test.py   # Entity extraction tests
+│   ├── KnowledgeGraphBuilderAgent.py # Triple store CRUD operations
+│   ├── KnowledgeGraphBuilderAgent_test.py # KG builder tests
+│   ├── OntologyEngineerAgent.py      # BFO ontology engineering
+│   └── OntologyEngineerAgent_test.py # Ontology engineering tests
 ├── models/                  # Model configurations
-│   ├── o3_mini.py          # OpenAI o3-mini (cloud)
-│   └── qwen3_8b.py         # Qwen3 8B (local/Ollama)
-├── workflows/               # Business logic workflows
-├── pipelines/               # Data processing pipelines
-├── ontologies/              # Ontology definitions
-├── sandbox/                 # Experimental scripts
-├── triggers.py              # Event-driven triggers
-├── mappings.py              # Visualization mappings
+│   ├── o3_mini.py          # OpenAI o3-mini (cloud, temp=1.0)
+│   └── qwen3_8b.py         # Qwen3 8B (local/Ollama, temp=0.7)
+├── workflows/               # Business logic workflows (15 implementations)
+│   ├── AgentRecommendationWorkflow.py     # AI agent recommendation engine
+│   ├── ConvertOntologyGraphToYamlWorkflow.py # Graph to YAML conversion
+│   ├── CreateClassOntologyYamlWorkflow.py    # Class ontology publishing
+│   ├── CreateIndividualOntologyYamlWorkflow.py # Individual ontology publishing
+│   ├── ExportGraphInstancesToExcelWorkflow.py # Data export capabilities
+│   ├── GetObjectPropertiesFromClassWorkflow.py # Property retrieval
+│   ├── GetSubjectGraphWorkflow.py            # Entity graph exploration
+│   ├── SearchIndividualWorkflow.py           # Semantic search
+│   └── TemplatableSparqlQuery.py            # SPARQL query templating
+├── pipelines/               # Data processing pipelines (18 implementations)
+│   ├── AddIndividualPipeline.py        # Entity creation
+│   ├── InsertDataSPARQLPipeline.py     # SPARQL data insertion
+│   ├── MergeIndividualsPipeline.py     # Entity merging
+│   ├── RemoveIndividualPipeline.py     # Entity deletion
+│   ├── UpdateDataPropertyPipeline.py   # Property updates
+│   └── Update*Pipeline.py              # Specialized update pipelines
+├── ontologies/              # Ontology definitions (4-level hierarchy)
+│   ├── top-level/          # BFO foundational ontologies
+│   ├── mid-level/          # Common Core Ontologies
+│   ├── domain-level/       # Domain-specific ontologies
+│   └── application-level/  # Use-case specific ontologies
+├── sandbox/                 # Experimental scripts (8 utilities)
+├── triggers.py              # Production event-driven triggers
+├── mappings.py              # Knowledge graph visualization colors
 └── __init__.py              # Module initialization
 ```
 
@@ -65,23 +87,31 @@ graph TD
 | Variable | Values | Default | Description |
 |----------|--------|---------|-------------|
 | `AI_MODE` | `cloud` \| `local` | `cloud` | Model deployment mode |
-| `OPENAI_API_KEY` | API key | Required | For cloud model (o3-mini) |
-| `NAAS_API_KEY` | API key | Optional | For production ontology triggers |
+| `OPENAI_API_KEY` | API key | Required | For cloud models (o3-mini, gpt-4o) |
+| `NAAS_API_KEY` | API key | Optional | For production ontology triggers & YAML publishing |
+| `ENV` | `dev` \| `prod` | `dev` | Environment mode (affects trigger activation) |
 
 ### Model Selection
 
 The agent automatically selects models based on `AI_MODE`:
 
 ```python
-# Cloud Mode (default)
+# Cloud Mode (default) - Creative orchestration
 AI_MODE=cloud  # Uses OpenAI o3-mini with temperature=1.0
 
-# Local Mode  
+# Local Mode - Privacy-focused with stable performance
 AI_MODE=local  # Uses Ollama qwen3:8b with temperature=0.7
 
-# Error handling
+# Model Selection Logic:
+# - AbiAgent: Uses AI_MODE selection (o3-mini vs qwen3:8b)
+# - EntitytoSPARQLAgent: Uses o3-mini (cloud only)
+# - KnowledgeGraphBuilderAgent: Uses gpt-4o (cloud only)
+# - OntologyEngineerAgent: Uses o3-mini (cloud only)
+
+# Error Handling:
 # Missing OPENAI_API_KEY in cloud mode → Agent creation fails
-# Missing Ollama in local mode → Agent creation fails
+# Missing Ollama in local mode → AbiAgent creation fails
+# Specialized agents require cloud mode and OpenAI API key
 ```
 
 ## 🚀 Usage
@@ -92,32 +122,32 @@ AI_MODE=local  # Uses Ollama qwen3:8b with temperature=0.7
 # Start Abi agent (default target)
 make chat-abi-agent
 
-# Explicit cloud mode
-AI_MODE=cloud make chat-abi-agent
-
-# Local privacy mode (requires Ollama)
-AI_MODE=local make chat-abi-agent
-
-# Alternative generic agent runner
-make chat agent=AbiAgent
+# Alternative agent runners
+make chat agent=AbiAgent                    # Multi-agent orchestrator
+make chat agent=EntitytoSPARQLAgent         # Entity extraction & SPARQL
+make chat agent=KnowledgeGraphBuilderAgent  # Knowledge graph operations
+make chat agent=OntologyEngineerAgent       # BFO ontology engineering
 ```
 
 ### Programmatic Integration
 
 ```python
 from src.core.modules.abi.agents.AbiAgent import create_agent
+from src.core.modules.abi.agents.EntitytoSPARQLAgent import create_agent as create_entity_agent
+from src.core.modules.abi.agents.KnowledgeGraphBuilderAgent import create_agent as create_kg_agent
 
-# Create agent with automatic model selection
-agent = create_agent()
+# Create orchestrator with automatic model selection
+abi_agent = create_agent()
+response = abi_agent.invoke("Route this to the best AI for code generation")
+# Workflow: Context preservation → Classification → Weighted routing to Mistral
 
-# Direct interaction
-response = agent.invoke("Route this to the best AI for code generation")
+# Knowledge graph operations
+kg_agent = create_kg_agent()
+kg_agent.invoke("Add a new organization called 'NaasAI' to the knowledge graph")
 
-# Workflow:
-# 1. Context preservation check
-# 2. Request classification (code generation)
-# 3. Weighted routing to Mistral
-# 4. Response synthesis with "Abi:" prefix
+# Entity extraction and SPARQL generation
+entity_agent = create_entity_agent()
+entity_agent.invoke("Extract entities from: 'John works at Microsoft as a software engineer'")
 ```
 
 ### Interaction Patterns

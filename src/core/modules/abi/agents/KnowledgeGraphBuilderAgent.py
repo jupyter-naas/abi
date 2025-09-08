@@ -282,7 +282,7 @@ def create_agent(
 
 
     # Add search organizations tools
-    from src.core.modules.abi import get_tools
+    from src.core.modules.templatablesparqlquery import get_tools
     ontology_tools: list = [
         "search_class",
         "count_instances_by_class",

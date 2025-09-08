@@ -31,6 +31,7 @@ You operate within a secure environment with authenticated access to LinkedIn's 
 You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 
 ## Tools
+- `linkedin_get_organization_id`: Get LinkedIn organization ID for a LinkedIn organization
 - `linkedin_get_organization_info`: Get comprehensive company information including details, metrics, and metadata
 - `linkedin_get_profile_public_id`: Get LinkedIn public profile ID for a LinkedIn profile
 - `linkedin_get_profile_id`: Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA
@@ -41,7 +42,7 @@ You have access to profile of the user: {secret.get('LINKEDIN_PROFILE_URL')}.
 - `linkedin_get_post_stats`: Get post performance metrics (views, likes, shares, comments count)
 - `linkedin_get_post_comments`: Get all comments and replies for a specific post
 - `linkedin_get_post_reactions`: Get all reactions (likes, celebrates, supports, etc.) for a specific post
-- `linkedin_json_cleaner`: Clean JSON data to make it LLM-friendly by removing unnecessary fields, flattening structures, and extracting image URLs
+- `linkedin_get_mutual_connexions`: Get mutual connections for a LinkedIn profile
 - `googlesearch_linkedin_organization`: Search Google for a LinkedIn organization
 - `googlesearch_linkedin_profile`: Search Google for a LinkedIn profile
 
@@ -64,9 +65,28 @@ I found the following LinkedIn organizations:
 Which one do you want to use?
 ```
 - Get data from LinkedIn using the tools provided
-- To get linkedin_get_profile_posts_feed you need to use the linkedin_get_profile_id tool to get the profile ID first.
-- Use `linkedin_json_cleaner` tool to clean the JSON data before using it
 - Provide the data in a clear, professional format with context and explanations
+
+Specific instructions:
+- LinkedIn profile posts feed
+1. Use the linkedin_get_profile_id tool to get the profile ID first before using the toollinkedin_get_profile_posts_feed
+
+- Get mutual connections:
+1. If profile URL is not provided, use Google Search to find the profile URL and validate the URL is correct with the user. Then, use the linkedin_get_profile_id tool to get the profile ID.
+2. If no company ID or URL is provided, pass an empty string = "". If provided, use the linkedin_get_organization_id tool to get the organization ID.
+3. Always return the number of mutual connections and the first 10 profiles after using the linkedin_get_mutual_connexions tool:
+```
+I found x mutual connections with [person name]. 
+
+Here are the first 10 profiles:
+- [Profile 1](https://www.linkedin.com/in/profile-1)
+- [Profile 2](https://www.linkedin.com/in/profile-2)
+- [Profile 3](https://www.linkedin.com/in/profile-3)
+
+Would you like to filter the results on their current organization [organization name] to reduce the number of results?
+...
+```
+4. Propose to filter the results on a company to reduce the number of results.
 
 ## Constraints
 - Be concise and to the point
@@ -131,6 +151,9 @@ def create_agent(
         Intent(intent_value="What is this LinkedIn post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
         Intent(intent_value="Who commented on this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
         Intent(intent_value="Who reacted to this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
+        Intent(intent_value="Who are my LinkedIn mutual connections with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
+        Intent(intent_value="Who is connected with this person in my LinkedIn network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
+        Intent(intent_value="How many mutual connections do I have with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
     ]
 
     return LinkedInAgent(

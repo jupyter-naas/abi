@@ -86,7 +86,10 @@ def create_agent(
         return "Pull request description stored in the clipboard"
     
     from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
+
+    class PullRequestDescriptionSchema(BaseModel):
+        description: str = Field(..., description="The pull request description")
     
     class EmptySchema(BaseModel):
         pass
@@ -95,19 +98,19 @@ def create_agent(
             StructuredTool(
                 name="git_diff",
                 description="Get the git diff and the branch name",
-                func=git_diff,
+                func=lambda : git_diff(),
                 args_schema=EmptySchema,
             ),
             StructuredTool(
                 name="store_pull_request_description",
                 description="Store the pull request description in a file `pull_request_description.md`",
-                func=store_pull_request_description,
-                args_schema=EmptySchema,
+                func=lambda description: store_pull_request_description(description),
+                args_schema=PullRequestDescriptionSchema,
             ),
             StructuredTool(
                 name="store_pull_request_description_to_clipboard",
                 description="Store the pull request description in the clipboard.",
-                func=store_pull_request_description_to_clipboard,
+                func=lambda: store_pull_request_description_to_clipboard(),
                 args_schema=EmptySchema,
             ),
         ]
