@@ -76,7 +76,11 @@ def get_secret(naas_api_key, naas_api_url, naas_secret_name):
     base64_secret = Base64Secret(naas_secret, naas_secret_name)
 
     for key, value in base64_secret.list().items():
-        print(f"{key}: {value}")
+        # If value is multiline
+        if "\n" in value:
+            print(f"{key}=\"{value}\"")
+        else:
+            print(f"{key}={value}")
 
 
 # Add the secrets group to the main abi group
