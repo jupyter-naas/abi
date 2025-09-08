@@ -146,14 +146,10 @@ def create_agent(
         Intent(intent_value="What is this person's public LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_public_id"),
         Intent(intent_value="What is this person's LinkedIn ID?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_id"),
         Intent(intent_value="What is this person's skills?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_skills"),
-        Intent(intent_value="What is this person's recent LinkedIn posts?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
         Intent(intent_value="What is my latest LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_profile_posts_feed"),
         Intent(intent_value="What is this LinkedIn post's stats?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_stats"),
         Intent(intent_value="Who commented on this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
         Intent(intent_value="Who reacted to this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
-        Intent(intent_value="Who are my LinkedIn mutual connections with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
-        Intent(intent_value="Who is connected with this person in my LinkedIn network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
-        Intent(intent_value="How many mutual connections do I have with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
     ]
 
     return LinkedInAgent(
