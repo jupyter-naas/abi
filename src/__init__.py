@@ -196,9 +196,14 @@ def load_modules():
                     topic, event_type, callback, background
                 )
 
-
+    logger.debug("Loading on_initialized")
     for module in _modules:
         module.on_initialized()
+
+    logger.debug("Loading agents")
+    for module in _modules:
+        logger.debug(f"Loading agents for module {module.module_import_path}")
+        module.load_agents()
 
     return _modules
 
