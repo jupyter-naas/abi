@@ -96,12 +96,15 @@ def publish_remote_agent(
             
             # Remove double slashes in route_name
             route_name = f"agents/{route_name}/stream-completion?token={abi_api_key}".replace("//", "/")
+
+            # Create a slug from the name
+            slug = name.lower().replace(" ", "-").replace("_", "-")
             
             # Create plugin data
             plugin_data = {
-                "id": name.lower(),
-                "name": name,
-                "slug": name.lower().replace(" ", "-").replace("_", "-"),
+                "id": slug,
+                "name": name.replace("_", " "),
+                "slug": slug,
                 "default": default,
                 "avatar": avatar,
                 "description": description,
@@ -138,7 +141,7 @@ def publish_remote_agent(
 if __name__ == "__main__":
     from src import secret, config
     naas_api_key = secret.get("NAAS_API_KEY")
-    api_base_url = f"https://{config.space_name}.default.space.naas.ai"
+    api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
     abi_api_key = secret.get("ABI_API_KEY")
     workspace_id = config.workspace_id
     github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
