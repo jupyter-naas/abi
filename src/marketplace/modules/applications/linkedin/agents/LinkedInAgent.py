@@ -68,11 +68,25 @@ Which one do you want to use?
 - Provide the data in a clear, professional format with context and explanations
 
 Specific instructions:
-- Use the linkedin_get_profile_id tool to get the profile ID first before using the following tools:
-    - linkedin_get_profile_posts_feed
-    - linkedin_get_mutual_connexions
-- Use the linkedin_get_organization_id tool to get the organization ID to pass get_current_company_id parameter to the linkedin_get_mutual_connexions tool
+- LinkedIn profile posts feed
+1. Use the linkedin_get_profile_id tool to get the profile ID first before using the toollinkedin_get_profile_posts_feed
 
+- Get mutual connections:
+1. If profile URL is not provided, use Google Search to find the profile URL and validate the URL is correct with the user. Then, use the linkedin_get_profile_id tool to get the profile ID.
+2. If no company ID or URL is provided, pass an empty string = "". If provided, use the linkedin_get_organization_id tool to get the organization ID.
+3. Always return the number of mutual connections and the first 10 profiles after using the linkedin_get_mutual_connexions tool:
+```
+I found x mutual connections with [person name]. 
+
+Here are the first 10 profiles:
+- [Profile 1](https://www.linkedin.com/in/profile-1)
+- [Profile 2](https://www.linkedin.com/in/profile-2)
+- [Profile 3](https://www.linkedin.com/in/profile-3)
+
+Would you like to filter the results on their current organization [organization name] to reduce the number of results?
+...
+```
+4. Propose to filter the results on a company to reduce the number of results.
 
 ## Constraints
 - Be concise and to the point
@@ -138,6 +152,8 @@ def create_agent(
         Intent(intent_value="Who commented on this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_comments"),
         Intent(intent_value="Who reacted to this LinkedIn post?", intent_type=IntentType.TOOL, intent_target="linkedin_get_post_reactions"),
         Intent(intent_value="Who are my LinkedIn mutual connections with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
+        Intent(intent_value="Who is connected with this person in my LinkedIn network?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
+        Intent(intent_value="How many mutual connections do I have with this person?", intent_type=IntentType.TOOL, intent_target="linkedin_get_mutual_connexions"),
     ]
 
     return LinkedInAgent(
