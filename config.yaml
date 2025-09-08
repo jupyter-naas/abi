@@ -41,7 +41,7 @@ modules:
   - path: src/marketplace/modules/applications/arxiv
     enabled: false
   - path: src/marketplace/modules/applications/git
-    enabled: false
+    enabled: true
   - path: src/marketplace/modules/applications/github
     enabled: true
   - path: src/marketplace/modules/applications/google_search
