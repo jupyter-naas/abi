@@ -1,5 +1,9 @@
 config:
   workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
+  auto_publish:
+    enabled: true # Enable automatic publishing of agents to workspace
+    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+    default_agent: "Abi" # Which agent to set as default in workspace
   github_project_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
   github_support_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
