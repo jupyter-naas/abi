@@ -286,7 +286,9 @@ class Agent(Expose):
 
         # TODO: Make sure the Agent does not call the version without tools.
         self._chat_model = chat_model
-        self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
+        self._chat_model_with_tools = chat_model
+        if self._tools:
+            self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
         
         # Use provided memory or create based on environment
         if memory is None:
@@ -376,7 +378,7 @@ class Agent(Expose):
         graph = StateGraph(MessagesState)
         graph.add_node(self.call_model)
         graph.add_edge(START, "call_model")
-
+        
         graph.add_node(self.call_tools)
         # This is not needed because the call_tools is generating the proper Command to go to the right node after each tool call.
         # graph.add_edge("call_tools", "call_model")
