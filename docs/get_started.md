@@ -12,6 +12,8 @@
     - [Pre-requisites](#pre-requisites)
     - [Installation Options](#installation-options)
     - [Setup Environment](#setup-environment)
+      - [For Linux/macOS:](#for-linuxmacos)
+      - [For Windows:](#for-windows)
     - [Configure YAML](#configure-yaml)
   - [Quickstart](#quickstart)
     - [Start Chatting](#start-chatting)
@@ -21,7 +23,9 @@
 
 ### What is ABI?
 
-The **ABI** (Agent Based Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Agentic AI Ontology Engine. This system empowers organizations to integrate, manage, and scale AI-driven operations with a focus on ontology, agent-driven workflows, and analytics. Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
+**ABI** (Agentic Brain Infrastructure) is the world's first AI Operating System built on semantic ontologies and knowledge graphs. ABI provides the foundational infrastructure for ontology-driven agentic computing, enabling intelligent agents to reason over structured knowledge while coordinating complex multi-agent workflows.
+
+At its core, ABI leverages formal ontologies to create a shared understanding between agents, tools, and data sources. This semantic foundation enables agents to make intelligent decisions based on rich contextual knowledge, maintain coherent state across interactions, and collaborate effectively within enterprise knowledge ecosystems.
 
 ### Why ABI?
 The **ABI** project aims to provide a open alternative to Palantir by offering a flexible and scalable framework for building intelligent systems using ontology. Unlike Palantir, which is often seen as a monolithic solution, ABI emphasizes modularity and customization, allowing organizations to tailor their AI-driven operations to specific needs. Combined with the Naas.ai ecosystem, ABI can be used to build the brain of your organization's agentic AI applications.
@@ -82,12 +86,46 @@ git push
 
 ### Setup Environment
 
+#### For Linux/macOS:
+
 1. Copy this file to .env
 ```bash
 cp .env.example .env
 ```
 2. Replace placeholder values with your actual credentials
 3. Uncomment (remove #) from lines you want to activate. The variables are used to configure the assistant.
+
+#### For Windows:
+
+**Option 1: Automated Setup (Recommended)**
+```cmd
+# Run the automated setup script
+setup.bat
+```
+
+**Option 2: PowerShell Setup**
+```powershell
+# Run the PowerShell setup script
+.\setup.ps1
+```
+
+**Option 3: Manual Setup**
+```cmd
+# Create virtual environment
+uv venv
+
+# Activate virtual environment
+.venv\Scripts\activate.bat
+
+# Install dependencies
+uv pip install -e lib/
+
+# Copy configuration files
+copy config.yaml.example config.yaml
+copy .env.example .env
+```
+
+After running any of these options, edit the `.env` file with your actual credentials.
 
 **Available AI Models**: ABI supports multiple LLM providers. Configure the API keys for the models you want to use:
 - `OPENAI_API_KEY` - For GPT-4o and Llama 3.3 70B models
@@ -112,7 +150,7 @@ cp config.yaml.example config.yaml
 - `github_project_id`: Your Github project number stored in Github URL (e.g. 12 for https://github.com/jupyter-naas/abi/projects/12). It will be used to assign all your issues to your github project.
 - `triple_store_path`: Path to the ontology store (e.g. "storage/triplestore")
 - `api_title`: API title (e.g. "ABI API") displayed in the documentation.
-- `api_description`: API description (e.g. "API for ABI, your Artifical Business Intelligence") displayed in the documentation.
+- `api_description`: API description (e.g. "API for ABI (Agentic Brain Infrastructure) - AI Operating System") displayed in the documentation.
 - `logo_path`: Path to the logo (e.g. "assets/logo.png") used in the API documentation.
 - `favicon_path`: Path to the favicon (e.g. "assets/favicon.ico") used in the API documentation.
 - `storage_name`: Name of the storage (e.g. "abi")

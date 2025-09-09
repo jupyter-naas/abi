@@ -5,7 +5,7 @@ config:
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
   triple_store_path: "storage/triplestore" # Path to the ontology store
   api_title: "ABI API" # API title
-  api_description: "API for ABI, your Artifical Business Intelligence" # API description
+  api_description: "API for ABI (Agentic Brain Infrastructure) - AI Operating System" # API description
   logo_path: "assets/logo.png" # Path to the logo
   favicon_path: "assets/favicon.ico" # Path to the favicon
   storage_name: "abi" # Name of the storage
@@ -45,7 +45,7 @@ modules:
   - path: src/marketplace/modules/applications/git
     enabled: true
   - path: src/marketplace/modules/applications/github
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/google_search
     enabled: true
   - path: src/marketplace/modules/applications/linkedin

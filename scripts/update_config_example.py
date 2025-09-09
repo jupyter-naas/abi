@@ -99,7 +99,7 @@ def update_config_example(config_path="config.yaml.example", silent=False):
             f.write("  github_project_id: # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)\n")
             f.write('  triple_store_path: "storage/triplestore" # Path to the ontology store\n')
             f.write('  api_title: "ABI API" # API title\n')
-            f.write('  api_description: "API for ABI, your Artifical Business Intelligence" # API description\n')
+            f.write('  api_description: "API for ABI (Agentic Brain Infrastructure) - AI Operating System" # API description\n')
             f.write('  logo_path: "assets/logo.png" # Path to the logo\n')
             f.write('  favicon_path: "assets/favicon.ico" # Path to the favicon\n')
             f.write('  storage_name: "abi" # Name of the storage\n')

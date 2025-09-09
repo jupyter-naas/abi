@@ -3,34 +3,55 @@ TAGS_METADATA = [
         "name": "Overview",
         "description": """
 ### Project Overview
-The **ABI** (Artificial Business Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Organizational AI System. 
-This system empowers businesses to integrate, manage, and scale AI-driven operations with a focus on ontology, assistant-driven workflows, and analytics.\n
-Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
+**ABI** (Agentic Brain Infrastructure) is the world's first AI Operating System built on semantic ontologies and knowledge graphs. 
+ABI provides the foundational infrastructure for ontology-driven agentic computing, where intelligent agents reason over structured knowledge while coordinating complex multi-agent workflows.
+
+At its core, ABI leverages formal ontologies to create a shared understanding between agents, tools, and data sources. This semantic foundation enables agents to make intelligent decisions based on rich contextual knowledge, maintain coherent state across interactions, and collaborate effectively within enterprise knowledge ecosystems.
 
 ### API Overview
-The ABI API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
-This document describes the current version of the ABI API, which provides access to agents, pipelines, workflows, integrations, ontology management and analytics features.
+The ABI API serves as the system interface to the ontology-driven AI Operating System, providing programmatic access to semantic agents, knowledge graphs, and reasoning capabilities.
+Through this API, you can spawn ontology-aware agents, query semantic knowledge bases, and orchestrate complex reasoning workflows across structured enterprise data.
+
+Core ontological capabilities include:
+- **Semantic Agent Management**: Deploy agents that reason over formal ontologies and knowledge graphs
+- **Ontology Engineering**: Build, validate, and evolve domain-specific knowledge models
+- **Knowledge Graph Operations**: Query, update, and reason over enterprise semantic data
+- **Contextual Reasoning**: Enable agents to make decisions based on rich ontological context
+- **Multi-Modal Integration**: Connect structured knowledge with unstructured data sources
+- **Workflow Orchestration**: Coordinate complex multi-step reasoning processes across agent ecosystems
         """,
     },
     {
         "name": "Authentication",
         "description": """
-Authentication uses a Bearer token that can be provided either in the Authorization header (e.g. 'Authorization: Bearer `<token>`') or as a query parameter (e.g. '?token=`<token>`'). 
-The token must match the `ABI_API_KEY` environment variable.
-Contact your administrator to get the token.
+Authentication uses a Bearer token that can be provided either in the Authorization header or as a query parameter. 
+
+**Getting Your API Key:**
+- If you're running ABI locally, check your `.env` file for the `ABI_API_KEY` value
+- For deployed instances, the API key is set during installation in your environment variables
+- Generate a new key by updating the `ABI_API_KEY` in your configuration
 
 *Authentication with Authorization header:*
 
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/agents/abi/completion"
+# For local development
+url = "http://localhost:9879/agents/Abi/completion"
+# For deployed instances  
+# url = "https://your-domain.com/agents/Abi/completion"
 
 headers = {
-    "Authorization": f"Bearer {token}"
+    "Authorization": f"Bearer {your_api_key}",
+    "Content-Type": "application/json"
 }
 
-response = requests.post(url, headers=headers)
+data = {
+    "prompt": "Hello, how can you help me?",
+    "thread_id": 1
+}
+
+response = requests.post(url, headers=headers, json=data)
 print(response.json())
 ```
 
@@ -39,9 +60,15 @@ print(response.json())
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/agents/abi/completion?token=<token>"
+# For local development
+url = f"http://localhost:9879/agents/Abi/completion?token={your_api_key}"
 
-response = requests.post(url)
+data = {
+    "prompt": "Hello, how can you help me?", 
+    "thread_id": 1
+}
+
+response = requests.post(url, json=data)
 print(response.json())
 ```
         """,
@@ -298,7 +325,7 @@ API_LANDING_HTML = """
     <body>
         <img src="/static/[LOGO_NAME]" alt="Logo" class="logo">
         <h1>Welcome to [TITLE]!</h1>
-        <p>[TITLE] is a tool that allows you to interact with ABI's capabilities for business process automation and intelligence.</p>
+        <p>[TITLE] is the API gateway to ABI (Agentic Brain Infrastructure) - your central hub for AI agent orchestration and intelligent automation.</p>
         <div class="buttons">
             <a href="/redoc">Go to Documentation</a>
         </div>
