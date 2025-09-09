@@ -230,6 +230,10 @@ publish-remote-agents: deps
 	@ echo "Publishing remote agents..."
 	@ uv run python scripts/publish_remote_agents.py
 
+publish-remote-agents-dry-run: deps
+	@ echo "Dry-run: Previewing remote agent publishing..."
+	@ uv run python scripts/publish_remote_agents.py --dry-run
+
 clean:
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
@@ -272,7 +276,8 @@ help:
 	@echo "  triplestore-prod-override Override the production triplestore with local data"
 	@echo "  triplestore-prod-pull    Pull triplestore data from production"
 	@echo "  docs-ontology            Generate ontology documentation"
-	@echo "  publish-remote-agents    Publish remote agents"
+	@echo "  publish-remote-agents    Publish remote agents to workspace"
+	@echo "  publish-remote-agents-dry-run Preview what agents would be published (dry-run mode)"
 	@echo ""
 	@echo "BUILDING:"
 	@echo "  build                    Build the Docker image (alias for build.linux.x86_64)"
