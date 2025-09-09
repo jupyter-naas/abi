@@ -31,6 +31,16 @@ jobs:
           AI_MODE: cloud
 
         run: make test-api
+
+      - name: Test API initialization with production secrets
+        env:
+          ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          NAAS_API_KEY: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          AI_MODE: cloud
+        run: make test-api-init-container
   container-scan:
     runs-on: ubuntu-latest
     steps:
