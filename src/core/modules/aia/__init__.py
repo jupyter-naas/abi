@@ -1,4 +1,4 @@
-from src import secret, config
+from src import secret
 
 def requirements():
     li_at = secret.get('li_at')
