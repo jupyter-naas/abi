@@ -17,9 +17,9 @@ modules:
   - path: src/core/modules/abi
     enabled: true
   - path: src/core/modules/chatgpt
-    enabled: true
+    enabled: false
   - path: src/core/modules/claude
-    enabled: true
+    enabled: false
   - path: src/core/modules/deepseek
     enabled: true
   - path: src/core/modules/gemini
@@ -45,17 +45,19 @@ modules:
   - path: src/marketplace/modules/applications/git
     enabled: true
   - path: src/marketplace/modules/applications/github
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/google_search
     enabled: true
   - path: src/marketplace/modules/applications/linkedin
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/naas
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/postgres
     enabled: true
   - path: src/marketplace/modules/applications/powerpoint
     enabled: false
+  - path: src/marketplace/modules/naas-openai-gpt4
+    enabled: true
   - path: src/marketplace/modules/domains/account-executive
     enabled: false
   - path: src/marketplace/modules/domains/accountant
