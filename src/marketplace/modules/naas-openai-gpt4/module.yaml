@@ -1,0 +1,37 @@
+name: "Naas OpenAI GPT-4"
+description: "Working GPT-4 chat via Naas API - Consolidated implementation"
+version: "1.0.0"
+author: "ABI Team"
+category: "ai-chat"
+
+agents:
+  - name: "NaasGPT4Agent"
+    description: "GPT-4 agent using reverse-engineered Naas API"
+    file: "agents/NaasGPT4Agent.py"
+    enabled: true
+
+apps:
+  - name: "cli"
+    main: "apps/cli.py"
+    title: "Naas GPT-4 CLI"
+    description: "Command-line interface for GPT-4"
+
+dependencies:
+  - httpx
+  - python-dotenv
+  - click
+
+environment_variables:
+  - name: "NAAS_TOKEN"
+    description: "JWT token from Naas API (reverse-engineered)"
+    required: true
+  - name: "NAAS_CHAT_ID"
+    description: "Chat session ID (defaults to 15349)"
+    required: false
+
+features:
+  - "Working reverse-engineered Naas API integration"
+  - "Conversation history and context"
+  - "SSL bypass for corporate environments"
+  - "Interactive and single-message modes"
+  - "Token usage tracking"
