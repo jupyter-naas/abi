@@ -58,7 +58,7 @@ test-api: deps
 
 test-api-init: deps
 	@ echo "🔍 Testing API initialization with production secrets..."
-	@ uv run python src/api.py --test-init
+	@ uv run --no-dev src/api.py --test-init
 
 test-api-init-container: build
 	@ echo "🔍 Testing API initialization in container with production secrets..."
@@ -68,7 +68,7 @@ test-api-init-container: build
 		-e NAAS_CREDENTIALS_JWT_TOKEN="${NAAS_CREDENTIALS_JWT_TOKEN}" \
 		-e OPENAI_API_KEY="${OPENAI_API_KEY}" \
 		-e GITHUB_ACCESS_TOKEN="${GITHUB_ACCESS_TOKEN}" \
-		abi:latest python src/api.py --test-init
+		abi:latest uv run --no-dev src/api.py --test-init
 
 hello:
 	@echo 'hello' | make
