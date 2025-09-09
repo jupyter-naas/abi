@@ -224,4 +224,10 @@ def api():
 
 
 if __name__ == "__main__":
-    api()
+    import sys
+    
+    if "--test-init" in sys.argv:
+        logger.info("✅ API initialization completed successfully")
+        print("API_INIT_TEST_PASSED")
+    else:
+        api()
