@@ -202,17 +202,17 @@ class OpenAIResponsesIntegration(Integration):
     ) -> Dict | str:
         
         # Download PDF and extract text
-        text = ""
+        pdf_text = ""
         try:
             pdf_bytes = requests.get(pdf_url).content
             with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+                pdf_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         except Exception as e:
             logger.error(f"Error processing PDF: {str(e)}")
             return str(e)
 
         # Build messages
-        messages = []
+        messages: list[dict] = []
         if system_prompt:
             messages.append({
                 "role": "system",
@@ -223,7 +223,7 @@ class OpenAIResponsesIntegration(Integration):
             "role": "user",
             "content": [
                 {"type": "input_text", "text": user_prompt},
-                {"type": "input_text", "text": text}
+                {"type": "input_text", "text": pdf_text}
             ]
         })
         
