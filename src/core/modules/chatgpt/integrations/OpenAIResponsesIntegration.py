@@ -119,7 +119,7 @@ class OpenAIResponsesIntegration(Integration):
         user_prompt: str = "Describe this image:",
         detail: str = "auto",
         return_text: bool = False
-    ) -> Dict:
+    ) -> Dict | str:
         """Analyze an image using OpenAI Responses.
         
         Args:

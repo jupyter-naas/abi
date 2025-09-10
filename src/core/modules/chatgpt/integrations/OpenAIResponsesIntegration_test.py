@@ -28,6 +28,7 @@ def test_analyze_image(integration: OpenAIResponsesIntegration):
     response = integration.analyze_image(image_url=image_url, return_text=True)
     
     assert response is not None, response
+    assert isinstance(response, str), response
     assert "boardwalk" in response, response
     assert "landscape" in response, response
 
@@ -36,6 +37,7 @@ def test_analyze_pdf(integration: OpenAIResponsesIntegration):
     response = integration.analyze_pdf(pdf_url=pdf_url, return_text=True)
     
     assert response is not None, response
+    assert isinstance(response, str), response
     assert "accor" in response.lower(), response
     assert "2023" in response, response
     assert "impact report" in response.lower(), response
