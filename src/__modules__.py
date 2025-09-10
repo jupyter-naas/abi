@@ -40,11 +40,9 @@ def analyze_module_dependencies(module_paths: List[str]) -> Dict[str, Set[str]]:
                     if isinstance(node, ast.Call):
                         if isinstance(node.func, ast.Name) and node.func.id == 'get_modules':
                             get_modules_found = True
-                            logger.debug(f"Found get_modules() call in {py_file}")
                             break
                         elif isinstance(node.func, ast.Attribute) and node.func.attr == 'get_modules':
                             get_modules_found = True
-                            logger.debug(f"Found get_modules() call in {py_file}")
                             break
                 
                 # If get_modules() is found, this module depends on ALL other modules
@@ -52,7 +50,7 @@ def analyze_module_dependencies(module_paths: List[str]) -> Dict[str, Set[str]]:
                     for other_module in module_paths:
                         if other_module != module_path:
                             dependencies[module_path].add(other_module)
-                    logger.info(f"Module {module_path} calls get_modules() - depends on ALL other modules")
+                    logger.debug(f"Module {module_path} depends on ALL other modules")
                 else:
                     # Regular dependency analysis for import statements
                     for node in ast.walk(tree):
