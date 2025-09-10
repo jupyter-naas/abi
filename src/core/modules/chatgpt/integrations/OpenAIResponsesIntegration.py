@@ -5,8 +5,6 @@ from abi import logger
 from typing import Any, Optional, Dict
 from pydantic import BaseModel
 import requests
-import base64
-import httpx
 import io
 import pdfplumber
 
@@ -273,7 +271,6 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
 
     class SearchWebSchema(BaseModel):
         query: str = Field(..., description="The query to search the web")
-        search_context_size : str = Field("medium", description="The search context size")
 
     class AnalyzeImageSchema(BaseModel):
         image_url: str = Field(..., description="The URL of the image to analyze")
@@ -287,7 +284,7 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
         StructuredTool(
             name="chatgpt_search_web",
             description="Search the web",
-            func=lambda query, search_context_size: integration.search_web(query=query, search_context_size=search_context_size, return_text=True),
+            func=lambda query: integration.search_web(query=query, search_context_size="medium", return_text=True),
             args_schema=SearchWebSchema
         ),
         StructuredTool(
