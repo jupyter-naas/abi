@@ -202,6 +202,7 @@ class OpenAIResponsesIntegration(Integration):
     ) -> Dict | str:
         
         # Download PDF and extract text
+        text = ""
         try:
             pdf_bytes = requests.get(pdf_url).content
             with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
