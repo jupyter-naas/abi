@@ -64,6 +64,7 @@ dependencies = [
     "langgraph-checkpoint-postgres>=2.0.23",
     "mypy>=1.17.1",
     "langchain-perplexity>=0.1.2",
+    "pdfplumber>=0.11.7",
 ]
 
 [project.scripts]
