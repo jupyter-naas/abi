@@ -297,9 +297,7 @@ class Agent(Expose):
         self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
             tools_to_bind = self._structured_tools.copy()
-            # Convert native_tools to list of Tools/BaseTools before extending
-            native_tools_converted = [Tool(**tool) for tool in self._native_tools]
-            tools_to_bind.extend(native_tools_converted)
+            tools_to_bind.extend(self._native_tools) # type: ignore
             self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
         
         # Use provided memory or create based on environment
