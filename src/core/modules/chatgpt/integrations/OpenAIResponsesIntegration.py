@@ -285,20 +285,20 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
 
     return [
         StructuredTool(
-            name="openai_responses_search_web",
-            description="Search the web using OpenAI Responses.",
-            func=lambda query, search_context_size: integration.search_web(query=query, search_context_size=search_context_size),
+            name="chatgpt_search_web",
+            description="Search the web",
+            func=lambda query, search_context_size: integration.search_web(query=query, search_context_size=search_context_size, return_text=True),
             args_schema=SearchWebSchema
         ),
         StructuredTool(
-            name="openai_responses_analyze_image",
-            description="Analyze an image using OpenAI Responses.",
+            name="chatgpt_analyze_image",
+            description="Analyze an image from URL",
             func=lambda image_url, user_prompt: integration.analyze_image(image_url=image_url, user_prompt=user_prompt, return_text=True),
             args_schema=AnalyzeImageSchema
         ),
         StructuredTool(
-            name="openai_responses_analyze_pdf",
-            description="Analyze a PDF document using OpenAI Responses.",
+            name="chatgpt_analyze_pdf",
+            description="Analyze a PDF document from URL",
             func=lambda pdf_url, user_prompt: integration.analyze_pdf(pdf_url=pdf_url, user_prompt=user_prompt, return_text=True),
             args_schema=AnalyzePdfSchema
         )
