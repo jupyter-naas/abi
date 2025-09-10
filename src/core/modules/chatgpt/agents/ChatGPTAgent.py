@@ -83,11 +83,23 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> Optional[IntentAgent]:
-    # Check if model is available
-    if model is None:
-        logger.error("ChatGPT model not available - missing OpenAI API key")
-        return None
+    # Define model
+    from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
+    from src import secret
+
+    model = ChatOpenAI(
+        model="gpt-4.1-mini", 
+        output_version="responses/v1",
+        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+    )
     
+    # Define tools
+    tools: list = [{"type": "web_search_preview"}, {"type": "image_generation"}]
+
+    # Define intents
+    intents: list = []
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -95,53 +107,12 @@ def create_agent(
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
-    
-    # Init
-    tools: list = []
 
-    # Tools (we already verified API key exists)
-    from src.core.modules.chatgpt.integrations import OpenAIWebSearchIntegration
-    from src.core.modules.chatgpt.integrations.OpenAIWebSearchIntegration import OpenAIWebSearchIntegrationConfiguration
-
-    openai_web_search_integration_configuration = OpenAIWebSearchIntegrationConfiguration(  
-        api_key=secret.get('OPENAI_API_KEY')
-    )
-    tools += OpenAIWebSearchIntegration.as_tools(openai_web_search_integration_configuration)
-
-    from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    
-    class EmptySchema(BaseModel):
-        pass
-        
-    current_datetime_tool = StructuredTool(
-        name="current_datetime", 
-        description="Get the current datetime in Paris timezone.",
-        func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-        args_schema=EmptySchema
-    )
-    
-    tools += [current_datetime_tool]
-
-    intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="I am ChatGPT, an AI assistant developed by OpenAI. I can help with real-time web search and provide comprehensive answers to your questions.",
-        ),
-        Intent(
-            intent_value="what can you do",
-            intent_type=IntentType.RAW,
-            intent_target="I can help with real-time web search, answer questions using the latest information from the internet, provide research assistance, and help with various tasks using OpenAI's capabilities.",
-        ),
-    ]
     return ChatGPTAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
-        tools=tools, 
+        chat_model=model,
+        # tools=tools, 
         agents=[],
         intents=intents,
         state=agent_shared_state, 
@@ -150,17 +121,4 @@ def create_agent(
     ) 
 
 class ChatGPTAgent(IntentAgent):
-    def as_api(
-        self, 
-        router: APIRouter, 
-        route_name: str = NAME, 
-        name: str = NAME.replace("_", " "), 
-        description: str = "API endpoints to call the ChatGPT agent completion.", 
-        description_stream: str = "API endpoints to call the ChatGPT agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass
