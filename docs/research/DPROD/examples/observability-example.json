@@ -1,0 +1,166 @@
+{
+  "@context": {
+    "dprod": "https://ekgf.github.io/dprod/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "dcat": "http://www.w3.org/ns/dcat#",
+    "abi": "https://naas.ai/abi/ontology/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "@type": "dprod:ObservabilityReport",
+  "@id": "abi:observability/2025-01-15",
+  "dprod:reportDate": "2025-01-15T10:30:00Z",
+  "dprod:dataProduct": "abi:agents/qwen",
+  "dprod:metrics": {
+    "performance": {
+      "avgResponseTime": {
+        "value": 1250,
+        "unit": "milliseconds",
+        "timestamp": "2025-01-15T10:30:00Z"
+      },
+      "throughput": {
+        "value": 45.2,
+        "unit": "requests_per_minute",
+        "timestamp": "2025-01-15T10:30:00Z" 
+      },
+      "errorRate": {
+        "value": 0.02,
+        "unit": "percentage",
+        "timestamp": "2025-01-15T10:30:00Z"
+      }
+    },
+    "quality": {
+      "accuracyScore": {
+        "value": 0.89,
+        "unit": "percentage",
+        "measurement": "user_satisfaction_rating"
+      },
+      "completenessScore": {
+        "value": 0.94,
+        "unit": "percentage",
+        "measurement": "response_completeness"
+      },
+      "relevanceScore": {
+        "value": 0.91,
+        "unit": "percentage", 
+        "measurement": "contextual_relevance"
+      }
+    },
+    "usage": {
+      "activeUsers": {
+        "value": 127,
+        "unit": "count",
+        "period": "last_24_hours"
+      },
+      "totalConversations": {
+        "value": 1842,
+        "unit": "count",
+        "period": "last_24_hours"
+      },
+      "avgConversationLength": {
+        "value": 8.3,
+        "unit": "exchanges",
+        "period": "last_24_hours"
+      }
+    }
+  },
+  "dprod:dataLineage": {
+    "@type": "prov:Activity",
+    "@id": "abi:conversation/conv-123456",
+    "prov:startedAtTime": "2025-01-15T10:15:00Z",
+    "prov:endedAtTime": "2025-01-15T10:18:00Z",
+    "prov:used": [
+      {
+        "@id": "abi:input/user-query-123456",
+        "@type": "prov:Entity",
+        "prov:value": "Help me write a Python function for data validation",
+        "prov:generatedAtTime": "2025-01-15T10:15:00Z"
+      },
+      {
+        "@id": "abi:models/qwen3:8b",
+        "@type": "prov:Entity", 
+        "prov:label": "Qwen3 8B Model",
+        "dprod:modelVersion": "v2.5.0"
+      }
+    ],
+    "prov:generated": [
+      {
+        "@id": "abi:output/response-123456",
+        "@type": "prov:Entity",
+        "prov:value": "Here's a comprehensive Python function for data validation...",
+        "prov:generatedAtTime": "2025-01-15T10:17:45Z",
+        "dprod:responseLength": 1247,
+        "dprod:codeSnippets": 1
+      }
+    ],
+    "prov:wasAssociatedWith": {
+      "@id": "abi:agents/qwen",
+      "@type": "prov:Agent",
+      "prov:label": "Qwen AI Agent"
+    }
+  },
+  "dprod:alertsAndIncidents": [
+    {
+      "@type": "dprod:Alert",
+      "@id": "abi:alert/response-time-high",
+      "dprod:severity": "warning", 
+      "dprod:description": "Response time exceeded 2s threshold",
+      "dprod:timestamp": "2025-01-15T10:25:00Z",
+      "dprod:affectedMetric": "avgResponseTime",
+      "dprod:currentValue": 2350,
+      "dprod:threshold": 2000,
+      "dprod:status": "resolved",
+      "dprod:resolvedAt": "2025-01-15T10:28:00Z"
+    }
+  ],
+  "dprod:dataQualityIssues": [
+    {
+      "@type": "dprod:DataQualityIssue",
+      "@id": "abi:quality-issue/incomplete-response",
+      "dprod:issueType": "completeness",
+      "dprod:description": "Some responses were truncated due to context window limits",
+      "dprod:affectedRecords": 23,
+      "dprod:detectionTime": "2025-01-15T09:45:00Z",
+      "dprod:severity": "medium",
+      "dprod:remediation": "Implement context window management for long conversations"
+    }
+  ],
+  "dprod:complianceStatus": {
+    "privacyCompliance": {
+      "status": "compliant",
+      "lastAudit": "2025-01-10T00:00:00Z",
+      "details": "Local processing ensures no data leaves user environment"
+    },
+    "dataRetention": {
+      "status": "compliant", 
+      "policy": "conversations_deleted_after_session",
+      "implementation": "automatic"
+    },
+    "accessControl": {
+      "status": "compliant",
+      "mechanism": "local_user_access_only",
+      "lastReview": "2025-01-10T00:00:00Z"
+    }
+  },
+  "dprod:recommendations": [
+    {
+      "@type": "dprod:Recommendation",
+      "dprod:category": "performance",
+      "dprod:priority": "medium",
+      "dprod:description": "Consider implementing response caching for frequently asked questions",
+      "dprod:expectedImpact": "20% reduction in response time"
+    },
+    {
+      "@type": "dprod:Recommendation", 
+      "dprod:category": "quality",
+      "dprod:priority": "high",
+      "dprod:description": "Implement context window management to prevent response truncation",
+      "dprod:expectedImpact": "Improved response completeness"
+    }
+  ],
+  "dprod:generatedBy": {
+    "@id": "abi:monitoring/observability-engine",
+    "@type": "prov:SoftwareAgent",
+    "prov:label": "ABI Observability Engine",
+    "dprod:version": "1.0.0"
+  }
+}
