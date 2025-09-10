@@ -9,11 +9,8 @@ from typing import Optional
 NAME = "ChatGPT"
 DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
+MODEL = "gpt-4.1-mini"
 SUGGESTIONS: list = []
-SYSTEM_PROMPT = """
-I am ChatGPT, an AI language model developed by OpenAI. I'm here to help you with information, answer your questions, provide explanations, and     
-assist with a wide range of topics.
-"""
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
@@ -25,7 +22,7 @@ def create_agent(
     from src import secret
 
     model = ChatOpenAI(
-        model="gpt-4.1-mini", 
+        model=MODEL, 
         output_version="responses/v1",
         api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
