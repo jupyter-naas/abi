@@ -409,7 +409,7 @@ class Agent(Expose):
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
 
-    def handle_response_v1(self, response: BaseMessage) -> Command:
+    def handle_openai_response_v1(self, response: BaseMessage) -> Command:
         content_str: str = ""
         tool_call: list[ToolCall] = []
         logger.debug(f"Chat model output version is responses/v1: {response}")
@@ -506,7 +506,7 @@ class Agent(Expose):
         elif (
             self._chat_model_output_version == "responses/v1"
         ):
-            return self.handle_response_v1(response)
+            return self.handle_openai_response_v1(response)
             
         # else:
         #     self._configuration._noti((self._name, response))
