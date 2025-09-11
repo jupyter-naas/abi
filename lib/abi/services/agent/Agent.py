@@ -181,6 +181,7 @@ class Agent(Expose):
         __description (str): The description of the agent
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
+        __native_tools (list[dict]): List of native tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
         __thread_id (str): Identifier for the current conversation thread
         __app (CompiledStateGraph): The compiled workflow graph
