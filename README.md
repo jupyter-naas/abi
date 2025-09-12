@@ -161,7 +161,7 @@ Built with international standards and regulatory frameworks as guiding principl
 <br>
 
 <div align="left">
-<img src="assets/domain-experts-banner.png" alt="Domain Expert Agents" width="400">
+<img src="assets/domain-experts-banner.png" alt="Domain Expert Agents" width="600">
 
 ### 🏪 **Marketplace Modules**
 
