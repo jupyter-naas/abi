@@ -1,5 +1,5 @@
 <div align="center">
-<img src="assets/abi-logo.png" alt="ABI Logo" width="128" height="128" style="border-radius: 20px;">
+<img src="assets/abi-logo.png" alt="ABI Logo" width="128" height="128">
 
 # ABI
 *Agentic Brain Infrastructure*
