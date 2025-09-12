@@ -161,12 +161,12 @@ Built with international standards and regulatory frameworks as guiding principl
 <br>
 
 <div align="left">
-<img src="assets/domain-experts-banner.png" alt="Domain Expert Agents" width="600">
+<img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="100%">
 
 ### 🏪 **Marketplace Modules**
 
 - **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Content Creator, Data Engineer, Accountant, Project Manager, etc.)
-- **Application Integrations**: GitHub, LinkedIn, Google Search, PostgreSQL, Git, Naas.ai
+- **Application Integrations**: GitHub, LinkedIn, Google Search, PostgreSQL, ArXiv, Naas, Git, PowerPoint, and more
 - **Modular Architecture**: Enable/disable any module via `config.yaml``
 
 <br>
