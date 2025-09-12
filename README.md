@@ -37,7 +37,7 @@ graph TD
     APPS <-->|"talks to"| ABI["🧠 ABI<br/>AI SuperAssistant"]
     
     %% === CORE INTELLIGENCE ===
-    ABI <-->|"queries"| OXIGRAPH[("🧠 Semantic Knowledge Graph<br/>Information, Relations & Logic")]
+    ABI <-->|"queries"| OXIGRAPH[("🧠 Semantic Knowledge Graph<br/>Information, Relations & Reasoning")]
     ABI <-->|"searches"| VECTORDB[("🔍 Vector DB<br/>Embeddings")]
     ABI <-->|"stores in"| POSTGRES[("🐘 PostgreSQL<br/>Memory")]
     
