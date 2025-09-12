@@ -68,8 +68,8 @@ def create_rounded_image(img_path, size=(60, 60), radius_percent=0.25):
 def create_domain_experts_banner(
     assets_dir="assets/domain-experts",
     output_path="assets/domain-experts-banner.png", 
-    logo_size=(60, 60),
-    spacing=15,
+    logo_size=(80, 80),  # Standard ABI banner size
+    spacing=20,          # Standard ABI banner spacing  
     max_per_row=8,
     background_color=(255, 255, 255, 0)  # Transparent
 ):
@@ -148,8 +148,8 @@ def main():
     parser = argparse.ArgumentParser(description="Create domain experts banner for ABI README")
     parser.add_argument("--assets-dir", default="assets/domain-experts", help="Domain experts assets directory")
     parser.add_argument("--output", default="assets/domain-experts-banner.png", help="Output file")
-    parser.add_argument("--size", type=int, default=60, help="Logo size (square)")
-    parser.add_argument("--spacing", type=int, default=15, help="Spacing between logos")
+    parser.add_argument("--size", type=int, default=80, help="Logo size (square) - Standard ABI banner size")
+    parser.add_argument("--spacing", type=int, default=20, help="Spacing between logos - Standard ABI banner spacing")
     parser.add_argument("--per-row", type=int, default=8, help="Max logos per row")
     parser.add_argument("--transparent", action="store_true", help="Transparent background")
     

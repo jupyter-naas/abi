@@ -58,8 +58,8 @@ def create_rounded_image(img_path, size=(80, 80), radius_percent=0.2):
 def create_llm_banner(
     assets_dir="assets",
     output_path="assets/llm-banner.png", 
-    logo_size=(80, 80),
-    spacing=20,
+    logo_size=(80, 80),  # Standard ABI banner size
+    spacing=20,          # Standard ABI banner spacing
     max_per_row=5,
     background_color=(255, 255, 255, 0)  # Transparent
 ):
