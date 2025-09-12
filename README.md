@@ -149,12 +149,13 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ## Key Features
 
+### 🤖 **Multi-Agent System**
+
 <div align="left">
 <img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
 <br><em>Powered by leading AI models</em>
 </div>
 
-### 🤖 **Multi-Agent System**
 - **ABI Agent**: Central orchestrator with intelligent routing across all AI models
 - **AI Model Agents**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
 - **Local Agents**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
