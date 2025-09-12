@@ -156,6 +156,7 @@ Built with international standards and regulatory frameworks as guiding principl
 - **ABI Agent**: Central orchestrator with intelligent routing across all AI models
 - **AI Model Agents**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
 - **Local Agents**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
+
 <br>
 <br>
 
@@ -167,25 +168,36 @@ Built with international standards and regulatory frameworks as guiding principl
 - **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Content Creator, Data Engineer, Accountant, Project Manager, etc.)
 - **Application Integrations**: GitHub, LinkedIn, Google Search, PostgreSQL, Git, Naas.ai
 - **Modular Architecture**: Enable/disable any module via `config.yaml``
+
 <br>
 <br>
-<br>
+
+<div align="left">
+<img src="assets/knowledge-management-banner.png" alt="Knowledge Management & Storage Technologies" width="400">
 
 ### 🧠 **Knowledge Management**
 
-<div align="left">
-<img src="assets/knowledge-management-banner.png" alt="Knowledge Management Standards" width="400">
-<br><em>Built on semantic web standards</em>
-</div>
+
+
 
 - **Semantic Knowledge Graph**: BFO-compliant ontologies with Oxigraph backend
 - **SPARQL Queries**: 30+ optimized queries for intelligent agent routing
 - **Vector Search**: Intent matching via embeddings and similarity search
 
+<br>
+<br>
+
+<div align="left">
+<img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="300">
+
 ### 🔄 **Automation & Orchestration**
+
 - **Workflows**: Automated business processes and task orchestration
 - **Pipelines**: Data processing and semantic transformation (via Dagster)
 - **Event-Driven**: Automatic triggers when new data enters knowledge graph
+
+<br>
+<br>
 
 ### 🌐 **Multiple Interfaces**
 - **Terminal**: Interactive chat with any agent

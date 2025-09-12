@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to create a Knowledge Management banner with semantic web standard logos
-Downloads and processes W3C, OWL, JSON-LD, and ISO 21838 logos
+Script to create an Automation & Orchestration banner with technology logos
+Uses existing logos from assets/automation-orchestration directory
 """
 
 from PIL import Image, ImageDraw
@@ -10,23 +10,35 @@ import os
 import argparse
 from pathlib import Path
 
-# Knowledge Management logos and their sources
-KNOWLEDGE_LOGOS = {
-    "w3c.png": "https://www.w3.org/Icons/w3c_home.png",
-    "bfo.png": "https://triplydb.com/imgs/avatars/d/6000a72bcbf91b03347f4a93.png?v=1", 
-    "rdf.png": "https://www.jean-delahousse.net/wp-content/uploads/2020/09/Rdf_logo-e1600714477975.png",
-    "iso.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/ISO_Logo_%28Red_square%29.svg/1200px-ISO_Logo_%28Red_square%29.svg.png",
-    "postgresql.png": "https://cdn.iconscout.com/icon/free/png-256/postgresql-11-1175122.png",
-    "qdrant.png": "https://avatars.githubusercontent.com/u/73504361?s=200&v=4",
-    "aws-s3.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Amazon-S3-Logo.svg/1200px-Amazon-S3-Logo.svg.png",
-    "oxigraph.png": "https://avatars.githubusercontent.com/u/64649343?s=200&v=4",
-    "aws-neptune.png": "https://dbdb.io/media/logos/amazon-neptune.png"
+# Automation & Orchestration logos (in preferred order)
+AUTOMATION_LOGOS = [
+    "python.png",
+    "fastapi.png",
+    "streamlit.png",
+    "dagster.jpg", 
+    "docker.png",
+    "github.png",
+    "ollama.png",
+    "naas.png",
+    "browser-use.png",
+    "chromium.png"
+]
+
+# Logo sources for missing technologies
+MISSING_LOGO_SOURCES = {
+    "fastapi.png": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png",
+    "streamlit.png": "https://streamlit.io/images/brand/streamlit-logo-primary-colormark-darktext.png",
+    "ollama.png": "https://ollama.com/public/ollama.png",
+    "naas.png": "https://avatars.githubusercontent.com/u/54785633?s=200&v=4"
 }
 
 def download_logo(url, filepath):
     """Download a logo from URL to filepath"""
     try:
-        response = requests.get(url, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+        response = requests.get(url, timeout=10, headers=headers)
         response.raise_for_status()
         
         with open(filepath, 'wb') as f:
@@ -70,54 +82,48 @@ def create_rounded_image(img_path, size=(80, 80), radius_percent=0.2):
         print(f"⚠️  Error processing {img_path}: {e}")
         return None
 
-def create_knowledge_management_banner(
-    assets_dir="assets/knowledge-management",
-    output_path="assets/knowledge-management-banner.png", 
+def create_automation_orchestration_banner(
+    assets_dir="assets/automation-orchestration",
+    output_path="assets/automation-orchestration-banner.png", 
     logo_size=(80, 80),  # Standard ABI banner size
     spacing=20,          # Standard ABI banner spacing
-    max_per_row=5,
-    background_color=(255, 255, 255, 0),  # Transparent
-    download_logos=True
+    max_per_row=5,       # 2 rows of 5 for 10 logos
+    background_color=(255, 255, 255, 0)  # Transparent
 ):
     """
-    Create a banner with knowledge management standard logos
+    Create a banner with automation & orchestration technology logos
     
     Args:
-        assets_dir: Directory containing knowledge management logo files
+        assets_dir: Directory containing logo files
         output_path: Where to save the banner
         logo_size: Size of each logo (width, height)
         spacing: Pixels between logos
         max_per_row: Maximum logos per row
         background_color: RGBA background color
-        download_logos: Whether to download logos if missing
     """
     assets_path = Path(assets_dir)
-    assets_path.mkdir(exist_ok=True)
     
-    # Download logos if requested
-    if download_logos:
-        print("🌐 Downloading knowledge management logos...")
-        for filename, url in KNOWLEDGE_LOGOS.items():
-            logo_path = assets_path / filename
-            if not logo_path.exists():
-                download_logo(url, logo_path)
-            else:
-                print(f"✅ Already exists: {filename}")
+    # Download missing logos
+    print("🔽 Downloading missing automation & orchestration logos...")
+    for logo_name, url in MISSING_LOGO_SOURCES.items():
+        logo_path = assets_path / logo_name
+        if not logo_path.exists():
+            download_logo(url, logo_path)
     
-    # Find available logos
+    # Find available automation logos
     available_logos = []
-    for filename in KNOWLEDGE_LOGOS.keys():
-        logo_path = assets_path / filename
+    for logo_file in AUTOMATION_LOGOS:
+        logo_path = assets_path / logo_file
         if logo_path.exists():
             available_logos.append(logo_path)
         else:
             print(f"⚠️  Logo not found: {logo_path}")
     
     if not available_logos:
-        print("❌ No knowledge management logos found!")
+        print("❌ No automation & orchestration logos found!")
         return False
     
-    print(f"🎯 Found {len(available_logos)} knowledge management logos")
+    print(f"🎯 Found {len(available_logos)} automation & orchestration logos")
     
     # Create rounded versions
     rounded_logos = []
@@ -156,46 +162,38 @@ def create_knowledge_management_banner(
     
     # Save banner
     banner.save(output_path, "PNG")
-    print(f"🎉 Created knowledge management banner: {output_path}")
+    print(f"🎉 Created automation & orchestration banner: {output_path}")
     print(f"   Size: {banner_width}x{banner_height}px")
-    print(f"   Standards: {logos_count} ({rows} rows)")
+    print(f"   Logos: {logos_count} ({rows} rows)")
     
     return True
 
 def main():
-    parser = argparse.ArgumentParser(description="Create knowledge management banner for ABI README")
-    parser.add_argument("--assets-dir", default="assets/knowledge-management", help="Knowledge management assets directory")
-    parser.add_argument("--output", default="assets/knowledge-management-banner.png", help="Output file")
-    parser.add_argument("--size", type=int, default=80, help="Logo size (square) - Standard ABI banner size")
-    parser.add_argument("--spacing", type=int, default=20, help="Spacing between logos - Standard ABI banner spacing")
-    parser.add_argument("--per-row", type=int, default=4, help="Max logos per row")
+    parser = argparse.ArgumentParser(description="Create automation & orchestration banner for ABI")
+    parser.add_argument("--assets-dir", default="assets/automation-orchestration", help="Assets directory")
+    parser.add_argument("--output", default="assets/automation-orchestration-banner.png", help="Output file")
+    parser.add_argument("--size", type=int, default=80, help="Logo size (square)")
+    parser.add_argument("--spacing", type=int, default=20, help="Spacing between logos")
+    parser.add_argument("--per-row", type=int, default=3, help="Max logos per row")
     parser.add_argument("--transparent", action="store_true", help="Transparent background")
-    parser.add_argument("--no-download", action="store_true", help="Skip downloading logos")
     
     args = parser.parse_args()
     
     logo_size = (args.size, args.size)
     bg_color = (255, 255, 255, 0) if args.transparent else (255, 255, 255, 255)
     
-    success = create_knowledge_management_banner(
+    success = create_automation_orchestration_banner(
         assets_dir=args.assets_dir,
         output_path=args.output,
         logo_size=logo_size,
         spacing=args.spacing,
         max_per_row=args.per_row,
-        background_color=bg_color,
-        download_logos=not args.no_download
+        background_color=bg_color
     )
     
     if success:
         print(f"\n🚀 Usage in README:")
-        print(f'<img src="{args.output}" alt="Knowledge Management Standards" width="350">')
-        print(f"\n📚 Standards included:")
-        print("- W3C: World Wide Web Consortium")
-        print("- BFO: Basic Formal Ontology") 
-        print("- SPARQL: SPARQL Query Language")
-        print("- RDF: Resource Description Framework")
-        print("- ISO: International Organization for Standardization")
+        print(f'<img src="{args.output}" alt="Automation & Orchestration Technologies" width="300">')
     else:
         print("❌ Failed to create banner")
 
