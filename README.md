@@ -116,7 +116,7 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ## Why ABI?
 
-**Ontology-Based AI for Good**: The power of ontology-driven systems has been proven at scale, but mostly behind closed doors and hefty price tags. We're building the open, ethical alternative - because transformative AI should serve humanity, not just those who can afford it.
+**Ontology-Based AI to Preserve the Freedom to Reason**: The convergence of semantic alignment and kinetic action through ontology-driven systems represents one of the most powerful technologies ever created. When such transformative capabilities exist behind closed doors or within a single organization's control, it threatens the fundamental freedom to reason and act independently. We believe this power should be distributed, not concentrated - because the ability to understand, reason about, and act upon complex information is a cornerstone of human autonomy and democratic society.
 
 **Core Capabilities for the Innovation Community:**
 - **Ontology-Driven Intelligence**: Semantic understanding that connects data, meaning, and action
