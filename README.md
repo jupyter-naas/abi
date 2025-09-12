@@ -161,7 +161,7 @@ Built with international standards and regulatory frameworks as guiding principl
 <br>
 
 <div align="left">
-<img src="assets/domain-experts-banner.png" alt="Domain Expert Agents" width="500">
+<img src="assets/domain-experts-banner.png" alt="Domain Expert Agents" width="400">
 
 ### 🏪 **Marketplace Modules**
 
@@ -177,8 +177,8 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ### 🧠 **Knowledge Management**
 
-
-
+<br><em>Semantic web standards + polyglot persistence architecture</em>
+</div>
 
 - **Semantic Knowledge Graph**: BFO-compliant ontologies with Oxigraph backend
 - **SPARQL Queries**: 30+ optimized queries for intelligent agent routing
@@ -188,9 +188,9 @@ Built with international standards and regulatory frameworks as guiding principl
 <br>
 
 <div align="left">
-<img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="300">
-
-### 🔄 **Automation & Orchestration**
+<img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="400">
+<br><em>Workflow automation & data pipeline orchestration</em>
+</div>
 
 - **Workflows**: Automated business processes and task orchestration
 - **Pipelines**: Data processing and semantic transformation (via Dagster)
