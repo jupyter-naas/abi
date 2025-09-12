@@ -116,7 +116,7 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ## Why ABI?
 
-**Ontology-Based AI for Everyone**: Palantir proved ontology-driven systems can change the world (and charge accordingly). We're just here to democratize the magic - because not everyone has a government contract budget, but everyone deserves to feel like a data wizard.
+**Ontology-Based AI for Good**: The power of ontology-driven systems has been proven at scale, but mostly behind closed doors and hefty price tags. We're building the open, ethical alternative - because transformative AI should serve humanity, not just those who can afford it.
 
 **Core Capabilities for the Innovation Community:**
 - **Ontology-Driven Intelligence**: Semantic understanding that connects data, meaning, and action
