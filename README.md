@@ -116,19 +116,19 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ## Why ABI?
 
-**Open Source Alternative to Palantir**: ABI brings ontology-driven AI and operating system technology to everyone. While Palantir's powerful semantic platforms serve large enterprises, ABI makes the same foundational capabilities accessible through open source.
+**Democratizing Ontology-Based AI Operating Systems**: Inspired by the groundbreaking work of companies like Palantir who have demonstrated the transformative power of semantic platforms at enterprise scale, ABI brings ontology-driven AI capabilities to the broader innovation ecosystem. While respecting the established leadership in this space, we believe these foundational technologies should be accessible to researchers, developers, and organizations of all sizes.
 
-**The Technology Everyone Should Have Access To:**
+**Core Capabilities for the Innovation Community:**
 - **Ontology-Driven Intelligence**: Semantic understanding that connects data, meaning, and action
 - **Knowledge Graph Operations**: Real-time reasoning over complex, interconnected information
 - **Automated Decision Systems**: AI that understands context and triggers appropriate responses
 - **Semantic Data Integration**: Connect disparate systems through shared understanding, not just APIs
 
-**Why Open Source Matters:**
-- **Universal Access**: No licensing barriers or enterprise-only restrictions
-- **Transparency**: See how the system works, modify it for your needs
-- **Community Innovation**: Collective improvement and shared knowledge
-- **Cost Accessibility**: Enterprise-grade capabilities without enterprise pricing
+**The Open Source Advantage:**
+- **Research & Education**: Academic institutions and researchers can explore ontological AI without barriers
+- **Innovation Acceleration**: Developers can build upon proven semantic architectures
+- **Community Collaboration**: Collective advancement of ontology-based AI methodologies
+- **Accessible Entry Point**: Learn and experiment with enterprise-grade semantic technologies
 
 ## Who is this for?
 
@@ -177,9 +177,6 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ### 🧠 **Knowledge Management**
 
-<br><em>Semantic web standards + polyglot persistence architecture</em>
-</div>
-
 - **Semantic Knowledge Graph**: BFO-compliant ontologies with Oxigraph backend
 - **SPARQL Queries**: 30+ optimized queries for intelligent agent routing
 - **Vector Search**: Intent matching via embeddings and similarity search
@@ -189,8 +186,6 @@ Built with international standards and regulatory frameworks as guiding principl
 
 <div align="left">
 <img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="400">
-<br><em>Workflow automation & data pipeline orchestration</em>
-</div>
 
 - **Workflows**: Automated business processes and task orchestration
 - **Pipelines**: Data processing and semantic transformation (via Dagster)
