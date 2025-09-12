@@ -173,7 +173,7 @@ Built with international standards and regulatory frameworks as guiding principl
 <br>
 
 <div align="left">
-<img src="assets/knowledge-management-banner.png" alt="Knowledge Management & Storage Technologies" width="400">
+<img src="assets/knowledge-management-banner-v2.png" alt="Knowledge Management & Storage Technologies" width="400">
 
 ### 🧠 **Knowledge Management**
 
