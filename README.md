@@ -22,6 +22,11 @@
 > A multi-agent AI System that uses ontologies to unify data, AI models, and workflows. 
 ⭐ **Star and follow to stay updated!**
 
+<div align="center">
+<img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
+<br><em>Powered by leading AI models</em>
+</div>
+
 ## Overview
 
 **ABI** (Agentic Brain Infrastructure) is an AI Operating System that uses intent-driven routing to match user requests with pre-configured responses and actions. When you make a request, ABI identifies your intent and triggers the appropriate response - whether that's a direct answer, tool usage, or routing to a specific AI agent.
