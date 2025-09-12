@@ -148,28 +148,28 @@ Built with international standards and regulatory frameworks as guiding principl
 - **🔗 Hybrid**: Start local, scale cloud, seamless migration
 
 ## Key Features
-
-### 🤖 **Multi-Agent System**
-
 <div align="left">
 <img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
-<br><em>Powered by leading AI models</em>
-</div>
+
+### 🤖 **Multi-Agent System**
 
 - **ABI Agent**: Central orchestrator with intelligent routing across all AI models
 - **AI Model Agents**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
 - **Local Agents**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
-
-### 🏪 **Marketplace Modules**
+<br>
+---
+<br>
 
 <div align="left">
 <img src="assets/domain-experts-banner.png" alt="Domain Expert Agents" width="500">
-<br><em>20+ specialized domain experts</em>
-</div>
+
+### 🏪 **Marketplace Modules**
 
 - **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Content Creator, Data Engineer, Accountant, Project Manager, etc.)
 - **Application Integrations**: GitHub, LinkedIn, Google Search, PostgreSQL, Git, Naas.ai
-- **Modular Architecture**: Enable/disable any module via `config.yaml`
+- **Modular Architecture**: Enable/disable any module via `config.yaml``
+<br>
+---
 
 ### 🧠 **Knowledge Management**
 - **Semantic Knowledge Graph**: BFO-compliant ontologies with Oxigraph backend
