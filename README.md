@@ -157,7 +157,6 @@ Built with international standards and regulatory frameworks as guiding principl
 - **AI Model Agents**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
 - **Local Agents**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
 <br>
----
 <br>
 
 <div align="left">
@@ -169,9 +168,16 @@ Built with international standards and regulatory frameworks as guiding principl
 - **Application Integrations**: GitHub, LinkedIn, Google Search, PostgreSQL, Git, Naas.ai
 - **Modular Architecture**: Enable/disable any module via `config.yaml``
 <br>
----
+<br>
+<br>
 
 ### 🧠 **Knowledge Management**
+
+<div align="left">
+<img src="assets/knowledge-management-banner.png" alt="Knowledge Management Standards" width="400">
+<br><em>Built on semantic web standards</em>
+</div>
+
 - **Semantic Knowledge Graph**: BFO-compliant ontologies with Oxigraph backend
 - **SPARQL Queries**: 30+ optimized queries for intelligent agent routing
 - **Vector Search**: Intent matching via embeddings and similarity search
