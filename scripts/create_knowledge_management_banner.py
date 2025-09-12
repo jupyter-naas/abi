@@ -13,9 +13,9 @@ from pathlib import Path
 # Knowledge Management logos and their sources
 KNOWLEDGE_LOGOS = {
     "w3c.png": "https://www.w3.org/Icons/w3c_home.png",
-    "semantic-web.png": "https://www.w3.org/Icons/SW/sw-horz-w3c.png", 
-    "json-ld.png": "https://json-ld.org/images/json-ld-logo-64.png",
-    "rdf.png": "https://www.w3.org/RDF/icons/rdf_w3c_icon.128.gif",
+    "bfo.png": "https://triplydb.com/imgs/avatars/d/6000a72bcbf91b03347f4a93.png?v=1", 
+    "sparql.png": "https://www.w3.org/Icons/SW/sparql_128.png",
+    "rdf.png": "https://www.jean-delahousse.net/wp-content/uploads/2020/09/Rdf_logo-e1600714477975.png",
     "iso.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/ISO_Logo_%28Red_square%29.svg/1200px-ISO_Logo_%28Red_square%29.svg.png"
 }
 
@@ -188,8 +188,8 @@ def main():
         print(f'<img src="{args.output}" alt="Knowledge Management Standards" width="350">')
         print(f"\n📚 Standards included:")
         print("- W3C: World Wide Web Consortium")
-        print("- OWL: Web Ontology Language") 
-        print("- JSON-LD: Linked Data format")
+        print("- BFO: Basic Formal Ontology") 
+        print("- SPARQL: SPARQL Query Language")
         print("- RDF: Resource Description Framework")
         print("- ISO: International Organization for Standardization")
     else:
