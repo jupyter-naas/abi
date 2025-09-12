@@ -116,7 +116,7 @@ Built with international standards and regulatory frameworks as guiding principl
 
 ## Why ABI?
 
-**Democratizing Ontology-Based AI Operating Systems**: Inspired by the groundbreaking work of companies like Palantir who have demonstrated the transformative power of ontology-based platforms at enterprise scale, ABI brings ontology-driven AI capabilities to the broader innovation ecosystem. While respecting the established leadership in this space, we believe these foundational technologies should be accessible to researchers, developers, and organizations of all sizes.
+**Ontology-Based AI for Everyone**: Palantir proved ontology-driven systems can change the world (and charge accordingly). We're just here to democratize the magic - because not everyone has a government contract budget, but everyone deserves to feel like a data wizard.
 
 **Core Capabilities for the Innovation Community:**
 - **Ontology-Driven Intelligence**: Semantic understanding that connects data, meaning, and action
