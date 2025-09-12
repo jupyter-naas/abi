@@ -19,7 +19,7 @@
 
 </div>
 
-> An organizational multi-agent system that uses ontologies to unify data, AI models, and workflows. 
+> A multi-agent AI System that uses ontologies to unify data, AI models, and workflows. 
 ⭐ **Star and follow to stay updated!**
 
 ## Overview
@@ -134,8 +134,8 @@ Built with international standards and regulatory frameworks as guiding principl
 
 **For innovators who want to own their AI**:
 
-- **🏠 Individuals**: Run locally, choose your models, own your data
-- **👤 Pro**: Automate workflows, optimize AI costs
+- **👤 Individuals**: Run locally, choose your models, own your data
+- **⚡ Pro**: Automate workflows, optimize AI costs
 - **👥 Teams**: Share knowledge, build custom agents
 - **🏢 Enterprise**: Replace consultants, integrate data, avoid vendor lock-in
 
