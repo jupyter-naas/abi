@@ -161,7 +161,7 @@ Built with international standards and regulatory frameworks as guiding principl
 <br>
 
 <div align="left">
-<img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="100%">
+<img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="800">
 
 ### 🏪 **Marketplace Modules**
 
