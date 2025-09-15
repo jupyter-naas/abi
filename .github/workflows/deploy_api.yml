@@ -92,6 +92,60 @@ jobs:
           naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
            || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
 
+      - name: Verify API deployment and version
+        run: |
+          echo "🔍 Verifying API deployment with expected version..."
+          
+          # Get the expected version from git tag
+          EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
+          echo "Expected version: $EXPECTED_VERSION"
+          
+          # API URL based on registry name
+          API_URL="https://${{ env.REGISTRY_NAME }}.default.space.naas.ai"
+          OPENAPI_URL="$API_URL/openapi.json"
+          
+          echo "Checking API at: $OPENAPI_URL"
+          
+          # Wait up to 5 minutes for API to be ready with correct version
+          TIMEOUT=300  # 5 minutes
+          INTERVAL=10  # Check every 10 seconds
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            echo "Attempt $((ELAPSED/INTERVAL + 1)): Checking API version..."
+            
+            # Try to get the version from OpenAPI endpoint
+            RESPONSE=$(curl -s "$OPENAPI_URL" 2>/dev/null || echo "")
+            
+            if [ -n "$RESPONSE" ]; then
+              # Extract version from JSON response
+              ACTUAL_VERSION=$(echo "$RESPONSE" | grep -o '"version":"[^"]*' | cut -d'"' -f4)
+              
+              if [ -n "$ACTUAL_VERSION" ]; then
+                echo "API responded with version: $ACTUAL_VERSION"
+                
+                if [ "$ACTUAL_VERSION" = "$EXPECTED_VERSION" ]; then
+                  echo "✅ API deployment verified! Version matches: $ACTUAL_VERSION"
+                  exit 0
+                else
+                  echo "⚠️ Version mismatch. Expected: $EXPECTED_VERSION, Got: $ACTUAL_VERSION"
+                fi
+              else
+                echo "⚠️ Could not extract version from API response"
+              fi
+            else
+              echo "⚠️ API not responding yet..."
+            fi
+            
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          
+          echo "❌ Timeout: API did not respond with expected version after 5 minutes"
+          echo "Expected: $EXPECTED_VERSION"
+          echo "Last response: $RESPONSE"
+          exit 1
+
   streamlit-demo:
     runs-on: ubuntu-latest
     env:
