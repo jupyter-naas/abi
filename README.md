@@ -44,7 +44,7 @@ graph TD
     
     %% === CORE INTELLIGENCE ===
     subgraph STORAGE["Storage"]
-        MEMORY[("🐘 PostgreSQL<br/>Instant Memory")]
+        MEMORY[("🐘 Memory<br/>Persisting context")]
         TRIPLESTORE[("🧠 Semantic Knowledge Graph<br/>Information, Relations & Reasoning")]
         VECTORDB[("🔍 Vector DB<br/>Embeddings")]
         FILES[("💾 Storage<br/>Files")]
