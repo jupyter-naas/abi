@@ -125,16 +125,17 @@ graph TD
 - **Multiple Interfaces**: Chat, REST API, Web Dashboard, MCP Protocol (Claude Desktop integration)
 - **Universal Access**: Single entry point to all AI capabilities and domain expertise
 
-**2. Agent Orchestration Layer**
+**2. Agent Orchestration Layer** using LangGraph agents
 - **ABI SuperAssistant**: Central coordinator that analyzes requests and routes to optimal resources
-- **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Data Analyst, Content Creator, etc.)
 - **AI Model Agents**: Access to ChatGPT, Claude, Gemini, Grok, Llama, Mistral, and local models
+- **Domains Expert Agents**: 20+ specialized agents (Software Engineer, Data Analyst, Content Creator, etc.)
+- **Applications Expert Agents**: 20+ specialized agents (GitHub, Google, LinkedIn, Powerpoint, etc.)
 
-**3. Intelligence Storage Layer**
-- **Semantic Knowledge Graph**: 50,000+ RDF triples in BFO-compliant ontologies for reasoning and relationships
-- **Vector Database**: Intent embeddings for semantic similarity matching and context understanding
-- **Memory System**: PostgreSQL for conversation history and persistent context
-- **File Storage**: Generated reports, documents, and workflow outputs
+**3. Adaptive Storage Layer** based on Hexagonal architecture
+- **Semantic Knowledge Graph**: RDF triples in BFO-compliant ontologies for reasoning and relationships (default: Oxygraph)
+- **Vector Database**: Intent embeddings for semantic similarity matching and context understanding (default: Qdrant)
+- **Memory System**: For conversation history and persistent context (default: PostgresSQL)
+- **File Storage**: Generated reports, documents, and workflow outputs (default: AWS S3)
 
 **4. Execution Components Layer**
 - **Ontologies**: BFO-structured knowledge that defines how data relates and flows
