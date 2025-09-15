@@ -36,26 +36,27 @@ graph TD
     USER["👤 User"] <-->|"uses"| APPS["📱 Apps<br/>Chat | API | Dashboard"]
     APPS <-->|"talks to"| AGENTS
 
-    subgraph AGENTS["Agents"]
+    %% === AGENTS LAYER ===
+    subgraph AGENTS["Multi-Agents System"]
         ABI["🧠 ABI<br/>AI SuperAssistant"]
-        CUSTOM_AGENTS["🎯 Agents<br/>General & Domain Experts"]
+        CUSTOM_AGENTS["🎯 Agents<br/>Application & Domain Experts"]
         ABI -->|"coordinates"| CUSTOM_AGENTS
     end
     
-    %% === CORE INTELLIGENCE ===
+    %% === STORAGE LAYER ===
     subgraph STORAGE["Storage"]
         MEMORY[("🐘 Memory<br/>Persisting context")]
         TRIPLESTORE[("🧠 Semantic Knowledge Graph<br/>Information, Relations & Reasoning")]
         VECTORDB[("🔍 Vector DB<br/>Embeddings")]
-        FILES[("💾 Storage<br/>Files")]
+        FILES[("💾 Object Storage<br/>Files")]
     end
     
-    AGENTS <-->|"queries"| TRIPLESTORE
-    AGENTS <-->|"searches"| VECTORDB
-    AGENTS <-->|"retrieves"| FILES
+    AGENTS <-->|"query"| TRIPLESTORE
+    AGENTS <-->|"search"| VECTORDB
+    AGENTS <-->|"retrieve"| FILES
     AGENTS <-->|"access"| MEMORY
-    FILES -->|"indexes in"| VECTORDB
-    MEMORY -->|"indexes in"| VECTORDB
+    FILES -->|"index in"| VECTORDB
+    MEMORY -->|"index in"| VECTORDB
 
     %% === EXECUTION LAYER ===
     subgraph C["Components"]
@@ -66,28 +67,29 @@ graph TD
         PIPELINES["⚙️ Pipelines<br/>Data → Semantic"]
         INTEGRATIONS["🔌 Integrations<br/>APIs, Files"]
     end
-    AGENTS <-->|"uses"| ONTOLOGIES
-    AGENTS -->|"runs"| INTEGRATIONS["🔌 Integrations<br/>APIs, Exports"]
-    AGENTS -->|"runs"| PIPELINES["⚙️ Pipelines<br/>Data → Semantic"]
+    AGENTS <-->|"use"| ONTOLOGIES
+    AGENTS -->|"execute"| INTEGRATIONS["🔌 Integrations<br/>APIs, Exports"]
+    AGENTS -->|"execute"| PIPELINES["⚙️ Pipelines<br/>Data → Semantic"]
     AGENTS -->|"access"| ANALYTICS["📊 Analytics<br/>Dashboards & Reports"]
-    AGENTS -->|"runs"| WORKFLOWS["🔄 Workflows<br/>Processes"] 
-    AGENTS -->|"uses"| MODELS["🤖 AI Models<br/>Open & Closed Source"]
+    AGENTS -->|"execute"| WORKFLOWS["🔄 Workflows<br/>Processes"] 
+    AGENTS -->|"use"| MODELS["🤖 AI Models<br/>Open & Closed Source"]
 
     %% === DATA PIPELINE ===
-    ONTOLOGIES-->|"structures"| PIPELINES
-    PIPELINES-->|"uses"| WORKFLOWS
-    PIPELINES-->|"uses"| INTEGRATIONS
-    PIPELINES -->|"creates triples"| TRIPLESTORE
-    WORKFLOWS-->|"uses"| INTEGRATIONS
+    ONTOLOGIES-->|"structure"| PIPELINES
+    PIPELINES-->|"use"| WORKFLOWS
+    PIPELINES-->|"use"| INTEGRATIONS
+    PIPELINES -->|"create triples"| TRIPLESTORE
+    WORKFLOWS-->|"use"| INTEGRATIONS
     
     %% === KINETIC ACTIONS ===
-    TRIPLESTORE -.->|"triggers"| PIPELINES
-    TRIPLESTORE -.->|"triggers"| WORKFLOWS
-    TRIPLESTORE -.->|"triggers"| INTEGRATIONS
+    TRIPLESTORE -.->|"trigger"| PIPELINES
+    TRIPLESTORE -.->|"trigger"| WORKFLOWS
+    TRIPLESTORE -.->|"trigger"| INTEGRATIONS
     
     %% === FILE GENERATION ===
-    WORKFLOWS -->|"generates"| FILES
-    INTEGRATIONS -->|"generates"| FILES
+    WORKFLOWS -->|"create"| FILES
+    WORKFLOWS -->|"generate"| ANALYTICS
+    INTEGRATIONS -->|"create"| FILES
     
     %% === STYLING ===
     classDef user fill:#2c3e50,stroke:#fff,stroke-width:2px,color:#fff
@@ -178,7 +180,7 @@ Moreover, this project is built with international standards and regulatory fram
 - **👤 Individuals**: Run locally, choose your models, own your data
 - **⚡ Pro**: Automate workflows, optimize AI costs
 - **👥 Teams**: Share knowledge, build custom agents
-- **🏢 Enterprise**: Replace consultants, integrate data, avoid vendor lock-in
+- **🏢 Enterprise**: Deploy organization-wide, integrate legacy systems, maintain full control
 
 **ABI Local & Open Source** + **[Naas.ai Cloud](https://naas.ai)** = Complete AI Operating System
 
@@ -192,11 +194,11 @@ Moreover, this project is built with international standards and regulatory fram
 <div align="left">
 <img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
 
-### 🤖 **Multi-Agent System**
+### 🤖 **Multi-Models**
 
-- **ABI Agent**: Central orchestrator with intelligent routing across all AI models
-- **AI Model Agents**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
-- **Local Agents**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
+- **Supervisor**: ABI, a Supervisor Agent with intelligent routing across all AI models.
+- **Cloud**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
+- **Local**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
 
 <br>
 <br>
@@ -204,11 +206,11 @@ Moreover, this project is built with international standards and regulatory fram
 <div align="left">
 <img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="800">
 
-### 🏪 **Marketplace Modules**
+### 🏪 **Marketplace**
 
 - **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Content Creator, Data Engineer, Accountant, Project Manager, etc.)
-- **Application Integrations**: GitHub, LinkedIn, Google Search, PostgreSQL, ArXiv, Naas, Git, PowerPoint, and more
-- **Modular Architecture**: Enable/disable any module via `config.yaml``
+- **Applications Module**: GitHub, LinkedIn, Google Search, PostgreSQL, ArXiv, Naas, Git, PowerPoint, and more
+- **Modular Architecture**: Enable/disable any module via `config.yaml`
 
 <br>
 <br>
@@ -221,6 +223,8 @@ Moreover, this project is built with international standards and regulatory fram
 - **Semantic Knowledge Graph**: BFO-compliant ontologies with Oxigraph backend
 - **SPARQL Queries**: 30+ optimized queries for intelligent agent routing
 - **Vector Search**: Intent matching via embeddings and similarity search
+- **Object Storage**: File storage and retrieval with MinIO compatibility
+- **Memory**: Persistent context and conversation history storage
 
 <br>
 <br>
@@ -228,9 +232,12 @@ Moreover, this project is built with international standards and regulatory fram
 <div align="left">
 <img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="400">
 
-- **Workflows**: Automated business processes and task orchestration
-- **Pipelines**: Data processing and semantic transformation (via Dagster)
-- **Event-Driven**: Automatic triggers when new data enters knowledge graph
+### ⚙️ **Automation & Orchestration**
+- **Integrations**: Seamless connectivity with external APIs and data export capabilities
+- **Workflows**: End-to-end automation of complex business processes with intelligent task orchestration
+- **Pipelines**: Data processing and semantic transformation
+- **Event-Driven**: Real-time reactivity with automatic triggers based on knowledge graph updates
+- **Cache System**: Intelligent caching layer to optimize API usage and manage rate limits efficiently
 
 <br>
 <br>
