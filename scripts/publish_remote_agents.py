@@ -44,13 +44,17 @@ def publish_remote_agent(
         if dry_run:
             logger.info(f"🧪 [DRY RUN] Would update \"ABI_API_KEY\" secret in Github repository: {github_repository}")
         else:
-            github_integration = GitHubIntegration(GitHubIntegrationConfiguration(access_token=github_access_token))
-            logger.info(f"🔑 Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
-            github_integration.create_or_update_repository_secret(
-                repo_name=github_repository,
-                secret_name="ABI_API_KEY",
-                value=abi_api_key
-            )
+            try:
+                github_integration = GitHubIntegration(GitHubIntegrationConfiguration(access_token=github_access_token))
+                logger.info(f"🔑 Updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
+                github_integration.create_or_update_repository_secret(
+                    repo_name=github_repository,
+                        secret_name="ABI_API_KEY",
+                        value=abi_api_key
+                )
+            except Exception as e:
+                logger.error(f"❌ Error updating \"ABI_API_KEY\" secret in Github repository: {github_repository}")
+                logger.error(f"❌ Error: {e}")
 
     # Get all agents from the modules
     load_modules()
