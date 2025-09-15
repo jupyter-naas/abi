@@ -34,36 +34,60 @@ The system combines multiple AI models (ChatGPT, Claude, Gemini, Grok, Llama, Mi
 graph TD
     %% === USER INTERACTION LAYER ===
     USER["👤 User"] <-->|"uses"| APPS["📱 Apps<br/>Chat | API | Dashboard"]
-    APPS <-->|"talks to"| ABI["🧠 ABI<br/>AI SuperAssistant"]
+    APPS <-->|"talks to"| AGENTS
+
+    subgraph AGENTS["Agents"]
+        ABI["🧠 ABI<br/>AI SuperAssistant"]
+        CUSTOM_AGENTS["🎯 Agents<br/>General & Domain Experts"]
+        ABI -->|"coordinates"| CUSTOM_AGENTS
+    end
     
     %% === CORE INTELLIGENCE ===
-    ABI <-->|"queries"| OXIGRAPH[("🧠 Semantic Knowledge Graph<br/>Information, Relations & Reasoning")]
-    ABI <-->|"searches"| VECTORDB[("🔍 Vector DB<br/>Embeddings")]
-    ABI <-->|"stores in"| POSTGRES[("🐘 PostgreSQL<br/>Memory")]
+    subgraph STORAGE["Storage"]
+        MEMORY[("🐘 PostgreSQL<br/>Instant Memory")]
+        TRIPLESTORE[("🧠 Semantic Knowledge Graph<br/>Information, Relations & Reasoning")]
+        VECTORDB[("🔍 Vector DB<br/>Embeddings")]
+        FILES[("💾 Storage<br/>Files")]
+    end
     
+    AGENTS <-->|"queries"| TRIPLESTORE
+    AGENTS <-->|"searches"| VECTORDB
+    AGENTS <-->|"retrieves"| FILES
+    AGENTS <-->|"access"| MEMORY
+    FILES -->|"indexes in"| VECTORDB
+    MEMORY -->|"indexes in"| VECTORDB
+
     %% === EXECUTION LAYER ===
-    ABI -->|"coordinates"| AGENTS["🎯 Agents<br/>General & Domain Experts"]
-    ABI -->|"runs"| WORKFLOWS["🔄 Workflows<br/>Processes"] 
-    ABI -->|"creates"| ANALYTICS["📊 Analytics<br/>Dashboards & Reports"]
-    
+    subgraph C["Components"]
+        MODELS["🤖 AI Models<br/>Open & Closed Source"]
+        ANALYTICS["📊 Analytics<br/>Dashboards & Reports"] 
+        WORKFLOWS["🔄 Workflows<br/>Processes"]
+        ONTOLOGIES["📚 Ontologies<br/>BFO Structure"]
+        PIPELINES["⚙️ Pipelines<br/>Data → Semantic"]
+        INTEGRATIONS["🔌 Integrations<br/>APIs, Files"]
+    end
+    AGENTS <-->|"uses"| ONTOLOGIES
+    AGENTS -->|"runs"| INTEGRATIONS["🔌 Integrations<br/>APIs, Exports"]
+    AGENTS -->|"runs"| PIPELINES["⚙️ Pipelines<br/>Data → Semantic"]
+    AGENTS -->|"access"| ANALYTICS["📊 Analytics<br/>Dashboards & Reports"]
+    AGENTS -->|"runs"| WORKFLOWS["🔄 Workflows<br/>Processes"] 
     AGENTS -->|"uses"| MODELS["🤖 AI Models<br/>Open & Closed Source"]
-    AGENTS <-->|"works with"| WORKFLOWS
-    
+
     %% === DATA PIPELINE ===
-    INTEGRATIONS["🔌 Integrations<br/>APIs, Files"] -->|"feeds data to"| PIPELINES["⚙️ Pipelines<br/>Data → Semantic"]
-    ONTOLOGIES["📚 Ontologies<br/>BFO Structure"] -->|"structures"| PIPELINES
-    PIPELINES -->|"saves to"| OXIGRAPH
-    PIPELINES -->|"indexes in"| VECTORDB
+    ONTOLOGIES-->|"structures"| PIPELINES
+    PIPELINES-->|"uses"| WORKFLOWS
+    PIPELINES-->|"uses"| INTEGRATIONS
+    PIPELINES -->|"creates triples"| TRIPLESTORE
+    WORKFLOWS-->|"uses"| INTEGRATIONS
     
     %% === KINETIC ACTIONS ===
-    OXIGRAPH -.->|"triggers"| WORKFLOWS
-    OXIGRAPH -.->|"activates"| AGENTS
+    TRIPLESTORE -.->|"triggers"| PIPELINES
+    TRIPLESTORE -.->|"triggers"| WORKFLOWS
+    TRIPLESTORE -.->|"triggers"| INTEGRATIONS
     
     %% === FILE GENERATION ===
-    AGENTS -->|"creates files"| STORAGE[("💾 Storage<br/>Files")]
-    WORKFLOWS -->|"generates files"| STORAGE
-    PIPELINES -->|"outputs files"| STORAGE
-    STORAGE -->|"serves to"| APPS
+    WORKFLOWS -->|"generates"| FILES
+    INTEGRATIONS -->|"generates"| FILES
     
     %% === STYLING ===
     classDef user fill:#2c3e50,stroke:#fff,stroke-width:2px,color:#fff
@@ -81,38 +105,52 @@ graph TD
     class USER user
     class ABI abi
     class APPS apps
-    class AGENTS agents
+    class CUSTOM_AGENTS agents
     class WORKFLOWS workflows
     class INTEGRATIONS integrations
     class ONTOLOGIES ontologies
     class PIPELINES pipelines
     class ANALYTICS analytics
     class MODELS models
-    class OXIGRAPH,VECTORDB,POSTGRES,STORAGE infrastructure
+    class TRIPLESTORE,VECTORDB,MEMORY,FILES infrastructure
 ```
 
 ## How ABI Works
 
-**ABI is your intelligent AI SuperAssistant** that connects you to the right tools and expertise for any task.
+**ABI is an AI Operating System** that orchestrates intelligent agents, data systems, and workflows through semantic understanding and automated reasoning.
 
-**What ABI Does:**
-- **Smart Routing**: Automatically picks the best AI model (ChatGPT, Claude, local models) based on your specific needs
-- **Context Memory**: Remembers your ongoing conversations so you never have to repeat yourself
-- **Expert Access**: Connects you to 20+ domain expert agents (Software Engineer, Content Creator, Data Analyst, etc.)
-- **Workflow Automation**: Triggers business processes and data pipelines based on your requests
-- **Multi-Interface**: Works through chat, API, web dashboard, or integrates with Claude Desktop
+### 🔄 **Four-Layer Architecture**
 
-**Simple Process**: Ask ABI anything → It analyzes your request → Routes to the best agent/tool → Delivers complete results
+**1. User Interaction Layer**
+- **Multiple Interfaces**: Chat, REST API, Web Dashboard, MCP Protocol (Claude Desktop integration)
+- **Universal Access**: Single entry point to all AI capabilities and domain expertise
 
-**Technical Foundation**: 
-- **Oxigraph**: Semantic knowledge graph with 50,000+ RDF triples in BFO-compliant ontologies
-- **Vector Database**: Stores intent embeddings for semantic similarity matching
-- **SPARQL + Vector Search**: Combines structured queries with semantic similarity for accurate intent matching
-- **Ontologies (BFO Top-Level)**: Provide classes, properties, relations, and logic for pipelines to accurately model reality
-- **External Integrations**: Connect to APIs, systems, databases, tools, and applications
-- **Object Storage**: Agents, workflows, and pipelines can generate files (reports, documents, etc.) 
+**2. Agent Orchestration Layer**
+- **ABI SuperAssistant**: Central coordinator that analyzes requests and routes to optimal resources
+- **Domain Expert Agents**: 20+ specialized agents (Software Engineer, Data Analyst, Content Creator, etc.)
+- **AI Model Agents**: Access to ChatGPT, Claude, Gemini, Grok, Llama, Mistral, and local models
 
-Built with international standards and regulatory frameworks as guiding principles, including [ISO/IEC 42001:2023 (AI Management Systems)](https://www.iso.org/standard/42001), [ISO/IEC 21838-2:2021 (Basic Formal Ontology)](https://www.iso.org/standard/74572.html), and forward-compatibility with emerging regulations like the EU AI Act, ABI provides a customizable framework suitable for individuals and organizations aiming to create intelligent, automated systems aligned to their needs.
+**3. Intelligence Storage Layer**
+- **Semantic Knowledge Graph**: 50,000+ RDF triples in BFO-compliant ontologies for reasoning and relationships
+- **Vector Database**: Intent embeddings for semantic similarity matching and context understanding
+- **Memory System**: PostgreSQL for conversation history and persistent context
+- **File Storage**: Generated reports, documents, and workflow outputs
+
+**4. Execution Components Layer**
+- **Ontologies**: BFO-structured knowledge that defines how data relates and flows
+- **Pipelines**: Automated data processing that transforms raw information into semantic knowledge
+- **Workflows**: Business process automation triggered by user requests or system events
+- **Integrations**: Connections to external APIs, databases, and applications
+- **Analytics**: Real-time dashboards and reporting capabilities
+
+### ⚡ **Intelligent Request Flow**
+
+1. **Request Analysis**: ABI receives your request through any interface
+2. **Semantic Understanding**: Vector search and SPARQL queries identify intent and context
+3. **Agent Routing**: Knowledge graph determines the best agent/model combination
+4. **Resource Coordination**: Agents access ontologies, trigger workflows, and use integrations as needed
+5. **Knowledge Creation**: Results are stored back into the knowledge graph for future reasoning
+6. **Kinetic Actions**: System automatically triggers related processes and workflows based on new knowledge
 
 ## Why ABI?
 
@@ -130,6 +168,8 @@ Built with international standards and regulatory frameworks as guiding principl
 - **Community Collaboration**: Collective advancement of ontology-based AI methodologies
 - **Accessible Entry Point**: Learn and experiment with enterprise-grade semantic technologies
 
+Moreover, this project is built with international standards and regulatory frameworks as guiding principles, including [ISO/IEC 42001:2023 (AI Management Systems)](https://www.iso.org/standard/42001), [ISO/IEC 21838-2:2021 (Basic Formal Ontology)](https://www.iso.org/standard/74572.html), and forward-compatibility with emerging regulations like the EU AI Act, ABI provides a customizable framework suitable for individuals and organizations aiming to create intelligent, automated systems aligned to their needs.
+
 ## Who is this for?
 
 **For innovators who want to own their AI**:
@@ -139,13 +179,13 @@ Built with international standards and regulatory frameworks as guiding principl
 - **👥 Teams**: Share knowledge, build custom agents
 - **🏢 Enterprise**: Replace consultants, integrate data, avoid vendor lock-in
 
-**For cloud users**, we offer **Naas AI Credits** that aggregate multiple AI models on our platform - giving you access to ChatGPT, Claude, Gemini, and more through a single, cost-optimized interface. Available for anyone with a [naas.ai](https://naas.ai) workspace account.
-
 **ABI Local & Open Source** + **[Naas.ai Cloud](https://naas.ai)** = Complete AI Operating System
 
 - **🏠 Local**: Open source, privacy-first, full control
 - **☁️ Cloud**: Managed infrastructure, marketplace, enterprise features  
 - **🔗 Hybrid**: Start local, scale cloud, seamless migration
+
+**For cloud users**, we offer **Naas AI Credits** that aggregate multiple AI models on our platform - giving you access to ChatGPT, Claude, Gemini, and more through a single, cost-optimized interface. Available for anyone with a [naas.ai](https://naas.ai) workspace account.
 
 ## Key Features
 <div align="left">
