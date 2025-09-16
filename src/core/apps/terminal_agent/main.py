@@ -244,39 +244,6 @@ def run_agent(agent: Agent):
     # Initialize conversation logging
     init_conversation_file()
     
-    # Helper function to get model info for an agent
-    def get_agent_model_info(agent_name: str) -> str:
-        """Get model information for the active agent"""
-        if not agent_name or agent_name == "Abi":
-            # For Abi, get model from the main agent
-            if hasattr(agent, '_chat_model'):
-                if hasattr(agent._chat_model, 'model_name'):
-                    return agent._chat_model.model_name
-                elif hasattr(agent._chat_model, 'model'):
-                    return agent._chat_model.model
-                else:
-                    return "o3-mini"  # Default for Abi
-            return "o3-mini"
-        
-        # For sub-agents, find the agent in the agents list
-        for sub_agent in agent.agents:
-            if sub_agent.name == agent_name:
-                if hasattr(sub_agent, '_chat_model'):
-                    chat_model = sub_agent._chat_model
-                    # Try to get model ID from langchain models
-                    if hasattr(chat_model, 'model_name'):
-                        return chat_model.model_name
-                    elif hasattr(chat_model, 'model'):
-                        return chat_model.model
-                    # For Ollama models
-                    elif hasattr(chat_model, '_client') and hasattr(chat_model._client, 'model'):
-                        return chat_model._client.model
-                    # For OpenAI models  
-                    elif hasattr(chat_model, '_model_name'):
-                        return chat_model._model_name
-                break
-        return "unknown"
-    
     # Show greeting when truly ready for input - instant like responses
     greeting_line = "Abi: Hello, World!"
     
@@ -289,9 +256,6 @@ def run_agent(agent: Agent):
     save_to_conversation(greeting_line)
     save_to_conversation("─" * TERMINAL_WIDTH)
     save_to_conversation("")  # Empty line
-    
-    # Set Abi as active agent after greeting
-    current_active_agent = agent.name
     
     # Available agents for mention suggestions (cloud + local)
     available_agents = [
@@ -317,9 +281,17 @@ def run_agent(agent: Agent):
     
     # Just start chatting naturally - like the screenshot
     while True:
+        # Set Abi as active agent after greeting
+        current_active_agent = agent.name
+        if hasattr(agent.chat_model, 'model_name'):
+            model_info = agent.chat_model.model_name
+        elif hasattr(agent.chat_model, 'model'):
+            model_info = agent.chat_model.model
+        else:
+            model_info = "unknown"
+            
         # Create clean status line showing active agent with model info
         if current_active_agent:
-            model_info = get_agent_model_info(current_active_agent)
             status_line = f"Active: {current_active_agent} (model: {model_info})"
         else:
             status_line = "No active agent"
