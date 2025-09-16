@@ -21,25 +21,25 @@ modules:
   - path: src/core/modules/abi
     enabled: true
   - path: src/core/modules/chatgpt
-    enabled: true
+    enabled: false
   - path: src/core/modules/claude
-    enabled: true
+    enabled: false
   - path: src/core/modules/deepseek
-    enabled: true
+    enabled: false
   - path: src/core/modules/gemini
-    enabled: true
+    enabled: false
   - path: src/core/modules/gemma
-    enabled: true
+    enabled: false
   - path: src/core/modules/grok
-    enabled: true
+    enabled: false
   - path: src/core/modules/llama
-    enabled: true
+    enabled: false
   - path: src/core/modules/mistral
-    enabled: true
+    enabled: false
   - path: src/core/modules/perplexity
-    enabled: true
+    enabled: false
   - path: src/core/modules/qwen
-    enabled: true
+    enabled: false
   - path: src/core/modules/templatablesparqlquery
     enabled: true
   - path: src/marketplace/modules/applications/algolia
@@ -49,15 +49,15 @@ modules:
   - path: src/marketplace/modules/applications/git
     enabled: true
   - path: src/marketplace/modules/applications/github
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/google_search
     enabled: true
   - path: src/marketplace/modules/applications/linkedin
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/naas
     enabled: true
   - path: src/marketplace/modules/applications/postgres
-    enabled: true
+    enabled: false
   - path: src/marketplace/modules/applications/powerpoint
     enabled: false
   - path: src/marketplace/modules/domains/account-executive
@@ -78,6 +78,8 @@ modules:
     enabled: false
   - path: src/marketplace/modules/domains/customer-success-manager
     enabled: false
+  - path: src/marketplace/modules/domains/cyber-security-analyst
+    enabled: true
   - path: src/marketplace/modules/domains/data-engineer
     enabled: false
   - path: src/marketplace/modules/domains/devops-engineer

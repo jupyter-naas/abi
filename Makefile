@@ -375,6 +375,9 @@ chat-naas-agent: deps
 chat-support-agent: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
 
+chat-cyber-security-analyst-agent: deps
+	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent CyberSecurityAnalystAgent
+
 pull-request-description: deps
 	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
