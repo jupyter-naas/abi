@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.modules.aia.integrations.AiaIntegration import (
+from src.marketplace.modules.applications.aia.integrations.AiaIntegration import (
     AiaIntegration,
     AiaIntegrationConfiguration,
 )
