@@ -19,6 +19,9 @@ services:
     environment:
       - PYTHONPATH=/app
       - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
+      - VECTOR_STORE_ADAPTER=qdrant
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     env_file:
       - .env
     command: ["uv", "run"]
@@ -26,6 +29,8 @@ services:
       oxigraph:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     networks:
       - abi-network
@@ -122,12 +127,35 @@ services:
       - local
       - prod
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - 6333:6333
+      - 6334:6334
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+      - container
+
 volumes:
   cargo-cache:
   venv_cache:
   oxigraph_data:
   postgres_data:
-  dagster_home: 
+  dagster_home:
+  qdrant_storage: 
 
 networks:
   abi-network:
