@@ -24,7 +24,7 @@ Contact your administrator to get the token.
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion"
+url = "https://<your-registry-name>.default.space.naas.ai/agents/abi/completion"
 
 headers = {
     "Authorization": f"Bearer {token}"
@@ -39,7 +39,7 @@ print(response.json())
 ```python
 import requests
 
-url = "https://<your-registry-name>.default.space.naas.ai/agents/supervisor/completion?token=<token>"
+url = "https://<your-registry-name>.default.space.naas.ai/agents/abi/completion?token=<token>"
 
 response = requests.post(url)
 print(response.json())
@@ -215,7 +215,7 @@ Required:
 API endpoints for interacting with ABI's agents.
 
 ### Core Agents:
-- Supervisor: Manages and coordinates other agents
+- Abi: Manages and coordinates other agents
 - Ontology: Manages and coordinates other agents
 - Naas: Manages and coordinates other agents
 - Support: Provides help and guidance for using ABI

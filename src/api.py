@@ -20,9 +20,6 @@ from typing import Annotated
 from src.openapi_doc import TAGS_METADATA, API_LANDING_HTML
 from src import config
 
-# Automatic loading of agents from modules
-from src.__modules__ import get_modules
-
 # Init API
 TITLE = config.api_title
 DESCRIPTION = config.api_description
@@ -190,10 +187,19 @@ def overridden_redoc():
 def root():
     return API_LANDING_HTML.replace("[TITLE]", TITLE).replace("[LOGO_NAME]", logo_name)
 
+# Add agents to the API
+all_agents: list = []
 for module in modules:
     for agent in module.agents:
-        logger.debug(f"Loading agent: {agent.name}")
-        agent.as_api(agents_router)
+        if agent is not None:
+            all_agents.append(agent)
+        else:
+            logger.warning(f"Skipping {agent.name} agent (missing API key)")
+
+# Sort agents by name and add to router
+for agent in sorted(all_agents, key=lambda a: a.name):
+    logger.debug(f"Adding agent to API: {agent.name}")
+    agent.as_api(agents_router)
 
 # Include routers
 app.include_router(agents_router)
@@ -215,19 +221,13 @@ def api():
         )
     else:
         uvicorn.run(app, host="0.0.0.0", port=9879)
-    # uvicorn.run(app, host="0.0.0.0", port=9879, reload=True)
 
 
 if __name__ == "__main__":
-    api()
-
-
-# @app.post("/telegram")
-# async def telegram(req: Request):
-#     data = await req.json()
-#     chat_id = data['message']['chat']['id']
-#     text = data['message']['text']
-
-#     requests.get(f"https://api.telegram.org/bot{os.environ.get('TELEGRAM_BOT_KEY')}/sendMessage?chat_id={chat_id}&text={text}")
-
-#     return data
+    import sys
+    
+    if "--test-init" in sys.argv:
+        logger.info("✅ API initialization completed successfully")
+        print("API_INIT_TEST_PASSED")
+    else:
+        api()

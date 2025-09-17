@@ -24,7 +24,10 @@ class NaasSecret(ISecretAdapter):
             response.raise_for_status()
             return str(response.json()["secret"]["value"])
         except requests.exceptions.HTTPError as _:
-            logger.error(f"Error getting secret {key}: {response.status_code}")
+            if response.status_code == 404:
+                logger.debug(f"Secret {key} not found")
+            else:
+                logger.error(f"Error getting secret {key}: {response.status_code}")
             return default
 
     def set(self, key: str, value: str):
@@ -65,7 +68,10 @@ class NaasSecret(ISecretAdapter):
         try:
             response.raise_for_status()
         except requests.exceptions.HTTPError as _:
-            logger.error(f"Error listing secrets: {response.status_code}")
+            if response.status_code == 404:
+                logger.debug("No secrets found or workspace not accessible")
+            else:
+                logger.error(f"Error listing secrets: {response.status_code}")
             return {}
 
         return {

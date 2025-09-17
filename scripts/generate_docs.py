@@ -5,10 +5,9 @@ import os
 import urllib.parse
 from abi import logger
 import shutil
-from mappings import rdf_terms, rdfs_terms, owl_terms, skos_terms, dc_terms # type: ignore
 import json
 
-ONTOLOGY_DICT = {
+ONTOLOGY_DICT: dict[str, str] = {
     "abi": "http://ontology.naas.ai/abi/",
     "bfo": "http://purl.obolibrary.org/obo/",
     "cco": "https://www.commoncoreontologies.org/",
@@ -16,21 +15,65 @@ ONTOLOGY_DICT = {
     "d3fend": "http://d3fend.mitre.org/ontologies/d3fend.owl#",
 }
 
-ONTOLOGY_OPERATORS = {"unionOf": "or", "intersectionOf": "and", "complementOf": "not"}
+ONTOLOGY_OPERATORS: dict[str, str] = {
+    "unionOf": "or",
+    "intersectionOf": "and",
+    "complementOf": "not",
+}
 
+# Add standard RDF terms
+rdf_terms: dict[str, str] = {
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type": "type",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#first": "first",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest": "rest",
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil": "nil",
+}
+
+# Add RDFS terms
+rdfs_terms: dict[str, str] = {
+    "http://www.w3.org/2000/01/rdf-schema#domain": "domain",
+    "http://www.w3.org/2000/01/rdf-schema#label": "label",
+    "http://www.w3.org/2000/01/rdf-schema#range": "range",
+    "http://www.w3.org/2000/01/rdf-schema#subClassOf": "subclassOf",
+}
+
+# Add OWL terms
+owl_terms: dict[str, str] = {
+    "http://www.w3.org/2002/07/owl#complementOf": "complementOf",
+    "http://www.w3.org/2002/07/owl#intersectionOf": "intersectionOf",
+    "http://www.w3.org/2002/07/owl#inverseOf": "inverseOf",
+    "http://www.w3.org/2002/07/owl#unionOf": "unionOf",
+}
+
+# Add SKOS terms
+skos_terms: dict[str, str] = {
+    "http://www.w3.org/2004/02/skos/core#altLabel": "altLabel",
+    "http://www.w3.org/2004/02/skos/core#definition": "definition",
+    "http://www.w3.org/2004/02/skos/core#example": "example",
+}
+
+# Add DC terms
+dc_terms: dict[str, str] = {
+    "http://purl.org/dc/elements/1.1/identifier": "identifier",
+    "http://purl.org/dc/terms/title": "title",
+    "http://purl.org/dc/terms/description": "description",
+    "http://purl.org/dc/terms/license": "license",
+    "http://purl.org/dc/terms/rights": "rights",
+    "http://purl.org/dc/terms/contributor": "contributor",
+}
 
 class OntologyDocs:
     def __init__(self):
         # Dictionary to store ontology components
-        self.onto = {}
-        self.onto_tuples = {}
-        self.onto_oprop = {}
-        self.onto_dprop = {}
-        self.onto_classes = {}
-        self.amount_per_level = {}
-        self.mapping_oprop = {}
-        self.ontologies_dict = ONTOLOGY_DICT
-        self.operators = ONTOLOGY_OPERATORS
+        self.onto: dict = {}
+        self.onto_tuples: dict = {}
+        self.onto_oprop: dict = {}
+        self.onto_dprop: dict = {}
+        self.onto_classes: dict = {}
+        self.amount_per_level: dict = {}
+        self.mapping_oprop: dict = {}
+        self.ontologies_dict: dict = ONTOLOGY_DICT
+        self.operators: dict = ONTOLOGY_OPERATORS
         # Add pydash as instance variable
         self._ = pydash
         self.docs_ontology = os.path.join("docs", "ontology")
@@ -66,45 +109,6 @@ class OntologyDocs:
                     "label": "Entity",
                     "level": 0,
                     "level_path": "Entity",
-                }
-            ],
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore",
-            level=0,
-            level_path="D3FENDCore",
-            hierarchy=[
-                {
-                    "uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDCore",
-                    "label": "D3FENDCore",
-                    "level": 0,
-                    "level_path": "D3FENDCore",
-                }
-            ],
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing",
-            level=0,
-            level_path="D3FENDKBThing",
-            hierarchy=[
-                {
-                    "uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#D3FENDKBThing",
-                    "label": "D3FENDKBThing",
-                    "level": 0,
-                    "level_path": "D3FENDKBThing",
-                }
-            ],
-        )
-        self.compute_class_levels(
-            "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing",
-            level=0,
-            level_path="ExternalThing",
-            hierarchy=[
-                {
-                    "uri": "http://d3fend.mitre.org/ontologies/d3fend.owl#ExternalThing",
-                    "label": "ExternalThing",
-                    "level": 0,
-                    "level_path": "ExternalThing",
                 }
             ],
         )
@@ -180,12 +184,12 @@ class OntologyDocs:
 
     def load_classes(self):
         # We filter the classes from the ontology.
-        _onto_classes = self._.filter_(
+        _onto_classes = sorted(self._.filter_(
             self.onto,
             lambda x: "http://www.w3.org/2002/07/owl#Class" in x["type"]
             if "type" in x
             else None,
-        )
+        ), key=lambda x: x["__id"])
         logger.info(f"🔍 Found {len(_onto_classes)} classes in the ontology.")
 
         # We remove the subclassOf that are restrictions to keep it simple for now.
@@ -255,6 +259,10 @@ class OntologyDocs:
     # It will build a tree of classes based on the unionOf, intersectionOf and complementOf.
     # It is usefull to understand what are the conditions for a class to be in the range or domain of an object property.
     def get_linked_classes(self, cls_id, rel_type=None):
+        # Handle None case
+        if cls_id is None:
+            return []
+        
         # If it's a leaf we return a dict with the class id and the operator.
         if "http" in cls_id:
             if rel_type is not None and rel_type in self.operators:
@@ -312,12 +320,12 @@ class OntologyDocs:
         if "domain" in x:
             x["domain"] = self._.map_(
                 x["domain"],
-                lambda x: x if "http" in x else self.get_linked_classes(x)[0],
+                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
             )
         if "range" in x:
             x["range"] = self._.map_(
                 x["range"],
-                lambda x: x if "http" in x else self.get_linked_classes(x)[0],
+                lambda x: x if (x is not None and "http" in x) else (self.get_linked_classes(x)[0] if self.get_linked_classes(x) else None),
             )
         return x
 
@@ -387,7 +395,9 @@ class OntologyDocs:
         # Init
         reference_dir = os.path.join(self.docs_ontology, "reference")
         shutil.rmtree(reference_dir, ignore_errors=True)
-        folder = "model"
+        foundry_dir = os.path.join(self.docs_ontology, "foundry")
+        shutil.rmtree(foundry_dir, ignore_errors=True)
+        folder = "full"
         dir_path = os.path.join(reference_dir, folder)
         onto_classes = self.onto_classes.values()
         logger.info(f"Foundry classes : {len(onto_classes)}")
@@ -494,12 +504,6 @@ class OntologyDocs:
                     markdown_content += "    classDef bfo fill:#97c1fb,color:#060606\n"
                     markdown_content += "    classDef cco fill:#e4c51e,color:#060606\n"
                     markdown_content += "    classDef abi fill:#48DD82,color:#060606\n"
-                    markdown_content += (
-                        "    classDef attack fill:#FF0000,color:#060606\n"
-                    )
-                    markdown_content += (
-                        "    classDef d3fend fill:#FF0000,color:#060606\n"
-                    )
                     markdown_content += "```\n\n"
                     for h in hierarchy:
                         h_label = h.get("label")
@@ -767,16 +771,44 @@ class OntologyDocs:
                     # Save markdown ontology folder
                     for k, v in self.ontologies_dict.items():
                         if v in onto_class:
-                            ontology_path = os.path.join(reference_dir, k)
-                            file_ontology_path = os.path.join(
-                                ontology_path, level_path, f"{label_safe}.md"
+                            # ontology_path = os.path.join(reference_dir, k)
+                            # file_ontology_path = os.path.join(
+                            #     ontology_path, level_path, f"{label_safe}.md"
+                            # )
+                            # os.makedirs(
+                            #     os.path.dirname(file_ontology_path), exist_ok=True
+                            # )
+                            # shutil.copy(file_path, file_ontology_path)
+                            # logger.info(
+                            #     f"✅ {label.capitalize()} saved in {file_ontology_path}"
+                            # )
+
+                            # Create Ontology Slim
+                            ontology_slim_path = os.path.join(reference_dir, k)
+                            if len(level_path.split("/")) < 3:
+                                continue
+                            if "Process boundary" in level_path or "Process profile" in level_path:
+                                continue
+
+                            level_slim_path = "/".join(level_path.split("/")[1:3])
+                            for word in ["Specifically dependent continuant", "Independent continuant"]:
+                                if word in level_path and not level_path.endswith(word) and len(level_path.split("/")) > 3:
+                                    slim_level = level_path.split("/")[3:4][0]
+                                    level_slim_path = level_slim_path.replace(word, slim_level)
+                                    break
+                                elif word in level_path and level_path.endswith(word):
+                                    level_slim_path = None
+                            if level_slim_path is None:
+                                continue
+                            abi_slim_path = os.path.join(
+                                ontology_slim_path, level_slim_path, f"{label_safe}.md"
                             )
                             os.makedirs(
-                                os.path.dirname(file_ontology_path), exist_ok=True
+                                os.path.dirname(abi_slim_path), exist_ok=True
                             )
-                            shutil.copy(file_path, file_ontology_path)
+                            shutil.copy(file_path, abi_slim_path)
                             logger.info(
-                                f"✅ {label.capitalize()} saved in {file_ontology_path}"
+                                f"✅ {label.capitalize()} saved in {abi_slim_path}"
                             )
                             break
 
@@ -787,7 +819,7 @@ class OntologyDocs:
                                 "docs", "ontology", "foundry", foundry
                             )
                             file_foundry_path = os.path.join(
-                                foundry_path, level_path, f"{label_safe}.md"
+                                foundry_path, level_slim_path, f"{label_safe}.md"
                             )
                             os.makedirs(
                                 os.path.dirname(file_foundry_path), exist_ok=True

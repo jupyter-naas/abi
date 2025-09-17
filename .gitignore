@@ -34,6 +34,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.pytype
 
 # IDEs and editors
 .idea/
@@ -106,3 +110,6 @@ storage/vectorstore/*
 !storage/*/example/**/*.webp
 !storage/*/example/**/*.heic
 
+
+*.pid
+sandbox/

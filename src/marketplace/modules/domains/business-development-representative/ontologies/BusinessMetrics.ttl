@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# BusinessMetrics Ontology for Business Development Representative Domain
+# Business development metrics and KPIs ontology
+
+@prefix : <http://naas.ai/ontology/business-development-representative/businessmetrics#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "BusinessMetrics Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Business development metrics and KPIs ontology" .
+
+# Core Classes
+:BusinessMetricsEntity a owl:Class ;
+    rdfs:label "BusinessMetrics Entity" ;
+    rdfs:comment "Base class for businessmetrics entities" .
+
+:BusinessMetricsProcess a owl:Class ;
+    rdfs:label "BusinessMetrics Process" ;
+    rdfs:comment "Processes related to businessmetrics" .
+
+:BusinessMetricsMetric a owl:Class ;
+    rdfs:label "BusinessMetrics Metric" ;
+    rdfs:comment "Metrics and measurements for businessmetrics" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :BusinessMetricsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :BusinessMetricsMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :BusinessMetricsEntity ;
+    rdfs:range :BusinessMetricsEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge

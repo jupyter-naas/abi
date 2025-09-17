@@ -82,18 +82,21 @@ def save_image(image: bytes, dir_path: str, file_name: str, copy: bool = True) -
         logger.debug(f"Error saving image to {dir_path}: {e}")
         return dir_path, file_name
 
-def get_csv(dir_path: str, file_name: str, sep: str = ";", encoding: str = "utf-8") -> pd.DataFrame:
+def get_csv(dir_path: str, file_name: str, sep: str = ";", decimal: str = ",", encoding: str = "utf-8") -> pd.DataFrame:
     """
     Get a CSV file from storage.
     """
     try:
-        file_content = services.storage_service.get_object(dir_path, file_name).decode(encoding)
-        return pd.read_csv(file_content, sep=sep)
+        file_content = services.storage_service.get_object(dir_path, file_name)
+        # Create a BytesIO object to avoid file name length issues
+        from io import BytesIO
+        csv_buffer = BytesIO(file_content)
+        return pd.read_csv(csv_buffer, sep=sep, decimal=decimal, encoding=encoding)
     except Exception as e:
         logger.debug(f"Error getting CSV file from {dir_path}: {e}")
         return pd.DataFrame()
 
-def save_csv(data: pd.DataFrame, dir_path: str, file_name: str, sep: str = ";", encoding: str = "utf-8", copy: bool = True) -> Tuple[str, str]:
+def save_csv(data: pd.DataFrame, dir_path: str, file_name: str, sep: str = ";", decimal: str = ",", encoding: str = "utf-8", copy: bool = True) -> Tuple[str, str]:
     """
     Save a CSV file to storage.
     """
@@ -101,10 +104,10 @@ def save_csv(data: pd.DataFrame, dir_path: str, file_name: str, sep: str = ";", 
         services.storage_service.put_object(
             prefix=dir_path,
             key=file_name,
-            content=data.to_csv(index=False, encoding=encoding, sep=sep).encode(encoding)
+            content=data.to_csv(index=False, encoding=encoding, sep=sep, decimal=decimal).encode(encoding)
         )
         if copy:
-            __make_copy(dir_path, file_name, data.to_csv(index=False, encoding=encoding, sep=sep).encode(encoding))
+            __make_copy(dir_path, file_name, data.to_csv(index=False, encoding=encoding, sep=sep, decimal=decimal).encode(encoding))
         logger.info(f"[save_csv] File successfully written to storage: {dir_path}/{file_name}")
         return dir_path, file_name
     except Exception as e:

@@ -1,0 +1,27 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# SalesMetrics Ontology for Inside Sales Representative Domain
+# Inside sales performance metrics ontology
+
+@prefix : <http://naas.ai/ontology/inside-sales representative/salesmetrics#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "SalesMetrics Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Inside sales performance metrics ontology" .
+
+# Core Classes
+:SalesMetricsEntity a owl:Class ;
+    rdfs:label "SalesMetrics Entity" ;
+    rdfs:comment "Base class for salesmetrics entities" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :SalesMetricsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+# Domain-specific instances would be defined here

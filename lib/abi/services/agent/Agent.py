@@ -1,5 +1,6 @@
 # Standard library imports for type hints
 from typing import Callable, Literal, Any, Union, Sequence, Generator
+import os
 
 # LangChain Core imports for base components
 from langchain_core.language_models import BaseChatModel
@@ -42,19 +43,91 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
+import re
+
+
+def create_checkpointer() -> BaseCheckpointSaver:
+    """Create a checkpointer based on environment configuration.
+    
+    Returns a PostgreSQL-backed checkpointer if POSTGRES_URL is set,
+    otherwise returns an in-memory checkpointer.
+    """
+    postgres_url = os.getenv("POSTGRES_URL")
+    
+    if postgres_url:
+        try:
+            from langgraph.checkpoint.postgres import PostgresSaver
+            from psycopg import Connection
+            from psycopg.rows import dict_row
+            import time
+            logger.debug(f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}")
+            
+            # Try connection with retries (PostgreSQL might still be starting)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Create connection with proper configuration (matching from_conn_string)
+                    conn = Connection.connect(
+                        postgres_url,
+                        autocommit=True,
+                        prepare_threshold=0,
+                        row_factory=dict_row
+                    )
+                    checkpointer = PostgresSaver(conn)
+                    
+                    # Setup tables if they don't exist
+                    checkpointer.setup()
+                    logger.debug("PostgreSQL checkpointer tables initialized")
+                    
+                    return checkpointer
+                    
+                except Exception as conn_error:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds...")
+                        time.sleep(2)
+                    else:
+                        raise conn_error
+                        
+        except ImportError:
+            logger.error("PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory.")
+        except Exception as e:
+            # Provide more helpful error messages
+            error_msg = str(e)
+            if "nodename nor servname provided" in error_msg:
+                logger.error(f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}")
+                logger.error("Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL")
+            else:
+                logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
+            logger.error("Falling back to in-memory checkpointer")
+        
+        # Fallback to in-memory checkpointer
+        return MemorySaver()
+    else:
+        logger.debug("Using in-memory checkpointer (set POSTGRES_URL for persistent memory)")
+        return MemorySaver()
 
 class AgentSharedState:
-    __thread_id: int
+    _thread_id: str
+    _current_active_agent: Optional[str]
 
-    def __init__(self, thread_id: int = 1):
+    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None):
+        assert isinstance(thread_id, str)
         self._thread_id = thread_id
+        self._current_active_agent = current_active_agent
 
     @property
-    def thread_id(self) -> int:
+    def thread_id(self) -> str:
         return self._thread_id
 
-    def set_thread_id(self, thread_id: int):
+    def set_thread_id(self, thread_id: str):
         self._thread_id = thread_id
+    
+    @property 
+    def current_active_agent(self) -> Optional[str]:
+        return self._current_active_agent
+    
+    def set_current_active_agent(self, agent_name: Optional[str]):
+        self._current_active_agent = agent_name
 
 
 @dataclass
@@ -71,6 +144,9 @@ class ToolUsageEvent(Event):
 class ToolResponseEvent(Event):
     pass
 
+@dataclass
+class AIMessageEvent(Event):
+    agent_name: str
 
 @dataclass
 class FinalStateEvent(Event):
@@ -84,6 +160,9 @@ class AgentConfiguration:
     )
     on_tool_response: Callable[[AnyMessage], None] = field(
         default_factory=lambda: lambda _: None
+    )
+    on_ai_message: Callable[[AnyMessage, str], None] = field(
+        default_factory=lambda: lambda _, __: None
     )
     system_prompt: str = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
@@ -102,7 +181,7 @@ class Agent(Expose):
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
-        __thread_id (int): Identifier for the current conversation thread
+        __thread_id (str): Identifier for the current conversation thread
         __app (CompiledStateGraph): The compiled workflow graph
         __workflow (StateGraph): The workflow definition graph
         __on_tool_usage (Callable[[AnyMessage], None]): Callback triggered when a tool is used
@@ -146,6 +225,7 @@ class Agent(Expose):
 
     _on_tool_usage: Callable[[AnyMessage], None]
     _on_tool_response: Callable[[AnyMessage], None]
+    _on_ai_message: Callable[[AnyMessage, str], None]
 
     # Avent queue used to stream tool usage and responses.
     _event_queue: Queue
@@ -157,7 +237,7 @@ class Agent(Expose):
         chat_model: BaseChatModel,
         tools: list[Union[Tool, "Agent"]] = [],
         agents: list["Agent"] = [],
-        memory: BaseCheckpointSaver = MemorySaver(),
+        memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
@@ -169,7 +249,7 @@ class Agent(Expose):
                 Should support tool binding.
             tools (list[Tool]): List of tools to make available to the agent.
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
-                Defaults to an in-memory saver.
+                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
         self._name = name
         self._description = description
@@ -206,14 +286,23 @@ class Agent(Expose):
 
         # TODO: Make sure the Agent does not call the version without tools.
         self._chat_model = chat_model
-        self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
-        self._checkpointer = memory
+        self._chat_model_with_tools = chat_model
+        if self._tools:
+            self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
+        
+        # Use provided memory or create based on environment
+        if memory is None:
+            self._checkpointer = create_checkpointer()
+        else:
+            self._checkpointer = memory
+            
         self._state = state
 
         self._configuration = configuration
 
         self._on_tool_usage = configuration.on_tool_usage
         self._on_tool_response = configuration.on_tool_response
+        self._on_ai_message = configuration.on_ai_message
 
         # Initialize the event queue.
         if event_queue is None:
@@ -225,33 +314,56 @@ class Agent(Expose):
 
         self.build_graph()
 
+    def validate_tool_name(self, tool: BaseTool) -> BaseTool:
+        if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
+            # Replace invalid characters with '_'
+            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', tool.name)
+            logger.warning(f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'.")
+            tool.name = valid_name
+        return tool
+
     def prepare_tools(
         self, tools: list[Union[Tool, "Agent"]], agents: list
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
+        
+        Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
         _agents: list["Agent"] = []
+        _tool_names: set[str] = set()
+        _agent_names: set[str] = set()
 
         # We process tools knowing that they can either be StructutedTools or Agent.
         for t in tools:
             if isinstance(t, Agent):
                 # TODO: We might want to duplicate the agent first.
-                logger.debug(f"Agent passed as tool: {t}")
-                _agents.append(t)
-                for tool in t.as_tools():
-                    _tools.append(tool)
+                # logger.debug(f"Agent passed as tool: {t}")
+                if t.name not in _agent_names:
+                    _agents.append(t)
+                    _agent_names.add(t.name)
+                    for tool in t.as_tools():
+                        tool = self.validate_tool_name(tool)
+                        if tool.name not in _tool_names:
+                            _tools.append(tool)
+                            _tool_names.add(tool.name)
             else:
-                _tools.append(t)
+                if t.name not in _tool_names:
+                    _tools.append(t)
+                    _tool_names.add(t.name)
 
         # We process agents that are not provided in tools.
         for agent in agents:
-            if agent not in _agents:
+            if agent.name not in _agent_names:
                 _agents.append(agent)
+                _agent_names.add(agent.name)
                 for tool in agent.as_tools():
-                    _tools.append(tool)
+                    tool = self.validate_tool_name(tool)
+                    if tool.name not in _tool_names:
+                        _tools.append(tool)
+                        _tool_names.add(tool.name)
 
         return _tools, _agents
 
@@ -266,16 +378,16 @@ class Agent(Expose):
         graph = StateGraph(MessagesState)
         graph.add_node(self.call_model)
         graph.add_edge(START, "call_model")
-
+        
         graph.add_node(self.call_tools)
         # This is not needed because the call_tools is generating the proper Command to go to the right node after each tool call.
         # graph.add_edge("call_tools", "call_model")
 
         for agent in self._agents:
-            logger.debug(f"Adding node {agent.name} in graph")
+            # logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
-            graph.add_edge(agent.name, "call_model")
+            #graph.add_edge(agent.name, "call_model")
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -294,6 +406,8 @@ class Agent(Expose):
                 SystemMessage(content=self._system_prompt),
             ] + messages
 
+        logger.debug(f"messages: {messages}")
+
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         if (
             isinstance(response, AIMessage)
@@ -308,6 +422,8 @@ class Agent(Expose):
             # response.tool_calls = [response.tool_calls[0]]
 
             return Command(goto="call_tools", update={"messages": [response]})
+        # else:
+        #     self._configuration._noti((self._name, response))
 
         return Command(goto="__end__", update={"messages": [response]})
 
@@ -364,6 +480,7 @@ class Agent(Expose):
 
         # If the last response is a ToolMessage, we want the model to interpret it.
         if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage):
+            logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
             results.append(Command(goto="call_model"))
 
         return results
@@ -379,6 +496,10 @@ class Agent(Expose):
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
         self._on_tool_response(message)
+    
+    def _notify_ai_message(self, message: AnyMessage, agent_name: str):
+        self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
+        self._on_ai_message(message, agent_name)
 
     def on_tool_usage(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool is used.
@@ -403,6 +524,11 @@ class Agent(Expose):
                 containing the tool response
         """
         self._on_tool_response = callback
+        
+    def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
+        """Register a callback to be called when an AI message is received.
+        """
+        self._on_ai_message = callback
 
     @property
     def app(self):
@@ -432,11 +558,18 @@ class Agent(Expose):
             config={"configurable": {"thread_id": self._state.thread_id}},
             subgraphs=True,
         ):
-            _, payload = chunk
+            source, payload = chunk
+            agent_name = self._name if len(source) == 0 else source[0].split(':')[0]
             if isinstance(payload, dict):
                 last_messages = []
 
                 logger.debug(f"payload: {payload}")
+                # print(f"{left} {self} payload: {payload}")
+                
+                # agent_name = self._name
+                # if 'call_model' not in payload:
+                #     agent_name = list(payload.keys())[0]
+                
                 v = list(payload.values())[0]
                 
                 if v is None:
@@ -459,6 +592,8 @@ class Agent(Expose):
                             # This is a tool call.
                             self._notify_tool_usage(last_message)
                         else:
+                            if 'call_model' in payload or 'intent_mapping_router' in payload:
+                                self._notify_ai_message(last_message, agent_name)
                             # This is a message.
                             # print("\n\nIntermediate AI Message:")
                             # print(last_message.content)
@@ -516,7 +651,7 @@ class Agent(Expose):
         conversation thread. Any subsequent invocations will be processed as part of a
         new conversation context.
         """
-        self._state.set_thread_id(self._state.thread_id + 1)
+        self._state.set_thread_id(str(int(self._state.thread_id) + 1))
 
     def __tool_function(self, prompt: str) -> str:
         response = self.invoke(prompt)
@@ -577,10 +712,15 @@ class Agent(Expose):
             description_stream (str): Optional description to add to the stream endpoints. Defaults to ""
             tags (list[str]): Optional list of tags to add to the endpoints. Defaults to None
         """
+        
+        route_name = route_name or self._name
+        name = name or self._name.capitalize().replace("_", " ")
+        description = description or self._description
+        description_stream = description_stream or self._description
 
         class CompletionQuery(BaseModel):
             prompt: str = Field(..., description="The prompt to send to the agent")
-            thread_id: int = Field(
+            thread_id: str | int = Field(
                 ..., description="The thread ID to use for the conversation"
             )
 
@@ -591,6 +731,9 @@ class Agent(Expose):
             tags=tags,
         )
         def completion(query: CompletionQuery):
+            if isinstance(query.thread_id, int):
+                query.thread_id = str(query.thread_id)
+
             new_agent = self.duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return new_agent.invoke(query.prompt)
@@ -602,6 +745,9 @@ class Agent(Expose):
             tags=tags,
         )
         async def stream_completion(query: CompletionQuery):
+            if isinstance(query.thread_id, int):
+                query.thread_id = str(query.thread_id)
+
             new_agent = self.duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
@@ -641,6 +787,11 @@ class Agent(Expose):
                 elif isinstance(message, ToolResponseEvent):
                     yield {
                         "event": "tool_response",
+                        "data": str(message.payload.content),
+                    }
+                elif isinstance(message, AIMessageEvent):
+                    yield {
+                        "event": "ai_message",
                         "data": str(message.payload.content),
                     }
                 elif isinstance(message, FinalStateEvent):
@@ -725,6 +876,9 @@ class Agent(Expose):
             AgentConfiguration: The agent's configuration
         """
         return self._configuration
+
+    def hello(self) -> str:
+        return "Hello"
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:

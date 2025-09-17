@@ -1,0 +1,226 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+<http://ontology.naas.ai/abi/CapabilityOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/CapabilityOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc11:contributor "Barry Smith" , "John Beverley" ;
+    dc:description "Capability ontology based on Barry Smith and John Beverley's work, following BFO standards."@en ;
+    dc:title "Capability Ontology (BFO+CCO)" ;
+    dc:source "Capabilities: An Ontology - John Beverley, David Limbaugh, Eric Merrell, Peter M. Koch, Barry Smith" .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+###  http://purl.org/dc/elements/1.1/contributor
+dc11:contributor rdf:type owl:AnnotationProperty .
+
+###  http://purl.org/dc/terms/description
+dc:description rdf:type owl:AnnotationProperty .
+
+###  http://purl.org/dc/terms/title
+dc:title rdf:type owl:AnnotationProperty .
+
+###  http://purl.org/dc/terms/source
+dc:source rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#definition
+skos:definition rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#example
+skos:example rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#prefLabel
+skos:prefLabel rdf:type owl:AnnotationProperty .
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://ontology.naas.ai/abi/capability/Capability
+capability:Capability rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Capability"@en ;
+    skos:definition "A disposition in whose realization some organism or group of organisms has or had an interest."@en ;
+    skos:example "A car's capability to ferry passengers, an AI's capability to generate text, a screwdriver's capability to open paint cans."@en .
+
+###  http://ontology.naas.ai/abi/capability/Interest
+capability:Interest rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Interest"@en ;
+    skos:definition "A quality of an organism or group of organisms indicating stake in the realization of certain capabilities."@en ;
+    skos:example "A user's interest in text generation, an organization's interest in data analysis."@en .
+
+###  http://ontology.naas.ai/abi/capability/CapabilityRealization
+capability:CapabilityRealization rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Capability Realization"@en ;
+    skos:definition "A process that realizes a specific capability."@en ;
+    skos:example "The process of generating text, analyzing data, or creating an image."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  http://ontology.naas.ai/abi/capability/hasInterestIn
+capability:hasInterestIn rdf:type owl:ObjectProperty ;
+    rdfs:label "has interest in"@en ;
+    rdfs:domain capability:Interest ;
+    rdfs:range capability:Capability ;
+    skos:definition "A relation between an interest and the capability it concerns."@en .
+
+###  http://ontology.naas.ai/abi/capability/bearerOfInterest
+capability:bearerOfInterest rdf:type owl:ObjectProperty ;
+    rdfs:label "bearer of interest"@en ;
+    rdfs:domain capability:Interest ;
+    rdfs:range bfo:BFO_0000040 ;
+    skos:definition "A relation between an interest and the organism or group that bears it."@en .
+
+###  http://ontology.naas.ai/abi/capability/realizesCapability
+capability:realizesCapability rdf:type owl:ObjectProperty ;
+    rdfs:label "realizes capability"@en ;
+    rdfs:domain capability:CapabilityRealization ;
+    rdfs:range capability:Capability ;
+    skos:definition "A relation between a capability realization process and the capability it realizes."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+###  http://ontology.naas.ai/abi/capability/capabilityName
+capability:capabilityName rdf:type owl:DatatypeProperty ;
+    rdfs:label "capability name"@en ;
+    rdfs:domain capability:Capability ;
+    rdfs:range xsd:string ;
+    skos:definition "The name or identifier of a capability."@en .
+
+###  http://ontology.naas.ai/abi/capability/capabilityDescription
+capability:capabilityDescription rdf:type owl:DatatypeProperty ;
+    rdfs:label "capability description"@en ;
+    rdfs:domain capability:Capability ;
+    rdfs:range xsd:string ;
+    skos:definition "A description of what the capability enables."@en .
+
+###  http://ontology.naas.ai/abi/capability/interestStrength
+capability:interestStrength rdf:type owl:DatatypeProperty ;
+    rdfs:label "interest strength"@en ;
+    rdfs:domain capability:Interest ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The strength of interest in a capability realization."@en .
+
+#################################################################
+#    Axioms
+#################################################################
+
+# All functions are capabilities (as per Smith & Beverley)
+bfo:BFO_0000034 rdfs:subClassOf capability:Capability .
+
+# Capabilities are dispositions (as per Smith & Beverley)
+capability:Capability rdfs:subClassOf bfo:BFO_0000017 .
+
+# Capabilities require material entities as bearers
+capability:Capability rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty bfo:BFO_0000052 ;
+    owl:someValuesFrom bfo:BFO_0000040
+] .
+
+# Capabilities are realized through processes
+capability:Capability rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty bfo:BFO_0000053 ;
+    owl:someValuesFrom bfo:BFO_0000015
+] .
+
+# Capability realizations have participants
+capability:CapabilityRealization rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:hasParticipant ;
+    owl:someValuesFrom bfo:BFO_0000040
+] .
+
+# Interests are qualities of organisms or groups
+capability:Interest rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty bfo:BFO_0000052 ;
+    owl:someValuesFrom bfo:BFO_0000040
+] .
+
+#################################################################
+#    Examples
+#################################################################
+
+###  http://ontology.naas.ai/abi/capability/TextGenerationCapability
+capability:TextGenerationCapability rdf:type capability:Capability ;
+    rdfs:label "Text Generation Capability"@en ;
+    capability:capabilityName "text_generation" ;
+    capability:capabilityDescription "The capability to generate coherent and contextually appropriate text."@en ;
+    skos:example "Generating articles, writing emails, creating stories."@en .
+
+###  http://ontology.naas.ai/abi/capability/CodeGenerationCapability
+capability:CodeGenerationCapability rdf:type capability:Capability ;
+    rdfs:label "Code Generation Capability"@en ;
+    capability:capabilityName "code_generation" ;
+    capability:capabilityDescription "The capability to generate functional code in various programming languages."@en ;
+    skos:example "Writing Python scripts, debugging code, creating algorithms."@en .
+
+###  http://ontology.naas.ai/abi/capability/DataAnalysisCapability
+capability:DataAnalysisCapability rdf:type capability:Capability ;
+    rdfs:label "Data Analysis Capability"@en ;
+    capability:capabilityName "data_analysis" ;
+    capability:capabilityDescription "The capability to analyze data and extract meaningful insights."@en ;
+    skos:example "Statistical analysis, pattern recognition, trend identification."@en .
+
+###  http://ontology.naas.ai/abi/capability/ImageGenerationCapability
+capability:ImageGenerationCapability rdf:type capability:Capability ;
+    rdfs:label "Image Generation Capability"@en ;
+    capability:capabilityName "image_generation" ;
+    capability:capabilityDescription "The capability to generate images from textual descriptions."@en ;
+    skos:example "Creating artwork, generating illustrations, producing visual content."@en .
+
+###  http://ontology.naas.ai/abi/capability/ReasoningCapability
+capability:ReasoningCapability rdf:type capability:Capability ;
+    rdfs:label "Reasoning Capability"@en ;
+    capability:capabilityName "reasoning" ;
+    capability:capabilityDescription "The capability to perform logical reasoning and problem-solving."@en ;
+    skos:example "Logical deduction, mathematical reasoning, complex problem-solving."@en .
+
+###  http://ontology.naas.ai/abi/capability/WebSearchCapability
+capability:WebSearchCapability rdf:type capability:Capability ;
+    rdfs:label "Web Search Capability"@en ;
+    capability:capabilityName "web_search" ;
+    capability:capabilityDescription "The capability to search the web and retrieve current information."@en ;
+    skos:example "Finding current news, researching topics, fact verification."@en .
+
+###  http://ontology.naas.ai/abi/capability/TranslationCapability
+capability:TranslationCapability rdf:type capability:Capability ;
+    rdfs:label "Translation Capability"@en ;
+    capability:capabilityName "translation" ;
+    capability:capabilityDescription "The capability to translate text between different languages."@en ;
+    skos:example "Language translation, cultural adaptation, multilingual communication."@en .
+
+###  http://ontology.naas.ai/abi/capability/ImageAnalysisCapability
+capability:ImageAnalysisCapability rdf:type capability:Capability ;
+    rdfs:label "Image Analysis Capability"@en ;
+    capability:capabilityName "image_analysis" ;
+    capability:capabilityDescription "The capability to analyze and understand visual content."@en ;
+    skos:example "Object recognition, scene understanding, visual content analysis."@en .
+
+###  http://ontology.naas.ai/abi/capability/TruthSeekingCapability
+capability:TruthSeekingCapability rdf:type capability:Capability ;
+    rdfs:label "Truth-Seeking Capability"@en ;
+    capability:capabilityName "truth_seeking" ;
+    capability:capabilityDescription "The capability to perform contrarian analysis and seek objective truth."@en ;
+    skos:example "Contrarian reasoning, truth verification, unbiased analysis."@en .

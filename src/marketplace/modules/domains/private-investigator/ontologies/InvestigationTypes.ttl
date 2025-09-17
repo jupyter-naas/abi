@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# InvestigationTypes Ontology for Private Investigator Domain
+# Investigation types and methodologies ontology
+
+@prefix : <http://naas.ai/ontology/private-investigator/investigationtypes#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "InvestigationTypes Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Investigation types and methodologies ontology" .
+
+# Core Classes
+:InvestigationTypesEntity a owl:Class ;
+    rdfs:label "InvestigationTypes Entity" ;
+    rdfs:comment "Base class for investigationtypes entities" .
+
+:InvestigationTypesProcess a owl:Class ;
+    rdfs:label "InvestigationTypes Process" ;
+    rdfs:comment "Processes related to investigationtypes" .
+
+:InvestigationTypesMetric a owl:Class ;
+    rdfs:label "InvestigationTypes Metric" ;
+    rdfs:comment "Metrics and measurements for investigationtypes" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :InvestigationTypesEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :InvestigationTypesMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :InvestigationTypesEntity ;
+    rdfs:range :InvestigationTypesEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge

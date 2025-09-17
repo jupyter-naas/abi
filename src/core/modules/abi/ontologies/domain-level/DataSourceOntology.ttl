@@ -1,0 +1,89 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+
+<http://ontology.naas.ai/abi/DataSourceOntology> a owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/DataSourceOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for data sources."@en ;
+    dc:title "Data Source Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:DataSource a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:label "Data Source"@en ;
+    skos:definition "A Data Source is an entity that provides access to data or information. It represents the origin or provider of data that can be consumed by other systems or processes."@en ;
+    skos:example "A database, API endpoint, file system, or web service that provides data."@en .
+
+abi:DataSourceComponent a owl:Class ;
+    rdfs:subClassOf abi:DataSource ;
+    rdfs:label "Data Source Component"@en ;
+    skos:definition "A Data Source Component is a constituent part of a larger data source system. It represents a modular piece that contributes to the overall functionality of the data source."@en ;
+    skos:example "A specific table in a database, a particular endpoint in an API, or a specific file in a file system."@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasComponent a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000115;
+    rdfs:label "has component"@en ;
+    rdfs:domain abi:DataSource ;
+    rdfs:range abi:DataSourceComponent ;
+    skos:definition "Relates a data source to one of its constituent components. This property indicates that the data source includes or contains the specified component as part of its structure."@en ;
+    owl:inverseOf abi:isComponentOf .
+
+abi:isComponentOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf bfo:BFO_0000129;
+    rdfs:label "is component of"@en ;
+    rdfs:domain abi:DataSourceComponent ;
+    rdfs:range abi:DataSource ;
+    skos:definition "Relates a data source component to the larger data source system of which it is a part. This property indicates that the component belongs to or is contained within the specified data source."@en ;
+    owl:inverseOf abi:hasComponent .
+
+abi:hasBackingDataSource a owl:ObjectProperty ;
+    rdfs:label "has backing data source"@en ;
+    skos:definition "Relates a subject to its backing data source."@en ;
+    rdfs:domain bfo:BFO_0000001 ; # Entity
+    rdfs:range abi:DataSource ;
+    skos:definition "Relates an entity to the data source that provides the underlying data for that entity. This property indicates the origin or source of the data that supports the entity."@en ;
+    skos:example "A report entity may have a backing data source that provides the raw data used to generate the report."@en .
+
+abi:dependsOn a owl:ObjectProperty ;
+    rdfs:label "depends on"@en ;
+    rdfs:domain abi:DataSource ;
+    rdfs:range abi:DataSource ;
+    skos:definition "Relates a data source to another data source upon which it depends for its operation or data."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:extracted_at a owl:DatatypeProperty ;
+    rdfs:label "extracted at"@en ;
+    rdfs:domain bfo:BFO_0000031 ; # Generically Dependent Continuant
+    rdfs:range xsd:dateTime ;
+    skos:definition "The timestamp in ISO 8601 format when a generically dependent continuant was extracted or retrieved from its source."@en ;
+    skos:example "2025-06-05T12:00:00Z"^^xsd:dateTime .
+
+abi:source_type a owl:DatatypeProperty ;
+    rdfs:label "source type"@en ;
+    rdfs:domain abi:DataSource ;
+    rdfs:range xsd:string ;
+    skos:definition "The type or category of the data source, indicating its nature or technology."@en ;
+    skos:example "REST_API", "SQL_DATABASE", "FILE_SYSTEM", "WEB_SERVICE", "EXCEL_FILE", "CSV_FILE", "WEBSITE_URL" .
+
+abi:source_path a owl:DatatypeProperty ;
+    rdfs:label "source path"@en ;
+    rdfs:domain abi:DataSource ;
+    rdfs:range xsd:string ;
+    skos:definition "The path to the data source, indicating its location or location in the file system."@en ;
+    skos:example "storage/datastore/euronext/indices/SBF_120/SBF_120_Index_Composition.xlsx" .

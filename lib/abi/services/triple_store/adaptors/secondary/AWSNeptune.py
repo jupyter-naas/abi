@@ -73,11 +73,13 @@ from rdflib import Graph, URIRef
 from abi.services.triple_store.TripleStorePorts import OntologyEvent
 from io import StringIO
 import rdflib
-from typing import Tuple, Any, overload
-import paramiko
-from sshtunnel import SSHTunnelForwarder
+from typing import Tuple, Any, overload, TYPE_CHECKING
 import tempfile
 import socket
+
+# Import SSH dependencies only when needed for type checking
+if TYPE_CHECKING:
+    from sshtunnel import SSHTunnelForwarder
 
 from rdflib.plugins.sparql.results.xmlresults import XMLResultParser
 from rdflib.plugins.sparql.results.rdfresults import RDFResultParser
@@ -187,7 +189,7 @@ class AWSNeptune(ITripleStorePort):
     credentials: botocore.credentials.Credentials
 
     # SSH tunnel to the Bastion host
-    tunnel: SSHTunnelForwarder
+    tunnel: 'SSHTunnelForwarder'
 
     default_graph_name: URIRef
 
@@ -1004,6 +1006,15 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         assert isinstance(bastion_user, str)
         assert isinstance(bastion_private_key, str)
 
+        # Import SSH dependencies when actually needed
+        try:
+            import paramiko
+        except ImportError as e:
+            raise ImportError(
+                "SSH tunnel support requires optional dependencies. "
+                "Install them with: pip install 'abi[ssh]' or install paramiko and sshtunnel separately"
+            ) from e
+            
         self.bastion_host = bastion_host
         self.bastion_port = bastion_port
         self.bastion_user = bastion_user
@@ -1044,15 +1055,15 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
         """
         assert self.neptune_sparql_endpoint is not None
 
-        def new_getaddrinfo(*args):
-            if args[0] == self.neptune_sparql_endpoint:
-                return ORIGINAL_GETADDRINFO("127.0.0.1", *args[1:])
+        def new_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+            if host == self.neptune_sparql_endpoint:
+                return ORIGINAL_GETADDRINFO("127.0.0.1", port, family, type, proto, flags)
             else:
-                return ORIGINAL_GETADDRINFO(*args)
+                return ORIGINAL_GETADDRINFO(host, port, family, type, proto, flags)
 
         socket.getaddrinfo = new_getaddrinfo
 
-    def __create_ssh_tunnel(self) -> SSHTunnelForwarder:
+    def __create_ssh_tunnel(self):
         """
         Create and start an SSH tunnel to the Neptune database.
 
@@ -1089,6 +1100,8 @@ class AWSNeptuneSSHTunnel(AWSNeptune):
             >>> tunnel = neptune_ssh._AWSNeptuneSSHTunnel__create_ssh_tunnel()
             >>> print(f"Tunnel running on local port: {tunnel.local_bind_port}")
         """
+        from sshtunnel import SSHTunnelForwarder
+        
         assert self.neptune_sparql_endpoint is not None
         assert self.neptune_port is not None
 

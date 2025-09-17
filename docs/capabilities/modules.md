@@ -2,12 +2,19 @@
 
 ## What is a Module?
 
-A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are now organized into two categories:
+A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are organized into three categories:
 
 1. **Core Modules**: Located in `src/core/modules/` - These are essential modules that provide the core functionality of the ABI system.
 2. **Custom Modules**: Located in `src/custom/modules/` - These are user-created modules that extend the system with additional capabilities.
+3. **Marketplace Modules**: Located in `src/marketplace/modules/` - These are community-shared modules available for selective activation.
 
-This separation makes the system architecture easier to understand and maintain, with a clear distinction between core functionality and custom extensions.
+This three-tier separation provides a clean architecture with distinct purposes: core system functionality, private extensions, and shared community resources.
+
+### Module Directory Purposes
+
+- **Core Modules** (`src/core/modules/`): Foundation modules that provide essential ABI functionality. These should not be modified directly.
+- **Custom Modules** (`src/custom/modules/`): Your private modules and customizations. Perfect for organization-specific agents and workflows.
+- **Marketplace Modules** (`src/marketplace/modules/`): Community-shared modules. All are disabled by default (`.disabled` suffix) for safety. Enable selectively as needed.
 
 Modules provide a way to organize and structure your code in a modular fashion, making it easier to maintain, extend, and reuse functionality. They can contain various components such as:
 
@@ -22,55 +29,111 @@ Modules provide a way to organize and structure your code in a modular fashion, 
 
 ### Module Loading Process
 
-The ABI system automatically discovers and loads modules at runtime. Here's how the process works:
+The ABI system uses a configuration-driven approach to load modules at runtime. Here's how the process works:
 
-1. The system scans both the `src/core/modules/` and `src/custom/modules/` directories for subdirectories
-2. Each subdirectory (except `__pycache__` and those containing "disabled" in their name) is considered a module
-3. The module is imported using Python's import system
-4. An `IModule` instance is created for the module
-5. The module's components (agents, workflows, pipelines) are loaded
-6. The loaded module is added to the system's registry
+1. **Configuration Reading**: The system reads the `config.yaml` file to determine which modules should be loaded
+2. **Module Selection**: Only modules listed in the `modules` section of the configuration with `enabled: true` are loaded
+3. **Path Validation**: The system verifies that each enabled module path exists as a directory
+4. **Module Import**: Each valid module path is converted to a Python import path and imported using `importlib.import_module()`
+5. **IModule Creation**: An `IModule` instance is created for each successfully imported module
+6. **Component Loading**: The module's components are loaded in the following order:
+   - Requirements checking (if a `requirements()` function exists)
+   - Triggers loading (from `triggers.py` if it exists)
+   - Ontologies loading (from `.ttl` files in the `ontologies/` directory)
+   - Agents loading (deferred until after all modules are initialized)
+7. **Module Registration**: The loaded module is added to the system's registry
+8. **Initialization**: After all modules are loaded, `on_initialized()` is called on each module
+9. **Agent Loading**: Finally, agents are loaded from each module's agent files
 
-This automatic loading mechanism means that you can add new functionality to the system simply by creating a new module directory with the appropriate structure in either the core or custom modules directory.
+**Key Benefits of Configuration-Based Loading**:
+- **Selective Activation**: Enable/disable modules without modifying code
+- **Environment-Specific Configurations**: Different module sets for development, testing, and production
+- **Dependency Management**: Control loading order and module dependencies
+- **Error Handling**: Graceful failure handling with detailed error messages
+
+**Configuration Example**:
+```yaml
+modules:
+  - path: src/core/modules/abi
+    enabled: true
+  - path: src/marketplace/modules/applications/github
+    enabled: true
+  - path: src/marketplace/modules/applications/postgres
+    enabled: false  # This module will not be loaded
+```
 
 ### Module Structure
 
 A typical module has the following directory structure:
 
 ```
-src/[core|custom]/modules/your_module_name/
-├── agents/                  # Contains AI agents
-│   └── YourAgent.py         # An agent implementation
-├── integrations/            # Contains integration implementations
-│   └── YourIntegration.py   # An integration implementation
-├── ontologies/              # Contains ontology implementations
-│   └── YourOntology.py      # An ontology implementation
-├── pipelines/               # Contains pipeline implementations
-│   └── YourPipeline.py      # A pipeline implementation
-├── workflows/               # Contains workflow implementations
-│   └── YourWorkflow.py      # A workflow implementation
-└── tests/                   # Contains tests for the module
+src/[core|marketplace]/modules/your_module_name/
+├── agents/                  # Contains AI agents (optional)
+│   └── YourAgent.py         # Must contain create_agent() function
+├── ontologies/              # Contains semantic ontology files (optional)
+│   └── schema.ttl           # Turtle format ontology files
+├── triggers.py              # Event triggers (optional)
+├── __init__.py              # Module initialization
+└── tests/                   # Contains tests for the module (optional)
     └── test_module.py       # Test implementations
 ```
 
+**Key Structure Notes**:
+- **Required**: Only `__init__.py` is required for a valid module
+- **Agent Files**: Must end with `Agent.py` and contain a `create_agent()` function
+- **Ontology Files**: `.ttl` files are automatically discovered recursively in `ontologies/`
+- **Triggers**: A `triggers.py` file with a `triggers` variable for event handling
+- **Optional Functions**: `requirements()` for dependency checking, `on_initialized()` for setup
+
+**Note**: The `src/custom/modules/` directory mentioned in the overview is not currently used in the configuration system. Most modules are either core modules or marketplace modules.
+
 ### How Components Are Loaded
 
-- **Agents**: The system looks for Python files in the `agents/` directory. Each file should contain a `create_agent()` function that returns an `Agent` instance.
-- **Workflows and Pipelines**: These are made available to the system when they're imported as part of the module loading process.
+The system loads different types of components through specific mechanisms:
+
+- **Agents**: The system recursively scans the module directory for files ending with `Agent.py` (excluding test files ending with `Agent_test.py`). Each agent file must contain a `create_agent()` function that returns an `Agent` instance. Duplicate agents (same name) are skipped with a warning.
+
+- **Triggers**: If a `triggers.py` file exists in the module root, it's imported and any `triggers` attribute is loaded. Triggers are used for event-driven functionality in the triple store system.
+
+- **Ontologies**: The system recursively searches for `.ttl` (Turtle) files in the `ontologies/` directory and loads them into the triple store service for semantic data processing.
+
+- **Requirements**: If the module defines a `requirements()` function, it's called during loading to verify that all necessary dependencies and conditions are met before proceeding.
+
+- **Initialization**: If the module defines an `on_initialized()` function, it's called after all modules have been loaded but before agents are loaded, allowing for cross-module setup.
 
 ### Disabling a Module
 
-To disable a module without removing it from the codebase, simply add "disabled" to the module directory name:
+There are two ways to disable a module:
+
+#### 1. Configuration-Based Disabling (Recommended)
+
+Set `enabled: false` in your `config.yaml` file:
+
+```yaml
+modules:
+  - path: src/marketplace/modules/applications/postgres
+    enabled: false  # This module will not be loaded
+```
+
+This is the preferred method as it:
+- Keeps the module code intact
+- Allows easy re-enabling
+- Supports environment-specific configurations
+- Provides clear visibility of disabled modules
+
+#### 2. Directory Naming (Legacy)
+
+Add "disabled" to the module directory name:
 
 ```bash
 # For core modules
-mv src/core/modules/your_module_name src/core/modules/your_module_name_disabled
+mv src/core/modules/your_module_name src/core/modules/your_module_name.disabled
 
-# For custom modules
-mv src/custom/modules/your_module_name src/custom/modules/your_module_name_disabled
+# For marketplace modules  
+mv src/marketplace/modules/your_module_name src/marketplace/modules/your_module_name.disabled
 ```
 
-The system will automatically skip loading modules with "disabled" in their name.
+**Note**: The system will skip loading modules with "disabled" in their name even if they're enabled in the configuration. However, the configuration-based approach is recommended for better maintainability.
 
 ## Test-Driven Development Approach
 1. Start by writing tests in the appropriate `tests` folder
@@ -80,7 +143,7 @@ The system will automatically skip loading modules with "disabled" in their name
 
 ## Best Practices
 
-1. **Choose the right location**: Place essential system functionality in core modules and extensions in custom modules
+1. **Choose the right location**: Place essential system functionality in core modules, your private extensions in custom modules, and shared community modules in marketplace
 2. **Keep modules focused**: Each module should have a clear, specific purpose
 3. **Maintain independence**: Minimize dependencies between modules
 4. **Document your components**: Provide clear documentation for your agents, workflows, and pipelines
@@ -91,11 +154,28 @@ The system will automatically skip loading modules with "disabled" in their name
 
 If your module is not being loaded correctly, check the following:
 
-1. Ensure your module directory is directly under either `src/core/modules/` or `src/custom/modules/`
-2. Verify that your module name doesn't contain "disabled"
-3. Check that your agents have a `create_agent()` function
-4. Ensure your workflows and pipelines follow the correct class structure
-5. Check for import errors or exceptions during the loading process
+### Configuration Issues
+1. **Module Not Listed**: Ensure your module is listed in the `modules` section of `config.yaml`
+2. **Module Disabled**: Verify that `enabled: true` is set for your module in the configuration
+3. **Path Incorrect**: Check that the module path in `config.yaml` matches the actual directory structure
+4. **Directory Doesn't Exist**: Ensure the module directory exists at the specified path
+
+### Module Structure Issues
+5. **Missing __init__.py**: Verify your module has an `__init__.py` file (required for Python imports)
+6. **Agent Function Missing**: Check that agent files ending with `Agent.py` contain a `create_agent()` function
+7. **Import Path Issues**: Ensure the module can be imported using the path specified in the configuration
+
+### Runtime Issues
+8. **Requirements Not Met**: If your module has a `requirements()` function, ensure it returns `True`
+9. **Import Errors**: Check the application logs for detailed error messages during module loading
+10. **Name Contains "disabled"**: Even if enabled in config, modules with "disabled" in their directory name are skipped
+
+### Debugging Steps
+- Check application logs for detailed error messages
+- Verify module paths with: `python -c "import sys; sys.path.append('.'); import your.module.path"`
+- Test agent creation independently: `from your.module.path.agents.YourAgent import create_agent; create_agent()`
+
+**Error Handling**: Module loading failures cause the application to exit with detailed error messages to prevent running with incomplete functionality.
 
 By following this guide, you should be able to create and integrate new modules into the ABI system effectively.
 

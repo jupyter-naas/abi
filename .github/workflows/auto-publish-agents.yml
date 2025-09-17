@@ -1,0 +1,120 @@
+name: Auto Publish Remote Agents
+
+on:
+  workflow_run:
+    workflows: ["ABI API"] # This matches the actual API deployment workflow name
+    types:
+      - completed
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: 'Force publish all agents regardless of changes'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  auto-publish:
+    runs-on: ubuntu-latest
+    # Only run if the API deployment was successful or if manually triggered
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+
+    - name: Install dependencies
+      run: |
+        uv sync --all-extras
+
+    - name: Check auto-publish configuration
+      id: check-config
+      run: |
+        # Check if auto-publish is enabled and get API URL
+        CONFIG_DATA=$(uv run python -c "
+        import yaml
+        with open('config.yaml', 'r') as f:
+            config = yaml.safe_load(f)
+        
+        config_section = config.get('config', {})
+        auto_publish = config_section.get('auto_publish', {})
+        space_name = config_section.get('space_name', '')
+        
+        print('AUTO_PUBLISH_ENABLED=' + str(auto_publish.get('enabled', False)).lower())
+        print('API_BASE_URL=https://' + space_name + '-api.default.space.naas.ai')
+        print('SPACE_NAME=' + space_name)
+        ")
+        
+        # Parse the output
+        eval "$CONFIG_DATA"
+        
+        echo "auto_publish_enabled=${AUTO_PUBLISH_ENABLED}" >> $GITHUB_OUTPUT
+        echo "api_base_url=${API_BASE_URL}" >> $GITHUB_OUTPUT
+        echo "space_name=${SPACE_NAME}" >> $GITHUB_OUTPUT
+        
+        if [ "$AUTO_PUBLISH_ENABLED" = "true" ]; then
+          echo "✅ Auto-publish is enabled in configuration"
+          echo "🌐 API Base URL: ${API_BASE_URL}"
+        else
+          echo "❌ Auto-publish is disabled in configuration"
+        fi
+
+    - name: Verify API accessibility
+      if: steps.check-config.outputs.auto_publish_enabled == 'true' || github.event.inputs.force_publish == 'true'
+      run: |
+        API_URL="${{ steps.check-config.outputs.api_base_url }}"
+        echo "🔍 Checking if API is accessible at: ${API_URL}"
+        
+        # Wait for API to be ready (up to 5 minutes)
+        for i in {1..30}; do
+          if curl -s --connect-timeout 10 "${API_URL}/health" > /dev/null 2>&1 || \
+             curl -s --connect-timeout 10 "${API_URL}/docs" > /dev/null 2>&1 || \
+             curl -s --connect-timeout 10 "${API_URL}/" > /dev/null 2>&1; then
+            echo "✅ API is accessible"
+            break
+          fi
+          
+          echo "⏳ API not ready yet (attempt $i/30), waiting 10 seconds..."
+          sleep 10
+          
+          if [ $i -eq 30 ]; then
+            echo "❌ API is not accessible after 5 minutes. Proceeding anyway..."
+            echo "⚠️ Published agents may not work until API is fully deployed"
+          fi
+        done
+
+    - name: Publish remote agents
+      if: steps.check-config.outputs.auto_publish_enabled == 'true' || github.event.inputs.force_publish == 'true'
+      env:
+        NAAS_API_KEY: ${{ secrets.NAAS_API_KEY }}
+        ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+        GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🚀 Starting automatic agent publishing..."
+        uv run python scripts/publish_remote_agents.py
+
+    - name: Notify on success
+      if: success() && (steps.check-config.outputs.auto_publish_enabled == 'true' || github.event.inputs.force_publish == 'true')
+      run: |
+        echo "✅ Remote agents successfully published to workspace!"
+
+    - name: Notify on failure
+      if: failure() && (steps.check-config.outputs.auto_publish_enabled == 'true' || github.event.inputs.force_publish == 'true')
+      run: |
+        echo "❌ Failed to publish remote agents. Check the logs for details."
+        exit 1
+
+    - name: Skip publishing
+      if: steps.check-config.outputs.auto_publish_enabled == 'false' && github.event.inputs.force_publish != 'true'
+      run: |
+        echo "⏭️ Auto-publish is disabled. Skipping agent publishing."
+        echo "To enable automatic publishing, set 'config.auto_publish.enabled: true' in config.yaml"

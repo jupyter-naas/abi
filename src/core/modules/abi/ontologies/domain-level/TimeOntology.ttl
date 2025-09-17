@@ -1,0 +1,27 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/TimeOntology> rdf:type owl:Ontology ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/TimeOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for time."@en ;
+    dc:title "Time Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:ISO8601UTCDateTime a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000203 ; # Temporal instant
+    rdfs:label "ISO 8601 UTC DateTime" ;
+    skos:definition "A Temporal Instant specified according to the ISO 8601 standard format with UTC timezone, representing a specific point in time." ;
+    skos:example "2025-01-01T00:00:00.000Z" ;
+    abi:is_curated_in_foundry "enterprise_management_foundry", "personal_ai_foundry" .

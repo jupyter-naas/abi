@@ -1,0 +1,46 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# SuccessMetrics Ontology for Customer Success Manager Domain
+# Customer success metrics and indicators ontology
+
+@prefix : <http://naas.ai/ontology/customer-success-manager/successmetrics#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "SuccessMetrics Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Customer success metrics and indicators ontology" .
+
+# Core Classes
+:SuccessMetricsEntity a owl:Class ;
+    rdfs:label "SuccessMetrics Entity" ;
+    rdfs:comment "Base class for successmetrics entities" .
+
+:SuccessMetricsProcess a owl:Class ;
+    rdfs:label "SuccessMetrics Process" ;
+    rdfs:comment "Processes related to successmetrics" .
+
+:SuccessMetricsMetric a owl:Class ;
+    rdfs:label "SuccessMetrics Metric" ;
+    rdfs:comment "Metrics and measurements for successmetrics" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :SuccessMetricsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+:hasValue a owl:DatatypeProperty ;
+    rdfs:domain :SuccessMetricsMetric ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "has value" .
+
+:relatedTo a owl:ObjectProperty ;
+    rdfs:domain :SuccessMetricsEntity ;
+    rdfs:range :SuccessMetricsEntity ;
+    rdfs:label "related to" .
+
+# Domain-specific instances would be defined here
+# This is a template - actual ontology would have comprehensive domain knowledge

@@ -16,6 +16,7 @@ class OntologyYaml:
         class_colors_mapping: dict = {},
         top_level_class: str = "http://purl.obolibrary.org/obo/BFO_0000001",
         display_relations_names: bool = True,
+        yaml_properties: list = []
     ):
         """Translate RDF graph to YAML.
 
@@ -31,6 +32,7 @@ class OntologyYaml:
             class_colors_mapping=class_colors_mapping,
             top_level_class=top_level_class,
             display_relations_names=display_relations_names,
+            yaml_properties=yaml_properties
         )
 
 
@@ -132,7 +134,12 @@ class Translator:
         }
 
     def translate(
-        self, graph, class_colors_mapping, top_level_class, display_relations_names
+        self, 
+        graph,
+        class_colors_mapping,
+        top_level_class,
+        display_relations_names,
+        yaml_properties
     ):
         """Translate RDF graph to YAML.
 
@@ -161,7 +168,7 @@ class Translator:
         self.map_oprop_labels()
 
         # Create the YAML file.
-        return self.create_yaml(class_colors_mapping, display_relations_names)
+        return self.create_yaml(class_colors_mapping, display_relations_names, yaml_properties)
 
     def __handle_onto_tuples(self, s, p, o):
         """Load SPO in onto_tuples dictionary.
@@ -365,8 +372,13 @@ class Translator:
         for o in self.onto_oprop:
             if o and "label" in self.onto_oprop.get(o):
                 self.mapping_oprop[o] = self.onto_oprop.get(o).get("label")[0]
-
-    def create_yaml(self, class_color, display_relations_names):
+        
+    def create_yaml(
+        self, 
+        class_color, 
+        display_relations_names, 
+        yaml_properties,
+    ):
         # Init
         all_classes = {}
         classes = {}
@@ -377,7 +389,15 @@ class Translator:
             "bfo": "http://purl.obolibrary.org/obo/",
             "cco": "https://www.commoncoreontologies.org/",
         }
-
+        if len(yaml_properties) == 0:
+            yaml_properties = [
+                "definition",
+                "example",
+                "description",
+                "download url",
+                "asset url",
+            ]
+        
         # Loop on classes
         for onto_class in self.onto_classes:
             if onto_class.startswith("http"):
@@ -540,7 +560,10 @@ class Translator:
         for individual in self.onto_individuals:
             # Init variables
             uri = individual.get("__id")  # Get URI
-            label = individual.get("label")[0]  # Get label
+            if len(individual.get("label", [])) > 0:
+                label = individual.get("label")[0]  # Get label
+            else:
+                label = uri.split("/")[-1]
             class_uri = [
                 i for i in individual.get("type", []) if "NamedIndividual" not in i
             ][0]  # Get class
@@ -569,8 +592,11 @@ class Translator:
                     or individual.get("avatar")
                 )
                 if image_url:
-                    entity["style"]["image"] = image_url[0]
-                    entity["style"]["shape"] = "image"
+                    for i in image_url:
+                        if str(i) != "None" and str(i).startswith("http"):
+                            entity["style"]["image"] = i
+                            entity["style"]["shape"] = "image"
+                            break
 
                 # Add ontology group
                 ontology_group = individual.get("ontology group")
@@ -596,31 +622,12 @@ class Translator:
                                     "to": v,
                                 }
                             )
-
-                # Add title in style
-                ind_title = f"{label} (id: {uri})"
-                yaml_properties = [
-                    "description",
-                    "summary",
-                    "headline",
-                    "industry",
-                    "employeecountrange",
-                    "content",
-                    "slug",
-                    "mission",
-                    "vision",
-                    "number_of_employees",
-                    "market_share",
-                    "source",
-                    "source_url",
-                    "source_date",
-                ]
+                    
+                # Add data properties
                 for x in yaml_properties:
                     x_value = individual.get(x)
                     if x_value:
                         entity[x] = x_value[0]
-                        ind_title = f"{ind_title}\n"
-                entity["style"]["title"] = ind_title
 
                 # Concat entities with individual
                 entities.append(entity)

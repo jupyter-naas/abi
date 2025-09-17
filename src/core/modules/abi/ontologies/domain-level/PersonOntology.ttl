@@ -1,0 +1,69 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+<http://ontology.naas.ai/abi/PersonOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology>, <https://www.commoncoreontologies.org/PlatformOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/PersonOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Domain ontology for persons and individuals."@en ;
+    dc:title "Person Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+
+
+#################################################################
+#    Object Properties
+#################################################################
+
+abi:hasSkill a owl:ObjectProperty ;
+    rdfs:label "has skill"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range cco:ont00000089 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a person and a professional skill they possess."@en ;
+    skos:example "John has the skill to play the piano."@en .
+
+abi:isSkillOf a owl:ObjectProperty ;
+    rdfs:label "is skill of"@en ;
+    rdfs:domain cco:ont00000089 ;
+    rdfs:range cco:ont00001262 ;
+    rdfs:subPropertyOf bfo:BFO_0000127 ;
+    skos:definition "A relation between a professional skill and the person who possesses it."@en ;
+    skos:example "Playing the piano is a skill of John."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+abi:first_name a owl:DataProperty ;
+    rdfs:label "first name"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:string ;
+    skos:definition "The first name of a person."@en ;
+    skos:example "John"@en .
+
+abi:last_name a owl:DataProperty ;
+    rdfs:label "last name"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:string ;
+    skos:definition "The last name of a person."@en ;
+    skos:example "Doe"@en .
+
+abi:date_of_birth a owl:DataProperty ;
+    rdfs:label "date of birth"@en ;
+    rdfs:domain cco:ont00001262 ;
+    rdfs:range xsd:date ;
+    skos:definition "The date of birth of a person."@en ;
+    skos:example "1990-01-01"@en .
+    

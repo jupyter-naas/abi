@@ -37,7 +37,7 @@ dependencies = [
     "gitpython>=3.1.43,<4",
     "openpyxl>=3.1.5,<4",
     "python-multipart>=0.0.20,<0.0.21",
-    "wordcloud>=1.9.4,<2",
+    # "wordcloud>=1.9.4,<2",  # Temporarily disabled due to missing Python.h
     "imapclient>=3.0.1,<4",
     "pynacl>=1.5.0,<2",
     "python-pptx>=1.0.2,<2",
@@ -49,15 +49,27 @@ dependencies = [
     "pydantic>=2.11.4",
     "watchdog>=6.0.0",
     "langchain-google-genai>=2.1.4",
+    "feedparser>=6.0.11",
     "thefuzz>=0.22.1",
-    "fitz>=0.0.1.dev2",
-    "pymupdf>=1.26.3",
-    "pytickersymbols>=1.1.15",
+    "ollama>=0.5.1",
+    "langchain-ollama>=0.3.4",
+    "httpx>=0.28.0,<0.29",
+    "python-dotenv>=1.0.0,<2",
+    "fastmcp>=2.11.2",
+    "langchain-anthropic>=0.3.17",
+    "langchain-mistralai>=0.2.11",
+    "langchain-xai>=0.2.5",
+    "google-genai>=1.28.0",
+    "psycopg[binary,pool]>=3.2.9",
+    "langgraph-checkpoint-postgres>=2.0.23",
+    "mypy>=1.17.1",
+    "langchain-perplexity>=0.1.2",
 ]
 
 [project.scripts]
 abi = "src.cli:main"
 api = "src.api:api"
+mcp-server = "mcp_server:run"
 chat-arxiv-agent = "src.apps.terminal_agent.main:run_arxiv_agent"
 
 [dependency-groups]
@@ -73,6 +85,8 @@ dev-dependencies = [
     "mypy>=1.15.0",
     "pyrefly>=0.16.1",
     "pytest-xdist>=3.7.0",
+    "dagster>=1.5.13",
+    "dagster-webserver>=1.5.13",
 ]
 
 
@@ -82,6 +96,9 @@ abi = { path = "./lib", editable = true }
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.dagster]
+module_name = "src.core.modules.__demo__.orchestration.definitions"
 
 [tool.pytest.ini_options]
 log_cli = true

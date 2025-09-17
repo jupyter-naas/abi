@@ -1,0 +1,27 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# FinancialInstruments Ontology for Treasurer Domain
+# Financial instruments and investment types ontology
+
+@prefix : <http://naas.ai/ontology/treasurer/financialinstruments#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "FinancialInstruments Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Financial instruments and investment types ontology" .
+
+# Core Classes
+:FinancialInstrumentsEntity a owl:Class ;
+    rdfs:label "FinancialInstruments Entity" ;
+    rdfs:comment "Base class for financialinstruments entities" .
+
+# Core Properties
+:hasType a owl:ObjectProperty ;
+    rdfs:domain :FinancialInstrumentsEntity ;
+    rdfs:range xsd:string ;
+    rdfs:label "has type" .
+
+# Domain-specific instances would be defined here

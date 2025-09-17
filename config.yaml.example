@@ -1,5 +1,9 @@
 config:
   workspace_id: # Naas workspace ID
+  auto_publish:
+    enabled: true # Enable automatic publishing of agents to workspace
+    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+    default_agent: "Abi" # Which agent to set as default in workspace
   github_project_repository: # Github repository name (e.g. jupyter-naas/abi)
   github_support_repository: # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
@@ -10,6 +14,90 @@ config:
   favicon_path: "assets/favicon.ico" # Path to the favicon
   storage_name: "abi" # Name of the storage
   space_name: "abi" # Name of the space
+
+modules:
+  - path: src/core/modules/abi
+    enabled: true
+  - path: src/core/modules/chatgpt
+    enabled: true
+  - path: src/core/modules/claude
+    enabled: true
+  - path: src/core/modules/deepseek
+    enabled: true
+  - path: src/core/modules/gemini
+    enabled: true
+  - path: src/core/modules/gemma
+    enabled: true
+  - path: src/core/modules/grok
+    enabled: true
+  - path: src/core/modules/llama
+    enabled: true
+  - path: src/core/modules/mistral
+    enabled: true
+  - path: src/core/modules/perplexity
+    enabled: true
+  - path: src/core/modules/qwen
+    enabled: true
+  - path: src/marketplace/modules/applications/algolia
+    enabled: true
+  - path: src/marketplace/modules/applications/arxiv
+    enabled: true
+  - path: src/marketplace/modules/applications/git
+    enabled: true
+  - path: src/marketplace/modules/applications/github
+    enabled: true
+  - path: src/marketplace/modules/applications/google_search
+    enabled: true
+  - path: src/marketplace/modules/applications/linkedin
+    enabled: true
+  - path: src/marketplace/modules/applications/naas
+    enabled: true
+  - path: src/marketplace/modules/applications/postgres
+    enabled: true
+  - path: src/marketplace/modules/applications/powerpoint
+    enabled: true
+  - path: src/marketplace/modules/domains/account-executive
+    enabled: true
+  - path: src/marketplace/modules/domains/accountant
+    enabled: true
+  - path: src/marketplace/modules/domains/business-development-representative
+    enabled: true
+  - path: src/marketplace/modules/domains/campaign-manager
+    enabled: true
+  - path: src/marketplace/modules/domains/community-manager
+    enabled: true
+  - path: src/marketplace/modules/domains/content-analyst
+    enabled: true
+  - path: src/marketplace/modules/domains/content-creator
+    enabled: true
+  - path: src/marketplace/modules/domains/content-strategist
+    enabled: true
+  - path: src/marketplace/modules/domains/customer-success-manager
+    enabled: true
+  - path: src/marketplace/modules/domains/data-engineer
+    enabled: true
+  - path: src/marketplace/modules/domains/devops-engineer
+    enabled: true
+  - path: src/marketplace/modules/domains/financial-controller
+    enabled: true
+  - path: src/marketplace/modules/domains/human-resources-manager
+    enabled: true
+  - path: src/marketplace/modules/domains/inside-sales representative
+    enabled: true
+  - path: src/marketplace/modules/domains/osint-researcher
+    enabled: true
+  - path: src/marketplace/modules/domains/private-investigator
+    enabled: true
+  - path: src/marketplace/modules/domains/project-manager
+    enabled: true
+  - path: src/marketplace/modules/domains/sales-development-representative
+    enabled: true
+  - path: src/marketplace/modules/domains/software-engineer
+    enabled: true
+  - path: src/marketplace/modules/domains/support
+    enabled: true
+  - path: src/marketplace/modules/domains/treasurer
+    enabled: true
   
 pipelines:
   - name: github.GithubIssuesPipeline

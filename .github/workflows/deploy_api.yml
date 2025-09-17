@@ -46,6 +46,23 @@ jobs:
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
 
+      - name: Test API with production secrets before deployment
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+          NAAS_API_KEY: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+        run: |
+          # Test API initialization with production secrets before deployment
+          docker run --rm \
+            -e ABI_API_KEY="$ABI_API_KEY" \
+            -e NAAS_API_KEY="$NAAS_API_KEY" \
+            -e NAAS_CREDENTIALS_JWT_TOKEN="$NAAS_CREDENTIALS_JWT_TOKEN" \
+            -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+            -e GITHUB_ACCESS_TOKEN="$ACCESS_TOKEN" \
+            ghcr.io/${{ github.repository }}/abi:latest uv run --no-dev src/api.py --test-init
+
       - name: Push latest abi container
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
@@ -74,6 +91,60 @@ jobs:
 
           naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
            || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+
+      - name: Verify API deployment and version
+        run: |
+          echo "🔍 Verifying API deployment with expected version..."
+          
+          # Get the expected version from git tag
+          EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
+          echo "Expected version: $EXPECTED_VERSION"
+          
+          # API URL based on registry name
+          API_URL="https://${{ env.REGISTRY_NAME }}.default.space.naas.ai"
+          OPENAPI_URL="$API_URL/openapi.json"
+          
+          echo "Checking API at: $OPENAPI_URL"
+          
+          # Wait up to 5 minutes for API to be ready with correct version
+          TIMEOUT=300  # 5 minutes
+          INTERVAL=10  # Check every 10 seconds
+          ELAPSED=0
+          
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            echo "Attempt $((ELAPSED/INTERVAL + 1)): Checking API version..."
+            
+            # Try to get the version from OpenAPI endpoint
+            RESPONSE=$(curl -s "$OPENAPI_URL" 2>/dev/null || echo "")
+            
+            if [ -n "$RESPONSE" ]; then
+              # Extract version from JSON response
+              ACTUAL_VERSION=$(echo "$RESPONSE" | grep -o '"version":"[^"]*' | cut -d'"' -f4)
+              
+              if [ -n "$ACTUAL_VERSION" ]; then
+                echo "API responded with version: $ACTUAL_VERSION"
+                
+                if [ "$ACTUAL_VERSION" = "$EXPECTED_VERSION" ]; then
+                  echo "✅ API deployment verified! Version matches: $ACTUAL_VERSION"
+                  exit 0
+                else
+                  echo "⚠️ Version mismatch. Expected: $EXPECTED_VERSION, Got: $ACTUAL_VERSION"
+                fi
+              else
+                echo "⚠️ Could not extract version from API response"
+              fi
+            else
+              echo "⚠️ API not responding yet..."
+            fi
+            
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          
+          echo "❌ Timeout: API did not respond with expected version after 5 minutes"
+          echo "Expected: $EXPECTED_VERSION"
+          echo "Last response: $RESPONSE"
+          exit 1
 
   streamlit-demo:
     runs-on: ubuntu-latest
@@ -123,7 +194,7 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
 
-          docker build -t streamlit-demo -f src/core/modules/__demo__/apps/streamlit/Dockerfile .
+          docker build -t streamlit-demo -f src/marketplace/modules/applications/__demo__/apps/streamlit/Dockerfile .
 
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
@@ -146,3 +217,76 @@ jobs:
 
           naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
            || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+
+  mcp-server:
+    runs-on: ubuntu-latest
+    needs: build  # Wait for API to be deployed first
+    env:
+      REGISTRY_NAME: ${{ github.event.repository.name }}-mcp-server
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.ACCESS_TOKEN }}
+      
+      - name: Install naas-python
+        run: |
+          pip install naas-python
+          pip install --upgrade pydantic==2.7.4
+      
+      - name: Create Naas Container registry
+        run: |
+          naas-python registry create --name ${{ env.REGISTRY_NAME }} || echo "Registry already exists"
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+
+      - name: Build and push MCP server container
+        env:
+          NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/abi:latest
+          docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
+
+          docker build -t mcp-server -f Dockerfile.mcp .
+
+          export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
+
+          # Generate timestamp to tag image
+          TIMESTAMP=$(date +%s)
+
+          docker tag mcp-server $URI:$TIMESTAMP
+
+          naas-python registry docker-login -n ${{ env.REGISTRY_NAME }}
+
+          docker push $URI:$TIMESTAMP
+          
+          ENV_CONFIG="{\
+            \"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\
+            \"NAAS_API_KEY\":\"$NAAS_CREDENTIALS_JWT_TOKEN\",\
+            \"GITHUB_ACCESS_TOKEN\":\"$ACCESS_TOKEN\",\
+            \"ABI_API_KEY\":\"$ABI_API_KEY\",\
+            \"ABI_API_BASE\":\"https://${{ github.event.repository.name }}-api.default.space.naas.ai\",\
+            \"MCP_TRANSPORT\":\"http\"\
+          }"
+
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"

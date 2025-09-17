@@ -9,7 +9,7 @@ from abi.services.secret.adaptors.secondary import (
 )
 from abi.services.secret.SecretPorts import ISecretAdapter
 from src.services import init_services
-from src import cli
+
 from src.__modules__ import get_modules
 import yaml
 from dataclasses import dataclass
@@ -21,7 +21,6 @@ from abi.services.object_storage.ObjectStorageFactory import (
 from abi.utils.LazyLoader import LazyLoader
 import atexit
 import os
-import asyncio
 
 
 @atexit.register
@@ -39,6 +38,12 @@ class PipelineConfig:
 
 
 @dataclass
+class ModuleConfig:
+    path: str
+    enabled: bool
+
+
+@dataclass
 class Config:
     workspace_id: str
     storage_name: str
@@ -53,6 +58,7 @@ class Config:
     pipelines: List[PipelineConfig]
     space_name: str
     cors_origins: List[str]
+    modules: List[ModuleConfig]
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config.yaml") -> "Config":
@@ -65,6 +71,12 @@ class Config:
                         name=p["name"], cron=p["cron"], parameters=p["parameters"]
                     )
                     for p in data["pipelines"]
+                ]
+                module_configs = [
+                    ModuleConfig(
+                        path=m["path"], enabled=m["enabled"]
+                    )
+                    for m in data["modules"]
                 ]
                 return cls(
                     workspace_id=config_data.get("workspace_id"),
@@ -80,6 +92,7 @@ class Config:
                     pipelines=pipeline_configs,
                     space_name=config_data.get("space_name"),
                     cors_origins=config_data.get("cors_origins"),
+                    modules=module_configs,
                 )
         except FileNotFoundError:
             return cls(
@@ -96,6 +109,7 @@ class Config:
                 pipelines=[],
                 space_name="",
                 cors_origins=[],
+                modules=[],
             )
 
 
@@ -110,7 +124,7 @@ naas_api_url = os.getenv("NAAS_API_URL", None)
 logger.debug(
     "Loading secrets into environment variables. Priority: Environment variables > .env > Naas Secrets"
 )
-secrets = {}
+secrets: dict = {}
 if naas_api_key is not None:
     naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
     base64_adapter = Base64Secret.Base64Secret(
@@ -148,16 +162,14 @@ for key, value in secrets.items():
 secret = Secret(secrets_adapters)
 config = Config.from_yaml()
 
-
 modules_loaded = False
-
-
 
 def load_modules():
     global services
     logger.debug("Loading modules")
-    _modules = get_modules()
+    _modules = get_modules(config)
 
+    logger.debug("Loading ontologies")
     ontology_filepaths = []
 
     for module in _modules:
@@ -184,17 +196,18 @@ def load_modules():
                     topic, event_type, callback, background
                 )
 
-
+    logger.debug("Loading on_initialized")
     for module in _modules:
         module.on_initialized()
 
+    logger.debug("Loading agents")
     for module in _modules:
+        logger.debug(f"Loading agents for module {module.module_import_path}")
         module.load_agents()
 
     return _modules
 
 services = LazyLoader(lambda: init_services(config, secret))
-modules = LazyLoader(load_modules)
+modules = LazyLoader(lambda: load_modules())
 
-if __name__ == "__main__":
-    cli.main()
+

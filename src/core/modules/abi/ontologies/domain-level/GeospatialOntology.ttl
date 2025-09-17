@@ -1,0 +1,46 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:Country a owl:Class ;
+    rdfs:subClassOf cco:ont00000472 ;
+    rdfs:label "Country" ;
+    skos:definition "A Geospatial Region that is a distinct territorial body or political entity recognized as an independent nation." ;
+    skos:example "United States, France, Japan" ;
+    rdfs:comment "A country is a distinct region with recognized boundaries and political governance, making it a suitable subclass of cco:GeospatialRegion." .
+
+abi:Address rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00000686 ;
+    rdfs:label "Address" ;
+    skos:definition "A Designative Information Content Entity that consists of a structured string of characters used to identify the location of an entity, typically including elements such as street name, number, city, region, and postal code." ;
+    skos:example "123 Main St, New York, NY 10001" ;
+    rdfs:comment "An Address is a structured string of characters used to identify the location of an entity, typically including elements such as street name, number, city, region, and postal code." .
+
+abi:ZIPCode rdf:type owl:Class ;
+    rdfs:subClassOf cco:ont00000686 ;
+    rdfs:label "ZIP Code" ;
+    skos:definition "A Designative Information Content Entity that consists of a string of characters used to identify a postal delivery area." ;
+    skos:example "92130" ;
+    rdfs:comment "A ZIP Code is a structured string of characters used to identify a postal delivery area for mail sorting and delivery purposes." .
+
+#################################################################
+#    Datatype Properties
+#################################################################
+
+abi:country_code a owl:DatatypeProperty ;
+    rdfs:domain abi:Country ;
+    rdfs:range xsd:string ;
+    rdfs:label "Country Code" ;
+    skos:definition "The ISO 3166-1 alpha-2 code for the country." ;
+    skos:example "US, FR, JP" .

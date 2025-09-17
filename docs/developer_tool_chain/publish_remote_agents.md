@@ -2,6 +2,10 @@
 
 This guide explains how to publish ABI agents as remote plugins on the Naas platform. This feature is only available if you have access to the Naas platform.
 
+## Automatic Publishing (Recommended)
+
+The system now supports automatic publishing of remote agents to your workspace. When enabled, agents will be automatically published to the specified workspace using `config.workspace_id` whenever the API is deployed.
+
 ## Prerequisites
 
 Before publishing remote agents, ensure you have:
@@ -32,32 +36,79 @@ Update your `config.yaml` file with the following settings:
 ```yaml
 config:
   workspace_id: "your_naas_workspace_id"
+  auto_publish:
+    enabled: true # Enable automatic publishing of agents to workspace
+    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+    default_agent: "Abi" # Which agent to set as default in workspace
   github_project_repository: "your_github_username/your_repository_name"
   space_name: "your_naas_space_name"
   # ... other configuration options
 ```
 
+#### Auto-Publish Configuration Options
+
+| Option | Description | Default | Example |
+|--------|-------------|---------|---------|
+| `enabled` | Enable/disable automatic publishing | `true` | `true` |
+| `exclude_agents` | List of agent names to exclude from publishing | `[]` | `["TestAgent", "DebugAgent"]` |
+| `default_agent` | Agent to set as default in the workspace | `"Abi"` | `"MyCustomAgent"` |
+
 ## How to Publish Remote Agents
 
-### Method 1: Using Make Command (Recommended)
+### Method 1: Automatic Publishing (Recommended)
 
-The easiest way to publish remote agents is using the provided Make command:
+When `auto_publish.enabled` is set to `true` in your `config.yaml`, agents will be automatically published to your workspace after each API deployment via GitHub Actions.
+
+**Benefits:**
+- ✅ Simplifies deployment workflow  
+- ✅ Ensures agents are up-to-date
+- ✅ Reduces manual intervention
+- ✅ Publishes all enabled agents automatically
+- ✅ Excludes only specified agents via `exclude_agents`
+
+**How it works:**
+1. GitHub Actions workflow triggers after successful API deployment
+2. Checks if auto-publish is enabled in configuration
+3. Verifies API accessibility
+4. Publishes all enabled agents except those in `exclude_agents`
+5. Sets the `default_agent` as the workspace default
+
+### Method 2: Manual Publishing with Make Command
+
+You can also manually publish agents using:
 
 ```bash
 make publish-remote-agents
 ```
-This command performs the following actions:
-1. Reads configuration settings from your environment and config files
-2. Publishes a predefined set of agents:
-   - `Supervisor` (set as default)
-   - `Ontology` 
-   - `Naas`
-   - `Multi_Models`
-   - `Support`
-3. Configures the published agents with appropriate settings
 
-To customize which agents are published, you can modify the `agents_to_publish` list directly in the script.
-Use the agent name to add more agents to publish.
+**Dry-Run Mode (Preview Changes):**
+To preview what agents would be published without making actual changes:
+
+```bash
+make publish-remote-agents-dry-run
+```
+
+Or directly:
+```bash
+uv run python scripts/publish_remote_agents.py --dry-run
+# Alternative flags: --dryrun, -n
+```
+
+**Dry-run benefits:**
+- ✅ Preview all agents that would be published
+- ✅ See detailed plugin configuration data
+- ✅ Test configuration without API keys
+- ✅ Identify excluded agents
+- ✅ Verify API URLs and workspace settings
+- ✅ No actual changes made to workspace or GitHub
+
+**Legacy behavior (when `auto_publish.enabled: false`):**
+- Publishes only specific agents: `Abi`, `Ontology`, `Naas`, `Multi_Models`, `Support`
+- Requires manual execution
+
+**New behavior (when `auto_publish.enabled: true`):**  
+- Publishes all enabled agents except those in `exclude_agents`
+- Uses configuration from `config.yaml`
 
 ### Method 2: Running the Script Directly
 
@@ -81,8 +132,8 @@ publish_remote_agent(
     workspace_id="your_workspace_id",
     github_access_token="your_github_token",
     github_repository="your_username/your_repo",
-    default_agent="Supervisor",
-    agents_to_publish=["Supervisor", "Ontology", "Naas"]
+    default_agent="Abi",
+agents_to_publish=["Abi", "Ontology", "Naas"]
 )
 ```
 
@@ -96,8 +147,10 @@ publish_remote_agent(
 | `workspace_id` | Naas workspace ID where plugins will be published | Yes | - |
 | `github_access_token` | GitHub personal access token | Yes | - |
 | `github_repository` | GitHub repository name (format: `username/repository`) | Yes | - |
-| `default_agent` | Name of the agent to set as default | No | "Supervisor" |
-| `agents_to_publish` | List of agent names to publish | No | ["Supervisor", "Ontology", "Naas", "Multi_Models", "Support"] |
+| `default_agent` | Name of the agent to set as default | No | "Abi" |
+| `agents_to_publish` | List of agent names to publish (legacy mode) | No | ["Abi", "Ontology", "Naas", "Multi_Models", "Support"] |
+| `exclude_agents` | List of agent names to exclude from publishing | No | [] |
+| `auto_publish_enabled` | Enable automatic publishing mode | No | false |
 
 ## What the Script Does
 
@@ -113,11 +166,16 @@ The `publish_remote_agents.py` script performs the following process:
 - This secret is used by the remote agents to authenticate with your ABI API
 
 ### 3. Agent Discovery and Processing
-For each agent specified in `agents_to_publish`:
 
-- **Loads Agent Modules**: Dynamically loads all available ABI agent modules
+**Auto-publish mode (when `auto_publish.enabled: true`):**
+- **Loads All Agent Modules**: Dynamically loads all available ABI agent modules
+- **Filters by Exclusion**: Publishes all agents except those listed in `exclude_agents`
+- **Extracts Agent Metadata**: Gathers agent information for all valid agents
+
+**Legacy mode (when `auto_publish.enabled: false`):**
+- **Loads Specific Agents**: Only processes agents listed in `agents_to_publish`
 - **Extracts Agent Metadata**: Gathers agent information including:
-  - Name and description
+  - Name and description  
   - System prompt from agent configuration
   - Avatar URL and suggestions from the module
   - API route name for remote access
@@ -141,18 +199,91 @@ For each agent:
 - Sets the specified `default_agent` as the default plugin in the workspace
 - This agent will be pre-selected when users access your workspace
 
+## GitHub Actions Workflow
+
+The automatic publishing is handled by the `.github/workflows/auto-publish-agents.yml` workflow:
+
+### Workflow Triggers
+- **After API Deployment**: Automatically runs after the "ABI API" workflow completes successfully
+- **Manual Trigger**: Can be manually triggered via GitHub Actions UI with force publish option
+
+### Workflow Steps
+1. **Checkout Code**: Gets the latest code from the repository
+2. **Setup Environment**: Installs Python 3.10 and uv package manager
+3. **Install Dependencies**: Installs all project dependencies
+4. **Check Configuration**: Verifies auto-publish is enabled and gets API URL
+5. **Verify API Access**: Waits up to 5 minutes for the API to be accessible
+6. **Publish Agents**: Runs the publishing script with proper configuration
+7. **Notify Results**: Reports success or failure
+
+### Required Secrets
+The workflow requires these GitHub repository secrets:
+- `NAAS_API_KEY`: Your Naas platform API key
+- `ABI_API_KEY`: Your ABI API authentication key  
+- `GITHUB_TOKEN`: Automatically provided by GitHub Actions
+
+### Workflow Configuration
+The workflow is configured to trigger after the "ABI API" deployment workflow:
+```yaml
+workflows: ["ABI API"] # Matches the actual API deployment workflow name
+```
+
 ## Expected Output
 
 When running the script successfully, you should see output similar to:
 
+**Auto-publish mode:**
 ```
-==> Getting existing plugins from workspace: your_workspace_id
-==> Existing plugins: 5
-==> Updating "ABI_API_KEY" secret in Github repository: your_username/your_repo
-==> Publishing agent: Supervisor
-Plugin 'Supervisor' updated in workspace 'your_workspace_id'
+🚀 Auto-publish enabled: True
+🚫 Excluded agents: None
+⭐ Default agent: Abi
+🔍 Getting existing plugins from workspace: your_workspace_id
+==> Getting agents from module: src/core/modules/abi
+==> Publishing agent: Abi
+✅ Plugin 'Abi' updated in workspace 'your_workspace_id'
 ==> Publishing agent: Ontology
-Plugin 'Ontology' created in workspace 'your_workspace_id'
+✅ Plugin 'Ontology' created in workspace 'your_workspace_id'
+==> Skipping excluded agent: TestAgent
+...
+```
+
+**Legacy mode:**
+```
+🚀 Auto-publish enabled: False
+📝 Publishing specific agents: ['Abi', 'Ontology', 'Naas', 'Multi_Models', 'Support']
+⭐ Default agent: Abi
+🔍 Getting existing plugins from workspace: your_workspace_id
+==> Publishing agent: Abi
+✅ Plugin 'Abi' updated in workspace 'your_workspace_id'
+...
+```
+
+**Dry-run mode:**
+```
+🧪 DRY RUN MODE - No changes will be made
+==================================================
+🚀 Auto-publish enabled: True
+🚫 Excluded agents: ['TestAgent']
+⭐ Default agent: Abi
+🌐 API Base URL: https://abi-api.default.space.naas.ai
+🏢 Workspace ID: your_workspace_id
+🧪 DRY RUN MODE: No actual changes will be made
+🧪 [DRY RUN] Would fetch existing plugins from workspace
+🧪 [DRY RUN] Would update "ABI_API_KEY" secret in Github repository: your_repo
+==> Getting agents from module: src/core/modules/abi
+🧪 [DRY RUN] Would publish agent: Abi
+🧪 [DRY RUN] Plugin data for 'Abi':
+    - ID: abi
+    - Name: Abi
+    - Type: CORE
+    - Default: True
+    - Remote URL: https://abi-api.default.space.naas.ai/agents/abi/stream-completion?token=dummy_abi_api_key
+    - Avatar: https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png
+    - Description: I'm Abi, your Artificial Business Intelligence assistant...
+    - Suggestions: 4 items
+🧪 [DRY RUN] Would check if plugin 'abi' already exists
+🧪 [DRY RUN] Would create/update plugin in workspace 'your_workspace_id'
+🧪 [DRY RUN] Would skip excluded agent: TestAgent
 ...
 ```
 

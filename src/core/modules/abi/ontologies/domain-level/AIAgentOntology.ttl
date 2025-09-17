@@ -1,0 +1,888 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix capability: <http://ontology.naas.ai/abi/capability/> .
+
+<http://ontology.naas.ai/abi/AIAgentOntology> rdf:type owl:Ontology ;
+    owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+    owl:imports <http://ontology.naas.ai/abi/CapabilityOntology> ;
+    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/core/modules/abi/ontologies/domain-level/AIAgentOntology.ttl> ;
+    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+    dc:description "Ontology for AI agents and AI systems using BFO and CCO standards, integrated with capability ontology."@en ;
+    dc:title "AI Agent Ontology (BFO+CCO)" .
+
+#################################################################
+#    Annotation properties
+#################################################################
+
+###  http://purl.org/dc/elements/1.1/contributor
+dc11:contributor rdf:type owl:AnnotationProperty .
+
+###  http://purl.org/dc/terms/description
+dc:description rdf:type owl:AnnotationProperty .
+
+###  http://purl.org/dc/terms/title
+dc:title rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#definition
+skos:definition rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#example
+skos:example rdf:type owl:AnnotationProperty .
+
+###  http://www.w3.org/2004/02/skos/core#prefLabel
+skos:prefLabel rdf:type owl:AnnotationProperty .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+###  http://ontology.naas.ai/abi/hasCapability
+abi:hasCapability a owl:ObjectProperty ;
+    rdfs:label "has capability"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range capability:Capability ;
+    skos:definition "A relation between an AI agent and its capabilities."@en .
+
+###  http://ontology.naas.ai/abi/realizesCapability
+abi:realizesCapability a owl:ObjectProperty ;
+    rdfs:label "realizes capability"@en ;
+    rdfs:domain abi:AIProcess ;
+    rdfs:range capability:Capability ;
+    skos:definition "A relation between an AI process and the capability it realizes."@en .
+
+###  http://ontology.naas.ai/abi/hasAIAgent
+abi:hasAIAgent a owl:ObjectProperty ;
+    rdfs:label "has AI agent"@en ;
+    rdfs:domain abi:AISystem ;
+    rdfs:range abi:AIAgent ;
+    skos:definition "A relation between an AI system and the AI agent it implements."@en .
+
+###  http://ontology.naas.ai/abi/canUtilizeModel
+abi:canUtilizeModel a owl:ObjectProperty ;
+    rdfs:label "can utilize model"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AIModelInstance ;
+    skos:definition "A relation between an AI agent and the AI model instances it can dynamically select for different processes."@en ;
+    rdfs:comment "AI agents can choose different models based on process requirements, cost optimization, and capability matching."@en .
+
+###  http://ontology.naas.ai/abi/isAIAgentOf
+abi:isAIAgentOf a owl:ObjectProperty ;
+    rdfs:label "is AI agent of"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AISystem ;
+    owl:inverseOf abi:hasAIAgent ;
+    skos:definition "A relation between an AI agent and the AI system that implements it."@en .
+
+###  http://ontology.naas.ai/abi/hasQuality
+abi:hasQuality a owl:ObjectProperty ;
+    rdfs:label "has quality"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range bfo:BFO_0000019 ;
+    skos:definition "A relation between a material entity and its qualities."@en .
+
+###  http://ontology.naas.ai/abi/hasParticipant
+abi:hasParticipant a owl:ObjectProperty ;
+    rdfs:label "has participant"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000040 ;
+    skos:definition "A relation between a process and the material entities that participate in it."@en .
+
+###  http://ontology.naas.ai/abi/occursIn
+abi:occursIn a owl:ObjectProperty ;
+    rdfs:label "occurs in"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000006 ;
+    skos:definition "A relation between a process and the spatial region where it occurs."@en .
+
+###  http://ontology.naas.ai/abi/hasTemporalRegion
+abi:hasTemporalRegion a owl:ObjectProperty ;
+    rdfs:label "has temporal region"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000008 ;
+    skos:definition "A relation between a process and its temporal region."@en .
+
+###  http://ontology.naas.ai/abi/isDocumentedBy
+abi:isDocumentedBy a owl:ObjectProperty ;
+    rdfs:label "is documented by"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000031 ;
+    skos:definition "A relation between a process and the information content that documents it."@en .
+
+###  http://ontology.naas.ai/abi/hasSpecification
+abi:hasSpecification a owl:ObjectProperty ;
+    rdfs:label "has specification"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range bfo:BFO_0000031 ;
+    skos:definition "A relation between a material entity and its specification."@en .
+
+###  http://ontology.naas.ai/abi/collaboratesWith
+abi:collaboratesWith a owl:ObjectProperty ;
+    rdfs:label "collaborates with"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AIAgent ;
+    skos:definition "A relation between AI agents that work together to achieve a common goal."@en ;
+    rdfs:comment "This relationship models agent collaboration where multiple AI agents coordinate their efforts, such as when a text generation agent works with an image analysis agent to create multimodal content."@en .
+
+###  http://ontology.naas.ai/abi/hasSpecializedRole
+abi:hasSpecializedRole a owl:ObjectProperty ;
+    rdfs:label "has specialized role"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AgentRole ;
+    skos:definition "A relation between an AI agent and its specialized role within a system."@en ;
+    rdfs:comment "This relationship captures the specific function or role an AI agent plays, such as 'primary responder', 'fallback handler', or 'specialized task executor'."@en .
+
+###  http://ontology.naas.ai/abi/isSubsystemOf
+abi:isSubsystemOf a owl:ObjectProperty ;
+    rdfs:label "is subsystem of"@en ;
+    rdfs:domain abi:AISystem ;
+    rdfs:range abi:AISystem ;
+    skos:definition "A relation between AI systems where one system is a component of another larger system."@en ;
+    rdfs:comment "This relationship models hierarchical system composition, such as when a microservice architecture contains multiple specialized subsystems that work together."@en .
+
+###  http://ontology.naas.ai/abi/hasSubsystem
+abi:hasSubsystem a owl:ObjectProperty ;
+    rdfs:label "has subsystem"@en ;
+    rdfs:domain abi:AISystem ;
+    rdfs:range abi:AISystem ;
+    owl:inverseOf abi:isSubsystemOf ;
+    skos:definition "A relation between AI systems where one system contains other systems as components."@en ;
+    rdfs:comment "This relationship models system composition where a larger AI system is composed of multiple smaller, specialized subsystems."@en .
+
+###  http://ontology.naas.ai/abi/precedesInTime
+abi:precedesInTime a owl:ObjectProperty ;
+    rdfs:label "precedes in time"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000015 ;
+    skos:definition "A relation between processes where one process occurs before another in a temporal sequence."@en ;
+    rdfs:comment "This relationship models temporal coordination between AI processes, such as when data preprocessing must occur before model inference."@en .
+
+###  http://ontology.naas.ai/abi/triggersProcess
+abi:triggersProcess a owl:ObjectProperty ;
+    rdfs:label "triggers process"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range bfo:BFO_0000015 ;
+    skos:definition "A relation between processes where the completion of one process initiates another process."@en ;
+    rdfs:comment "This relationship models causal dependencies between AI processes, such as when a text analysis process triggers a response generation process."@en .
+
+###  http://ontology.naas.ai/abi/hasFallbackAgent
+abi:hasFallbackAgent a owl:ObjectProperty ;
+    rdfs:label "has fallback agent"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range abi:AIAgent ;
+    skos:definition "A relation between AI agents where one agent serves as a backup when the primary agent fails."@en ;
+    rdfs:comment "This relationship models fault tolerance in AI systems, ensuring continuous service availability through redundant agent configurations."@en .
+
+###  http://ontology.naas.ai/abi/hasLoadBalancer
+abi:hasLoadBalancer a owl:ObjectProperty ;
+    rdfs:label "has load balancer"@en ;
+    rdfs:domain abi:AISystem ;
+    rdfs:range abi:LoadBalancer ;
+    skos:definition "A relation between an AI system and its load balancing component."@en ;
+    rdfs:comment "This relationship models how AI systems distribute workload across multiple agents to optimize performance and resource utilization."@en .
+
+###  http://ontology.naas.ai/abi/utilizesModel
+abi:utilizesModel a owl:ObjectProperty ;
+    rdfs:label "utilizes model"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range abi:AIModelInstance ;
+    skos:definition "A relation between an AI process and the specific AI model instance actually used in that process execution."@en ;
+    rdfs:comment "This captures the actual model selection made by an AI agent for a specific process instance."@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+###  http://ontology.naas.ai/abi/modelName
+abi:modelName a owl:DataProperty ;
+    rdfs:label "model name"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:string ;
+    skos:definition "The name identifier of an AI model."@en .
+
+###  http://ontology.naas.ai/abi/providerName
+abi:providerName a owl:DataProperty ;
+    rdfs:label "provider name"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:string ;
+    skos:definition "The name of the organization providing the AI system."@en .
+
+###  http://ontology.naas.ai/abi/accuracyValue
+abi:accuracyValue a owl:DataProperty ;
+    rdfs:label "accuracy value"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The numerical value of model accuracy."@en .
+
+###  http://ontology.naas.ai/abi/latencyValue
+abi:latencyValue a owl:DataProperty ;
+    rdfs:label "latency value"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:integer ;
+    skos:definition "The numerical value of response latency in milliseconds."@en .
+
+###  http://ontology.naas.ai/abi/tokenLimit
+abi:tokenLimit a owl:DataProperty ;
+    rdfs:label "token limit"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:integer ;
+    skos:definition "The maximum number of tokens the model can process."@en .
+
+###  http://ontology.naas.ai/abi/trainingDataCutoff
+abi:trainingDataCutoff a owl:DataProperty ;
+    rdfs:label "training data cutoff"@en ;
+    rdfs:domain bfo:BFO_0000008 ;
+    rdfs:range xsd:date ;
+    skos:definition "The date until which training data extends."@en .
+
+###  http://ontology.naas.ai/abi/locationName
+abi:locationName a owl:DataProperty ;
+    rdfs:label "location name"@en ;
+    rdfs:domain bfo:BFO_0000006 ;
+    rdfs:range xsd:string ;
+    skos:definition "The name of the spatial location."@en .
+
+###  http://ontology.naas.ai/abi/specificationContent
+abi:specificationContent a owl:DataProperty ;
+    rdfs:label "specification content"@en ;
+    rdfs:domain bfo:BFO_0000031 ;
+    rdfs:range xsd:string ;
+    skos:definition "The content of the model specification."@en .
+
+###  http://ontology.naas.ai/abi/collaborationPriority
+abi:collaborationPriority a owl:DataProperty ;
+    rdfs:label "collaboration priority"@en ;
+    rdfs:domain abi:AIAgent ;
+    rdfs:range xsd:integer ;
+    skos:definition "The priority level of an AI agent in collaborative scenarios."@en ;
+    rdfs:comment "This property indicates the relative importance of an agent when multiple agents collaborate, with higher values indicating higher priority."@en .
+
+###  http://ontology.naas.ai/abi/systemComplexity
+abi:systemComplexity a owl:DataProperty ;
+    rdfs:label "system complexity"@en ;
+    rdfs:domain abi:AISystem ;
+    rdfs:range xsd:string ;
+    skos:definition "A measure of the complexity of an AI system."@en ;
+    rdfs:comment "This property captures the complexity level of an AI system, such as 'simple', 'moderate', or 'complex', based on the number of agents and their interactions."@en .
+
+###  http://ontology.naas.ai/abi/temporalSequence
+abi:temporalSequence a owl:DataProperty ;
+    rdfs:label "temporal sequence"@en ;
+    rdfs:domain bfo:BFO_0000015 ;
+    rdfs:range xsd:integer ;
+    skos:definition "The sequence number of a process in a temporal workflow."@en ;
+    rdfs:comment "This property indicates the order of processes in a workflow, where lower numbers indicate earlier execution in the sequence."@en .
+
+###  http://ontology.naas.ai/abi/inputTokenCost
+abi:inputTokenCost a owl:DataProperty ;
+    rdfs:label "input token cost"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The cost per million input tokens in USD."@en ;
+    rdfs:comment "Price data from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/outputTokenCost
+abi:outputTokenCost a owl:DataProperty ;
+    rdfs:label "output token cost"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The cost per million output tokens in USD."@en ;
+    rdfs:comment "Price data from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/outputSpeed
+abi:outputSpeed a owl:DataProperty ;
+    rdfs:label "output speed"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The median output generation speed in tokens per second."@en ;
+    rdfs:comment "Performance data from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/intelligenceIndex
+abi:intelligenceIndex a owl:DataProperty ;
+    rdfs:label "intelligence index"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The Artificial Analysis intelligence index score."@en ;
+    rdfs:comment "Composite intelligence score from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/codingIndex
+abi:codingIndex a owl:DataProperty ;
+    rdfs:label "coding index"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The Artificial Analysis coding index score."@en ;
+    rdfs:comment "Coding capability score from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/mathIndex
+abi:mathIndex a owl:DataProperty ;
+    rdfs:label "math index"@en ;
+    rdfs:domain bfo:BFO_0000019 ;
+    rdfs:range xsd:decimal ;
+    skos:definition "The Artificial Analysis math index score."@en ;
+    rdfs:comment "Mathematical reasoning score from Artificial Analysis benchmarks."@en .
+
+###  http://ontology.naas.ai/abi/sourceAPI
+abi:sourceAPI a owl:DataProperty ;
+    rdfs:label "source API"@en ;
+    rdfs:domain bfo:BFO_0000040 ;
+    rdfs:range xsd:string ;
+    skos:definition "The API source URL for model data."@en ;
+    rdfs:comment "Attribution to data source API."@en .
+
+#################################################################
+#    Classes
+#################################################################
+
+###  http://ontology.naas.ai/abi/AISystem
+abi:AISystem a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "AI System"@en ;
+    skos:definition "A material entity that implements artificial intelligence capabilities."@en ;
+    skos:example "ChatGPT server infrastructure, Claude API endpoints, Gemini model instances."@en .
+
+###  http://ontology.naas.ai/abi/AIModelInstance
+abi:AIModelInstance a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "AI Model Instance"@en ;
+    skos:definition "A material entity that is a specific instantiation of an AI model running on hardware."@en ;
+    skos:example "GPT-4 model running on OpenAI's servers, Claude-3-Sonnet instance."@en .
+
+###  http://ontology.naas.ai/abi/AIAgent
+abi:AIAgent a owl:Class ;
+    rdfs:subClassOf cco:ont00001017 ;
+    rdfs:label "AI Agent"@en ;
+    skos:definition "An agent that is an artificial intelligence system capable of autonomous decision-making and task execution."@en ;
+    skos:example "ChatGPT, Claude, Gemini, and other AI systems that can engage in conversations and perform various tasks."@en .
+
+###  http://ontology.naas.ai/abi/AgentRole
+abi:AgentRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;
+    rdfs:label "Agent Role"@en ;
+    skos:definition "A realizable entity that defines the specialized function or role of an AI agent within a system."@en ;
+    skos:example "Primary responder, fallback handler, specialized task executor, coordinator, validator."@en .
+
+###  http://ontology.naas.ai/abi/LoadBalancer
+abi:LoadBalancer a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Load Balancer"@en ;
+    skos:definition "A material entity that distributes workload across multiple AI agents to optimize performance."@en ;
+    skos:example "Round-robin load balancer, weighted load balancer, intelligent routing system."@en .
+
+###  http://ontology.naas.ai/abi/ModelAccuracy
+abi:ModelAccuracy a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Model Accuracy"@en ;
+    skos:definition "A quality that inheres in an AI model and represents its performance accuracy."@en .
+
+###  http://ontology.naas.ai/abi/ResponseLatency
+abi:ResponseLatency a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Response Latency"@en ;
+    skos:definition "A quality that inheres in an AI system and represents response time."@en .
+
+###  http://ontology.naas.ai/abi/TokenCapacity
+abi:TokenCapacity a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;
+    rdfs:label "Token Capacity"@en ;
+    skos:definition "A quality that inheres in an AI model and represents maximum token processing capacity."@en .
+
+
+
+###  http://ontology.naas.ai/abi/TextGenerationProcess
+abi:TextGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Text Generation Process"@en ;
+    skos:definition "A process in which an AI system generates text based on input."@en .
+
+###  http://ontology.naas.ai/abi/ImageAnalysisProcess
+abi:ImageAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Image Analysis Process"@en ;
+    skos:definition "A process in which an AI system analyzes and interprets images."@en .
+
+###  http://ontology.naas.ai/abi/CodeGenerationProcess
+abi:CodeGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Code Generation Process"@en ;
+    skos:definition "A process in which an AI system generates code based on specifications."@en .
+
+###  http://ontology.naas.ai/abi/ModelTrainingPeriod
+abi:ModelTrainingPeriod a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Model Training Period"@en ;
+    skos:definition "A temporal region during which an AI model was trained."@en .
+
+###  http://ontology.naas.ai/abi/InferenceSession
+abi:InferenceSession a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;
+    rdfs:label "Inference Session"@en ;
+    skos:definition "A temporal region during which an AI model performs inference."@en .
+
+###  http://ontology.naas.ai/abi/DataCenterLocation
+abi:DataCenterLocation a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ;
+    rdfs:label "Data Center Location"@en ;
+    skos:definition "A spatial region where AI systems are physically located."@en .
+
+###  http://ontology.naas.ai/abi/CloudRegion
+abi:CloudRegion a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ;
+    rdfs:label "Cloud Region"@en ;
+    skos:definition "A spatial region defined by cloud service provider infrastructure."@en .
+
+###  http://ontology.naas.ai/abi/ModelSpecification
+abi:ModelSpecification a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Model Specification"@en ;
+    skos:definition "An information content entity that describes AI model parameters and capabilities."@en .
+
+###  http://ontology.naas.ai/abi/TrainingDataset
+abi:TrainingDataset a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Training Dataset"@en ;
+    skos:definition "An information content entity that contains data used to train an AI model."@en .
+
+###  http://ontology.naas.ai/abi/APIResponse
+abi:APIResponse a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "API Response"@en ;
+    skos:definition "An information content entity that contains AI system output."@en .
+
+#################################################################
+#    General axioms
+#################################################################
+
+# Class Axioms
+abi:AIModelInstance rdfs:subClassOf abi:AISystem ;
+    rdfs:comment "Every AI model instance is a type of AI system."@en .
+
+abi:TextGenerationProcess rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:realizesCapability ;
+    owl:someValuesFrom capability:TextGenerationCapability ;
+    rdfs:comment "Every text generation process must realize a text generation capability."@en
+] .
+
+abi:ImageAnalysisProcess rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:realizesCapability ;
+    owl:someValuesFrom capability:ImageAnalysisCapability ;
+    rdfs:comment "Every image analysis process must realize an image analysis capability."@en
+] .
+
+abi:CodeGenerationProcess rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:realizesCapability ;
+    owl:someValuesFrom capability:CodeGenerationCapability ;
+    rdfs:comment "Every code generation process must realize a code generation capability."@en
+] .
+
+# Advanced Relationship Axioms
+abi:AIAgent rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:hasSpecializedRole ;
+    owl:someValuesFrom abi:AgentRole ;
+    rdfs:comment "Every AI agent must have at least one specialized role within a system."@en
+] .
+
+abi:AIAgent rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:canUtilizeModel ;
+    owl:someValuesFrom abi:AIModelInstance ;
+    rdfs:comment "Every AI agent must be able to utilize at least one AI model instance."@en
+] .
+
+abi:AISystem rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:hasLoadBalancer ;
+    owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+    rdfs:comment "Every AI system can have at most one load balancer for workload distribution."@en
+] .
+
+abi:TextGenerationProcess rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:triggersProcess ;
+    owl:someValuesFrom abi:TextGenerationProcess ;
+    rdfs:comment "Text generation processes can trigger other text generation processes in workflows."@en
+] .
+
+# Model-Process Relationship Axioms
+bfo:BFO_0000015 rdfs:subClassOf [
+    rdf:type owl:Restriction ;
+    owl:onProperty abi:utilizesModel ;
+    owl:maxCardinality "1"^^xsd:nonNegativeInteger ;
+    rdfs:comment "Each process instance utilizes exactly one AI model instance."@en
+] .
+
+# Property Axioms
+abi:hasAIAgent owl:inverseOf abi:isAIAgentOf ;
+    rdfs:comment "If an AI system has an AI agent, then that AI agent is an agent of that AI system."@en .
+
+abi:hasSubsystem owl:inverseOf abi:isSubsystemOf ;
+    rdfs:comment "If an AI system has a subsystem, then that subsystem is a component of that AI system."@en .
+
+abi:hasCapability owl:inverseOf [
+    rdf:type owl:ObjectProperty ;
+    rdfs:label "is capability of"@en ;
+    rdfs:domain bfo:BFO_0000017 ;
+    rdfs:range bfo:BFO_0000040 ;
+    rdfs:comment "If a material entity has a capability, then that capability belongs to that material entity."@en
+] .
+
+abi:realizesCapability owl:inverseOf [
+    rdf:type owl:ObjectProperty ;
+    rdfs:label "is realized by"@en ;
+    rdfs:domain bfo:BFO_0000017 ;
+    rdfs:range bfo:BFO_0000015 ;
+    rdfs:comment "If a process realizes a capability, then that capability is realized by that process."@en
+] .
+
+# Advanced Property Characteristics
+abi:collaboratesWith a owl:SymmetricProperty ;
+    rdfs:comment "Collaboration is symmetric - if agent A collaborates with agent B, then agent B collaborates with agent A."@en .
+
+abi:precedesInTime a owl:TransitiveProperty ;
+    rdfs:comment "Temporal precedence is transitive - if process A precedes B and B precedes C, then A precedes C."@en .
+
+abi:triggersProcess a owl:IrreflexiveProperty ;
+    rdfs:comment "A process cannot trigger itself - this prevents infinite loops in workflow definitions."@en .
+
+# Disjoint Classes
+capability:TextGenerationCapability owl:disjointWith capability:ImageAnalysisCapability .
+capability:TextGenerationCapability owl:disjointWith capability:CodeGenerationCapability .
+capability:ImageAnalysisCapability owl:disjointWith capability:CodeGenerationCapability .
+
+abi:TextGenerationProcess owl:disjointWith abi:ImageAnalysisProcess .
+abi:TextGenerationProcess owl:disjointWith abi:CodeGenerationProcess .
+abi:ImageAnalysisProcess owl:disjointWith abi:CodeGenerationProcess .
+
+abi:ModelAccuracy owl:disjointWith abi:ResponseLatency .
+abi:ModelAccuracy owl:disjointWith abi:TokenCapacity .
+abi:ResponseLatency owl:disjointWith abi:TokenCapacity .
+
+abi:AISystem owl:disjointWith abi:LoadBalancer .
+
+# Functional Properties
+abi:modelName a owl:FunctionalProperty ;
+    rdfs:comment "Each AI system can have only one model name."@en .
+
+abi:providerName a owl:FunctionalProperty ;
+    rdfs:comment "Each AI system can have only one provider name."@en .
+
+abi:accuracyValue a owl:FunctionalProperty ;
+    rdfs:comment "Each model accuracy quality can have only one numerical value."@en .
+
+abi:latencyValue a owl:FunctionalProperty ;
+    rdfs:comment "Each response latency quality can have only one numerical value."@en .
+
+abi:tokenLimit a owl:FunctionalProperty ;
+    rdfs:comment "Each token capacity quality can have only one numerical value."@en .
+
+abi:trainingDataCutoff a owl:FunctionalProperty ;
+    rdfs:comment "Each model training period can have only one cutoff date."@en .
+
+abi:locationName a owl:FunctionalProperty ;
+    rdfs:comment "Each spatial region can have only one location name."@en .
+
+abi:collaborationPriority a owl:FunctionalProperty ;
+    rdfs:comment "Each AI agent can have only one collaboration priority value."@en .
+
+abi:systemComplexity a owl:FunctionalProperty ;
+    rdfs:comment "Each AI system can have only one complexity level."@en .
+
+abi:temporalSequence a owl:FunctionalProperty ;
+    rdfs:comment "Each process can have only one sequence number in a workflow."@en .
+
+# Data Property Axioms
+abi:accuracyValue rdfs:subPropertyOf [
+    rdf:type owl:DatatypeProperty ;
+    rdfs:range [ rdf:type rdfs:Datatype ;
+                 owl:onDatatype xsd:decimal ;
+                 owl:withRestrictions ( [ xsd:minInclusive "0.0"^^xsd:decimal ;
+                                         xsd:maxInclusive "1.0"^^xsd:decimal ] ) ] ;
+    rdfs:comment "Accuracy values must be between 0.0 and 1.0 (0% to 100%)."@en
+] .
+
+abi:latencyValue rdfs:subPropertyOf [
+    rdf:type owl:DatatypeProperty ;
+    rdfs:range [ rdf:type rdfs:Datatype ;
+                 owl:onDatatype xsd:integer ;
+                 owl:withRestrictions ( [ xsd:minInclusive "0"^^xsd:integer ] ) ] ;
+    rdfs:comment "Latency values must be non-negative integers (milliseconds)."@en
+] .
+
+abi:tokenLimit rdfs:subPropertyOf [
+    rdf:type owl:DatatypeProperty ;
+    rdfs:range [ rdf:type rdfs:Datatype ;
+                 owl:onDatatype xsd:integer ;
+                 owl:withRestrictions ( [ xsd:minInclusive "1"^^xsd:integer ] ) ] ;
+    rdfs:comment "Token limits must be positive integers (at least 1 token)."@en
+] .
+
+abi:collaborationPriority rdfs:subPropertyOf [
+    rdf:type owl:DatatypeProperty ;
+    rdfs:range [ rdf:type rdfs:Datatype ;
+                 owl:onDatatype xsd:integer ;
+                 owl:withRestrictions ( [ xsd:minInclusive "1"^^xsd:integer ;
+                                         xsd:maxInclusive "10"^^xsd:integer ] ) ] ;
+    rdfs:comment "Collaboration priority must be between 1 (lowest) and 10 (highest)."@en
+] .
+
+abi:temporalSequence rdfs:subPropertyOf [
+    rdf:type owl:DatatypeProperty ;
+    rdfs:range [ rdf:type rdfs:Datatype ;
+                 owl:onDatatype xsd:integer ;
+                 owl:withRestrictions ( [ xsd:minInclusive "1"^^xsd:integer ] ) ] ;
+    rdfs:comment "Temporal sequence numbers must be positive integers starting from 1."@en
+] .
+
+# Advanced Business Logic Axioms
+abi:PrimaryResponderRole owl:differentFrom abi:FallbackHandlerRole .
+abi:PrimaryResponderRole owl:differentFrom abi:SpecializedTaskExecutorRole .
+abi:PrimaryResponderRole owl:differentFrom abi:CoordinatorRole .
+abi:PrimaryResponderRole owl:differentFrom abi:ValidatorRole .
+
+abi:FallbackHandlerRole owl:differentFrom abi:SpecializedTaskExecutorRole .
+abi:FallbackHandlerRole owl:differentFrom abi:CoordinatorRole .
+abi:FallbackHandlerRole owl:differentFrom abi:ValidatorRole .
+
+abi:SpecializedTaskExecutorRole owl:differentFrom abi:CoordinatorRole .
+abi:SpecializedTaskExecutorRole owl:differentFrom abi:ValidatorRole .
+
+abi:CoordinatorRole owl:differentFrom abi:ValidatorRole .
+
+#################################################################
+#    Agent Role Instances
+#################################################################
+
+###  http://ontology.naas.ai/abi/PrimaryResponderRole
+abi:PrimaryResponderRole a abi:AgentRole ;
+    rdfs:label "Primary Responder Role"@en ;
+    skos:definition "A role where an AI agent serves as the main responder to user requests."@en ;
+    rdfs:comment "This role is typically assigned to the most capable or reliable AI agent in a system."@en .
+
+###  http://ontology.naas.ai/abi/FallbackHandlerRole
+abi:FallbackHandlerRole a abi:AgentRole ;
+    rdfs:label "Fallback Handler Role"@en ;
+    skos:definition "A role where an AI agent serves as a backup when the primary agent fails."@en ;
+    rdfs:comment "This role ensures system reliability and continuous service availability."@en .
+
+###  http://ontology.naas.ai/abi/SpecializedTaskExecutorRole
+abi:SpecializedTaskExecutorRole a abi:AgentRole ;
+    rdfs:label "Specialized Task Executor Role"@en ;
+    skos:definition "A role where an AI agent handles specific types of tasks or domains."@en ;
+    rdfs:comment "This role is assigned to agents with specialized capabilities for particular use cases."@en .
+
+###  http://ontology.naas.ai/abi/CoordinatorRole
+abi:CoordinatorRole a abi:AgentRole ;
+    rdfs:label "Coordinator Role"@en ;
+    skos:definition "A role where an AI agent orchestrates the activities of multiple other agents."@en ;
+    rdfs:comment "This role manages workflow coordination and agent collaboration in complex systems."@en .
+
+###  http://ontology.naas.ai/abi/ValidatorRole
+abi:ValidatorRole a abi:AgentRole ;
+    rdfs:label "Validator Role"@en ;
+    skos:definition "A role where an AI agent validates and quality-checks outputs from other agents."@en ;
+    rdfs:comment "This role ensures output quality and compliance with system requirements."@en .
+
+#################################################################
+#    BFO AI Network Design - Specific Process Classes
+#################################################################
+
+###  http://ontology.naas.ai/abi/CreativeWritingProcess
+abi:CreativeWritingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Creative Writing Process"@en ;
+    skos:definition "A process in which an AI system generates creative text content including stories, poems, creative content, and imaginative writing."@en ;
+    skos:example "Writing a short story, composing poetry, creating marketing copy, generating creative narratives."@en .
+
+###  http://ontology.naas.ai/abi/TruthSeekingAnalysisProcess
+abi:TruthSeekingAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Truth Seeking Analysis Process"@en ;
+    skos:definition "A process in which an AI system analyzes information to find and validate factual truth, challenging assumptions and exploring alternative viewpoints."@en ;
+    skos:example "Fact-checking claims, validating information sources, contrarian analysis, truth-seeking research."@en .
+
+
+
+###  http://ontology.naas.ai/abi/CodeGenerationProcess
+abi:CodeGenerationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Code Generation Process"@en ;
+    skos:definition "A process in which an AI system generates computer code, algorithms, and software solutions based on specifications."@en ;
+    skos:example "Programming algorithms, software development, debugging code, system design implementation."@en .
+
+###  http://ontology.naas.ai/abi/BusinessProposalCreationProcess
+abi:BusinessProposalCreationProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Business Proposal Creation Process"@en ;
+    skos:definition "A process in which an AI system creates comprehensive business proposals including requirements analysis, content structuring, persuasive writing, and professional formatting."@en ;
+    skos:example "Creating RFP responses, generating project proposals, developing service offerings, writing business plans."@en .
+
+
+
+
+
+
+
+#################################################################
+#    BFO AI Network Design - Process Examples (3 Concrete Instances)
+#################################################################
+
+
+
+### Creative Writing Process Example
+abi:ClaudeCreativeWritingProcess a abi:CreativeWritingProcess ;
+    rdfs:label "Claude Creative Writing Process"@en ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasParticipant abi:ClaudeAgent ;
+    abi:utilizesModel abi:claude_3_5_sonnet_20241022 ;
+    abi:hasTemporalRegion abi:CreativeWritingSession ;
+    abi:occursIn abi:AnthropicDataCenter ;
+    abi:hasQuality abi:CreativeWritingQuality ;
+    abi:isDocumentedBy abi:CreativeWritingSpecification ;
+    rdfs:comment "Claude agent's creative writing process utilizing Claude-3.5-Sonnet model instance for high-quality constitutional AI output."@en .
+
+### Truth Seeking Analysis Process Example  
+abi:GrokTruthSeekingProcess a abi:TruthSeekingAnalysisProcess ;
+    rdfs:label "Grok Truth Seeking Analysis Process"@en ;
+    abi:realizesCapability capability:TruthSeekingCapability ;
+    abi:hasParticipant abi:GrokAgent ;
+    abi:utilizesModel abi:grok_beta ;
+    abi:hasTemporalRegion abi:TruthSeekingSession ;
+    abi:occursIn abi:xAIDataCenter ;
+    abi:hasQuality abi:TruthSeekingQuality ;
+    abi:isDocumentedBy abi:TruthSeekingSpecification ;
+    rdfs:comment "Grok agent's truth-seeking process utilizing Grok-Beta model instance for contrarian analysis and real-time validation."@en .
+
+### Code Generation Process Example
+abi:MistralCodeGenerationProcess a abi:CodeGenerationProcess ;
+    rdfs:label "Mistral Code Generation Process"@en ;
+    abi:realizesCapability capability:CodeGenerationCapability ;
+    abi:hasParticipant abi:MistralAgent ;
+    abi:utilizesModel abi:mistral_large_2411 ;
+    abi:hasTemporalRegion abi:CodeGenerationSession ;
+    abi:occursIn abi:MistralDataCenter ;
+    abi:hasQuality abi:CodeGenerationQuality ;
+    abi:isDocumentedBy abi:CodeGenerationSpecification ;
+    rdfs:comment "Mistral agent's code generation process utilizing Mistral-Large-2411 model instance for mathematical reasoning and technical expertise."@en .
+
+### Business Proposal Creation Process Example
+abi:ClaudeBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
+    rdfs:label "Claude Business Proposal Creation Process"@en ;
+    abi:realizesCapability capability:TextGenerationCapability ;
+    abi:hasParticipant abi:ClaudeAgent ;
+    abi:utilizesModel abi:claude_3_5_sonnet_20241022 ;
+    abi:hasTemporalRegion abi:BusinessProposalSession ;
+    abi:occursIn abi:AnthropicDataCenter ;
+    abi:hasQuality abi:BusinessProposalQuality ;
+    abi:isDocumentedBy abi:BusinessProposalSpecification ;
+    rdfs:comment "Claude agent's business proposal creation process utilizing Claude-3.5-Sonnet for professional content generation with constitutional AI safety."@en .
+
+
+
+#################################################################
+#    Supporting Instances for Process Examples
+#################################################################
+
+### Temporal Regions
+abi:CreativeWritingSession a abi:InferenceSession ;
+    rdfs:label "Creative Writing Session"@en ;
+    rdfs:comment "Temporal region during which creative writing occurs."@en .
+
+abi:TruthSeekingSession a abi:InferenceSession ;
+    rdfs:label "Truth Seeking Session"@en ;
+    rdfs:comment "Temporal region during which truth-seeking analysis occurs."@en .
+
+abi:CodeGenerationSession a abi:InferenceSession ;
+    rdfs:label "Code Generation Session"@en ;
+    rdfs:comment "Temporal region during which code generation occurs."@en .
+
+abi:BusinessProposalSession a abi:InferenceSession ;
+    rdfs:label "Business Proposal Session"@en ;
+    rdfs:comment "Temporal region during which business proposal creation occurs."@en .
+
+
+
+### Spatial Regions
+abi:AnthropicDataCenter a abi:DataCenterLocation ;
+    rdfs:label "Anthropic Data Center"@en ;
+    abi:locationName "Anthropic US West Data Center" ;
+    rdfs:comment "Spatial region where Anthropic's AI systems are located."@en .
+
+abi:xAIDataCenter a abi:DataCenterLocation ;
+    rdfs:label "xAI Data Center"@en ;
+    abi:locationName "xAI US Data Center" ;
+    rdfs:comment "Spatial region where xAI's AI systems are located."@en .
+
+abi:MistralDataCenter a abi:DataCenterLocation ;
+    rdfs:label "Mistral Data Center"@en ;
+    abi:locationName "Mistral Europe Data Center" ;
+    rdfs:comment "Spatial region where Mistral's AI systems are located."@en .
+
+### Qualities
+abi:CreativeWritingQuality a abi:ModelAccuracy ;
+    rdfs:label "Creative Writing Quality"@en ;
+    abi:accuracyValue "0.95"^^xsd:decimal ;
+    rdfs:comment "Quality measure for creative writing output."@en .
+
+abi:TruthSeekingQuality a abi:ModelAccuracy ;
+    rdfs:label "Truth Seeking Quality"@en ;
+    abi:accuracyValue "0.73"^^xsd:decimal ;
+    rdfs:comment "Quality measure for truth-seeking analysis."@en .
+
+abi:CodeGenerationQuality a abi:ModelAccuracy ;
+    rdfs:label "Code Generation Quality"@en ;
+    abi:accuracyValue "0.89"^^xsd:decimal ;
+    rdfs:comment "Quality measure for code generation."@en .
+
+
+
+### Information Content Entities
+abi:CreativeWritingSpecification a abi:ModelSpecification ;
+    rdfs:label "Creative Writing Process Specification"@en ;
+    abi:specificationContent "Creative writing process with constitutional AI principles, high-quality narrative generation, and ethical content creation."@en ;
+    rdfs:comment "Specification for creative writing process capabilities."@en .
+
+abi:TruthSeekingSpecification a abi:ModelSpecification ;
+    rdfs:label "Truth Seeking Process Specification"@en ;
+    abi:specificationContent "Truth-seeking process with contrarian analysis, real-time validation, assumption challenging, and factual verification."@en ;
+    rdfs:comment "Specification for truth-seeking process capabilities."@en .
+
+abi:CodeGenerationSpecification a abi:ModelSpecification ;
+    rdfs:label "Code Generation Process Specification"@en ;
+    abi:specificationContent "Code generation process with mathematical reasoning, technical expertise, algorithm development, and software engineering."@en ;
+    rdfs:comment "Specification for code generation process capabilities."@en .
+
+
+
+### AI Agent Instances (Material Entities)
+# Note: AI Agents orchestrate processes but capabilities belong to the AI Model Instances they utilize
+
+abi:ChatGPTAgent a abi:AIAgent ;
+    rdfs:label "ChatGPT Agent"@en ;
+    rdfs:comment "OpenAI ChatGPT AI agent that can dynamically select from multiple OpenAI model instances (GPT-4o, GPT-4o-mini, o1, etc.) based on process requirements."@en .
+
+abi:ClaudeAgent a abi:AIAgent ;
+    rdfs:label "Claude Agent"@en ;
+    rdfs:comment "Anthropic Claude AI agent that can dynamically select from multiple Claude model instances (Claude-3.5-Sonnet, Claude-3-Haiku, etc.) based on process requirements."@en .
+
+abi:GrokAgent a abi:AIAgent ;
+    rdfs:label "Grok Agent"@en ;
+    rdfs:comment "xAI Grok AI agent that can dynamically select from multiple Grok model instances based on process requirements and truth-seeking analysis needs."@en .
+
+abi:MistralAgent a abi:AIAgent ;
+    rdfs:label "Mistral Agent"@en ;
+    rdfs:comment "Mistral AI agent that can dynamically select from multiple Mistral model instances (Mistral-Large, Codestral, etc.) based on process requirements."@en .
+
+abi:GeminiAgent a abi:AIAgent ;
+    rdfs:label "Gemini Agent"@en ;
+    rdfs:comment "Google Gemini AI agent that can dynamically select from multiple Gemini model instances (Gemini-2.0-Flash, Gemini-Pro, etc.) based on process requirements."@en .
+

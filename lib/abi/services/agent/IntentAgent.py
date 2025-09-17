@@ -25,9 +25,8 @@ from queue import Queue
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.memory import MemorySaver
 
-from .Agent import Agent, AgentSharedState, AgentConfiguration
+from .Agent import Agent, AgentSharedState, AgentConfiguration, create_checkpointer
 from .beta.IntentMapper import IntentMapper, Intent, IntentType
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
@@ -86,7 +85,7 @@ class IntentAgent(Agent):
         tools: list[Union[Tool, "Agent"]] = [],
         agents: list["Agent"] = [],
         intents: list[Intent] = [],
-        memory: BaseCheckpointSaver = MemorySaver(),
+        memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
@@ -108,20 +107,29 @@ class IntentAgent(Agent):
                 Defaults to [].
             intents (list[Intent], optional): List of intents for mapping user messages.
                 Defaults to [].
-            memory (BaseCheckpointSaver, optional): Checkpoint saver for conversation state.
-                Defaults to MemorySaver().
+            memory (BaseCheckpointSaver | None, optional): Checkpoint saver for conversation state.
+                If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
+                Defaults to None.
             state (AgentSharedState, optional): Shared state configuration.
                 Defaults to AgentSharedState().
             configuration (AgentConfiguration, optional): Agent configuration settings.
                 Defaults to AgentConfiguration().
             event_queue (Queue | None, optional): Queue for handling events.
                 Defaults to None.
+            threshold (float, optional): Minimum score threshold for intent matching.
+                Defaults to 0.85.
+            threshold_neighbor (float, optional): Maximum score difference for similar intents.
+                Defaults to 0.05.
         """
         # We set class specific properties before calling the super constructor because it will call the build_graph method.
         self._intents = intents
         self._intent_mapper = IntentMapper(self._intents)
         self._threshold = threshold
         self._threshold_neighbor = threshold_neighbor
+
+        # Handle memory configuration (same pattern as base Agent class)
+        if memory is None:
+            memory = create_checkpointer()
 
         super().__init__(
             name=name,
@@ -221,7 +229,12 @@ class IntentAgent(Agent):
         """
         logger.debug(f"return_raw_intent state: {state}")
         intent : Intent = state["intent_mapping"]["intents"][0]['intent']
-        return Command(goto=END, update={"messages": [AIMessage(content=intent.intent_target)]})
+        
+        ai_message = AIMessage(content=intent.intent_target)
+        
+        self._notify_ai_message(ai_message, self.name)
+        
+        return Command(goto=END, update={"messages": [ai_message]})
     
     def filter_out_intents(self, state: IntentState):
         """Filter out logically irrelevant intents using LLM analysis.
@@ -427,10 +440,6 @@ Last user message: "{last_human_message.content}"
             if response.content == "true":
                 filtered_intents.append(intent)
         
-        rich.print(f"Last human message: {last_human_message.content}")
-        rich.print(f"Length of entity checked filtered intents: {len(filtered_intents)}")
-        rich.print(filtered_intents)
-        
         return Command(update={"intent_mapping": {"intents": filtered_intents}})
 
     def intent_mapping_router(self, state: IntentState) -> Command:
@@ -450,6 +459,17 @@ Last user message: "{last_human_message.content}"
         if "intent_mapping" in state:
             intent_mapping = state["intent_mapping"]
             if len(intent_mapping["intents"]) == 0:
+                # Check if there's an active agent for context preservation
+                if (hasattr(self, '_state') and 
+                    hasattr(self._state, 'current_active_agent') and 
+                    self._state.current_active_agent):
+                    active_agent_name = self._state.current_active_agent
+                    # Find the active agent in our agents list
+                    active_agent = pd.find(self._agents, lambda a: a.name == active_agent_name)
+                    if active_agent is not None:
+                        # Route to the active agent for conversation continuation
+                        return Command(goto=active_agent_name)
+                
                 return Command(goto="call_model")
             elif len(intent_mapping["intents"]) == 1:
                 intent : Intent = intent_mapping["intents"][0]['intent']
@@ -579,7 +599,6 @@ Last user message: "{last_human_message.content}"
         
         
         for agent in self._agents:
-            print(f"Adding agent {agent.name} to the graph")
             # graph.add_node(agent.graph, metadata={"name": agent.name})
             graph.add_node(agent.name, agent.graph)
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
@@ -590,5 +609,9 @@ Last user message: "{last_human_message.content}"
             graph = patcher(graph)
         
         self.graph = graph.compile(checkpointer=self._checkpointer)     
+
+    @property
+    def intents(self) -> list[Intent]:
+        return self._intents
         
         
