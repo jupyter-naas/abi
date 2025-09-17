@@ -6,10 +6,10 @@ from abi.services.agent.Agent import (
 from typing import Optional
 
 
-NAME = "ChatGPT_Research"
-DESCRIPTION = "ChatGPT Research Agent that provides real-time answers to any question on the web using OpenAI Web Search."
+NAME = "ChatGPT_Responses"
+DESCRIPTION = "ChatGPT Responses Agent provides real-time answers to any question on the web using responses v1 OpenAI api."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
-MODEL = "gpt-4.1-mini"
+MODEL = "gpt-5-mini"
 SUGGESTIONS: list = []
 
 def create_agent(
@@ -37,7 +37,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    return ChatGPTResearchAgent(
+    return ChatGPTResponsesAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
@@ -47,5 +47,5 @@ def create_agent(
         memory=None
     ) 
 
-class ChatGPTResearchAgent(Agent):
+class ChatGPTResponsesAgent(Agent):
     pass
