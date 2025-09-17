@@ -447,6 +447,11 @@ local-up: check-docker
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 
+reload-local: check-docker
+	@docker-compose --profile local down -v
+	@make local-up
+	@echo "✓ Local services reloaded"
+
 local-logs: check-docker
 	@docker-compose --profile local logs -f
 
