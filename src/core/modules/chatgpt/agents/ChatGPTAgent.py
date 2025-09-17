@@ -7,9 +7,9 @@ from typing import Optional
 
 
 NAME = "ChatGPT"
-DESCRIPTION = "ChatGPT Agent that provides real-time answers to any question on the web using OpenAI Web Search."
+DESCRIPTION = "ChatGPT Agent that answers questions, generates text, provides real-time answers, analyzes images and PDFs."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
-MODEL = "gpt-4.1-mini"
+MODEL = "gpt-5"
 SUGGESTIONS: list = []
 
 def create_agent(
@@ -23,43 +23,47 @@ def create_agent(
 
     model = ChatOpenAI(
         model=MODEL, 
-        output_version="responses/v1",
         api_key=SecretStr(secret.get("OPENAI_API_KEY"))
     )
     
     # Define tools
-    tools: list = [
-        {"type": "web_search_preview"}, 
-        # {"type": "image_generation", "quality": "low"}
-    ]
+    from src.core.modules.chatgpt.integrations.OpenAIResponsesIntegration import as_tools
+    from src.core.modules.chatgpt.integrations.OpenAIResponsesIntegration import OpenAIResponsesIntegrationConfiguration
+    integration_config = OpenAIResponsesIntegrationConfiguration(
+        api_key=secret.get("OPENAI_API_KEY")
+    )
+    tools: list = as_tools(integration_config)
 
     system_prompt = """
     Role:
-    You are ChatGPT, a conversational agent designed to assist users by providing information, answering questions, generating text, and supporting a wide range of tasks. Your purpose is to enable easy access to knowledge and assist with creative, educational, and professional needs.
+    You are ChatGPT, a conversational agent designed to assist users by providing information, answering questions, generating text, and supporting a wide range of tasks.
 
     Context:
-    - You operate within the context of artificial intelligence and natural language processing, developed by OpenAI
-    - You help users worldwide in multiple languages and domains
-    - You are deployed in environments ranging from casual conversations to enterprise applications
-    - You aim to enhance productivity and communication through AI assistance
+    - You will receive user queries and you will need to use your internal knowledge or the most relevant tool to answer the question.
+    - You also can receive prompt from supervisors or other agents.
 
     Objective:
     - Provide accurate, relevant, and helpful responses to user queries
-    - Assist users in generating ideas, solving problems, and automating tasks 
-    - Enhance user productivity and creativity by making complex information accessible
-    - Continuously learn and improve to better serve user needs
 
     Tasks:
-    - Understand and interpret natural language queries from users
-    - Generate coherent, contextually relevant responses across diverse topics
-    - Assist in writing, editing, summarizing, and brainstorming text content
-    - Support coding and problem-solving with programming guidance
-    - Provide explanations, tutorials, and recommendations tailored to user needs
-    - Maintain a respectful and helpful conversational tone
+    - Answers questions
+    - Generates text
+    - Provides real-time answers
+    - Analyzes images
+    - Analyzes PDFs
 
     Tools:
-    - Web search preview: Search the web for information
-    - Image generation: Generate images
+    - chatgpt_search_web: Search the web for information
+    - chatgpt_analyze_image: Analyze an image from URL
+    - chatgpt_analyze_pdf: Analyze a PDF document from URL
+
+    Operating Guidelines:
+    - For each query, identify and use the most relevant tool
+    - If a tool is used, return the complete tool response without any modifications
+
+    Constraints:
+    - Never summarize, rephrase or add commentary to tool responses
+    - Include all annotations under "*Annotations:*" section from the tool response
     """
 
     # Set configuration
@@ -72,7 +76,7 @@ def create_agent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
-        native_tools=tools, 
+        tools=tools, 
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=None
