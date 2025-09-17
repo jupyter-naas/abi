@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, Union, Sequence, Generator
+from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict
 import os
 
 # LangChain Core imports for base components
@@ -23,7 +23,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from typing import Annotated, Optional
 from langchain_core.messages import ToolMessage, ToolCall
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
@@ -297,8 +296,9 @@ class Agent(Expose):
             self._chat_model_output_version = chat_model.output_version
         self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
-            tools_to_bind = self._structured_tools.copy()
-            tools_to_bind.extend(self._native_tools) # type: ignore
+            tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
+            tools_to_bind.extend(self._structured_tools)
+            tools_to_bind.extend(self._native_tools)
             self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
         
         # Use provided memory or create based on environment
