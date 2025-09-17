@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, Union, Sequence, Generator
+from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict
 import os
 
 # LangChain Core imports for base components
@@ -23,7 +23,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from typing import Annotated, Optional
 from langchain_core.messages import ToolMessage, ToolCall
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
@@ -181,6 +180,7 @@ class Agent(Expose):
         __description (str): The description of the agent
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
+        __native_tools (list[dict]): List of native tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
         __thread_id (str): Identifier for the current conversation thread
         __app (CompiledStateGraph): The compiled workflow graph
@@ -296,8 +296,9 @@ class Agent(Expose):
             self._chat_model_output_version = chat_model.output_version
         self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
-            tools_to_bind = self._structured_tools.copy()
-            tools_to_bind.extend(self._native_tools) # type: ignore
+            tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
+            tools_to_bind.extend(self._structured_tools)
+            tools_to_bind.extend(self._native_tools)
             self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
         
         # Use provided memory or create based on environment
@@ -408,7 +409,7 @@ class Agent(Expose):
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
 
-    def handle_response_v1(self, response: BaseMessage) -> Command:
+    def handle_openai_response_v1(self, response: BaseMessage) -> Command:
         content_str: str = ""
         tool_call: list[ToolCall] = []
         logger.debug(f"Chat model output version is responses/v1: {response}")
@@ -505,7 +506,7 @@ class Agent(Expose):
         elif (
             self._chat_model_output_version == "responses/v1"
         ):
-            return self.handle_response_v1(response)
+            return self.handle_openai_response_v1(response)
             
         # else:
         #     self._configuration._noti((self._name, response))
