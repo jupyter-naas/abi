@@ -70,7 +70,7 @@ dependencies = [
 [project.scripts]
 abi = "src.cli:main"
 api = "src.api:api"
-mcp-server = "mcp_server:run"
+mcp-server = "src.mcp_server:run"
 chat-arxiv-agent = "src.apps.terminal_agent.main:run_arxiv_agent"
 
 [dependency-groups]

@@ -171,7 +171,7 @@ mcp-http: deps
 
 mcp-test: deps
 	@echo "🔍 Running MCP Server validation tests..."
-	uv run python mcp_server_test.py
+	uv run python -m src.mcp_server_test
 
 api-prod: deps
 	@ docker build -t abi-prod -f docker/images/Dockerfile.linux.x86_64 . --platform linux/amd64
@@ -494,10 +494,10 @@ dagster-ui:
 
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.applications.__demo__.orchestration.definitions
+	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
 
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.applications.__demo__.orchestration.definitions
+	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
 
 .PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
