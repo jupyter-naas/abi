@@ -98,9 +98,42 @@ jobs:
         run: |
           echo "🔍 Verifying API deployment with expected version..."
           
-          # Get the expected version from git tag
-          EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
-          echo "Expected version: $EXPECTED_VERSION"
+          # Get current commit hash
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          CURRENT_COMMIT_SHORT=$(git rev-parse --short HEAD)
+          echo "Current commit (full): $CURRENT_COMMIT"
+          echo "Current commit (short): $CURRENT_COMMIT_SHORT"
+          
+          # Debug: Get all releases and their target commits
+          echo "🔍 Fetching releases from GitHub API..."
+          RELEASES_JSON=$(curl -s -H "Authorization: token ${{ secrets.ACCESS_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          
+          echo "📋 Available releases and their target commits:"
+          echo "$RELEASES_JSON" | jq -r '.[] | "\(.tag_name) -> \(.target_commitish)"' | head -10
+          
+          # Search for release that points to current commit
+          # Try multiple matching strategies
+          EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
+            jq -r --arg commit "$CURRENT_COMMIT" --arg short_commit "$CURRENT_COMMIT_SHORT" \
+            '.[] | select(.target_commitish == $commit or .target_commitish == $short_commit or .target_commitish == ("refs/heads/" + $commit) or .target_commitish == ("refs/heads/" + $short_commit)) | .tag_name' | \
+            head -1)
+          
+          # If still not found, try matching against the default branch
+          if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
+            echo "🔄 Trying to match against default branch releases..."
+            EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
+              jq -r '.[] | select(.target_commitish == "main" or .target_commitish == "master" or .target_commitish == "") | .tag_name' | \
+              head -1)
+          fi
+          
+          # Fallback to git describe if no release found
+          if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
+            EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
+            echo "❌ No release found for commit, using git describe: $EXPECTED_VERSION"
+          else
+            echo "✅ Found release for commit: $EXPECTED_VERSION"
+          fi
           
           # API URL based on registry name
           API_URL="https://${{ env.REGISTRY_NAME }}.default.space.naas.ai"
