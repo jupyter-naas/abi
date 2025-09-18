@@ -49,11 +49,11 @@ modules:
   - path: src/marketplace/applications/git
     enabled: true
   - path: src/marketplace/applications/github
-    enabled: true
+    enabled: false
   - path: src/marketplace/applications/google_search
     enabled: true
   - path: src/marketplace/applications/linkedin
-    enabled: true
+    enabled: false
   - path: src/marketplace/applications/naas
     enabled: true
   - path: src/marketplace/applications/postgres

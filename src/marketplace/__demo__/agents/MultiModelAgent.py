@@ -5,7 +5,7 @@ from typing import Optional
 from pydantic import SecretStr
 from fastapi import APIRouter
 from enum import Enum
-from src.marketplace.applications.__demo__.workflows.ExecutePythonCodeWorkflow import ExecutePythonCodeWorkflow, ExecutePythonCodeWorkflowConfiguration
+from src.marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import ExecutePythonCodeWorkflow, ExecutePythonCodeWorkflowConfiguration
 # from langchain_anthropic import ChatAnthropic
 # from langchain_ollama import ChatOllama
 

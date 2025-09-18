@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 
 # Copy application code
-COPY mcp_server.py ./
+COPY src/mcp_server.py ./
 # COPY lib/ ./lib/
 # COPY src/ ./src/
 COPY .env* ./

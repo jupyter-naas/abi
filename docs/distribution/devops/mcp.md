@@ -8,7 +8,7 @@ The Model Context Protocol (MCP) integration enables ABI agents to be exposed as
 
 The MCP integration consists of:
 
-- **MCP Server** (`mcp_server.py`): Lightweight server that exposes ABI agents as MCP tools
+- **MCP Server** (`src/mcp_server.py`): Lightweight server that exposes ABI agents as MCP tools
 - **Dynamic Agent Discovery**: Automatically discovers available agents from the ABI API
 - **Multiple Transport Support**: STDIO for local integrations, HTTP for remote deployments
 - **Authentication**: Secure API key-based authentication with ABI backend
@@ -41,13 +41,13 @@ The API will be available at `http://localhost:9879`
 #### Step 2: Run MCP Server (STDIO mode for Claude Desktop)
 ```bash
 # In terminal 2
-uv run python mcp_server.py
+uv run python -m src.mcp_server
 ```
 
 #### Step 3: Run MCP Server (HTTP mode)
 ```bash
 # In terminal 2
-MCP_TRANSPORT=http uv run python mcp_server.py
+MCP_TRANSPORT=http uv run python -m src.mcp_server
 ```
 
 Then test the HTTP endpoint:
@@ -85,7 +85,7 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
   "mcpServers": {
     "abi-local": {
       "command": "python",
-      "args": ["/path/to/mcp_server.py"],
+      "args": ["-m", "src.mcp_server"],
       "env": {
         "ABI_API_KEY": "your_api_key_here"
       }
@@ -116,7 +116,7 @@ Add to your Claude Desktop MCP settings (`~/Library/Application Support/Claude/c
 Run the comprehensive test suite to validate your MCP integration:
 
 ```bash
-uv run python mcp_server_test.py
+uv run python -m src.mcp_server_test
 ```
 
 This will validate:
@@ -193,7 +193,7 @@ uv run api
 
 ## Expected Output
 
-When running `mcp_server_test.py` with a working API:
+When running the MCP server test with a working API:
 
 ```
 🚀 MCP Server Validation Tests

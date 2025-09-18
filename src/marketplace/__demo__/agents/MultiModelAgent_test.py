@@ -1,7 +1,7 @@
 import pytest
 
 from abi.services.agent.Agent import Agent
-from src.marketplace.applications.__demo__.agents.MultiModelAgent import create_agent
+from src.marketplace.__demo__.agents.MultiModelAgent import create_agent
 
 @pytest.fixture
 def agent() -> Agent:

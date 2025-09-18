@@ -1,6 +1,6 @@
 import pytest
 
-from src.marketplace.applications.__demo__.workflows.ExecutePythonCodeWorkflow import (
+from src.marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import (
     ExecutePythonCodeWorkflow,
     ExecutePythonCodeWorkflowConfiguration,
     ExecutePythonCodeWorkflowParameters,
