@@ -12,7 +12,7 @@ To publish your custom module to the Marketplace:
 2. **Add to Marketplace with .disabled suffix**:
    ```bash
    # From your ABI project root
-   cp -r src/custom/modules/your_module_name/ src/marketplace/modules/your_module_name.disabled/
+   cp -r src/custom/modules/your_module_name/ src/marketplace/your_module_name.disabled/
    ```
 
 3. **Open a PR on ABI and ask for review**:

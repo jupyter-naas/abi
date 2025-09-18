@@ -1,5 +1,5 @@
-from src.marketplace.modules.applications.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
-from src.core.modules.abi.workflows.ExportGraphInstancesToExcelWorkflow import (
+from src.marketplace.applications.naas.integrations.NaasIntegration import NaasIntegrationConfiguration
+from src.core.abi.workflows.ExportGraphInstancesToExcelWorkflow import (
     ExportGraphInstancesToExcelWorkflow, 
     ExportGraphInstancesToExcelWorkflowConfiguration,
     ExportGraphInstancesToExcelWorkflowParameters

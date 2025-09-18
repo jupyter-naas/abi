@@ -55,7 +55,7 @@ Both endpoints accept the same request format:
 
 Agents are automatically registered in the API when they are added to a module. To add a new agent:
 
-1. Create a new module directory in `src/core/modules/` or `src/custom/modules/`
+1. Create a new module directory in `src/core/` or `src/custom/modules/`
 2. Add an `agents` directory within your module
 3. Create a Python file inside the `agents` directory with an agent implementation
 4. Implement a `create_agent()` function that returns your agent instance

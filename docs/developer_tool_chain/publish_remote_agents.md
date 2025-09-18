@@ -238,7 +238,7 @@ When running the script successfully, you should see output similar to:
 🚫 Excluded agents: None
 ⭐ Default agent: Abi
 🔍 Getting existing plugins from workspace: your_workspace_id
-==> Getting agents from module: src/core/modules/abi
+==> Getting agents from module: src/core/abi
 ==> Publishing agent: Abi
 ✅ Plugin 'Abi' updated in workspace 'your_workspace_id'
 ==> Publishing agent: Ontology
@@ -270,7 +270,7 @@ When running the script successfully, you should see output similar to:
 🧪 DRY RUN MODE: No actual changes will be made
 🧪 [DRY RUN] Would fetch existing plugins from workspace
 🧪 [DRY RUN] Would update "ABI_API_KEY" secret in Github repository: your_repo
-==> Getting agents from module: src/core/modules/abi
+==> Getting agents from module: src/core/abi
 🧪 [DRY RUN] Would publish agent: Abi
 🧪 [DRY RUN] Plugin data for 'Abi':
     - ID: abi
