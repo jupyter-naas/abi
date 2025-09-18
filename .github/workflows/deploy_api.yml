@@ -75,6 +75,8 @@ jobs:
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
+          # Get SHA256 digest for deployment
+          IMAGE_SHA=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ github.repository }}/abi:latest | cut -d'@' -f2)
 
           docker tag ghcr.io/${{ github.repository }}/abi:latest $URI:$TIMESTAMP
 
@@ -89,8 +91,8 @@ jobs:
             \"ABI_API_KEY\":\"$ABI_API_KEY\"\
           }"
 
-          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
-           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI@$IMAGE_SHA --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@$IMAGE_SHA --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
 
       - name: Verify API deployment and version
         run: |
@@ -200,6 +202,8 @@ jobs:
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
+          # Get SHA256 digest for deployment
+          IMAGE_SHA=$(docker inspect --format='{{.Id}}' streamlit-demo | cut -d':' -f2)
 
           docker tag streamlit-demo $URI:$TIMESTAMP
 
@@ -215,8 +219,8 @@ jobs:
             \"GOOGLE_API_KEY\":\"$GOOGLE_API_KEY\"\
           }"
 
-          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
-           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
 
   mcp-server:
     runs-on: ubuntu-latest
@@ -272,6 +276,8 @@ jobs:
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
+          # Get SHA256 digest for deployment
+          IMAGE_SHA=$(docker inspect --format='{{.Id}}' mcp-server | cut -d':' -f2)
 
           docker tag mcp-server $URI:$TIMESTAMP
 
@@ -288,5 +294,5 @@ jobs:
             \"MCP_TRANSPORT\":\"http\"\
           }"
 
-          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
-           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
