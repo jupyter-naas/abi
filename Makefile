@@ -182,10 +182,10 @@ api-local: deps
 	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-local
 
 sparql-terminal: deps
-	@ uv run python -m src.core.apps.sparql_terminal.main	
+	@ uv run python -m src.core.modules.abi.apps.sparql_terminal.main	
 
 oxigraph-admin: deps
-	@ uv run python -m src.core.apps.oxigraph_admin.main
+	@ uv run python -m src.core.modules.abi.apps.oxigraph_admin.main
 
 oxigraph-explorer:
 	@echo "🚀 Opening Knowledge Graph Explorer..."
@@ -370,23 +370,23 @@ chat-abi-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli
 
 chat-naas-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent NaasAgent
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent NaasAgent
 
 chat-support-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent SupportAgent
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent SupportAgent
 
 pull-request-description: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 # Local Ollama-based agents for privacy-focused interactions
 chat-qwen-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent QwenAgent
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent QwenAgent
 
 chat-deepseek-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent DeepSeekAgent
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent DeepSeekAgent
 
 chat-gemma-agent: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent GemmaAgent
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent GemmaAgent
 
 default: deps help
 
@@ -397,7 +397,7 @@ console: deps
 
 agent=AbiAgent
 chat: deps
-	@ uv run python -m src.core.apps.terminal_agent.main generic_run_agent $(agent)
+	@ uv run python -m src.core.modules.abi.apps.terminal_agent.main generic_run_agent $(agent)
 
 
 # Docker Compose Commands

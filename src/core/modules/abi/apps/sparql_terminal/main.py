@@ -1,4 +1,4 @@
-from src.core.apps.sparql_terminal.terminal_style import (
+from src.core.modules.abi.apps.sparql_terminal.terminal_style import (
     clear_screen,
     print_welcome_message,
     print_divider,

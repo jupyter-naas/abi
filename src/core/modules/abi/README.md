@@ -29,6 +29,11 @@ src/core/modules/abi/
 │   ├── KnowledgeGraphBuilderAgent_test.py # KG builder tests
 │   ├── OntologyEngineerAgent.py      # BFO ontology engineering
 │   └── OntologyEngineerAgent_test.py # Ontology engineering tests
+├── apps/                    # User interface applications
+│   ├── avatar_chat/        # Avatar-based chat interface
+│   ├── oxigraph_admin/     # Knowledge graph administration
+│   ├── sparql_terminal/    # SPARQL query interface
+│   └── terminal_agent/     # Main terminal chat interface
 ├── models/                  # Model configurations
 │   ├── o3_mini.py          # OpenAI o3-mini (cloud, temp=1.0)
 │   └── qwen3_8b.py         # Qwen3 8B (local/Ollama, temp=0.7)
@@ -54,7 +59,6 @@ src/core/modules/abi/
 │   ├── mid-level/          # Common Core Ontologies
 │   ├── domain-level/       # Domain-specific ontologies
 │   └── application-level/  # Use-case specific ontologies
-├── sandbox/                 # Experimental scripts (8 utilities)
 ├── triggers.py              # Production event-driven triggers
 ├── mappings.py              # Knowledge graph visualization colors
 └── __init__.py              # Module initialization
