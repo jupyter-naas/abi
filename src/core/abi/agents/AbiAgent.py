@@ -222,44 +222,31 @@ You can browse the data and run queries there."""
     
     # Add Oxigraph Admin tool
     def open_oxigraph_admin() -> str:
-        """Launch the Oxigraph Administrative Interface for terminal-based KG management."""
-        import subprocess
-        import os
-        try:
-            # Run oxigraph-admin in the background
-            subprocess.Popen(
-                ["uv", "run", "python", "-m", "src.core.abi.apps.oxigraph_admin.main"],
-                cwd=os.getcwd()
-            )
-            return """🔧 **Oxigraph Administrative Interface Launched!**
+        """Open the Oxigraph Administrative Interface for terminal-based KG management."""
+        return """🔧 **Oxigraph Administrative Interface**
 
-The terminal-based admin tool is now running with:
+To launch the terminal-based admin tool, run:
+```
+make oxigraph-admin
+```
+
+Features available:
 • Knowledge Graph Statistics
 • Query Templates & Examples  
 • Service Control & Monitoring
-• Data Management Tools
-
-Check your terminal for the interactive interface."""
-        except Exception as e:
-            return f"❌ Failed to launch Oxigraph Admin: {str(e)}"
+• Data Management Tools"""
     
     # Add SPARQL Terminal tool
     def open_sparql_terminal() -> str:
-        """Launch the interactive SPARQL Terminal for direct database queries."""
-        import subprocess
-        import os
-        try:
-            # Run sparql-terminal in the background
-            subprocess.Popen(
-                ["uv", "run", "python", "-m", "src.core.abi.apps.sparql_terminal.main"],
-                cwd=os.getcwd()
-            )
-            return """💻 **SPARQL Terminal Launched!**
+        """Open the interactive SPARQL Terminal for direct database queries."""
+        return """💻 **SPARQL Terminal**
 
-Interactive SPARQL query console is now running.
-Check your terminal for the command-line interface."""
-        except Exception as e:
-            return f"❌ Failed to launch SPARQL Terminal: {str(e)}"
+To launch the interactive SPARQL console, run:
+```
+make sparql-terminal
+```
+
+This opens a command-line interface for direct SPARQL queries against your knowledge graph."""
     
     # Add service status tool
     def show_abi_services() -> str:
