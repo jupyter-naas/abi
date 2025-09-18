@@ -262,7 +262,7 @@ def main():
     # Ensure all local services are running (Oxigraph, PostgreSQL, etc.)
     ensure_local_services_running()
     
-    from src.core.modules.abi.apps.terminal_agent.main import generic_run_agent
+    from src.core.abi.apps.terminal_agent.main import generic_run_agent
     generic_run_agent("AbiAgent")
 
 if __name__ == "__main__":

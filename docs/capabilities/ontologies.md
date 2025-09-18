@@ -20,7 +20,7 @@ Ontologies in ABI are organized in a layered approach:
 3. **Domain Ontologies**: Concepts specific to particular domains (e.g., Finance, Healthcare)
 4. **Application Ontologies**: Concepts specific to applications
 
-The `src/core/modules/ontology/ontologies/` directory contains the vetted ontologies used across ABI.
+The `src/core/ontology/ontologies/` directory contains the vetted ontologies used across ABI.
 
 ## Creating Module Ontologies
 

@@ -234,7 +234,7 @@ ABI includes several example apps that demonstrate best practices:
 - **Integration Manager**: UI for managing external service connections
 - **ABI CLI**: Command-line interface for common ABI operations
 
-You can find these examples in the `src/core/modules/common/apps/` directory.
+You can find these examples in the `src/core/common/apps/` directory.
 
 ## Resources
 

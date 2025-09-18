@@ -5,8 +5,8 @@
 **Every code component has a mirror folder in `storage/datastore/`**
 
 ```
-src/core/modules/your_module/orchestration/    →    storage/datastore/core/modules/your_module/orchestration/
-src/core/modules/your_module/pipelines/        →    storage/datastore/core/modules/your_module/pipelines/
+src/core/your_module/orchestration/    →    storage/datastore/core/modules/your_module/orchestration/
+src/core/your_module/pipelines/        →    storage/datastore/core/modules/your_module/pipelines/
 ```
 
 **Why?** No hunting for data. No root pollution. Clean scaling.
@@ -16,7 +16,7 @@ src/core/modules/your_module/pipelines/        →    storage/datastore/core/mod
 ### 1. Create Module Structure
 ```bash
 # Code (manual)
-mkdir -p src/core/modules/your_module/{orchestration,pipelines,workflows}
+mkdir -p src/core/your_module/{orchestration,pipelines,workflows}
 
 # Data (automatic - your code creates it!)
 # No manual mkdir needed - use os.makedirs(path, exist_ok=True)
@@ -50,7 +50,7 @@ DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/your_module/orchestration
 
 ### Orchestration
 ```python
-# src/core/modules/your_module/orchestration/definitions.py
+# src/core/your_module/orchestration/definitions.py
 from abi.utils.Storage import ensure_data_directory
 
 @dagster.asset
@@ -63,7 +63,7 @@ def my_asset():
 
 ### Pipelines
 ```python
-# src/core/modules/your_module/pipelines/YourPipeline.py
+# src/core/your_module/pipelines/YourPipeline.py
 from abi.utils.Storage import ensure_data_directory
 
 class YourPipeline:
@@ -76,7 +76,7 @@ class YourPipeline:
 
 ### Integrations
 ```python
-# src/core/modules/your_module/integrations/YourIntegration.py
+# src/core/your_module/integrations/YourIntegration.py
 from abi.utils.Storage import ensure_data_directory
 
 class YourIntegration:
@@ -105,7 +105,7 @@ os.makedirs("storage/datastore/core/modules/your_module/component", exist_ok=Tru
 DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/your_module/orchestration
 
 # Mirror every code component
-src/core/modules/demo/pipelines/ → storage/datastore/core/modules/demo/pipelines/
+src/core/demo/pipelines/ → storage/datastore/core/modules/demo/pipelines/
 ```
 
 ### ❌ Don't Do This
@@ -126,7 +126,7 @@ DAGSTER_HOME=storage/orchestration
 ### Check Structure
 ```bash
 # Verify both sides exist
-tree src/core/modules/your_module
+tree src/core/your_module
 tree storage/datastore/core/modules/your_module
 
 # Find root pollution
@@ -151,4 +151,4 @@ mv scattered_file.db storage/datastore/core/modules/your_module/orchestration/
 
 ## Reference
 
-See `src/core/modules/__demo__/` for a working example of Code-Data Symmetry.
+See `src/core/__demo__/` for a working example of Code-Data Symmetry.
