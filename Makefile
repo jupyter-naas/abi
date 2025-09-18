@@ -174,11 +174,11 @@ mcp-test: deps
 	uv run python mcp_server_test.py
 
 api-prod: deps
-	@ docker build -t abi-prod -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker build -t abi-prod -f docker/images/Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 --env-file .env -e ENV=prod --platform linux/amd64 abi-prod
 
 api-local: deps
-	@ docker build -t abi-local -f Dockerfile.linux.x86_64 . --platform linux/amd64
+	@ docker build -t abi-local -f docker/images/Dockerfile.linux.x86_64 . --platform linux/amd64
 	@ docker run --rm -it -p 9879:9879 -v ./storage:/app/storage --env-file .env -e ENV=dev --platform linux/amd64 abi-local
 
 sparql-terminal: deps
@@ -265,7 +265,7 @@ help:
 	@echo "ENVIRONMENT SETUP:"
 	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
 	@echo "  install                  Install all dependencies (similar to .venv)"
-	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
+	@echo "  local-build              Build all Docker containers defined in docker/compose/docker-compose -f docker/compose/docker-compose.yml.yml"
 	@echo "  lock                     Update the Poetry lock file without installing packages"
 	@echo ""
 	@echo "DEVELOPMENT:"
@@ -356,10 +356,10 @@ build: build.linux.x86_64
 # 
 # Parameters:
 #   - Image name: abi
-#   - Dockerfile: Dockerfile.linux.x86_64
+#   - Dockerfile: docker/images/Dockerfile.linux.x86_64
 #   - Platform: linux/amd64 (ensures consistent builds on x86_64/amd64 architecture)
 build.linux.x86_64: deps
-	DOCKER_BUILDKIT=1 docker build . -t abi -f Dockerfile.linux.x86_64 --platform linux/amd64
+	DOCKER_BUILDKIT=1 docker build . -t abi -f docker/images/Dockerfile.linux.x86_64 --platform linux/amd64
 	
 	@# Show container size
 	@docker image ls abi
@@ -415,27 +415,27 @@ check-docker:
 # Enhanced cleanup with conflict detection
 docker-cleanup: check-docker
 	@echo "🧹 Running Docker cleanup to prevent conflicts..."
-	@./scripts/docker_cleanup.sh
+	@./docker/scripts/cleanup.sh
 
 oxigraph-up: check-docker
-	@docker-compose --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
+	@docker-compose -f docker/compose/docker-compose.yml --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
 oxigraph-down: check-docker
-	@docker-compose --profile local stop oxigraph || true
+	@docker-compose -f docker/compose/docker-compose.yml --profile local stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
 oxigraph-status: check-docker
 	@echo "Oxigraph status:"
-	@docker-compose --profile local ps oxigraph
+	@docker-compose -f docker/compose/docker-compose.yml --profile local ps oxigraph
 
 local-up: check-docker
 	@echo "🚀 Starting local services..."
-	@if ! docker-compose --profile local up -d --timeout 60; then \
+	@if ! docker-compose -f docker/compose/docker-compose.yml --profile local up -d --timeout 60; then \
 		echo "❌ Failed to start services. Running cleanup..."; \
-		./scripts/docker_cleanup.sh; \
+		./docker/scripts/cleanup.sh; \
 		echo "🔄 Retrying..."; \
-		docker-compose --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+		docker-compose -f docker/compose/docker-compose.yml --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
 	@echo "✓ Local containers started"
 	@make dagster-up
@@ -448,56 +448,56 @@ local-up: check-docker
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 
 local-logs: check-docker
-	@docker-compose --profile local logs -f
+	@docker-compose -f docker/compose/docker-compose.yml --profile local logs -f
 
 local-stop: check-docker
-	@docker-compose --profile local stop
+	@docker-compose -f docker/compose/docker-compose.yml --profile local stop
 	@echo "✓ All local services stopped"
 
 local-down: check-docker
 	@make dagster-down
-	@docker-compose --profile local down --timeout 10 || true
+	@docker-compose -f docker/compose/docker-compose.yml --profile local down --timeout 10 || true
 	@echo "✓ All local services stopped"
 
 container-up:
-	@docker-compose --profile container up -d
+	@docker-compose -f docker/compose/docker-compose.yml --profile container up -d
 	@echo "✓ ABI container started"
 
 container-down:
-	@docker-compose --profile container down
+	@docker-compose -f docker/compose/docker-compose.yml --profile container down
 	@echo "✓ ABI container stopped"
 
 dagster-dev:
 	@echo "🚀 Starting Dagster development server..."
-	@docker-compose --profile local up dagster
+	@docker-compose -f docker/compose/docker-compose.yml --profile local up dagster
 
 dagster-up:
 	@echo "🚀 Starting Dagster in background..."
-	@docker-compose --profile local up -d dagster
+	@docker-compose -f docker/compose/docker-compose.yml --profile local up -d dagster
 	@echo "✓ Dagster started on http://localhost:3001"
 	@echo "📝 Logs: make dagster-logs"
 
 dagster-down:
 	@echo "🛑 Stopping Dagster..."
-	@docker-compose --profile local down dagster
+	@docker-compose -f docker/compose/docker-compose.yml --profile local down dagster
 	@echo "✓ Dagster stopped"
 
 dagster-logs:
 	@echo "📄 Showing Dagster logs..."
-	@docker-compose --profile local logs -f dagster
+	@docker-compose -f docker/compose/docker-compose.yml --profile local logs -f dagster
 
 dagster-ui:
 	@echo "🌐 Opening Dagster web interface..."
 	@echo "📍 Visit: http://localhost:3001"
 	@command -v open >/dev/null 2>&1 && open "http://localhost:3001" || echo "Open the URL manually in your browser"
-	@docker-compose --profile local up dagster
+	@docker-compose -f docker/compose/docker-compose.yml --profile local up dagster
 
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker-compose --profile local exec dagster uv run dagster asset list -m src.core.modules.__demo__.orchestration.definitions
+	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.core.modules.__demo__.orchestration.definitions
 
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker-compose --profile local exec dagster uv run dagster asset materialize --select "*" -m src.core.modules.__demo__.orchestration.definitions
+	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.core.modules.__demo__.orchestration.definitions
 
 .PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize

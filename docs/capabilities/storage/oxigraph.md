@@ -83,7 +83,7 @@ OXIGRAPH_URL=http://localhost:7878  # Default for local development
 
 ### Docker Compose Configuration
 
-Oxigraph is configured in `docker-compose.yml` with:
+Oxigraph is configured in `docker/compose/docker-compose.yml` with:
 - **Port**: 7878 (mapped to host)
 - **Volume**: Persistent storage for data
 - **Health Check**: Monitors SPARQL endpoint availability
