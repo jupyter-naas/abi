@@ -193,19 +193,22 @@ def publish_remote_agent(
 
 if __name__ == "__main__":
     import sys
-    from src import secret, config
+    from src import config
     import time
+    from dotenv import load_dotenv, dotenv_values
+    
+    # Load environment variables
+    load_dotenv()
+    env = dotenv_values()
     
     # Check for dry-run flag
     dry_run = "--dry-run" in sys.argv or "--dryrun" in sys.argv or "-n" in sys.argv
-
-    time.sleep(5)
     
-    naas_api_key = secret.get("NAAS_API_KEY")
+    naas_api_key = env.get("NAAS_API_KEY")
     api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
-    abi_api_key = secret.get("ABI_API_KEY")
+    abi_api_key = env.get("ABI_API_KEY")
     workspace_id = config.workspace_id
-    github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
+    github_access_token = env.get("GITHUB_ACCESS_TOKEN")
     github_repository = config.github_project_repository
     
     # Get auto-publish configuration
@@ -216,9 +219,9 @@ if __name__ == "__main__":
     
     # Legacy support for manual agent selection (when auto-publish is disabled)
     agents_to_publish = []
-    if not auto_publish_enabled:
+    if not auto_publish_enabled != "true":
         # Default agents when auto-publish is disabled (backward compatibility)
-        agents_to_publish = ["Abi", "Ontology", "Naas", "Multi_Models", "Support"]
+        agents_to_publish = ["Abi"]
     
     # In dry-run mode, relax the API key requirements
     if not dry_run and (naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None):
