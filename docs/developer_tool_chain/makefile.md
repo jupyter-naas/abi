@@ -73,7 +73,7 @@ This target sets up a virtual environment inside a Docker container using Poetry
 make dev-build
 ```
 
-**What it does:** Builds all the Docker containers defined in the docker/compose/docker-compose.yml file.
+**What it does:** Builds all the Docker containers defined in the docker-compose.yml file.
 
 **When to use it:** When you first start working with the project or when the Docker configuration changes.
 

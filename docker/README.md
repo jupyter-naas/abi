@@ -52,10 +52,10 @@ docker build -f docker/images/Dockerfile.mcp -t abi-mcp .
 ### Running Services
 ```bash
 # Start all local services
-docker-compose -f docker/compose/docker-compose.yml --profile local up -d
+docker-compose -f docker-compose.yml --profile local up -d
 
 # Start specific service
-docker-compose -f docker/compose/docker-compose.yml up oxigraph
+docker-compose -f docker-compose.yml up oxigraph
 ```
 
 ### Cleanup

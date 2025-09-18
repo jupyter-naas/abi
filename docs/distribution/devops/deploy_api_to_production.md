@@ -131,7 +131,7 @@ If you prefer to deploy ABI on your own hardware instead of using NAAS spaces, y
 
 For a more maintainable setup, especially on a server:
 
-1. **Create a docker/compose/docker-compose.yml file**:
+1. **Create a docker-compose.yml file**:
    ```yaml
    version: '3'
    
@@ -172,7 +172,7 @@ For deployment on specialized hardware (e.g., GPU machines, DGX stations):
 
 1. **GPU Support**: If your machine has GPUs that you want to make available to the container:
    
-   Add to your docker/compose/docker-compose.yml:
+   Add to your docker-compose.yml:
    ```yaml
    services:
      abi-api:
