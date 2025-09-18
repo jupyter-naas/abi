@@ -1,5 +1,4 @@
 from src.__modules__ import get_modules
-from abi import logger
 from src.marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
@@ -10,6 +9,7 @@ from src.marketplace.applications.github.integrations.GitHubIntegration import (
 )
 from src import load_modules, config
 from fastapi import APIRouter
+from abi import logger
 
 def publish_remote_agent(
     naas_api_key: str, 
@@ -193,23 +193,32 @@ def publish_remote_agent(
 
 if __name__ == "__main__":
     import sys
+    import os
     from src import config
-    import time
-    from dotenv import load_dotenv, dotenv_values
+    from dotenv import load_dotenv
     
     # Load environment variables
     load_dotenv()
-    env = dotenv_values()
     
     # Check for dry-run flag
     dry_run = "--dry-run" in sys.argv or "--dryrun" in sys.argv or "-n" in sys.argv
     
-    naas_api_key = env.get("NAAS_API_KEY")
+    # Get environment variables (prioritize actual environment over .env file)
+    naas_api_key = os.getenv("NAAS_API_KEY")
     api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
-    abi_api_key = env.get("ABI_API_KEY")
+    abi_api_key = os.getenv("ABI_API_KEY")
     workspace_id = config.workspace_id
-    github_access_token = env.get("GITHUB_ACCESS_TOKEN")
+    github_access_token = os.getenv("GITHUB_ACCESS_TOKEN")
     github_repository = config.github_project_repository
+    
+    # Debug logging for environment variables
+    logger.debug(f"Environment variable status:")
+    logger.debug(f"  NAAS_API_KEY: {'✅ Set' if naas_api_key else '❌ Missing'}")
+    logger.debug(f"  ABI_API_KEY: {'✅ Set' if abi_api_key else '❌ Missing'}")
+    logger.debug(f"  GITHUB_ACCESS_TOKEN: {'✅ Set' if github_access_token else '❌ Missing'}")
+    logger.debug(f"  Workspace ID: {'✅ Set' if workspace_id else '❌ Missing'}")
+    logger.debug(f"  GitHub Repository: {'✅ Set' if github_repository else '❌ Missing'}")
+    logger.debug(f"  API Base URL: {api_base_url}")
     
     # Get auto-publish configuration
     auto_publish_config = getattr(config, 'auto_publish', {})
