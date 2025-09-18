@@ -109,8 +109,8 @@ jobs:
           RELEASES_JSON=$(curl -s -H "Authorization: token ${{ secrets.ACCESS_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/releases")
           
-          echo "📋 Available releases and their target commits:"
-          echo "$RELEASES_JSON" | jq -r '.[] | "\(.tag_name) -> \(.target_commitish)"' | head -10
+          echo "📋 Available releases and their target commits (ordered by date):"
+          echo "$RELEASES_JSON" | jq -r '.[] | "\(.tag_name) -> \(.target_commitish) (created: \(.created_at))"' | head -10
           
           # Search for release that points to current commit
           # Try multiple matching strategies
@@ -122,9 +122,11 @@ jobs:
           # If still not found, try matching against the default branch
           if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
             echo "🔄 Trying to match against default branch releases..."
+            # Get the most recent release targeting main/master, sorted by creation date
             EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
-              jq -r '.[] | select(.target_commitish == "main" or .target_commitish == "master" or .target_commitish == "") | .tag_name' | \
+              jq -r 'sort_by(.created_at) | reverse | .[] | select(.target_commitish == "main" or .target_commitish == "master" or .target_commitish == "") | .tag_name' | \
               head -1)
+            echo "📌 Selected most recent release targeting main branch: $EXPECTED_VERSION"
           fi
           
           # Fallback to git describe if no release found
