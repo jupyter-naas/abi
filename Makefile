@@ -265,7 +265,7 @@ help:
 	@echo "ENVIRONMENT SETUP:"
 	@echo "  .venv                    Create virtual environment (automatically called by other commands)"
 	@echo "  install                  Install all dependencies (similar to .venv)"
-	@echo "  local-build              Build all Docker containers defined in docker/compose/docker-compose -f docker/compose/docker-compose.yml.yml"
+	@echo "  local-build              Build all Docker containers defined in docker/compose/docker-compose.yml"
 	@echo "  lock                     Update the Poetry lock file without installing packages"
 	@echo ""
 	@echo "DEVELOPMENT:"
@@ -494,10 +494,10 @@ dagster-ui:
 
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.core.modules.__demo__.orchestration.definitions
+	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.applications.__demo__.orchestration.definitions
 
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.core.modules.__demo__.orchestration.definitions
+	@docker-compose -f docker/compose/docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.applications.__demo__.orchestration.definitions
 
 .PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
