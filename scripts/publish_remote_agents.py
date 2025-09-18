@@ -223,9 +223,16 @@ if __name__ == "__main__":
         # Default agents when auto-publish is disabled (backward compatibility)
         agents_to_publish = ["Abi"]
     
-    # In dry-run mode, relax the API key requirements
-    if not dry_run and (naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None):
-        raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID must be set")
+    # Check each required variable individually when not in dry-run mode
+    if not dry_run:
+        if naas_api_key is None:
+            raise ValueError("NAAS_API_KEY must be set")
+        if api_base_url is None:
+            raise ValueError("API_BASE_URL must be set") 
+        if abi_api_key is None:
+            raise ValueError("ABI_API_KEY must be set")
+        if workspace_id is None:
+            raise ValueError("WORKSPACE_ID must be set")
     
     # Set dummy values for dry-run if missing
     if dry_run:
