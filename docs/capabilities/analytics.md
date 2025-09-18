@@ -136,7 +136,7 @@ ABI includes several example analytics components that demonstrate best practice
 - **Data Quality Reports**: Analyze the quality of data processed by pipelines
 - **User Activity Analytics**: Track how users interact with ABI components
 
-You can find these examples in the `src/core/modules/common/analytics/` directory.
+You can find these examples in the `src/core/common/analytics/` directory.
 
 ## Resources
 
