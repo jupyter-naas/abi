@@ -231,7 +231,7 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
 
-          docker build -t streamlit-demo -f src/marketplace/modules/applications/__demo__/apps/streamlit/Dockerfile .
+          docker build -t streamlit-demo -f src/marketplace/__demo__/apps/streamlit/Dockerfile .
 
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
