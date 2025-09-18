@@ -194,9 +194,12 @@ def publish_remote_agent(
 if __name__ == "__main__":
     import sys
     from src import secret, config
+    import time
     
     # Check for dry-run flag
     dry_run = "--dry-run" in sys.argv or "--dryrun" in sys.argv or "-n" in sys.argv
+
+    time.sleep(5)
     
     naas_api_key = secret.get("NAAS_API_KEY")
     api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
