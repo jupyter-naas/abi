@@ -4,17 +4,17 @@
 
 A module in the ABI system is a self-contained, standalone component that encapsulates related functionality. Modules are designed to be pluggable, meaning they can be added or removed from the system without modifying other parts of the codebase. Modules are organized into three categories:
 
-1. **Core Modules**: Located in `src/core/modules/` - These are essential modules that provide the core functionality of the ABI system.
+1. **Core Modules**: Located in `src/core/` - These are essential modules that provide the core functionality of the ABI system.
 2. **Custom Modules**: Located in `src/custom/modules/` - These are user-created modules that extend the system with additional capabilities.
-3. **Marketplace Modules**: Located in `src/marketplace/modules/` - These are community-shared modules available for selective activation.
+3. **Marketplace Modules**: Located in `src/marketplace/` - These are community-shared modules available for selective activation.
 
 This three-tier separation provides a clean architecture with distinct purposes: core system functionality, private extensions, and shared community resources.
 
 ### Module Directory Purposes
 
-- **Core Modules** (`src/core/modules/`): Foundation modules that provide essential ABI functionality. These should not be modified directly.
+- **Core Modules** (`src/core/`): Foundation modules that provide essential ABI functionality. These should not be modified directly.
 - **Custom Modules** (`src/custom/modules/`): Your private modules and customizations. Perfect for organization-specific agents and workflows.
-- **Marketplace Modules** (`src/marketplace/modules/`): Community-shared modules. All are disabled by default (`.disabled` suffix) for safety. Enable selectively as needed.
+- **Marketplace Modules** (`src/marketplace/`): Community-shared modules. All are disabled by default (`.disabled` suffix) for safety. Enable selectively as needed.
 
 Modules provide a way to organize and structure your code in a modular fashion, making it easier to maintain, extend, and reuse functionality. They can contain various components such as:
 
@@ -54,11 +54,11 @@ The ABI system uses a configuration-driven approach to load modules at runtime. 
 **Configuration Example**:
 ```yaml
 modules:
-  - path: src/core/modules/abi
+  - path: src/core/abi
     enabled: true
-  - path: src/marketplace/modules/applications/github
+  - path: src/marketplace/applications/github
     enabled: true
-  - path: src/marketplace/modules/applications/postgres
+  - path: src/marketplace/applications/postgres
     enabled: false  # This module will not be loaded
 ```
 
@@ -111,7 +111,7 @@ Set `enabled: false` in your `config.yaml` file:
 
 ```yaml
 modules:
-  - path: src/marketplace/modules/applications/postgres
+  - path: src/marketplace/applications/postgres
     enabled: false  # This module will not be loaded
 ```
 
@@ -127,10 +127,10 @@ Add "disabled" to the module directory name:
 
 ```bash
 # For core modules
-mv src/core/modules/your_module_name src/core/modules/your_module_name.disabled
+mv src/core/your_module_name src/core/your_module_name.disabled
 
 # For marketplace modules  
-mv src/marketplace/modules/your_module_name src/marketplace/modules/your_module_name.disabled
+mv src/marketplace/your_module_name src/marketplace/your_module_name.disabled
 ```
 
 **Note**: The system will skip loading modules with "disabled" in their name even if they're enabled in the configuration. However, the configuration-based approach is recommended for better maintainability.

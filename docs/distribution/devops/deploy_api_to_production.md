@@ -39,7 +39,7 @@ The deployment process is fully automated through GitHub Actions workflows:
 
 2. **Container Build Process**:
    - When a new release is published, the `build_abi_container.yml` workflow is triggered
-   - This builds a Docker container using `Dockerfile.linux.x86_64`
+   - This builds a Docker container using `docker/images/Dockerfile.linux.x86_64`
    - The container is tagged and pushed to GitHub Container Registry (ghcr.io)
 
 3. **Deployment to NAAS**:
@@ -131,7 +131,7 @@ If you prefer to deploy ABI on your own hardware instead of using NAAS spaces, y
 
 For a more maintainable setup, especially on a server:
 
-1. **Create a docker-compose.yml file**:
+1. **Create a docker/compose/docker-compose.yml file**:
    ```yaml
    version: '3'
    
@@ -140,7 +140,7 @@ For a more maintainable setup, especially on a server:
        image: abi:latest
        build:
          context: .
-         dockerfile: Dockerfile.linux.x86_64
+         dockerfile: docker/images/Dockerfile.linux.x86_64
        restart: unless-stopped
        ports:
          - "9879:9879"
@@ -172,7 +172,7 @@ For deployment on specialized hardware (e.g., GPU machines, DGX stations):
 
 1. **GPU Support**: If your machine has GPUs that you want to make available to the container:
    
-   Add to your docker-compose.yml:
+   Add to your docker/compose/docker-compose.yml:
    ```yaml
    services:
      abi-api:
