@@ -490,20 +490,8 @@ Last user message: "{last_human_message.content}"
                     return Command(goto=END, update={
                         "messages": [AIMessage(content=intent.intent_target)]
                     })
-                elif intent.intent_type == IntentType.TOOL:
-                    # Create a tool call message to trigger the specific tool
-                    tool_call_message = AIMessage(
-                        content="",
-                        tool_calls=[{
-                            "name": intent.intent_target,
-                            "args": {},
-                            "id": f"call_{intent.intent_target}",
-                            "type": "tool_call"
-                        }]
-                    )
-                    return Command(goto="call_tools", update={
-                        "messages": [tool_call_message]
-                    })
+                # elif intent.intent_type == IntentType.TOOL:
+                #     return Command(goto="model_call_tools")
                 elif intent.intent_type == IntentType.AGENT:
                     return Command(goto=intent.intent_target)
                 else:
