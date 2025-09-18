@@ -1,4 +1,4 @@
-from src.core.apps.terminal_agent.terminal_style import (
+from src.core.modules.abi.apps.terminal_agent.terminal_style import (
     print_tool_usage,
     print_tool_response,
     print_image,

@@ -3,7 +3,7 @@ Oxigraph Administrative Interface
 Provides terminal-based management and monitoring for Oxigraph triple store
 """
 
-from src.core.apps.oxigraph_admin.terminal_style import (
+from src.core.modules.abi.apps.oxigraph_admin.terminal_style import (
     clear_screen,
     print_welcome_message,
     print_divider,
@@ -334,7 +334,7 @@ SELECT ?entity ?label ?type WHERE {
                 self.data_management_menu()
             elif choice == "5":
                 console.print("Opening SPARQL terminal...")
-                subprocess.run(["uv", "run", "python", "-m", "src.core.apps.sparql_terminal.main"])
+                subprocess.run(["uv", "run", "python", "-m", "src.core.modules.abi.apps.sparql_terminal.main"])
                 break
             elif choice == "6":
                 console.print("Opening YasGUI web interface...")
