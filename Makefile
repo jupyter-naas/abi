@@ -213,44 +213,44 @@ docker-model-deps:
 	@if [ "$$CI" = "true" ] || [ "$$GITHUB_ACTIONS" = "true" ]; then \
 		echo "🔄 CI environment detected - skipping Docker Model Runner checks"; \
 		echo "✓ Docker Model Runner checks skipped in CI"; \
-		exit 0; \
-	fi
-	@if ! docker model status >/dev/null 2>&1; then \
+		echo "✅ Docker Model Runner dependencies checked"; \
+	elif ! docker model status >/dev/null 2>&1; then \
 		echo "❌ Docker Model Runner not available. Please ensure:"; \
 		echo "   1. Docker Desktop 4.40+ is installed"; \
 		echo "   2. Experimental features are enabled"; \
 		echo "   3. Run: docker model install-runner"; \
 		exit 1; \
-	fi
-	@echo "✓ Docker Model Runner is available"
-	@echo "🔍 Checking required models..."
-	@if curl -s --connect-timeout 5 https://hub.docker.com >/dev/null 2>&1; then \
-		if ! docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
-			echo "📥 Pulling chat model: ai/gemma3:4B-Q4_0"; \
-			docker model pull ai/gemma3:4B-Q4_0; \
-		else \
-			echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
-		fi; \
-		if ! docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
-			echo "📥 Pulling embedding model: ai/embeddinggemma:300M-Q8_0"; \
-			docker model pull ai/embeddinggemma:300M-Q8_0; \
-		else \
-			echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
-		fi; \
 	else \
-		echo "🔒 Airgap mode - skipping model downloads"; \
-		if docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
-			echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+		echo "✓ Docker Model Runner is available"; \
+		echo "🔍 Checking required models..."; \
+		if curl -s --connect-timeout 5 https://hub.docker.com >/dev/null 2>&1; then \
+			if ! docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+				echo "📥 Pulling chat model: ai/gemma3:4B-Q4_0"; \
+				docker model pull ai/gemma3:4B-Q4_0; \
+			else \
+				echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+			fi; \
+			if ! docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+				echo "📥 Pulling embedding model: ai/embeddinggemma:300M-Q8_0"; \
+				docker model pull ai/embeddinggemma:300M-Q8_0; \
+			else \
+				echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+			fi; \
 		else \
-			echo "⚠️  Chat model ai/gemma3:4B-Q4_0 not found (run with internet first)"; \
+			echo "🔒 Airgap mode - skipping model downloads"; \
+			if docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+				echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+			else \
+				echo "⚠️  Chat model ai/gemma3:4B-Q4_0 not found (run with internet first)"; \
+			fi; \
+			if docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+				echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+			else \
+				echo "⚠️  Embedding model not found (using deterministic embeddings)"; \
+			fi; \
 		fi; \
-		if docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
-			echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
-		else \
-			echo "⚠️  Embedding model not found (using deterministic embeddings)"; \
-		fi; \
+		echo "✅ Docker Model Runner dependencies checked"; \
 	fi
-	@echo "✅ Docker Model Runner dependencies checked"
 
 # Create symbolic link to allow importing lib.abi from the virtual environment
 python_version=$(shell cat .python-version)
