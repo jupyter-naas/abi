@@ -126,6 +126,16 @@ services:
       - local
       - prod
 
+  # Docker Model Runner - Local AI Models
+  # Note: This service expects Docker Model Runner to be running on the host
+  # at http://localhost:11434/v1 with models like gemma3:4b available
+  # 
+  # To set up Docker Model Runner:
+  # 1. Ensure Docker Desktop 4.40+ with experimental features enabled
+  # 2. Run: docker model pull ai/gemma3:4B-Q4_0
+  # 3. The models will be accessible via OpenAI-compatible API at localhost:11434/v1
+  #
+  # This configuration documents the dependency without creating conflicts
 
 volumes:
   cargo-cache:
