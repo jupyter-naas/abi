@@ -180,7 +180,7 @@ def create_agent(
         if not cloud_model:
             logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
             return None
-        selected_model = cloud_model
+        selected_model = cloud_model.model
     elif ai_mode == "local":
         if not local_model:
             logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
