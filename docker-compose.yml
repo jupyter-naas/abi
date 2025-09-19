@@ -125,50 +125,48 @@ services:
     profiles:
       - local
       - prod
-
-  # Local AI Models Configuration
-  # These services document the local AI model configuration
-  # The actual models run via Docker Model Runner on the host
   
-  local-chat:
-    image: alpine:latest
-    command: ["echo", "Local chat model: ai/gemma3:4B-Q4_0 running via Docker Model Runner"]
+  # Docker Model Runner Manager
+  # Manages Docker Model Runner models on the host system
+  # Note: Docker Model Runner images cannot be used directly in docker-compose
+  # This service starts and manages the models via docker model commands
+  docker-model-manager:
+    image: docker:dind
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - MODEL_NAME=ai/gemma3:4B-Q4_0
-      - MODEL_TYPE=chat
-      - API_ENDPOINT=http://localhost:11434/v1/chat/completions
-      - CONTEXT_WINDOW=131072
-      - QUANTIZATION=Q4_0
-      - PROVIDER=docker-model-runner
+      - CHAT_MODEL=ai/gemma3:4B-Q4_0
+      - EMBEDDING_MODEL=ai/embeddinggemma:300M-Q8_0
+      - CHAT_PORT=11434
+      - EMBEDDING_PORT=11435
+    command: |
+      sh -c "
+        echo '🚀 Starting Docker Model Runner models...'
+        
+        # Start chat model
+        echo '📱 Starting chat model: ai/gemma3:4B-Q4_0'
+        docker model run ai/gemma3:4B-Q4_0 & || echo '⚠️  Chat model already running or failed'
+        
+        # Start embedding model (note: we use deterministic embeddings in code)
+        echo '🔢 Embedding model: ai/embeddinggemma:300M-Q8_0 (using deterministic embeddings)'
+        
+        echo '✅ Docker Model Runner setup complete'
+        echo '🌐 Chat API: http://localhost:11434/v1/chat/completions'
+        echo '🔢 Embeddings: Deterministic (768 dimensions)'
+        
+        # Keep container running
+        tail -f /dev/null
+      "
     labels:
-      - "abi.model.name=ai/gemma3:4B-Q4_0"
-      - "abi.model.type=chat"
-      - "abi.model.provider=docker-model-runner"
-      - "abi.model.endpoint=http://localhost:11434/v1/chat/completions"
-      - "abi.model.context_window=131072"
+      - "abi.service=docker-model-runner-manager"
+      - "abi.chat.model=ai/gemma3:4B-Q4_0"
+      - "abi.chat.endpoint=http://localhost:11434/v1/chat/completions"
+      - "abi.embedding.model=ai/embeddinggemma:300M-Q8_0"
+      - "abi.embedding.type=deterministic"
+      - "abi.embedding.dimensions=768"
     profiles:
       - local
-    restart: "no"
-
-  local-embeddings:
-    image: alpine:latest  
-    command: ["echo", "Local embedding model: ai/embeddinggemma:300M-Q8_0 (using deterministic embeddings)"]
-    environment:
-      - MODEL_NAME=ai/embeddinggemma:300M-Q8_0
-      - MODEL_TYPE=embeddings
-      - DIMENSIONS=768
-      - QUANTIZATION=Q8_0
-      - PROVIDER=deterministic
-      - IMPLEMENTATION=hash-based
-    labels:
-      - "abi.model.name=ai/embeddinggemma:300M-Q8_0"
-      - "abi.model.type=embeddings"
-      - "abi.model.provider=deterministic"
-      - "abi.model.dimensions=768"
-      - "abi.model.implementation=hash-based"
-    profiles:
-      - local
-    restart: "no"
+    restart: unless-stopped
 
 volumes:
   cargo-cache:
