@@ -481,7 +481,7 @@ def main(agent_name="AbiAgent"):
     # Ensure all local services are running (Oxigraph, PostgreSQL, etc.)
     ensure_local_services_running()
     
-    console.print(f"Starting default agent...", style="green")
+    console.print(f"Starting agent...", style="green")
     from src.core.abi.apps.terminal_agent.main import generic_run_agent
     generic_run_agent(agent_name)
 
