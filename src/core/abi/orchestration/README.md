@@ -8,28 +8,39 @@ This module provides data orchestration capabilities for the ABI demo, implement
 
 **Engine**: Dagster  
 **Purpose**: RSS feed monitoring and data collection  
-**Scope**: Demonstration of orchestration patterns for ABI
+**Scope**: Core orchestration capability for ABI daily news awareness
 
 ## Features
 
 ### RSS Feed Processing Pipeline
 
-- **15 Data Sources**: Monitors RSS feeds from technology companies, AI topics, and key personalities
+- **40+ Data Sources**: Comprehensive monitoring of the entire AI ecosystem
 - **Real-time Processing**: 30-second polling intervals for timely data collection
 - **Structured Storage**: Converts RSS entries to JSON with timestamp-based organization
 - **Error Handling**: Robust error handling and retry logic for reliable operation
 
 ### Monitored Sources
 
-**Technology Topics:**
-- AI, LLM, Ontology, OpenAI
+**Research Laboratories (15):**
+- DeepMind, Google AI Research, OpenAI, Anthropic
+- Microsoft Research, Meta AI Research, IBM Research AI
+- Nvidia Research, Apple Machine Learning, Tesla AI
+- Intel AI Lab, Samsung AI Research, Baidu Research
+- Allen Institute for AI, MILA Montreal
 
-**Companies:**
-- Google, Meta, Microsoft, Apple, Amazon
-- Tesla, SpaceX, NASA, Palantir
+**Emerging Research Organizations (13):**
+- Cohere, Scale AI, Inflection AI, Claude AI, Adept AI
+- Character AI, Together AI, Stability AI, Builder AI
+- Contextual AI, Weights & Biases, SingularityNET, Hugging Face
 
-**Personalities:**
-- Elon Musk, Donald Trump
+**AI/ML Startups (7):**
+- Databricks, Anyscale, Jasper AI, Runway ML
+- Synthesia, Mistral AI, Perplexity AI
+
+**Core AI Topics (8):**
+- Machine Learning, Large Language Models, Generative AI
+- Computer Vision, Natural Language Processing
+- Reinforcement Learning, AI Safety, AGI
 
 ## Architecture
 
@@ -52,7 +63,7 @@ RSS Sources → Sensors → Jobs → Assets → Storage
 ### Storage Structure
 
 ```
-storage/datastore/core/modules/__demo__/rss_feed/
+storage/datastore/core/modules/abi/orchestration/rss_feed/
 ├── 20250115T103045_AI_Breakthrough_in_Machine_Learning.txt
 ├── 20250115T103112_Tesla_Quarterly_Earnings_Report.txt
 ├── 20250115T103200_Palantir_Government_Contract_News.txt
@@ -73,14 +84,14 @@ storage/datastore/core/modules/__demo__/rss_feed/
 **Examples**:
 ```bash
 # Filter by query term
-ls storage/datastore/core/modules/__demo__/rss_feed/*_AI_*
-ls storage/datastore/core/modules/__demo__/rss_feed/*_Tesla_*
+ls storage/datastore/core/modules/abi/orchestration/rss_feed/*_AI_*
+ls storage/datastore/core/modules/abi/orchestration/rss_feed/*_Tesla_*
 
 # Filter by date range
-ls storage/datastore/core/modules/__demo__/rss_feed/20250115T*
+ls storage/datastore/core/modules/abi/orchestration/rss_feed/20250115T*
 
 # Combined filtering
-ls storage/datastore/core/modules/__demo__/rss_feed/20250115T*_Palantir_*
+ls storage/datastore/core/modules/abi/orchestration/rss_feed/20250115T*_Palantir_*
 ```
 
 ## Usage
@@ -186,7 +197,7 @@ Planned enhancements for deeper ABI integration:
 
 ```bash
 # Test orchestration components
-uv run python -c "from src.core.modules.__demo__.orchestration import definitions; print('✅ Import successful')"
+uv run python -c "from src.core.abi.orchestration import definitions; print('✅ Import successful')"
 
 # Check Dagster container status
 make oxigraph-status

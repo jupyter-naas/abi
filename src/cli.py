@@ -52,7 +52,13 @@ def ensure_local_services_running():
         try:
             # Try to start services with automatic cleanup on failure
             result = subprocess.run(
-                ["local-down", "local-up"],
+                ["make", "local-down"],
+                capture_output=True,
+                text=True,
+                timeout=60  # 1 minute timeout
+            )
+            result = subprocess.run(
+                ["make", "local-up"],
                 capture_output=True,
                 text=True,
                 timeout=120  # 2 minute timeout
