@@ -1,6 +1,8 @@
 services:
   abi:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/images/Dockerfile
     ports:
       - 9879:9879
       - 8501:8501
@@ -72,8 +74,8 @@ services:
     ports:
       - 7878:80
     volumes:
-      - ./src/core/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./src/core/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
+      - ./src/core/abi/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./src/core/abi/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
     depends_on:
       - oxigraph
     networks:
@@ -98,7 +100,9 @@ services:
       - prod
 
   dagster:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/images/Dockerfile
     ports:
       - 3001:3000  # Changed to 3001 to avoid conflict with yasgui
     volumes:
