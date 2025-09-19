@@ -13,7 +13,18 @@
 
 # Default target with help display
 default: deps help local-up
-	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+	@echo "🚀 Starting ABI Agent..."
+	@if curl -s --connect-timeout 5 https://pypi.org >/dev/null 2>&1; then \
+		LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent; \
+	else \
+		echo "🔒 Airgap mode - using existing environment"; \
+		if [ -d .venv ]; then \
+			.venv/bin/python -m src.cli AbiAgent; \
+		else \
+			echo "❌ No virtual environment found. Please run with internet connection first."; \
+			exit 1; \
+		fi; \
+	fi
 
 # Main help documentation - displays all available commands organized by category
 help:
@@ -172,12 +183,17 @@ uv:
 		echo "🌐 Online mode - installing dependencies from PyPI"; \
 		uv sync --all-extras; \
 	else \
-		echo "🔒 Airgap mode - using existing virtual environment"; \
+		echo "🔒 Airgap mode detected"; \
 		if [ ! -d .venv ]; then \
-			echo "⚠️  No virtual environment found. Please run 'make' with internet connection first."; \
-			exit 1; \
+			echo "⚠️  No virtual environment found. Creating minimal venv for airgap mode..."; \
+			uv venv; \
+			echo "✅ Basic virtual environment created"; \
+			echo "⚠️  Some dependencies may be missing. Run with internet connection for full setup."; \
+		else \
+			echo "✅ Using existing virtual environment"; \
 		fi; \
 	fi
+	@touch .venv
 
 # Environment file will be created dynamically by CLI during first boot
 .env:
@@ -237,8 +253,13 @@ python_version=$(shell cat .python-version)
 	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi 
 
 # Install dependencies (alternative to .venv)
-install: dep
-	@ uv sync
+install:
+	@if curl -s --connect-timeout 5 https://pypi.org >/dev/null 2>&1; then \
+		echo "🌐 Installing dependencies from PyPI"; \
+		uv sync; \
+	else \
+		echo "🔒 Airgap mode - skipping dependency installation"; \
+	fi
 
 # Update dependency lock files
 lock: deps
