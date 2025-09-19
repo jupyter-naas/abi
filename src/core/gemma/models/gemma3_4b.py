@@ -1,14 +1,14 @@
 from abi.models.Model import ChatModel
-from langchain_ollama import ChatOllama
+from abi.models.DockerModelRunnerChat import DockerModelRunnerChat
 from typing import Optional
 from abi import logger
 
-ID = "gemma3:4b"
-NAME = "Gemma3 4B"
-DESCRIPTION = "Google's open-source Gemma3 4B model for local deployment. Fast, lightweight alternative to cloud Gemini."
-IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.png"
+ID = "gemma3n"
+NAME = "Gemma3 Docker"
+DESCRIPTION = "Google's Gemma3 model running via Docker Model Runner for local deployment without Ollama dependency."
+IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/docker_100x100.png"
 CONTEXT_WINDOW = 8192
-OWNER = "ollama"
+OWNER = "google"
 
 model: Optional[ChatModel] = None
 
@@ -19,14 +19,15 @@ try:
         description=DESCRIPTION,
         image=IMAGE,
         owner=OWNER,
-        model=ChatOllama(
-            model=ID,
+        model=DockerModelRunnerChat(
+            endpoint="http://localhost:8080",
+            model_name="gemma3n",
             temperature=0.4,  # Balanced creativity for general conversation
-            # num_predict=2048,  # Reasonable output length for 4B model
+            max_tokens=2048,
         ),
         context_window=CONTEXT_WINDOW,
     )
-    logger.debug("✅ Gemma3 4B model loaded successfully via Ollama")
+    logger.debug("✅ Gemma3 Docker model loaded successfully via Docker Model Runner")
 except Exception as e:
-    logger.error(f"⚠️  Error loading Gemma3 4B model: {e}")
-    logger.error("   Make sure Ollama is running and 'gemma3:4b' model is pulled.")
+    logger.error(f"⚠️  Error loading Gemma3 Docker model: {e}")
+    logger.error("   Make sure Docker Model Runner services are running (make local-up)")

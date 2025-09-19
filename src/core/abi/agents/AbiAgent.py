@@ -175,7 +175,7 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     
     from src.core.abi.models.gpt_4_1 import model as cloud_model
-    from src.core.abi.models.qwen3_8b import model as local_model
+    from src.core.gemma.models.gemma3_4b import model as local_model
     from src import secret
 
     # Define model
@@ -187,7 +187,7 @@ def create_agent(
         selected_model = cloud_model.model
     elif ai_mode == "local":
         if not local_model:
-            logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
+            logger.error("Local model (gemma3n) not available - Docker Model Runner not running")
             return None
         selected_model = local_model.model
     else:

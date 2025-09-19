@@ -126,6 +126,31 @@ services:
       - local
       - prod
 
+  # Docker Model Runner Services
+  gemma-chat:
+    image: ai/gemma3n:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - MODEL_API_PORT=8080
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+
+  gemma-embedding:
+    image: ai/embeddinggemma:latest
+    ports:
+      - "8081:8080"
+    environment:
+      - MODEL_API_PORT=8080
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+
 volumes:
   cargo-cache:
   venv_cache:
