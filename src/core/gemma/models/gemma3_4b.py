@@ -1,6 +1,5 @@
 from abi.models.Model import ChatModel
 from abi.models.DockerModelRunnerChat import DockerModelRunnerChat
-from langchain_ollama import ChatOllama
 from typing import Optional
 from abi import logger
 import requests
@@ -36,21 +35,28 @@ try:
     else:
         raise ConnectionError("Docker Model Runner not healthy")
 except (requests.exceptions.RequestException, ConnectionError):
-    # Fallback to Ollama
+    # Fallback to direct Ollama via our DockerModelRunnerChat adapter
     try:
-        model = ChatModel(
-            model_id="gemma3:4b",
-            name="Gemma3 4B (Ollama)",
-            description="Google's Gemma3 4B model via Ollama fallback",
-            image=IMAGE,
-            owner=OWNER,
-            model=ChatOllama(
-                model="gemma3:4b",
-                temperature=0.4,
-            ),
-            context_window=CONTEXT_WINDOW,
-        )
-        logger.debug("✅ Gemma3 model loaded via Ollama (fallback)")
+        # Check if standard Ollama is running on port 11434
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if response.status_code == 200:
+            model = ChatModel(
+                model_id="gemma2:2b",
+                name="Gemma2 2B (Ollama Direct)",
+                description="Google's Gemma2 2B model via direct Ollama fallback",
+                image=IMAGE,
+                owner=OWNER,
+                model=DockerModelRunnerChat(
+                    endpoint="http://localhost:11434",
+                    model_name="gemma2:2b",
+                    temperature=0.4,
+                    max_tokens=2048,
+                ),
+                context_window=CONTEXT_WINDOW,
+            )
+            logger.debug("✅ Gemma2 model loaded via direct Ollama (fallback)")
+        else:
+            raise ConnectionError("No Ollama service available")
     except Exception as e:
-        logger.error(f"⚠️ Error loading Gemma3 model (both Docker and Ollama failed): {e}")
-        logger.error("   Install either Docker Model Runner or Ollama with gemma3:4b")
+        logger.error(f"⚠️ Error loading Gemma model (all methods failed): {e}")
+        logger.error("   Start local services with: make local-up")
