@@ -50,6 +50,6 @@ modules:
   - path: src/marketplace/applications/naas
     enabled: true
   - path: src/marketplace/applications/postgres
-    enabled: true
+    enabled: false
   - path: src/marketplace/domains/support
     enabled: true
