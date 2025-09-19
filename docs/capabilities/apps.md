@@ -61,8 +61,8 @@ Create a Streamlit app that leverages your module's components:
 ```python
 # src/custom/modules/your_module_name/apps/streamlit/app.py
 import streamlit as st
-from src.custom.modules.your_module_name.workflows.YourWorkflow import YourWorkflow, YourWorkflowParameters, YourWorkflowConfiguration
-from src.custom.modules.your_module_name.integrations.YourIntegration import YourIntegration, YourIntegrationConfiguration
+from src.custom.your_module_name.workflows.YourWorkflow import YourWorkflow, YourWorkflowParameters, YourWorkflowConfiguration
+from src.custom.your_module_name.integrations.YourIntegration import YourIntegration, YourIntegrationConfiguration
 from src import secret
 
 # Set up page config
@@ -118,8 +118,8 @@ Create a CLI app using Click or another Python CLI framework:
 ```python
 # src/custom/modules/your_module_name/apps/cli/cli.py
 import click
-from src.custom.modules.your_module_name.workflows.YourWorkflow import YourWorkflow, YourWorkflowParameters, YourWorkflowConfiguration
-from src.custom.modules.your_module_name.integrations.YourIntegration import YourIntegration, YourIntegrationConfiguration
+from src.custom.your_module_name.workflows.YourWorkflow import YourWorkflow, YourWorkflowParameters, YourWorkflowConfiguration
+from src.custom.your_module_name.integrations.YourIntegration import YourIntegration, YourIntegrationConfiguration
 from src import secret
 import json
 
