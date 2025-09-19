@@ -1,11 +1,6 @@
 config:
   workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
-  auto_publish:
-    enabled: true # Enable automatic publishing of agents to workspace
-    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
-    default_agent: "Abi" # Which agent to set as default in workspace
-  github_project_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
-  github_support_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
+  github_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
   triple_store_path: "storage/triplestore" # Path to the ontology store
   api_title: "ABI API" # API title
@@ -16,6 +11,10 @@ config:
   space_name: "abi" # Name of the space
   cors_origins:
     - "http://localhost:9879"
+  auto_publish:
+    enabled: true # Enable automatic publishing of agents to workspace
+    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+    default_agent: "Abi" # Which agent to set as default in workspace
 
 modules:
   - path: src/core/abi
@@ -42,71 +41,13 @@ modules:
     enabled: true
   - path: src/core/templatablesparqlquery
     enabled: true
-  - path: src/marketplace/applications/algolia
-    enabled: false
-  - path: src/marketplace/applications/arxiv
-    enabled: false
   - path: src/marketplace/applications/git
     enabled: true
-  - path: src/marketplace/applications/github
-    enabled: false
   - path: src/marketplace/applications/google_search
     enabled: true
-  - path: src/marketplace/applications/linkedin
-    enabled: false
   - path: src/marketplace/applications/naas
     enabled: true
   - path: src/marketplace/applications/postgres
     enabled: true
-  - path: src/marketplace/applications/powerpoint
-    enabled: false
-  - path: src/marketplace/domains/account-executive
-    enabled: false
-  - path: src/marketplace/domains/accountant
-    enabled: false
-  - path: src/marketplace/domains/business-development-representative
-    enabled: false
-  - path: src/marketplace/domains/campaign-manager
-    enabled: false
-  - path: src/marketplace/domains/community-manager
-    enabled: false
-  - path: src/marketplace/domains/content-analyst
-    enabled: false
-  - path: src/marketplace/domains/content-creator
-    enabled: false
-  - path: src/marketplace/domains/content-strategist
-    enabled: false
-  - path: src/marketplace/domains/customer-success-manager
-    enabled: false
-  - path: src/marketplace/domains/data-engineer
-    enabled: false
-  - path: src/marketplace/domains/devops-engineer
-    enabled: false
-  - path: src/marketplace/domains/financial-controller
-    enabled: false
-  - path: src/marketplace/domains/human-resources-manager
-    enabled: false
-  - path: src/marketplace/domains/inside-sales representative
-    enabled: false
-  - path: src/marketplace/domains/osint-researcher
-    enabled: false
-  - path: src/marketplace/domains/private-investigator
-    enabled: false
-  - path: src/marketplace/domains/project-manager
-    enabled: false
-  - path: src/marketplace/domains/sales-development-representative
-    enabled: false
-  - path: src/marketplace/domains/software-engineer
-    enabled: false
   - path: src/marketplace/domains/support
     enabled: true
-  - path: src/marketplace/domains/treasurer
-    enabled: false
-
-pipelines:
-  - name: github.GithubIssuesPipeline
-    cron: "0 0 * * *"
-    parameters:
-      - github_repository: "https://github.com/jupyter-naas/abi"
-      - github_repository: "https://github.com/jupyter-naas/docs"
-      - github_repository: "https://github.com/jupyter-naas/naaspython"
