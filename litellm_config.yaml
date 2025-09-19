@@ -1,0 +1,23 @@
+model_list:
+  - model_name: gemma3
+    litellm_params:
+      model: ollama/gemma2:2b
+      api_base: http://ollama:11434
+      
+  - model_name: gemma3-chat
+    litellm_params:
+      model: ollama/gemma2:2b
+      api_base: http://ollama:11434
+      
+  - model_name: embedding
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://ollama:11434
+
+general_settings:
+  master_key: sk-1234
+  database_url: sqlite:///tmp/litellm.db
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false

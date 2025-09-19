@@ -17,33 +17,38 @@ class DockerModelRunnerEmbeddings(BaseModel, Embeddings):
         arbitrary_types_allowed = True
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Embed a list of documents."""
-        payload = {
-            "texts": texts,
-            "model": self.model_name
-        }
+        """Embed a list of documents using Ollama API (Docker Model Runner backend)."""
+        embeddings = []
         
-        try:
-            response = requests.post(
-                f"{self.endpoint}/embed",
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=60
-            )
-            response.raise_for_status()
+        for text in texts:
+            payload = {
+                "model": self.model_name,
+                "prompt": text
+            }
             
-            result = response.json()
-            embeddings = result.get("embeddings", [])
-            
-            if len(embeddings) != len(texts):
-                raise RuntimeError(f"Expected {len(texts)} embeddings, got {len(embeddings)}")
-            
-            return embeddings
-            
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Docker Model Runner embedding API error: {e}")
-        except (KeyError, json.JSONDecodeError) as e:
-            raise RuntimeError(f"Invalid response format from Docker Model Runner: {e}")
+            try:
+                response = requests.post(
+                    f"{self.endpoint}/api/embeddings",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=60
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                embedding = result.get("embedding", [])
+                
+                if not embedding:
+                    raise RuntimeError(f"No embedding returned for text: {text[:50]}...")
+                
+                embeddings.append(embedding)
+                
+            except requests.exceptions.RequestException as e:
+                raise RuntimeError(f"Docker Model Runner embedding API error: {e}")
+            except (KeyError, json.JSONDecodeError) as e:
+                raise RuntimeError(f"Invalid response format from Docker Model Runner: {e}")
+        
+        return embeddings
     
     def embed_query(self, text: str) -> List[float]:
         """Embed a single query text."""

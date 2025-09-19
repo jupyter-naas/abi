@@ -45,20 +45,32 @@ class DockerModelRunnerChat(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        """Generate chat response using Docker Model Runner API."""
+        """Generate chat response using Ollama API (Docker Model Runner backend)."""
         
-        prompt = self._convert_messages_to_prompt(messages)
+        # Convert messages to Ollama format
+        ollama_messages = []
+        for message in messages:
+            if isinstance(message, SystemMessage):
+                ollama_messages.append({"role": "system", "content": message.content})
+            elif isinstance(message, HumanMessage):
+                ollama_messages.append({"role": "user", "content": message.content})
+            elif isinstance(message, AIMessage):
+                ollama_messages.append({"role": "assistant", "content": message.content})
         
         payload = {
-            "prompt": prompt,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens or 2048,
-            "stop": stop or []
+            "model": self.model_name,
+            "messages": ollama_messages,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens or 2048,
+                "stop": stop or []
+            }
         }
         
         try:
             response = requests.post(
-                f"{self.endpoint}/generate",
+                f"{self.endpoint}/api/chat",
                 json=payload,
                 headers={"Content-Type": "application/json"},
                 timeout=60
@@ -66,11 +78,7 @@ class DockerModelRunnerChat(BaseChatModel):
             response.raise_for_status()
             
             result = response.json()
-            generated_text = result.get("text", "").strip()
-            
-            # Remove the "Assistant:" prefix if present
-            if generated_text.startswith("Assistant:"):
-                generated_text = generated_text[10:].strip()
+            generated_text = result.get("message", {}).get("content", "").strip()
             
             message = AIMessage(content=generated_text)
             generation = ChatGeneration(message=message)

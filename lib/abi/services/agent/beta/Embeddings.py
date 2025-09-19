@@ -11,13 +11,13 @@ ai_mode = secret.get("AI_MODE", "cloud")
 embeddings_model: Union[DockerModelRunnerEmbeddings, OpenAIEmbeddings]
 
 if ai_mode == "local":
-    # Check if Docker Model Runner is available
+    # Check if Docker Model Runner is available for local embeddings
     try:
-        response = requests.get("http://localhost:8081/health", timeout=2)
+        response = requests.get("http://localhost:12435/api/tags", timeout=2)
         if response.status_code == 200:
             embeddings_model = DockerModelRunnerEmbeddings(
-                endpoint="http://localhost:8081",
-                model_name="embeddinggemma"
+                endpoint="http://localhost:12435",
+                model_name="nomic-embed-text"
             )
             logger.info("✅ Using Docker Model Runner embeddings (local mode)")
         else:

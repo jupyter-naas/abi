@@ -16,7 +16,7 @@ model: Optional[ChatModel] = None
 
 # Try Docker Model Runner first
 try:
-    response = requests.get("http://localhost:8080/health", timeout=2)
+    response = requests.get("http://localhost:12434/api/tags", timeout=2)
     if response.status_code == 200:
         model = ChatModel(
             model_id=ID,
@@ -25,14 +25,14 @@ try:
             image=IMAGE,
             owner=OWNER,
             model=DockerModelRunnerChat(
-                endpoint="http://localhost:8080",
-                model_name="gemma3n",
+                endpoint="http://localhost:12434",
+                model_name="gemma2:2b",
                 temperature=0.4,
                 max_tokens=2048,
             ),
             context_window=CONTEXT_WINDOW,
         )
-        logger.debug("✅ Gemma3 model loaded via Docker Model Runner")
+        logger.debug("✅ Gemma2 model loaded via Docker Model Runner")
     else:
         raise ConnectionError("Docker Model Runner not healthy")
 except (requests.exceptions.RequestException, ConnectionError):
