@@ -126,16 +126,49 @@ services:
       - local
       - prod
 
-  # Docker Model Runner - Local AI Models
-  # Note: This service expects Docker Model Runner to be running on the host
-  # at http://localhost:11434/v1 with models like gemma3:4b available
-  # 
-  # To set up Docker Model Runner:
-  # 1. Ensure Docker Desktop 4.40+ with experimental features enabled
-  # 2. Run: docker model pull ai/gemma3:4B-Q4_0
-  # 3. The models will be accessible via OpenAI-compatible API at localhost:11434/v1
-  #
-  # This configuration documents the dependency without creating conflicts
+  # Local AI Models Configuration
+  # These services document the local AI model configuration
+  # The actual models run via Docker Model Runner on the host
+  
+  local-chat:
+    image: alpine:latest
+    command: ["echo", "Local chat model: ai/gemma3:4B-Q4_0 running via Docker Model Runner"]
+    environment:
+      - MODEL_NAME=ai/gemma3:4B-Q4_0
+      - MODEL_TYPE=chat
+      - API_ENDPOINT=http://localhost:11434/v1/chat/completions
+      - CONTEXT_WINDOW=131072
+      - QUANTIZATION=Q4_0
+      - PROVIDER=docker-model-runner
+    labels:
+      - "abi.model.name=ai/gemma3:4B-Q4_0"
+      - "abi.model.type=chat"
+      - "abi.model.provider=docker-model-runner"
+      - "abi.model.endpoint=http://localhost:11434/v1/chat/completions"
+      - "abi.model.context_window=131072"
+    profiles:
+      - local
+    restart: "no"
+
+  local-embeddings:
+    image: alpine:latest  
+    command: ["echo", "Local embedding model: ai/embeddinggemma:300M-Q8_0 (using deterministic embeddings)"]
+    environment:
+      - MODEL_NAME=ai/embeddinggemma:300M-Q8_0
+      - MODEL_TYPE=embeddings
+      - DIMENSIONS=768
+      - QUANTIZATION=Q8_0
+      - PROVIDER=deterministic
+      - IMPLEMENTATION=hash-based
+    labels:
+      - "abi.model.name=ai/embeddinggemma:300M-Q8_0"
+      - "abi.model.type=embeddings"
+      - "abi.model.provider=deterministic"
+      - "abi.model.dimensions=768"
+      - "abi.model.implementation=hash-based"
+    profiles:
+      - local
+    restart: "no"
 
 volumes:
   cargo-cache:
