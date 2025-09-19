@@ -1,5 +1,4 @@
 from src import secret
-from abi import logger
 
 def requirements():
     li_at = secret.get('li_at')
