@@ -170,7 +170,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     
-    from src.core.abi.models.o3_mini import model as cloud_model
+    from src.core.abi.models.gpt_4_1 import model as cloud_model
     from src.core.abi.models.qwen3_8b import model as local_model
     from src import secret
 
@@ -185,7 +185,7 @@ def create_agent(
         if not local_model:
             logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
             return None
-        selected_model = local_model
+        selected_model = local_model.model
     else:
         logger.error("AI_MODE must be either 'cloud' or 'local'")
         return None
@@ -407,7 +407,7 @@ You can browse the data and run queries there."""
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=selected_model.model,
+        chat_model=selected_model,
         tools=tools,
         agents=agents,  # Empty list for now
         intents=intents,
