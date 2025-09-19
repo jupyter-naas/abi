@@ -99,7 +99,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.dagster]
-module_name = "src.core.modules.__demo__.orchestration.definitions"
+module_name = "src.core.abi.orchestration.definitions"
 
 [tool.pytest.ini_options]
 log_cli = true

@@ -40,10 +40,10 @@ The demo shows RSS feed monitoring - a real-world orchestration example:
 
 ```bash
 # View the orchestration code
-cat src/core/__demo__/orchestration/definitions.py
+cat src/core/abi/orchestration/definitions.py
 
 # See the generated data
-ls storage/datastore/core/modules/__demo__/rss_feed/
+ls storage/datastore/core/modules/abi/orchestration/rss_feed/
 ```
 
 ### 3. Understanding the Demo
@@ -668,8 +668,8 @@ make dagster-logs
 ### Getting Help
 
 **Learning Resources:**
-- Explore the working demo: `src/core/__demo__/orchestration/`
-- Check generated data: `storage/datastore/core/modules/__demo__/rss_feed/`
+- Explore the working demo: `src/core/abi/orchestration/`
+- Check generated data: `storage/datastore/core/modules/abi/orchestration/rss_feed/`
 - Web interface: `http://localhost:3000` (when running)
 
 **Debugging Steps:**
