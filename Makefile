@@ -167,7 +167,17 @@ uv:
 
 # Create virtual environment and install all dependencies
 .venv:
-	@ uv sync --all-extras
+	@echo "📦 Setting up virtual environment..."
+	@if curl -s --connect-timeout 5 https://pypi.org >/dev/null 2>&1; then \
+		echo "🌐 Online mode - installing dependencies from PyPI"; \
+		uv sync --all-extras; \
+	else \
+		echo "🔒 Airgap mode - using existing virtual environment"; \
+		if [ ! -d .venv ]; then \
+			echo "⚠️  No virtual environment found. Please run 'make' with internet connection first."; \
+			exit 1; \
+		fi; \
+	fi
 
 # Environment file will be created dynamically by CLI during first boot
 .env:
@@ -193,24 +203,33 @@ docker-model-deps:
 	fi
 	@echo "✓ Docker Model Runner is available"
 	@echo "🔍 Checking required models..."
-	@if ! docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
-		echo "📥 Pulling chat model: ai/gemma3:4B-Q4_0"; \
-		docker model pull ai/gemma3:4B-Q4_0; \
+	@if curl -s --connect-timeout 5 https://hub.docker.com >/dev/null 2>&1; then \
+		if ! docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+			echo "📥 Pulling chat model: ai/gemma3:4B-Q4_0"; \
+			docker model pull ai/gemma3:4B-Q4_0; \
+		else \
+			echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+		fi; \
+		if ! docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+			echo "📥 Pulling embedding model: ai/embeddinggemma:300M-Q8_0"; \
+			docker model pull ai/embeddinggemma:300M-Q8_0; \
+		else \
+			echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+		fi; \
 	else \
-		echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+		echo "🔒 Airgap mode - skipping model downloads"; \
+		if docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+			echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+		else \
+			echo "⚠️  Chat model ai/gemma3:4B-Q4_0 not found (run with internet first)"; \
+		fi; \
+		if docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+			echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+		else \
+			echo "⚠️  Embedding model not found (using deterministic embeddings)"; \
+		fi; \
 	fi
-	@if ! docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
-		echo "📥 Pulling embedding model: ai/embeddinggemma:300M-Q8_0"; \
-		docker model pull ai/embeddinggemma:300M-Q8_0; \
-	else \
-		echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
-	fi
-	@echo "✅ All Docker Model Runner dependencies satisfied"
-
-# Setup NLP models (spaCy) with local caching for airgap compatibility
-nlp-models:
-	@echo "📚 Setting up NLP models..."
-	@python scripts/setup_nlp_models.py
+	@echo "✅ Docker Model Runner dependencies checked"
 
 # Create symbolic link to allow importing lib.abi from the virtual environment
 python_version=$(shell cat .python-version)
