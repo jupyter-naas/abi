@@ -12,7 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-default: deps help
+default: deps local-up
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
@@ -473,6 +473,8 @@ local-up: check-docker
 	fi
 	@echo "✓ Local containers started"
 	@make dagster-up
+	@echo "🚀 Docker Model Runner models available via HTTP API"
+	@echo "✅ Models accessible at http://localhost:11434/v1"
 	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
@@ -480,6 +482,7 @@ local-up: check-docker
 	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
+	@echo "  - Docker Model Runner: http://localhost:11434/v1"
 
 # View logs from all local services
 local-logs: check-docker

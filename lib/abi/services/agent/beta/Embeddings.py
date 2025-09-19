@@ -2,7 +2,6 @@ from langchain_openai import OpenAIEmbeddings
 from abi.models.DockerModelRunnerEmbeddings import DockerModelRunnerEmbeddings
 from src import secret
 from typing import Union
-import requests
 from abi import logger
 
 # Select embedding model based on AI_MODE
@@ -11,20 +10,11 @@ ai_mode = secret.get("AI_MODE", "cloud")
 embeddings_model: Union[DockerModelRunnerEmbeddings, OpenAIEmbeddings]
 
 if ai_mode == "local":
-    # Check if Docker Model Runner is available for local embeddings
-    try:
-        response = requests.get("http://localhost:12435/api/tags", timeout=2)
-        if response.status_code == 200:
-            embeddings_model = DockerModelRunnerEmbeddings(
-                endpoint="http://localhost:12435",
-                model_name="nomic-embed-text"
-            )
-            logger.info("✅ Using Docker Model Runner embeddings (local mode)")
-        else:
-            raise ConnectionError("Docker Model Runner not healthy")
-    except (requests.exceptions.RequestException, ConnectionError):
-        logger.warning("⚠️ Docker Model Runner not available, falling back to OpenAI embeddings")
-        embeddings_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+    # Use Docker Model Runner deterministic embeddings for local mode
+    embeddings_model = DockerModelRunnerEmbeddings(
+        model_name="ai/embeddinggemma:300M-Q8_0"
+    )
+    logger.info("✅ Using Docker Model Runner deterministic embeddings (768 dimensions)")
 else:
     embeddings_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 

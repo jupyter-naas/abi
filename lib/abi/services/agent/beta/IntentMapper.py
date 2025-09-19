@@ -27,16 +27,20 @@ class IntentMapper:
     def __init__(self, intents: list[Intent]):
         self.intents = intents
         
-        # Determine embedding dimension based on AI mode
-        from src import secret
-        ai_mode = secret.get("AI_MODE", "cloud")
-        embedding_dimension = 768 if ai_mode == "local" else 1536
+        # Determine embedding dimension based on actual embeddings model
+        from .Embeddings import embeddings_model
+        
+        # Test embedding dimension with a sample text
+        test_embedding = embeddings_model.embed_query("test")
+        embedding_dimension = len(test_embedding)
         
         self.vector_store = VectorStore(dimension=embedding_dimension)
         intents_values = [intent.intent_value for intent in intents]
         self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values))
         
         # Use local model for intent mapping if in local mode
+        from src import secret
+        ai_mode = secret.get("AI_MODE", "cloud")
         if ai_mode == "local":
             from src.core.gemma.models.gemma3_4b import model as local_model
             if local_model:

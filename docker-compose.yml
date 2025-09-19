@@ -126,46 +126,13 @@ services:
       - local
       - prod
 
-  # Docker Model Runner - Gemma Chat Model
-  gemma-chat:
-    image: ollama/ollama:latest
-    ports:
-      - "12434:11434"
-    volumes:
-      - gemma_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    networks:
-      - abi-network
-    profiles:
-      - local
-      - prod
-    entrypoint: ["/bin/bash", "-c", "ollama serve & sleep 10 && ollama pull gemma2:2b && wait"]
-
-  # Docker Model Runner - Embedding Model  
-  gemma-embedding:
-    image: ollama/ollama:latest
-    ports:
-      - "12435:11434"
-    volumes:
-      - embedding_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    networks:
-      - abi-network
-    profiles:
-      - local
-      - prod
-    entrypoint: ["/bin/bash", "-c", "ollama serve & sleep 10 && ollama pull nomic-embed-text && wait"]
 
 volumes:
   cargo-cache:
   venv_cache:
   oxigraph_data:
   postgres_data:
-  dagster_home:
-  gemma_data:
-  embedding_data: 
+  dagster_home: 
 
 networks:
   abi-network:

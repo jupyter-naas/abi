@@ -51,7 +51,71 @@ class DockerModelRunnerChat(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        """Generate chat response using Ollama API (Docker Model Runner backend)."""
+        """Generate chat response using Docker Model Runner OpenAI API or Ollama."""
+        
+        # If endpoint contains /v1, use OpenAI format (Docker Model Runner)
+        if "/v1" in self.endpoint:
+            return self._generate_openai_format(messages, stop, run_manager, **kwargs)
+        else:
+            # Use Ollama API format for standard Ollama endpoints
+            return self._generate_ollama_format(messages, stop, run_manager, **kwargs)
+    
+    def _generate_openai_format(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Generate using OpenAI-compatible API (Docker Model Runner)."""
+        
+        # Convert messages to OpenAI format
+        api_messages = []
+        for message in messages:
+            if isinstance(message, SystemMessage):
+                api_messages.append({"role": "system", "content": message.content})
+            elif isinstance(message, HumanMessage):
+                api_messages.append({"role": "user", "content": message.content})
+            elif isinstance(message, AIMessage):
+                api_messages.append({"role": "assistant", "content": message.content})
+        
+        payload = {
+            "model": self.model_name,
+            "messages": api_messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens or 4096,
+            "stop": stop or []
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.endpoint}/chat/completions",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=120
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            generated_text = result["choices"][0]["message"]["content"].strip()
+            
+            message = AIMessage(content=generated_text)
+            generation = ChatGeneration(message=message)
+            return ChatResult(generations=[generation])
+            
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"Docker Model Runner API error: {e}")
+        except (KeyError, json.JSONDecodeError) as e:
+            raise RuntimeError(f"Invalid response format from Docker Model Runner: {e}")
+
+    def _generate_ollama_format(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Fallback to Ollama API format."""
         
         # Convert messages to Ollama format
         ollama_messages = []
@@ -69,7 +133,7 @@ class DockerModelRunnerChat(BaseChatModel):
             "stream": False,
             "options": {
                 "temperature": self.temperature,
-                "num_predict": self.max_tokens or 2048,
+                "num_predict": self.max_tokens or 4096,
                 "stop": stop or []
             }
         }
@@ -79,7 +143,7 @@ class DockerModelRunnerChat(BaseChatModel):
                 f"{self.endpoint}/api/chat",
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=60
+                timeout=120
             )
             response.raise_for_status()
             
