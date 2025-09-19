@@ -35,13 +35,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Base
 from langchain_core.tools import tool
 from abi import logger
 import pydash as pd
-import spacy
 import rich
-
-
-
-
-nlp = spacy.load("en_core_web_sm")
+import re
 
 
 class IntentState(MessagesState):
@@ -330,11 +325,10 @@ Last user message: "{last_human_message.content}"
         return Command(update={"intent_mapping": {"intents": filtered_intents}})
     
     def _extract_entities(self, text: str) -> list[str]:
-        """Extract named entities from text using spaCy.
+        """Extract named entities from text using regex patterns.
         
-        Uses the spaCy NLP model to identify and extract named entities
-        from the provided text, returning them in lowercase for consistent
-        comparison.
+        Uses simple regex patterns to identify potential named entities
+        including proper nouns, dates, numbers, and acronyms.
         
         Args:
             text (str): Input text to extract entities from
@@ -342,8 +336,20 @@ Last user message: "{last_human_message.content}"
         Returns:
             list[str]: List of extracted entity texts in lowercase
         """
-        doc = nlp(text)
-        return [ent.text.lower() for ent in doc.ents]
+        # Extract potential entities using regex patterns
+        patterns = [
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b',  # Proper nouns
+            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',   # Dates
+            r'\b\d+(?:\.\d+)?\b',                    # Numbers
+            r'\b[A-Z]{2,}\b'                         # Acronyms
+        ]
+        
+        entities = []
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            entities.extend([match.lower() for match in matches])
+        
+        return list(set(entities))  # Remove duplicates
     
     def entity_check(self, state: IntentState):
         """Validate entity consistency between user message and intents.

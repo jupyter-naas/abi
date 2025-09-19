@@ -17,8 +17,6 @@ dependencies = [
     "sparqlwrapper>=2.0.0",
     "click>=8.2.1",
     "qdrant-client>=1.14.3",
-    "spacy>=3.8.7",
-    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
     "pip>=25.1.1",
     "pydantic>=2.11.5"
 ]

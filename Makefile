@@ -207,6 +207,11 @@ docker-model-deps:
 	fi
 	@echo "✅ All Docker Model Runner dependencies satisfied"
 
+# Setup NLP models (spaCy) with local caching for airgap compatibility
+nlp-models:
+	@echo "📚 Setting up NLP models..."
+	@python scripts/setup_nlp_models.py
+
 # Create symbolic link to allow importing lib.abi from the virtual environment
 python_version=$(shell cat .python-version)
 .venv/lib/python$(python_version)/site-packages/abi: deps
