@@ -6,14 +6,12 @@ from langchain_core.tools import StructuredTool, BaseTool
 from dataclasses import dataclass
 from abi import logger
 from pydantic import Field
-from typing import Annotated, Dict, Any, List
+from typing import Annotated, Dict, Any
 from rdflib import (
     Graph,
-    URIRef,
     Literal,
     Namespace,
     RDF,
-    OWL,
     RDFS,
     XSD,
     DCTERMS,

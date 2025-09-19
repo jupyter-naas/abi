@@ -15,28 +15,66 @@ from pathlib import Path
 from rdflib import Graph
 from datetime import datetime
 
-from RSSFeedToBFOPipeline import (
+from .RSSFeedToBFOPipeline import (
     RSSFeedToBFOPipeline,
     RSSFeedToBFOPipelineConfiguration,
     RSSFeedToBFOPipelineParameters
 )
 
 # Mock triple store service for testing
-class MockTripleStoreService:
+from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
+from typing import Callable
+import rdflib.query
+
+class MockTripleStoreService(ITripleStoreService):
     def __init__(self):
         self.graphs = []
         
-    def insert_graph(self, graph: Graph) -> bool:
+    def insert(self, graph: Graph):
         """Insert graph into triple store."""
         self.graphs.append(graph)
         print(f"📥 Inserted graph with {len(graph)} triples into triple store")
         return True
+        
+    def insert_graph(self, graph: Graph) -> bool:
+        """Legacy method for compatibility."""
+        return self.insert(graph)
         
     def get_graph_count(self) -> int:
         return len(self.graphs)
         
     def get_total_triples(self) -> int:
         return sum(len(graph) for graph in self.graphs)
+        
+    def remove(self, triples: Graph):
+        pass
+        
+    def get(self) -> Graph:
+        combined = Graph()
+        for graph in self.graphs:
+            combined += graph
+        return combined
+        
+    def query(self, query: str) -> rdflib.query.Result:
+        return self.get().query(query)
+        
+    def query_view(self, view: str, query: str) -> rdflib.query.Result:
+        return self.get().query(query)
+        
+    def get_subject_graph(self, subject: str) -> Graph:
+        return Graph()
+        
+    def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
+        return "mock_subscription"
+        
+    def unsubscribe(self, subscription_id: str):
+        pass
+        
+    def load_schema(self, filepath: str):
+        pass
+        
+    def get_schema_graph(self) -> Graph:
+        return Graph()
 
 class OrchestrationToOxigraphProcessor:
     """Processes RSS feed files and sends them to Oxigraph via BFO pipeline."""
@@ -184,7 +222,7 @@ class OrchestrationToOxigraphProcessor:
         
         total_triples = self.triple_store_service.get_total_triples()
         
-        print(f"\n📊 Batch Processing Results:")
+        print("\n📊 Batch Processing Results:")
         print(f"   ✅ Processed: {processed}")
         print(f"   ❌ Failed: {failed}")
         print(f"   📈 Total triples in store: {total_triples}")

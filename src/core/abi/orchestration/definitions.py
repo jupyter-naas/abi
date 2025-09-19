@@ -1,6 +1,5 @@
 import dagster
 import os
-import json
 import yaml
 from typing import Dict, Any, List
 
@@ -102,7 +101,6 @@ def bfo_ttl_asset(context: dagster.AssetExecutionContext, raw_rss_asset):
     from abi.utils.Storage import ensure_data_directory
     import json
     import xml.etree.ElementTree as ET
-    from pathlib import Path
     
     # Create TTL output directory
     data_dir = ensure_data_directory("abi", "orchestration")
@@ -168,13 +166,47 @@ def bfo_ttl_asset(context: dagster.AssetExecutionContext, raw_rss_asset):
         )
         
         # Mock triple store for TTL generation
-        class TTLGeneratorStore:
+        from abi.services.triple_store.TripleStorePorts import ITripleStoreService, OntologyEvent
+        from rdflib import Graph
+        from typing import Callable
+        import rdflib.query
+        
+        class TTLGeneratorStore(ITripleStoreService):
             def __init__(self):
                 self.generated_graph = None
                 
             def insert(self, graph):
                 self.generated_graph = graph
                 return True
+                
+            def remove(self, triples: Graph):
+                pass
+                
+            def get(self) -> Graph:
+                return self.generated_graph or Graph()
+                
+            def query(self, query: str) -> rdflib.query.Result:
+                return self.get().query(query)
+                
+            def query_view(self, view: str, query: str) -> rdflib.query.Result:
+                return self.get().query(query)
+                
+            def get_subject_graph(self, subject: str) -> Graph:
+                return Graph()
+                
+            def subscribe(self, topic: tuple, event_type: OntologyEvent, callback: Callable) -> str:
+                return "mock_subscription"
+                
+            def unsubscribe(self, subscription_id: str):
+                pass
+                
+            def load_schema(self, filepath: str):
+                """Load schema file - no-op for mock."""
+                pass
+                
+            def get_schema_graph(self) -> Graph:
+                """Get schema graph - returns empty graph for mock."""
+                return Graph()
         
         # Initialize BFO pipeline
         ttl_store = TTLGeneratorStore()
@@ -226,7 +258,6 @@ def bfo_ttl_asset(context: dagster.AssetExecutionContext, raw_rss_asset):
 def oxigraph_insert_asset(context: dagster.AssetExecutionContext, bfo_ttl_asset):
     """Send TTL files to Oxigraph triple store."""
     import requests
-    from pathlib import Path
     
     ttl_file_path = bfo_ttl_asset["ttl_file_path"]
     article_id = bfo_ttl_asset["article_id"]

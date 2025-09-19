@@ -1,10 +1,8 @@
-import json
 import pytest
-from datetime import datetime
-from unittest.mock import Mock, MagicMock
-from rdflib import Graph, Namespace, URIRef, Literal
+from unittest.mock import Mock
+from rdflib import Graph, Namespace, Literal
 
-from RSSFeedToBFOPipeline import (
+from .RSSFeedToBFOPipeline import (
     RSSFeedToBFOPipeline, 
     RSSFeedToBFOPipelineConfiguration, 
     RSSFeedToBFOPipelineParameters
@@ -109,7 +107,6 @@ class TestRSSFeedToBFOPipeline:
         
         # Define namespaces for testing
         BFO = Namespace("http://purl.obolibrary.org/obo/")
-        RSS = Namespace("http://ontology.naas.ai/rss/")
         
         # Test BFO 7 buckets representation
         triples = list(result_graph)
@@ -232,7 +229,7 @@ def test_integration_with_sample_data():
     result_graph = pipeline.run(parameters)
     
     # Print some statistics
-    print(f"\n=== BFO RSS Pipeline Integration Test Results ===")
+    print("\n=== BFO RSS Pipeline Integration Test Results ===")
     print(f"Generated triples: {len(result_graph)}")
     print(f"Namespaces: {list(dict(result_graph.namespaces()).keys())}")
     
