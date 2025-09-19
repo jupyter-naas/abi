@@ -210,6 +210,11 @@ git-deps: .git/hooks/pre-commit
 # Ensure Docker Model Runner is available and models are pulled
 docker-model-deps:
 	@echo "🤖 Checking Docker Model Runner..."
+	@if [ "$$CI" = "true" ] || [ "$$GITHUB_ACTIONS" = "true" ]; then \
+		echo "🔄 CI environment detected - skipping Docker Model Runner checks"; \
+		echo "✓ Docker Model Runner checks skipped in CI"; \
+		exit 0; \
+	fi
 	@if ! docker model status >/dev/null 2>&1; then \
 		echo "❌ Docker Model Runner not available. Please ensure:"; \
 		echo "   1. Docker Desktop 4.40+ is installed"; \
