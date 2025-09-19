@@ -245,9 +245,9 @@ def run_agent(agent: Agent):
     init_conversation_file()
     
     # Show greeting when truly ready for input - instant like responses
-    greeting_line = "Abi: Hello, World!"
+    greeting_line = f"{agent.name}: Hello, World!"
     
-    console.print("Abi:", style="bold green", end=" ")
+    console.print(f"{agent.name}:", style="bold green", end=" ")
     console.print("Hello, World!", style="bright_white")
     console.print("─" * console.width, style="dim")
     print()  # Add spacing after separator

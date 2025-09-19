@@ -209,7 +209,7 @@ if __name__ == "__main__":
     abi_api_key = os.getenv("ABI_API_KEY")
     workspace_id = config.workspace_id
     github_access_token = os.getenv("GITHUB_ACCESS_TOKEN")
-    github_repository = config.github_project_repository
+    github_repository = config.github_repository
     
     # Debug logging for environment variables
     logger.debug(f"Environment variable status:")

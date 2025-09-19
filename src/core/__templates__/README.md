@@ -80,7 +80,7 @@ Description + List of functions
 ##### Configuration
 
 ```python
-from src.custom.modules.perplexity.integrations.PerplexityIntegration import (
+from src.custom.perplexity.integrations.PerplexityIntegration import (
     PerplexityIntegration,
     PerplexityIntegrationConfiguration
 )

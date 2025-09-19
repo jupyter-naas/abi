@@ -37,7 +37,7 @@ make chat agent=LinkedInAgent
 
 Or use the integration directly in your code:
 ```python
-from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import (
+from src.marketplace.applications.linkedin.integrations.LinkedInIntegration import (
     LinkedInIntegration,
     LinkedInIntegrationConfiguration
 )
@@ -167,7 +167,7 @@ Core integration providing authenticated access to LinkedIn's internal APIs thro
 #### Configuration
 
 ```python
-from src.marketplace.modules.applications.linkedin.integrations.LinkedInIntegration import (
+from src.marketplace.applications.linkedin.integrations.LinkedInIntegration import (
     LinkedInIntegration,
     LinkedInIntegrationConfiguration
 )
