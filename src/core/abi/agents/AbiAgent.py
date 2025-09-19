@@ -11,7 +11,8 @@ from abi import logger
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 DESCRIPTION = "Coordinates and manages specialized agents."
-SYSTEM_PROMPT = """# ROLE
+# Full system prompt for cloud mode
+SYSTEM_PROMPT_FULL = """# ROLE
 You are Abi, the AI Super Assistant and Supervisor Agent developed by NaasAI. You function as:
 - **Multi-Agent System Orchestrator**: Central coordinator managing specialized AI agents in a hierarchical ecosystem
 - **Elite Strategic Advisor**: High-level consultant with expertise spanning business strategy, technical architecture, and communication excellence  
@@ -154,6 +155,38 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **Optimize for user productivity** and satisfaction in multi-agent conversation flows
 """
 
+# Simplified system prompt for local mode
+SYSTEM_PROMPT_LOCAL = """# ROLE
+You are Abi, the AI Super Assistant developed by NaasAI. You are a helpful, knowledgeable assistant that can:
+- Answer questions about yourself and ABI (Agentic Brain Infrastructure)
+- Provide strategic advice and technical guidance
+- Help with various tasks and conversations
+- Support both English and French interactions
+
+# IDENTITY
+- **Name**: Abi (AI Super Assistant)
+- **Developer**: NaasAI
+- **Purpose**: Agentic Brain Infrastructure - empowering intelligent, autonomous AI systems
+
+# GUIDELINES
+- Always identify as Abi when asked about your identity
+- Be helpful, concise, and professional
+- Respond in the user's preferred language
+- Focus on providing valuable assistance
+- Maintain a friendly but professional tone
+
+# CONSTRAINTS
+- Always identify as Abi, AI Super Assistant developed by NaasAI
+- Do not mention competing AI providers - focus on capabilities
+- Provide accurate information about ABI and NaasAI's mission
+"""
+
+# Select system prompt based on AI mode
+def get_system_prompt(ai_mode: str) -> str:
+    return SYSTEM_PROMPT_LOCAL if ai_mode == "local" else SYSTEM_PROMPT_FULL
+
+SYSTEM_PROMPT = SYSTEM_PROMPT_FULL  # Default for backward compatibility
+
 SUGGESTIONS: list = [
     {
         "label": "Web Search",
@@ -178,18 +211,22 @@ def create_agent(
     from src.core.gemma.models.gemma3_4b import model as local_model
     from src import secret
 
-    # Define model
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
+    # Define model and system prompt based on AI mode
+    ai_mode = secret.get("AI_MODE", "cloud")  # Default to cloud if not set
+    system_prompt = get_system_prompt(ai_mode)
+    
     if ai_mode == "cloud":
         if not cloud_model:
             logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
             return None
         selected_model = cloud_model.model
+        logger.debug("✅ Using cloud model with full system prompt")
     elif ai_mode == "local":
         if not local_model:
-            logger.error("Local model (gemma3n) not available - Docker Model Runner not running")
+            logger.error("Local model (Gemma) not available - Docker Model Runner not running")
             return None
         selected_model = local_model.model
+        logger.debug("✅ Using local Gemma model with simplified system prompt")
     else:
         logger.error("AI_MODE must be either 'cloud' or 'local'")
         return None
@@ -431,11 +468,16 @@ You can browse the data and run queries there."""
 
     logger.debug(f"Intents: {intents}")
 
-    # Set configuration
+    # Set configuration with appropriate system prompt
     if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
-        )
+        # Replace [AGENTS_LIST] placeholder with actual agents
+        final_system_prompt = system_prompt.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents]))
+        agent_configuration = AgentConfiguration(system_prompt=final_system_prompt)
+    else:
+        # Override system prompt if configuration provided
+        final_system_prompt = system_prompt.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents]))
+        agent_configuration.system_prompt = final_system_prompt
+        
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
