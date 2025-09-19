@@ -22,6 +22,12 @@ class DockerModelRunnerChat(BaseChatModel):
     def _llm_type(self) -> str:
         return "docker-model-runner"
     
+    def bind_tools(self, tools, **kwargs):
+        """Bind tools to the model. For now, return self since we don't support tool calling."""
+        # Note: Docker Model Runner doesn't support tool calling yet
+        # Return self to maintain compatibility with Agent framework
+        return self
+    
     def _convert_messages_to_prompt(self, messages: List[BaseMessage]) -> str:
         """Convert LangChain messages to a single prompt string."""
         prompt_parts = []

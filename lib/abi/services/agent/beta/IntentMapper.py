@@ -1,8 +1,9 @@
 from .VectorStore import VectorStore
 from .Embeddings import openai_embeddings_batch, openai_embeddings
 from langchain_openai import ChatOpenAI
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage, HumanMessage
-from typing import Tuple, Any
+from typing import Tuple, Any, Union
 from enum import Enum
 from dataclasses import dataclass
 
@@ -20,16 +21,31 @@ class Intent:
 class IntentMapper:
     intents: list[Intent]
     vector_store: VectorStore
-    model: ChatOpenAI
+    model: Union[ChatOpenAI, BaseChatModel]
     system_prompt: str
     
     def __init__(self, intents: list[Intent]):
         self.intents = intents
-        self.vector_store = VectorStore()
+        
+        # Determine embedding dimension based on AI mode
+        from src import secret
+        ai_mode = secret.get("AI_MODE", "cloud")
+        embedding_dimension = 768 if ai_mode == "local" else 1536
+        
+        self.vector_store = VectorStore(dimension=embedding_dimension)
         intents_values = [intent.intent_value for intent in intents]
         self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values))
         
-        self.model = ChatOpenAI(model="gpt-4o-mini")
+        # Use local model for intent mapping if in local mode
+        if ai_mode == "local":
+            from src.core.gemma.models.gemma3_4b import model as local_model
+            if local_model:
+                self.model = local_model.model
+            else:
+                # Fallback to OpenAI if local model not available
+                self.model = ChatOpenAI(model="gpt-4o-mini")
+        else:
+            self.model = ChatOpenAI(model="gpt-4o-mini")
         self.system_prompt = """
 You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
 
