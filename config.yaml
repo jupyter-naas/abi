@@ -43,6 +43,8 @@ modules:
     enabled: true
   - path: src/marketplace/applications/git
     enabled: true
+  - path: src/marketplace/applications/github
+    enabled: true
   - path: src/marketplace/applications/google_search
     enabled: true
   - path: src/marketplace/applications/naas
