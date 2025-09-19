@@ -59,7 +59,7 @@ The `ExchangeratesapiIntegration` class provides methods to interact with the Ex
 ##### Configuration
 
 ```python
-from src.marketplace.modules.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import (
+from src.marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import (
     ExchangeratesapiIntegration,
     ExchangeratesapiIntegrationConfiguration
 )
@@ -103,7 +103,7 @@ print(symbols["symbols"])  # Dictionary of currency codes and names
 
 **Using with LangChain Tools:**
 ```python
-from src.marketplace.modules.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import as_tools
+from src.marketplace.applications.exchangeratesapi.integrations.ExchangeratesapiIntegration import as_tools
 
 # Convert integration to LangChain tools
 tools = as_tools(config)
