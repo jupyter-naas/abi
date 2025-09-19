@@ -21,7 +21,7 @@ class FeatureRequestWorkflowConfiguration(WorkflowConfiguration):
     """
     github_integration_config: GitHubIntegrationConfiguration
     github_graphql_integration_config: GitHubGraphqlIntegrationConfiguration
-    repo_name: str = config.github_support_repository
+    repo_name: str = config.github_repository
     project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
 
 class FeatureRequestParameters(WorkflowParameters):

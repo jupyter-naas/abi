@@ -28,7 +28,7 @@ make chat Agent=SupportAgent
 ### Structure
 
 ```
-src.marketplace.modules.domains.support/
+src.marketplace.domains.support/
 ├── agents/                                        # AI agents
 │   └── SupportAgent.py                           # Main support assistant agent
 ├── workflows/                                     # Business workflows
@@ -59,7 +59,7 @@ An AI agent that provides natural language interface for GitHub issue management
 5. **Project Integration**: Manages issues within GitHub projects
 
 ```python
-from src.marketplace.modules.domains.support.agents.SupportAgent import create_agent
+from src.marketplace.domains.support.agents.SupportAgent import create_agent
 
 # Create agent
 agent = create_agent()
@@ -81,7 +81,7 @@ Orchestrates GitHub issue management operations:
 5. **Issue Validation**: Validate input parameters before creation
 
 ```python
-from src.marketplace.modules.domains.support.workflows.GitHubSupportWorkflows import (
+from src.marketplace.domains.support.workflows.GitHubSupportWorkflows import (
     GitHubSupportWorkflows,
     GitHubSupportWorkflowsConfiguration
 )
@@ -111,7 +111,7 @@ Complete integration with GitHub's REST API:
 5. **Activity Tracking**: Monitor repository activities
 
 ```python
-from src.marketplace.modules.domains.support.integrations.GithubIntegration import (
+from src.marketplace.domains.support.integrations.GithubIntegration import (
     GithubIntegration,
     GithubIntegrationConfiguration
 )
@@ -137,7 +137,7 @@ Advanced integration using GitHub's GraphQL API:
 4. **Field Operations**: Handle custom project fields
 
 ```python
-from src.marketplace.modules.domains.support.integrations.GithubGraphqlIntegration import (
+from src.marketplace.domains.support.integrations.GithubGraphqlIntegration import (
     GithubGraphqlIntegration,
     GithubGraphqlIntegrationConfiguration
 )

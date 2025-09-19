@@ -52,7 +52,7 @@ The deployment process is fully automated through GitHub Actions workflows:
      - Creates or updates a NAAS space with environment variables and resource configurations (CPU, memory)
 
 4. **Access the Deployed API**:
-   - The API will be accessible at: `https://<github_project_repository.name>-api.default.space.naas.ai/`
+   - The API will be accessible at: `https://<github_repository.name>-api.default.space.naas.ai/`
    - The deployment uses the following configuration:
      - Port: 9879
      - CPU: 1 core
