@@ -2,10 +2,10 @@
 
 import requests
 import json
-from typing import Any, Dict, List, Optional, Iterator
+from typing import Any, List, Optional, Iterator
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage, AIMessageChunk
+from langchain_core.outputs import ChatGeneration, ChatResult, ChatGenerationChunk
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from pydantic import Field
 
@@ -88,7 +88,10 @@ class DockerModelRunnerChat(BaseChatModel):
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
-    ) -> Iterator[ChatGeneration]:
+    ) -> Iterator[ChatGenerationChunk]:
         """Stream chat response (fallback to non-streaming for now)."""
         result = self._generate(messages, stop, run_manager, **kwargs)
-        yield result.generations[0]
+        generation = result.generations[0]
+        chunk_message = AIMessageChunk(content=generation.message.content)
+        chunk = ChatGenerationChunk(message=chunk_message)
+        yield chunk

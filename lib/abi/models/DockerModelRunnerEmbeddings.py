@@ -2,7 +2,7 @@
 
 import requests
 import json
-from typing import List, Optional
+from typing import List
 from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel, Field
 
