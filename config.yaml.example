@@ -17,35 +17,35 @@ config:
     default_agent: "Abi" # Which agent to set as default in workspace
 
 modules:
-  - path: src/core/modules/abi
+  - path: src/core/abi
     enabled: true
-  - path: src/core/modules/chatgpt
+  - path: src/core/chatgpt
     enabled: true
-  - path: src/core/modules/claude
+  - path: src/core/claude
     enabled: true
-  - path: src/core/modules/deepseek
+  - path: src/core/deepseek
     enabled: true
-  - path: src/core/modules/gemini
+  - path: src/core/gemini
     enabled: true
-  - path: src/core/modules/gemma
+  - path: src/core/gemma
     enabled: true
-  - path: src/core/modules/grok
+  - path: src/core/grok
     enabled: true
-  - path: src/core/modules/llama
+  - path: src/core/llama
     enabled: true
-  - path: src/core/modules/mistral
+  - path: src/core/mistral
     enabled: true
-  - path: src/core/modules/perplexity
+  - path: src/core/perplexity
     enabled: true
-  - path: src/core/modules/qwen
+  - path: src/core/qwen
     enabled: true
-  - path: src/core/modules/templatablesparqlquery
+  - path: src/core/templatablesparqlquery
     enabled: true
-  - path: src/marketplace/modules/applications/git
+  - path: src/marketplace/applications/git
     enabled: true
-  - path: src/marketplace/modules/applications/github
+  - path: src/marketplace/applications/github
     enabled: true
-  - path: src/marketplace/modules/applications/naas
+  - path: src/marketplace/applications/naas
     enabled: true
-  - path: src/marketplace/modules/domains/support
+  - path: src/marketplace/domains/support
     enabled: true

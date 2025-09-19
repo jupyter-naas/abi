@@ -11,10 +11,23 @@
   - [Installation](#installation)
     - [Pre-requisites](#pre-requisites)
     - [Installation Options](#installation-options)
-    - [Setup Environment](#setup-environment)
-    - [Configure YAML](#configure-yaml)
+    - [Automated Setup](#automated-setup)
+    - [Manual Configuration (Advanced)](#manual-configuration-advanced)
   - [Quickstart](#quickstart)
-    - [Start Chatting](#start-chatting)
+    - [One-Command Start](#one-command-start)
+    - [Alternative Agents](#alternative-agents)
+    - [AI Mode Selection](#ai-mode-selection)
+    - [Quick Commands Reference](#quick-commands-reference)
+    - [Troubleshooting](#troubleshooting)
+  - [Advanced Usage](#advanced-usage)
+    - [Development \& API](#development--api)
+    - [Data Management](#data-management)
+    - [Orchestration \& Monitoring](#orchestration--monitoring)
+    - [Testing \& Quality Assurance](#testing--quality-assurance)
+    - [Package Management](#package-management)
+    - [Documentation \& Publishing](#documentation--publishing)
+    - [Environment URLs](#environment-urls)
+    - [Module System](#module-system)
   - [Help \& Support](#help--support)
 
 ## Introduction
@@ -80,62 +93,299 @@ git pull --rebase upstream main
 git push
 ```
 
-### Setup Environment
+### Automated Setup
 
-1. Copy this file to .env
+ABI now features an **automated setup process** that guides you through the initial configuration. Simply run:
+
+```bash
+make
+```
+
+This will:
+1. **Install Dependencies** - Automatically set up uv, Python 3.10, and all required packages
+2. **Interactive Setup** - Guide you through personal information and preferences
+3. **AI Mode Selection** - Choose between local (privacy-focused) or cloud (more powerful) AI
+4. **Service Configuration** - Automatically start local services (Oxigraph, PostgreSQL, Dagster)
+5. **Module Configuration** - Scan available modules and configure API keys as needed
+6. **Start ABI Agent** - Launch the main conversational AI interface
+
+The setup process is interactive and will ask you for:
+- **Personal Information**: Your name and email for personalization
+- **AI Mode**: Choose local (privacy) or cloud (performance) AI processing
+- **API Keys**: Optional keys for enhanced features and modules
+- **Module Preferences**: Enable/disable specific functionality modules
+
+### Manual Configuration (Advanced)
+
+If you prefer manual configuration, you can still use the traditional approach:
+
+1. **Environment Setup**
 ```bash
 cp .env.example .env
+# Edit .env with your credentials
 ```
-2. Replace placeholder values with your actual credentials
-3. Uncomment (remove #) from lines you want to activate. The variables are used to configure the assistant.
 
-**Available AI Models**: ABI supports multiple LLM providers. Configure the API keys for the models you want to use:
-- `OPENAI_API_KEY` - For GPT-4o and Llama 3.3 70B models
-- `ANTHROPIC_API_KEY` - For Claude 3.5 Sonnet model
-- `GOOGLE_API_KEY` - For Gemini 2.0 Flash model
-- `MISTRAL_API_KEY` - For Mistral Large 2 model
-
-Note: The .env file should never be committed to version control
-as it contains sensitive credentials
-
-### Configure YAML
-
-1. Copy the example file to config.yaml
+2. **YAML Configuration**
 ```bash
 cp config.yaml.example config.yaml
+# Edit config.yaml with your settings
 ```
 
-2. Edit the file with your configuration:
-- `workspace_id`: Workspace ID in Naas Platform. It will be used for storage and publishing modules components. Access it from this [link](https://naas.ai/account/settings)
-- `github_project_repository`: Your Github repository name (e.g. "jupyter-naas/abi"). It will be used in documentation and API as registry name.
-- `github_support_repository`: A Github repository name (e.g. "jupyter-naas/abi") to store support issues. It will be used by the support agent to create all requests or report bugs. It can be the same as `github_project_repository`.
-- `github_project_id`: Your Github project number stored in Github URL (e.g. 12 for https://github.com/jupyter-naas/abi/projects/12). It will be used to assign all your issues to your github project.
+**Available AI Models**: ABI supports multiple LLM providers. Configure the API keys for the models you want to use:
+- `OPENAI_API_KEY` - For GPT-4o and other OpenAI models
+- `ANTHROPIC_API_KEY` - For Claude 3.5 Sonnet model
+- `GOOGLE_API_KEY` - For Gemini models
+- `MISTRAL_API_KEY` - For Mistral models
+
+**Configuration Parameters**:
+- `workspace_id`: Naas Platform workspace ID for storage and publishing
+- `github_repository`: Your repository name (e.g. "jupyter-naas/abi")
+- `github_project_id`: GitHub project number for issue management
 - `triple_store_path`: Path to the ontology store (e.g. "storage/triplestore")
-- `api_title`: API title (e.g. "ABI API") displayed in the documentation.
-- `api_description`: API description (e.g. "API for ABI, your Artifical Business Intelligence") displayed in the documentation.
-- `logo_path`: Path to the logo (e.g. "assets/logo.png") used in the API documentation.
-- `favicon_path`: Path to the favicon (e.g. "assets/favicon.ico") used in the API documentation.
-- `storage_name`: Name of the storage (e.g. "abi")
-- `space_name`: Name of the space (e.g. "abi")
+- `api_title`: API title displayed in documentation
+- `api_description`: API description for documentation
+- `logo_path`: Path to logo for API documentation
+- `favicon_path`: Path to favicon for API documentation
 
 ## Quickstart
 
-### Start Chatting
+### One-Command Start
 
-Now, the project is installed and configured, you can start chatting with the core agent by running the following command:
+The simplest way to get started is with the automated setup:
 
 ```bash
-make chat-abi-agent
+make
 ```
 
-This command will:
-1. Setup the environment and install dependencies
-2. Initialize your .env configuration 
-3. Start the Oxigraph triple store automatically (via Docker)
-4. Initialize your knowledge graph
-5. Run the Abi agent
+This single command handles everything: dependencies, configuration, services, and starts the ABI agent.
 
-It can take a few minutes the first time you run it as it needs to download and start the Oxigraph Docker container (though Oxigraph starts much faster than alternatives).
+### Alternative Agents
+
+After initial setup, you can start different specialized agents:
+
+**Main Agents:**
+```bash
+make                        # Default ABI agent (automated setup)
+make chat-abi-agent        # Main ABI agent (direct start)
+make chat-naas-agent       # Naas platform integration agent
+make chat-support-agent    # Customer support specialized agent
+```
+
+**Local AI Agents (Privacy-focused):**
+```bash
+make chat-qwen-agent       # Qwen3 8B - Multilingual coding assistant
+make chat-deepseek-agent   # DeepSeek R1 8B - Advanced reasoning
+make chat-gemma-agent      # Gemma3 4B - Lightweight and fast
+```
+
+### AI Mode Selection
+
+During setup, you'll choose between two AI processing modes:
+
+**🔒 Local Mode (Privacy-focused)**
+- All AI processing happens on your machine
+- Requires [Ollama](https://ollama.com/download) installation
+- Uses models like Qwen3 8B, DeepSeek R1, Gemma3
+- Complete data privacy and offline capabilities
+- Slower processing but fully autonomous
+
+**☁️ Cloud Mode (Performance-focused)**
+- Uses cloud AI providers (OpenAI, Anthropic, Google, etc.)
+- Requires API keys for chosen providers
+- Faster and more powerful AI capabilities
+- Data is sent to third-party services
+- Better for complex reasoning and analysis
+
+### Quick Commands Reference
+
+**Start Services:**
+```bash
+make local-up              # Start all local services
+make local-down            # Stop all local services
+make local-logs            # View service logs
+```
+
+**Development Tools:**
+```bash
+make api                   # Start API server (port 9879)
+make mcp                   # Start MCP server for Claude Desktop
+make sparql-terminal       # Interactive SPARQL query terminal
+make oxigraph-explorer     # Open Knowledge Graph web interface
+```
+
+**Testing & Quality:**
+```bash
+make test                  # Run all tests
+make check                 # Run code quality checks
+make help                  # Show all available commands
+```
+
+### Troubleshooting
+
+If you encounter issues during startup:
+
+1. **Docker Issues:**
+```bash
+make docker-cleanup        # Clean up Docker conflicts
+make local-up              # Restart services
+```
+
+2. **Service Connection Issues:**
+```bash
+make oxigraph-status       # Check Oxigraph status
+make local-logs            # View service logs
+```
+
+3. **Local AI Setup (Ollama):**
+```bash
+# Install Ollama: https://ollama.com/download
+ollama run qwen3:8b        # Pull and run local AI model
+```
+
+The first startup may take a few minutes as it downloads Docker containers and AI models.
+
+## Advanced Usage
+
+### Development & API
+
+**API Server:**
+```bash
+make api                   # Local development API (port 9879)
+make api-prod              # Production API in Docker
+make api-local             # Local API with Docker volume mounting
+```
+
+**MCP (Model Context Protocol):**
+```bash
+make mcp                   # STDIO mode for Claude Desktop integration
+make mcp-http              # HTTP mode on port 8000
+make mcp-test              # Run MCP validation tests
+```
+
+### Data Management
+
+**Knowledge Graph Operations:**
+```bash
+make sparql-terminal       # Interactive SPARQL query interface
+make oxigraph-admin        # Oxigraph database administration
+make oxigraph-explorer     # Web-based knowledge graph explorer
+```
+
+**Data Synchronization:**
+```bash
+make datastore-pull        # Pull datastore from remote
+make datastore-push        # Push local changes to remote
+make storage-pull          # Pull storage data
+make storage-push          # Push storage changes
+```
+
+**Triplestore Operations:**
+```bash
+make triplestore-export-excel    # Export to Excel format
+make triplestore-export-turtle   # Export to Turtle/RDF format
+make triplestore-prod-pull       # Pull from production environment
+make triplestore-prod-override   # Override production with local data
+```
+
+### Orchestration & Monitoring
+
+**Dagster (Data Orchestration):**
+```bash
+make dagster-dev           # Start Dagster development server
+make dagster-up            # Start Dagster in background
+make dagster-down          # Stop Dagster service
+make dagster-ui            # Open Dagster web interface
+make dagster-status        # Check asset status
+make dagster-materialize   # Execute all assets
+```
+
+**Service Management:**
+```bash
+make local-up              # Start all services (Oxigraph, PostgreSQL, Dagster)
+make local-down            # Stop and remove all services
+make local-stop            # Stop services without removing
+make local-logs            # View all service logs
+make oxigraph-up           # Start only Oxigraph
+make oxigraph-down         # Stop only Oxigraph
+```
+
+### Testing & Quality Assurance
+
+**Testing:**
+```bash
+make test                  # Run all tests
+make test-abi              # Test abi library specifically
+make test-api              # Test API functionality
+make ftest                 # Interactive test selector with fuzzy finder
+```
+
+**Code Quality:**
+```bash
+make check                 # Run all quality checks
+make check-core            # Check core modules
+make check-custom          # Check custom modules
+make check-marketplace     # Check marketplace modules
+make fmt                   # Format code with ruff
+make bandit                # Security scanning
+```
+
+### Package Management
+
+**Dependencies:**
+```bash
+make add dep=package-name  # Add dependency to main project
+make abi-add dep=package   # Add dependency to abi library
+make lock                  # Update dependency lock files
+```
+
+**Docker:**
+```bash
+make build                 # Build Docker image
+make local-build           # Build all containers
+make trivy-container-scan  # Security scan containers
+```
+
+### Documentation & Publishing
+
+**Documentation:**
+```bash
+make docs-ontology         # Generate ontology documentation
+make help                  # Show comprehensive help
+```
+
+**Publishing:**
+```bash
+make publish-remote-agents # Publish agents to workspace
+make publish-remote-agents-dry-run # Preview publishing
+make pull-request-description      # Generate PR description with AI
+```
+
+### Environment URLs
+
+When services are running, access them at:
+
+- **Oxigraph (Knowledge Graph)**: http://localhost:7878
+- **YasGUI (SPARQL Editor)**: http://localhost:3000  
+- **PostgreSQL (Agent Memory)**: localhost:5432
+- **Dagster (Orchestration)**: http://localhost:3001
+- **API Server**: http://localhost:9879
+- **MCP HTTP Server**: http://localhost:8000
+
+### Module System
+
+ABI uses a modular architecture with components in:
+- `src/core/` - Core ABI functionality
+- `src/custom/` - Custom organizational modules
+- `src/marketplace/` - Community and third-party modules
+
+Each module can contain:
+- **Agents** - Conversational AI interfaces
+- **Integrations** - External service connections
+- **Pipelines** - Data processing workflows
+- **Workflows** - Business logic automation
+- **Ontologies** - Knowledge graph schemas
+
+Modules are automatically discovered and can be enabled/disabled during setup based on available API keys and requirements.
 
 ## Help & Support
 For any questions or support requests, please create an issue on this repository or reach out via [support@naas.ai](mailto:support@naas.ai).

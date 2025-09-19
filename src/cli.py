@@ -7,6 +7,8 @@ import requests
 import time
 import os
 import shutil
+import yaml
+import signal
 
 ENV = "dev"
 
@@ -16,16 +18,9 @@ if not os.path.exists(".env"):
         f.write("LOG_LEVEL=DEBUG\n")
     print("Created .env file with default values")
 
-if not os.path.exists(f"config.{ENV}.yaml") and os.path.exists("config.yaml"):
-    shutil.copy("config.yaml", f"config.{ENV}.yaml")
-    print("Created config.env.yaml file from config.yaml")
-
 console = Console(style="")
 
 dv = dotenv_values()
-
-# Catch ctrl+c
-import signal
 
 def signal_handler(sig, frame):
     console.print("\n\n🛑 Ctrl+C pressed. See you next time! 👋", style="bright_red")
@@ -109,8 +104,6 @@ def ensure_ollama_running():
         ip_address = "localhost"
         
     ollama_running = False
-    
-    
     while not ollama_running:
         try:
             r = requests.get(f"http://{ip_address}:11434/api/version")
@@ -146,6 +139,7 @@ def ensure_ollama_running():
 def personnal_information():
     if "FIRST_NAME" in dv:
         return
+    
     # Natural setup experience
     print("\nHello! I'm ABI, your AI assistant.")
     print("Since this is our first time meeting, I'd like to ask you a few quick questions.")
@@ -179,12 +173,8 @@ def define_ai_mode():
 def define_naas_api_key():
     if "NAAS_API_KEY" in dv:
         return
-
-    # Optional Naas key
-    print("\nOne last thing - do you have a Naas API key for enhanced features?")
-    print("You can get one for free by signing up at naas.ai and visiting naas.ai/account/api-key")
-    naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
     
+    naas_key = Prompt.ask("What's your Naas API key?\nGet one for free at https://naas.ai/account/api-key", default="")
     valid_naas_api_key = False
     while not valid_naas_api_key:
         try:
@@ -197,6 +187,66 @@ def define_naas_api_key():
             naas_key = Prompt.ask("(Paste it here, or press Enter to skip)", default="")
     
     append_to_dotenv("NAAS_API_KEY", naas_key)
+
+def define_config_file():
+    import re
+    
+    if not os.path.exists(f"config.yaml"):
+        shutil.copy("config.yaml.example", "config.yaml")
+        console.print("\nCreated config.yaml file from config.yaml.example", style="blue")
+        console.print("\nLet's configure your project settings:", style="blue")
+        
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            workspace_id = Prompt.ask("What's your Naas workspace ID? (Find it at https://naas.ai/account/settings)")
+            while not re.match(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", workspace_id):
+                console.print("Invalid workspace ID format. It should be a UUID like: 96ce7ee7-e5f5-4bca-acf9-9d5d41317f81", style="red")
+                workspace_id = Prompt.ask("Please enter a valid workspace ID")
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {os.getenv('NAAS_API_KEY')}",
+            }
+            url = f"https://api.naas.ai/workspace/{workspace_id}"
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                console.print("✅ Valid workspace ID.", style="green")
+                break
+            else:
+                console.print("Invalid workspace ID. Please try again ({} attempts left).".format(max_attempts - attempt), style="red")
+                
+        github_repo = Prompt.ask("What's your Github repository name? (e.g. jupyter-naas/abi)")
+        github_repo = github_repo.replace("https://github.com/", "")
+        if github_repo.endswith("/"):
+            github_repo = github_repo[:-1]
+        while not (github_repo == "jupyter-naas/abi" or re.match(r"^[a-zA-Z0-9-]+/[a-zA-Z0-9-]+$", github_repo)):
+            console.print("Invalid repository format. It should be 'jupyter-naas/abi' or follow the format 'owner/repo'", style="red")
+            github_repo = Prompt.ask("Please enter a valid repository name")
+        
+        # Read and modify the config file
+        with open("config.yaml", "r") as f:
+            config = yaml.safe_load(f)
+            
+        config["config"]["workspace_id"] = workspace_id
+        config["config"]["github_repository"] = github_repo
+        
+        # Derive other settings from repo name
+        repo_name = github_repo.split("/")[-1]  # Get last part after /
+        clean_name = repo_name.replace(".", "")  # Remove dots
+        
+        config["config"]["storage_name"] = clean_name
+        config["config"]["space_name"] = clean_name
+        config["config"]["api_title"] = f"{clean_name.upper()} API"
+        config["config"]["api_description"] = f"API for {clean_name.upper()} AI system."
+        
+        # Write back the updated config
+        with open("config.yaml", "w") as f:
+            yaml.dump(config, f)
+            
+        print("\nConfiguration saved to config.yaml")
+        
+    if not os.path.exists(f"config.{ENV}.yaml") and os.path.exists("config.yaml"):
+        shutil.copy("config.yaml", f"config.{ENV}.yaml")
+        print("Created config.env.yaml file from config.yaml")
 
 def define_abi_api_key():
     if "ABI_API_KEY" in dv:
@@ -276,7 +326,7 @@ def check_modules_requirements():
             # and __init__.py exists
             if any(indicator in dirs for indicator in module_indicators) and "__init__.py" in files:
                 all_modules.append(root)
-    console.print(f"Found {len(all_modules)} modules available in the project.", style="blue")
+    # console.print(f"Found {len(all_modules)} modules available in the project.", style="blue")
 
     # Get module enabled from config
     with open(f"config.{ENV}.yaml", "r") as f:
@@ -284,6 +334,7 @@ def check_modules_requirements():
     
     config_modules: list = [m["path"] for m in config["modules"]]
     enabled_modules: list = [m["path"] for m in config["modules"] if m["enabled"]]
+    console.print(f"Found {len(enabled_modules)} modules enabled in the project.\n", style="blue")
     
     # Keep track of modules to disable
     modules_to_enable: list = []
@@ -292,10 +343,11 @@ def check_modules_requirements():
     for module_path in sorted(all_modules):
         try:
             if module_path not in config_modules:
-                module_to_add = Prompt.ask(f"The module '{module_path}' is available in the project but not enabled in your config file. Do you want to enable it?", choices=["y", "n"], default="n")
+                module_to_add = Prompt.ask(f"Module '{module_path}' is available in the project but not enabled in your config file. Do you want to enable it? (Press Enter to skip)", choices=["y", "n"], default="n")
                 if module_to_add != "y":
                     modules_to_disable.append(module_path)
                     continue
+                modules_to_enable.append(module_path)
                 enabled_modules.append(module_path)
 
             if module_path not in enabled_modules:
@@ -404,6 +456,7 @@ checks = [
     personnal_information,
     define_ai_mode,
     define_naas_api_key,
+    define_config_file,
     define_abi_api_key,
     define_oxigraph_url,
     define_postgres_url,
