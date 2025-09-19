@@ -79,7 +79,7 @@ jobs:
           
       - name: Generate analytics report
         run: |
-          uv run python -m src.custom.modules.your_module_name.analytics.reports.generate_report
+          uv run python -m src.custom.your_module_name.analytics.reports.generate_report
         env:
           # Add any required environment variables/secrets
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
