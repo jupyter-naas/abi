@@ -116,22 +116,26 @@ logger.debug(
 )
 secrets: dict = {}
 if naas_api_key is not None:
-    naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
-    base64_adapter = Base64Secret.Base64Secret(
-        naas_secret_adapter, os.environ.get("ABI_BASE64_SECRET_NAME", "abi_secrets")
-    )
-    abi_secrets = base64_adapter.list()
+    try:
+        naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
+        base64_adapter = Base64Secret.Base64Secret(
+            naas_secret_adapter, os.environ.get("ABI_BASE64_SECRET_NAME", "abi_secrets")
+        )
+        abi_secrets = base64_adapter.list()
 
-    if abi_secrets is not None and len(abi_secrets) > 0:
-        logger.debug("Loading Secrets from Naas Secrets")
-        for key, value in abi_secrets.items():
-            if os.getenv(key) is None:
-                secrets[key] = value
-            else:
-                logger.debug(f"Secret {key} already set in environment variables")
-                secrets[key] = os.getenv(key)
-
-    secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
+        if abi_secrets is not None and len(abi_secrets) > 0:
+            logger.debug("Loading Secrets from Naas Secrets")
+            for key, value in abi_secrets.items():
+                if os.getenv(key) is None:
+                    secrets[key] = value
+                else:
+                    logger.debug(f"Secret {key} already set in environment variables")
+                    secrets[key] = os.getenv(key)
+        
+        secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
+    except Exception as e:
+        logger.warning(f"🔒 Airgap mode: Cannot connect to Naas API ({e})")
+        logger.info("Using environment variables and .env file for secrets")
 
 logger.debug("Loading Secrets from .env file")
 envfile_values = dotenv_values()

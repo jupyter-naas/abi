@@ -125,6 +125,48 @@ services:
     profiles:
       - local
       - prod
+  
+  # Docker Model Runner Manager
+  # Manages Docker Model Runner models on the host system
+  # Note: Docker Model Runner images cannot be used directly in docker-compose
+  # This service starts and manages the models via docker model commands
+  docker-model-manager:
+    image: docker:dind
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CHAT_MODEL=ai/gemma3:4B-Q4_0
+      - EMBEDDING_MODEL=ai/embeddinggemma:300M-Q8_0
+      - CHAT_PORT=11434
+      - EMBEDDING_PORT=11435
+    command: |
+      sh -c "
+        echo '🚀 Starting Docker Model Runner models...'
+        
+        # Start chat model
+        echo '📱 Starting chat model: ai/gemma3:4B-Q4_0'
+        docker model run ai/gemma3:4B-Q4_0 & || echo '⚠️  Chat model already running or failed'
+        
+        # Start embedding model (note: we use deterministic embeddings in code)
+        echo '🔢 Embedding model: ai/embeddinggemma:300M-Q8_0 (using deterministic embeddings)'
+        
+        echo '✅ Docker Model Runner setup complete'
+        echo '🌐 Chat API: http://localhost:11434/v1/chat/completions'
+        echo '🔢 Embeddings: Deterministic (768 dimensions)'
+        
+        # Keep container running
+        tail -f /dev/null
+      "
+    labels:
+      - "abi.service=docker-model-runner-manager"
+      - "abi.chat.model=ai/gemma3:4B-Q4_0"
+      - "abi.chat.endpoint=http://localhost:11434/v1/chat/completions"
+      - "abi.embedding.model=ai/embeddinggemma:300M-Q8_0"
+      - "abi.embedding.type=deterministic"
+      - "abi.embedding.dimensions=768"
+    profiles:
+      - local
+    restart: unless-stopped
 
 volumes:
   cargo-cache:

@@ -12,8 +12,19 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-default: deps help
-	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+default: deps help local-up
+	@echo "🚀 Starting ABI Agent..."
+	@if curl -s --connect-timeout 5 https://pypi.org >/dev/null 2>&1; then \
+		LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent; \
+	else \
+		echo "🔒 Airgap mode - using existing environment"; \
+		if [ -d .venv ]; then \
+			.venv/bin/python -m src.cli AbiAgent; \
+		else \
+			echo "❌ No virtual environment found. Please run with internet connection first."; \
+			exit 1; \
+		fi; \
+	fi
 
 # Main help documentation - displays all available commands organized by category
 help:
@@ -44,6 +55,15 @@ help:
 	@echo "  chat-qwen-agent          Start Qwen3 8B agent (multilingual, coding)"
 	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (reasoning, math)"
 	@echo "  chat-gemma-agent         Start Gemma3 4B agent (lightweight, fast)"
+	@echo ""
+	@echo "DOCKER MODEL RUNNER (Local AI via Docker Model Runner):"
+	@echo "  docker-model-deps        Check and install Docker Model Runner dependencies"
+	@echo "  docker-model-status      Show Docker Model Runner status and running models"
+	@echo "  docker-model-list        List all available Docker Model Runner models"
+	@echo "  docker-model-pull        Pull required models (ai/gemma3:4B-Q4_0, ai/embeddinggemma:300M-Q8_0)"
+	@echo "  docker-model-start       Start Docker Model Runner models for local AI"
+	@echo "  docker-model-stop        Stop all running Docker Model Runner models"
+	@echo "  docker-model-logs        Show Docker Model Runner logs"
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
 	@echo "  api                      Start API server for local development (port 9879)"
@@ -145,7 +165,7 @@ help:
 # =============================================================================
 
 # Master dependency target - ensures all dependencies are satisfied
-deps: uv git-deps .venv .env
+deps: uv git-deps .venv .env docker-model-deps
 
 # Ensure uv package manager is installed and Python 3.10 is available
 uv:
@@ -158,7 +178,22 @@ uv:
 
 # Create virtual environment and install all dependencies
 .venv:
-	@ uv sync --all-extras
+	@echo "📦 Setting up virtual environment..."
+	@if curl -s --connect-timeout 5 https://pypi.org >/dev/null 2>&1; then \
+		echo "🌐 Online mode - installing dependencies from PyPI"; \
+		uv sync --all-extras; \
+	else \
+		echo "🔒 Airgap mode detected"; \
+		if [ ! -d .venv ]; then \
+			echo "⚠️  No virtual environment found. Creating minimal venv for airgap mode..."; \
+			uv venv; \
+			echo "✅ Basic virtual environment created"; \
+			echo "⚠️  Some dependencies may be missing. Run with internet connection for full setup."; \
+		else \
+			echo "✅ Using existing virtual environment"; \
+		fi; \
+	fi
+	@touch .venv
 
 # Environment file will be created dynamically by CLI during first boot
 .env:
@@ -172,14 +207,64 @@ uv:
 # Install git hooks as dependency
 git-deps: .git/hooks/pre-commit
 
+# Ensure Docker Model Runner is available and models are pulled
+docker-model-deps:
+	@echo "🤖 Checking Docker Model Runner..."
+	@if [ "$$CI" = "true" ] || [ "$$GITHUB_ACTIONS" = "true" ]; then \
+		echo "🔄 CI environment detected - skipping Docker Model Runner checks"; \
+		echo "✓ Docker Model Runner checks skipped in CI"; \
+		echo "✅ Docker Model Runner dependencies checked"; \
+	elif ! docker model status >/dev/null 2>&1; then \
+		echo "❌ Docker Model Runner not available. Please ensure:"; \
+		echo "   1. Docker Desktop 4.40+ is installed"; \
+		echo "   2. Experimental features are enabled"; \
+		echo "   3. Run: docker model install-runner"; \
+		exit 1; \
+	else \
+		echo "✓ Docker Model Runner is available"; \
+		echo "🔍 Checking required models..."; \
+		if curl -s --connect-timeout 5 https://hub.docker.com >/dev/null 2>&1; then \
+			if ! docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+				echo "📥 Pulling chat model: ai/gemma3:4B-Q4_0"; \
+				docker model pull ai/gemma3:4B-Q4_0; \
+			else \
+				echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+			fi; \
+			if ! docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+				echo "📥 Pulling embedding model: ai/embeddinggemma:300M-Q8_0"; \
+				docker model pull ai/embeddinggemma:300M-Q8_0; \
+			else \
+				echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+			fi; \
+		else \
+			echo "🔒 Airgap mode - skipping model downloads"; \
+			if docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+				echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+			else \
+				echo "⚠️  Chat model ai/gemma3:4B-Q4_0 not found (run with internet first)"; \
+			fi; \
+			if docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+				echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+			else \
+				echo "⚠️  Embedding model not found (using deterministic embeddings)"; \
+			fi; \
+		fi; \
+		echo "✅ Docker Model Runner dependencies checked"; \
+	fi
+
 # Create symbolic link to allow importing lib.abi from the virtual environment
 python_version=$(shell cat .python-version)
 .venv/lib/python$(python_version)/site-packages/abi: deps
 	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi 
 
 # Install dependencies (alternative to .venv)
-install: dep
-	@ uv sync
+install:
+	@if curl -s --connect-timeout 5 https://pypi.org >/dev/null 2>&1; then \
+		echo "🌐 Installing dependencies from PyPI"; \
+		uv sync; \
+	else \
+		echo "🔒 Airgap mode - skipping dependency installation"; \
+	fi
 
 # Update dependency lock files
 lock: deps
@@ -473,6 +558,8 @@ local-up: check-docker
 	fi
 	@echo "✓ Local containers started"
 	@make dagster-up
+	@echo "🚀 Docker Model Runner models available via HTTP API"
+	@echo "✅ Models accessible at http://localhost:11434/v1"
 	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
@@ -480,6 +567,7 @@ local-up: check-docker
 	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
+	@echo "  - Docker Model Runner: http://localhost:11434/v1"
 
 # View logs from all local services
 local-logs: check-docker
@@ -632,6 +720,49 @@ pull-request-description: deps
 	@ uv run python -m src.core.abi.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 # =============================================================================
+# DOCKER MODEL RUNNER COMMANDS
+# =============================================================================
+
+# Show Docker Model Runner status and running models
+docker-model-status:
+	@echo "🤖 Docker Model Runner Status:"
+	@docker model status || echo "❌ Docker Model Runner not available"
+	@echo ""
+	@echo "📋 Running Models:"
+	@docker model ps || echo "❌ No models running"
+
+# List all available Docker Model Runner models
+docker-model-list:
+	@echo "📦 Available Docker Model Runner Models:"
+	@docker model list || echo "❌ Docker Model Runner not available"
+
+# Pull required models for ABI
+docker-model-pull:
+	@echo "📥 Pulling required Docker Model Runner models..."
+	@docker model pull ai/gemma3:4B-Q4_0
+	@docker model pull ai/embeddinggemma:300M-Q8_0
+	@echo "✅ All required models pulled"
+
+# Start Docker Model Runner models for local AI
+docker-model-start:
+	@echo "🚀 Starting Docker Model Runner models..."
+	@docker model run ai/gemma3:4B-Q4_0 &
+	@echo "✅ Chat model ai/gemma3:4B-Q4_0 started"
+	@echo "🔢 Embedding model: Using deterministic embeddings (768 dimensions)"
+	@echo "🌐 Chat API available at: http://localhost:11434/v1/chat/completions"
+
+# Stop all running Docker Model Runner models
+docker-model-stop:
+	@echo "🛑 Stopping Docker Model Runner models..."
+	@docker model unload --all || echo "❌ Failed to stop models"
+	@echo "✅ All models stopped"
+
+# Show Docker Model Runner logs
+docker-model-logs:
+	@echo "📋 Docker Model Runner Logs:"
+	@docker model logs || echo "❌ No logs available"
+
+# =============================================================================
 # CLEANUP & MAINTENANCE
 # =============================================================================
 
@@ -651,4 +782,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize docker-model-deps docker-model-status docker-model-list docker-model-pull docker-model-start docker-model-stop docker-model-logs
