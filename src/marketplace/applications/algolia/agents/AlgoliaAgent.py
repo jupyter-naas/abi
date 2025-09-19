@@ -12,9 +12,9 @@ from pydantic import SecretStr
 from enum import Enum
 from src import secret
 
-NAME = "Algolia Assistant"
-DESCRIPTION = "An assistant that helps you interact with Algolia search services, including searching indexes and managing records."
-MODEL = "gpt-4"
+NAME = "Algolia"
+DESCRIPTION = "An Agent that helps you interact with Algolia search services, including searching indexes and managing records."
+MODEL = "gpt-4.1-mini"
 TEMPERATURE = 0
 AVATAR_URL = "https://logo.clearbit.com/algolia.com"
 SYSTEM_PROMPT = """

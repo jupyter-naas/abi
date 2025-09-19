@@ -40,7 +40,7 @@ config:
     enabled: true # Enable automatic publishing of agents to workspace
     exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
     default_agent: "Abi" # Which agent to set as default in workspace
-  github_project_repository: "your_github_username/your_repository_name"
+  github_repository: "your_github_username/your_repository_name"
   space_name: "your_naas_space_name"
   # ... other configuration options
 ```
