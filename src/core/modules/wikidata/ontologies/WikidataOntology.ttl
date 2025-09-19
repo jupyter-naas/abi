@@ -1,0 +1,174 @@
+@prefix wd: <http://www.wikidata.org/entity/> .
+@prefix wdt: <http://www.wikidata.org/prop/direct/> .
+@prefix wikibase: <http://wikiba.se/ontology#> .
+@prefix p: <http://www.wikidata.org/prop/> .
+@prefix ps: <http://www.wikidata.org/prop/statement/> .
+@prefix pq: <http://www.wikidata.org/prop/qualifier/> .
+@prefix pr: <http://www.wikidata.org/prop/reference/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+# Wikidata ABI Ontology
+# This ontology defines common Wikidata entities and properties used in the ABI Wikidata module
+
+<http://ontology.naas.ai/abi/wikidata/> a owl:Ontology ;
+    dcterms:title "ABI Wikidata Ontology" ;
+    dcterms:description "Ontology defining common Wikidata entities and properties for natural language querying" ;
+    dcterms:created "2024-01-01" ;
+    dcterms:creator "ABI Wikidata Agent" .
+
+# Common Entity Classes
+wd:Q5 a owl:Class ;
+    rdfs:label "human"@en ;
+    rdfs:comment "A human being"@en ;
+    skos:altLabel "person"@en, "individual"@en .
+
+wd:Q6256 a owl:Class ;
+    rdfs:label "country"@en ;
+    rdfs:comment "A sovereign state or political entity"@en ;
+    skos:altLabel "nation"@en, "state"@en .
+
+wd:Q515 a owl:Class ;
+    rdfs:label "city"@en ;
+    rdfs:comment "A large permanent human settlement"@en ;
+    skos:altLabel "town"@en, "municipality"@en .
+
+wd:Q43229 a owl:Class ;
+    rdfs:label "organization"@en ;
+    rdfs:comment "An organized group of people with a particular purpose"@en ;
+    skos:altLabel "organisation"@en, "institution"@en .
+
+wd:Q35120 a owl:Class ;
+    rdfs:label "entity"@en ;
+    rdfs:comment "Something that exists in its own right"@en .
+
+wd:Q7725634 a owl:Class ;
+    rdfs:label "literary work"@en ;
+    rdfs:comment "Creative work primarily composed of text"@en ;
+    skos:altLabel "book"@en, "publication"@en .
+
+wd:Q11424 a owl:Class ;
+    rdfs:label "film"@en ;
+    rdfs:comment "Sequence of images giving the impression of movement"@en ;
+    skos:altLabel "movie"@en, "cinema"@en .
+
+wd:Q838948 a owl:Class ;
+    rdfs:label "work of art"@en ;
+    rdfs:comment "Creative artistic work"@en ;
+    skos:altLabel "artwork"@en .
+
+# Common Properties
+wdt:P31 a owl:ObjectProperty ;
+    rdfs:label "instance of"@en ;
+    rdfs:comment "That class of which this subject is a particular example and member"@en ;
+    skos:altLabel "is a"@en, "type"@en .
+
+wdt:P17 a owl:ObjectProperty ;
+    rdfs:label "country"@en ;
+    rdfs:comment "Sovereign state that this item is in"@en ;
+    skos:altLabel "located in country"@en .
+
+wdt:P106 a owl:ObjectProperty ;
+    rdfs:label "occupation"@en ;
+    rdfs:comment "Occupation of a person"@en ;
+    skos:altLabel "job"@en, "profession"@en .
+
+wdt:P569 a owl:DatatypeProperty ;
+    rdfs:label "date of birth"@en ;
+    rdfs:comment "Date on which the subject was born"@en ;
+    skos:altLabel "birth date"@en, "born"@en .
+
+wdt:P570 a owl:DatatypeProperty ;
+    rdfs:label "date of death"@en ;
+    rdfs:comment "Date on which the subject died"@en ;
+    skos:altLabel "death date"@en, "died"@en .
+
+wdt:P166 a owl:ObjectProperty ;
+    rdfs:label "award received"@en ;
+    rdfs:comment "Award or recognition received by a person or organization"@en ;
+    skos:altLabel "received award"@en, "honor"@en .
+
+wdt:P585 a owl:DatatypeProperty ;
+    rdfs:label "point in time"@en ;
+    rdfs:comment "Date or point in time associated with this property"@en ;
+    skos:altLabel "date"@en, "time"@en .
+
+wdt:P577 a owl:DatatypeProperty ;
+    rdfs:label "publication date"@en ;
+    rdfs:comment "Date or point in time when a work was first published or released"@en ;
+    skos:altLabel "published"@en, "release date"@en .
+
+wdt:P57 a owl:ObjectProperty ;
+    rdfs:label "director"@en ;
+    rdfs:comment "Director(s) of film, TV-series, stageplay, video game or similar"@en ;
+    skos:altLabel "directed by"@en .
+
+wdt:P50 a owl:ObjectProperty ;
+    rdfs:label "author"@en ;
+    rdfs:comment "Main creator(s) of a written work"@en ;
+    skos:altLabel "written by"@en, "creator"@en .
+
+wdt:P170 a owl:ObjectProperty ;
+    rdfs:label "creator"@en ;
+    rdfs:comment "Maker of this creative work or other object"@en ;
+    skos:altLabel "created by"@en, "made by"@en .
+
+wdt:P159 a owl:ObjectProperty ;
+    rdfs:label "headquarters location"@en ;
+    rdfs:comment "Specific location where an organization's headquarters is or has been situated"@en ;
+    skos:altLabel "headquarters"@en, "HQ"@en .
+
+wdt:P36 a owl:ObjectProperty ;
+    rdfs:label "capital"@en ;
+    rdfs:comment "Seat of government of a country, state, province, or other type of administrative territorial entity"@en ;
+    skos:altLabel "capital city"@en .
+
+wdt:P1082 a owl:DatatypeProperty ;
+    rdfs:label "population"@en ;
+    rdfs:comment "Number of people inhabiting the place"@en ;
+    skos:altLabel "inhabitants"@en .
+
+wdt:P279 a owl:ObjectProperty ;
+    rdfs:label "subclass of"@en ;
+    rdfs:comment "This item is a subclass (subset) of that item"@en ;
+    skos:altLabel "is a type of"@en .
+
+wdt:P361 a owl:ObjectProperty ;
+    rdfs:label "part of"@en ;
+    rdfs:comment "Object of which the subject is a part"@en ;
+    skos:altLabel "belongs to"@en .
+
+wdt:P131 a owl:ObjectProperty ;
+    rdfs:label "located in the administrative territorial entity"@en ;
+    rdfs:comment "The item is located on the territory of the following administrative entity"@en ;
+    skos:altLabel "located in"@en .
+
+# Language and Label Properties
+rdfs:label a owl:DatatypeProperty ;
+    rdfs:label "label"@en ;
+    rdfs:comment "Human-readable name for the entity"@en .
+
+skos:altLabel a owl:DatatypeProperty ;
+    rdfs:label "alternative label"@en ;
+    rdfs:comment "Alternative name or synonym for the entity"@en .
+
+# Query Patterns and Templates
+<http://ontology.naas.ai/abi/wikidata/pattern/person_info> a owl:Class ;
+    rdfs:label "Person Information Pattern"@en ;
+    rdfs:comment "SPARQL pattern for querying basic person information"@en .
+
+<http://ontology.naas.ai/abi/wikidata/pattern/country_info> a owl:Class ;
+    rdfs:label "Country Information Pattern"@en ;
+    rdfs:comment "SPARQL pattern for querying country information"@en .
+
+<http://ontology.naas.ai/abi/wikidata/pattern/award_winners> a owl:Class ;
+    rdfs:label "Award Winners Pattern"@en ;
+    rdfs:comment "SPARQL pattern for querying award recipients"@en .
+
+<http://ontology.naas.ai/abi/wikidata/pattern/creative_works> a owl:Class ;
+    rdfs:label "Creative Works Pattern"@en ;
+    rdfs:comment "SPARQL pattern for querying books, films, and other creative works"@en . 
