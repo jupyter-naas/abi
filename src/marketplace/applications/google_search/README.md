@@ -85,7 +85,7 @@ RDF ontology that defines:
 ### Basic Setup
 
 ```python
-from src.custom.modules.google_search.integrations.GoogleSearchIntegration import (
+from src.marketplace.applications.google_search.integrations.GoogleSearchIntegration import (
     GoogleSearchIntegration,
     GoogleSearchIntegrationConfiguration
 )
@@ -100,7 +100,7 @@ integration = GoogleSearchIntegration(config)
 ### Pipeline Configuration
 
 ```python
-from src.custom.modules.google_search.pipelines.AddGoogleSearchPipeline import (
+from src.marketplace.applications.google_search.pipelines.AddGoogleSearchPipeline import (
     AddGoogleSearchPipeline,
     AddGoogleSearchPipelineConfiguration
 )
@@ -167,7 +167,7 @@ print(urls)
 ### Using with LangChain Tools
 
 ```python
-from src.custom.modules.google_search.integrations.GoogleSearchIntegration import as_tools
+from src.marketplace.applications.google_search.integrations.GoogleSearchIntegration import as_tools
 
 # Convert integration to LangChain tools
 tools = as_tools(config)
