@@ -140,13 +140,7 @@ services:
     profiles:
       - local
       - prod
-    command: >
-      sh -c "
-        ollama serve &
-        sleep 10 &&
-        ollama pull gemma2:2b &&
-        wait
-      "
+    entrypoint: ["/bin/bash", "-c", "ollama serve & sleep 10 && ollama pull gemma2:2b && wait"]
 
   # Docker Model Runner - Embedding Model  
   gemma-embedding:
@@ -162,13 +156,7 @@ services:
     profiles:
       - local
       - prod
-    command: >
-      sh -c "
-        ollama serve &
-        sleep 10 &&
-        ollama pull nomic-embed-text &&
-        wait
-      "
+    entrypoint: ["/bin/bash", "-c", "ollama serve & sleep 10 && ollama pull nomic-embed-text && wait"]
 
 volumes:
   cargo-cache:
