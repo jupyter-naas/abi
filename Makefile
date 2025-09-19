@@ -12,7 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-default: deps local-up
+default: deps help local-up
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
@@ -44,6 +44,15 @@ help:
 	@echo "  chat-qwen-agent          Start Qwen3 8B agent (multilingual, coding)"
 	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (reasoning, math)"
 	@echo "  chat-gemma-agent         Start Gemma3 4B agent (lightweight, fast)"
+	@echo ""
+	@echo "DOCKER MODEL RUNNER (Local AI via Docker Model Runner):"
+	@echo "  docker-model-deps        Check and install Docker Model Runner dependencies"
+	@echo "  docker-model-status      Show Docker Model Runner status and running models"
+	@echo "  docker-model-list        List all available Docker Model Runner models"
+	@echo "  docker-model-pull        Pull required models (ai/gemma3:4B-Q4_0, ai/embeddinggemma:300M-Q8_0)"
+	@echo "  docker-model-start       Start Docker Model Runner models for local AI"
+	@echo "  docker-model-stop        Stop all running Docker Model Runner models"
+	@echo "  docker-model-logs        Show Docker Model Runner logs"
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
 	@echo "  api                      Start API server for local development (port 9879)"
@@ -145,7 +154,7 @@ help:
 # =============================================================================
 
 # Master dependency target - ensures all dependencies are satisfied
-deps: uv git-deps .venv .env
+deps: uv git-deps .venv .env docker-model-deps
 
 # Ensure uv package manager is installed and Python 3.10 is available
 uv:
@@ -171,6 +180,32 @@ uv:
 
 # Install git hooks as dependency
 git-deps: .git/hooks/pre-commit
+
+# Ensure Docker Model Runner is available and models are pulled
+docker-model-deps:
+	@echo "🤖 Checking Docker Model Runner..."
+	@if ! docker model status >/dev/null 2>&1; then \
+		echo "❌ Docker Model Runner not available. Please ensure:"; \
+		echo "   1. Docker Desktop 4.40+ is installed"; \
+		echo "   2. Experimental features are enabled"; \
+		echo "   3. Run: docker model install-runner"; \
+		exit 1; \
+	fi
+	@echo "✓ Docker Model Runner is available"
+	@echo "🔍 Checking required models..."
+	@if ! docker model list | grep -q "ai/gemma3:4B-Q4_0"; then \
+		echo "📥 Pulling chat model: ai/gemma3:4B-Q4_0"; \
+		docker model pull ai/gemma3:4B-Q4_0; \
+	else \
+		echo "✓ Chat model ai/gemma3:4B-Q4_0 is available"; \
+	fi
+	@if ! docker model list | grep -q "ai/embeddinggemma:300M-Q8_0"; then \
+		echo "📥 Pulling embedding model: ai/embeddinggemma:300M-Q8_0"; \
+		docker model pull ai/embeddinggemma:300M-Q8_0; \
+	else \
+		echo "✓ Embedding model ai/embeddinggemma:300M-Q8_0 is available"; \
+	fi
+	@echo "✅ All Docker Model Runner dependencies satisfied"
 
 # Create symbolic link to allow importing lib.abi from the virtual environment
 python_version=$(shell cat .python-version)
@@ -635,6 +670,49 @@ pull-request-description: deps
 	@ uv run python -m src.core.abi.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 # =============================================================================
+# DOCKER MODEL RUNNER COMMANDS
+# =============================================================================
+
+# Show Docker Model Runner status and running models
+docker-model-status:
+	@echo "🤖 Docker Model Runner Status:"
+	@docker model status || echo "❌ Docker Model Runner not available"
+	@echo ""
+	@echo "📋 Running Models:"
+	@docker model ps || echo "❌ No models running"
+
+# List all available Docker Model Runner models
+docker-model-list:
+	@echo "📦 Available Docker Model Runner Models:"
+	@docker model list || echo "❌ Docker Model Runner not available"
+
+# Pull required models for ABI
+docker-model-pull:
+	@echo "📥 Pulling required Docker Model Runner models..."
+	@docker model pull ai/gemma3:4B-Q4_0
+	@docker model pull ai/embeddinggemma:300M-Q8_0
+	@echo "✅ All required models pulled"
+
+# Start Docker Model Runner models for local AI
+docker-model-start:
+	@echo "🚀 Starting Docker Model Runner models..."
+	@docker model run ai/gemma3:4B-Q4_0 &
+	@echo "✅ Chat model ai/gemma3:4B-Q4_0 started"
+	@echo "🔢 Embedding model: Using deterministic embeddings (768 dimensions)"
+	@echo "🌐 Chat API available at: http://localhost:11434/v1/chat/completions"
+
+# Stop all running Docker Model Runner models
+docker-model-stop:
+	@echo "🛑 Stopping Docker Model Runner models..."
+	@docker model unload --all || echo "❌ Failed to stop models"
+	@echo "✅ All models stopped"
+
+# Show Docker Model Runner logs
+docker-model-logs:
+	@echo "📋 Docker Model Runner Logs:"
+	@docker model logs || echo "❌ No logs available"
+
+# =============================================================================
 # CLEANUP & MAINTENANCE
 # =============================================================================
 
@@ -654,4 +732,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize docker-model-deps docker-model-status docker-model-list docker-model-pull docker-model-start docker-model-stop docker-model-logs
