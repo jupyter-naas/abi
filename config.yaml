@@ -45,11 +45,7 @@ modules:
     enabled: true
   - path: src/marketplace/applications/github
     enabled: true
-  - path: src/marketplace/applications/google_search
-    enabled: true
   - path: src/marketplace/applications/naas
     enabled: true
-  - path: src/marketplace/applications/postgres
-    enabled: false
   - path: src/marketplace/domains/support
     enabled: true
