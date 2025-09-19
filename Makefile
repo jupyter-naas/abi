@@ -91,6 +91,7 @@ help:
 	@echo "  local-logs               View logs from all local services"
 	@echo "  local-stop               Stop all local services without removing containers"
 	@echo "  local-down               Stop and remove all local service containers"
+	@echo "  local-reload             Stop and remove all local service containers and restart them"
 	@echo "  container-up             Start ABI in container mode"
 	@echo "  container-down           Stop ABI container"
 	@echo ""
@@ -494,6 +495,11 @@ local-down: check-docker
 	@make dagster-down
 	@docker-compose -f docker-compose.yml --profile local down --timeout 10 || true
 	@echo "✓ All local services stopped"
+
+local-reload: check-docker
+	@docker-compose --profile local down -v
+	@make local-up
+	@echo "✓ Local services reloaded"
 
 # Start ABI in container mode
 container-up:
