@@ -462,7 +462,14 @@ check-docker:
 # Enhanced cleanup with conflict detection
 docker-cleanup: check-docker
 	@echo "🧹 Running Docker cleanup to prevent conflicts..."
-	@./docker/scripts/cleanup.sh
+	@chmod +x ./docker/scripts/cleanup.sh 2>/dev/null || true
+	@./docker/scripts/cleanup.sh || ( \
+		echo "🔧 Fallback cleanup for WSL/Windows..."; \
+		docker compose --profile local down --remove-orphans || true; \
+		docker container prune -f || true; \
+		docker network prune -f || true; \
+		echo "✅ Cleanup complete"; \
+	)
 
 # Start Oxigraph knowledge graph database
 oxigraph-up: check-docker
