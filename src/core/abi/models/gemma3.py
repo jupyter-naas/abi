@@ -3,10 +3,12 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-from typing import Optional, List, Any
+from langchain_core.outputs.chat_generation import ChatGenerationChunk
+from langchain_core.messages import AIMessage
+from typing import Optional, List, Any, Iterator
 from abi import logger
 import json
-import re
+import requests
 
 class AirgapChatOpenAI(ChatOpenAI):
     """Minimal wrapper for Docker Model Runner with basic tool support"""
@@ -16,42 +18,43 @@ class AirgapChatOpenAI(ChatOpenAI):
         self._tools = []
     
     def bind_tools(self, tools, **kwargs):
-        self._tools = tools
+        # Just return self without storing tools - we don't need complex tool handling
+        return self
+
+    def bind(self, **kwargs):
+        # Just return self - keep it simple
         return self
     
-    def bind(self, **kwargs):
-        # Strip tool parameters that Docker Model Runner doesn't support
-        clean_kwargs = {k: v for k, v in kwargs.items() if 'tool' not in k.lower()}
-        return super().bind(**clean_kwargs) if clean_kwargs else self
+    @property
+    def _llm_type(self) -> str:
+        return "airgap_chat_openai"
     
     def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, run_manager: Optional[CallbackManagerForLLMRun] = None, **kwargs: Any) -> ChatResult:
-        # Extract system prompt and user message
+        # Extract system prompt and user message with improved formatting
         system_prompt = ""
         user_msg = None
         
         for msg in messages:
-            if hasattr(msg, 'content'):
+            if hasattr(msg, 'content') and msg.content:
                 if 'SystemMessage' in str(type(msg)):
                     if isinstance(msg.content, str):
                         system_prompt += msg.content + "\n"
                 elif isinstance(msg, HumanMessage):
                     user_msg = msg.content
         
-        if user_msg:
-            # Build complete prompt with system context
-            prompt = system_prompt.strip()
-            
-            if self._tools:
-                # Add tool info
-                tool_info = "\nAvailable tools:\n"
-                for tool in self._tools:
-                    if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                        tool_info += f"- {tool.name}: {tool.description}\n"
-                tool_info += "\nTo use a tool, respond with: TOOL_CALL: tool_name {json_args}\n"
-                prompt += tool_info
-            
-            prompt += f"\n\nUser: {user_msg}"
-            messages = [HumanMessage(content=prompt)]
+        # Always ensure we have a valid user message
+        if not user_msg or not user_msg.strip():
+            user_msg = "Hello"
+        
+        # Build GPT-style prompt with clear instruction formatting
+        if system_prompt.strip():
+            prompt = f"System: {system_prompt.strip()}\n\n"
+        else:
+            prompt = ""
+        
+        
+        prompt += f"User: {user_msg}\n\nAssistant:"
+        messages = [HumanMessage(content=prompt)]
         
         # Clean kwargs
         clean_kwargs = {k: v for k, v in kwargs.items() if k in ['temperature', 'max_tokens', 'stop']}
@@ -59,35 +62,96 @@ class AirgapChatOpenAI(ChatOpenAI):
         # Get response
         result = super()._generate(messages, stop=stop, run_manager=run_manager, **clean_kwargs)
         
-        # Handle tool calls if present
-        if self._tools and result.generations:
+        # Simple tool call handling - just ensure we have proper AIMessage format
+        if result.generations:
             content = result.generations[0].message.content
-            if isinstance(content, str):
-                tool_calls = re.findall(r'TOOL_CALL:\s*(\w+)\s*({.*?})', content, re.DOTALL)
-            else:
-                tool_calls = []
+            from langchain_core.messages import AIMessage
             
-            if tool_calls:
-                tool_results = []
-                for tool_name, args_json in tool_calls:
-                    try:
-                        args = json.loads(args_json)
-                        tool = next((t for t in self._tools if hasattr(t, 'name') and t.name == tool_name), None)
-                        if tool:
-                            if hasattr(tool, 'invoke'):
-                                result_text = tool.invoke(args)
-                            else:
-                                result_text = str(tool(**args))
-                            tool_results.append(f"{tool_name}: {result_text}")
-                    except Exception as e:
-                        tool_results.append(f"{tool_name}: Error - {e}")
-                
-                if tool_results:
-                    # Get final response with tool results
-                    final_prompt = f"{content}\n\nTool results:\n" + "\n".join(tool_results) + "\n\nProvide a final response:"
-                    result = super()._generate([HumanMessage(content=final_prompt)], stop=stop, run_manager=run_manager, **clean_kwargs)
+            # Always create AIMessage with empty tool_calls to prevent routing issues
+            ai_message = AIMessage(
+                content=content,
+                additional_kwargs={}
+            )
+            ai_message.tool_calls = []
+            result.generations[0].message = ai_message
         
         return result
+    
+    def _stream(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, run_manager: Optional[CallbackManagerForLLMRun] = None, **kwargs: Any) -> Iterator[ChatGenerationChunk]:
+        """Stream tokens from the Docker Model Runner"""
+        # Extract system prompt and user message with improved formatting
+        system_prompt = ""
+        user_msg = None
+        
+        for msg in messages:
+            if hasattr(msg, 'content') and msg.content:
+                if 'SystemMessage' in str(type(msg)):
+                    if isinstance(msg.content, str):
+                        system_prompt += msg.content + "\n"
+                elif isinstance(msg, HumanMessage):
+                    user_msg = msg.content
+        
+        # Always ensure we have a valid user message
+        if not user_msg or not user_msg.strip():
+            user_msg = "Hello"
+        
+        # Build GPT-style prompt with clear instruction formatting
+        if system_prompt.strip():
+            prompt = f"System: {system_prompt.strip()}\n\n"
+        else:
+            prompt = ""
+        
+        
+        prompt += f"User: {user_msg}\n\nAssistant:"
+        
+        # Make streaming request to Docker Model Runner
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                json={
+                    "model": self.model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": True,
+                    "temperature": kwargs.get('temperature', self.temperature),
+                    "max_tokens": kwargs.get('max_tokens', 512),
+                },
+                stream=True,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            # Process streaming response
+            for line in response.iter_lines():
+                if line:
+                    line = line.decode('utf-8')
+                    if line.startswith('data: '):
+                        data = line[6:]  # Remove 'data: ' prefix
+                        if data.strip() == '[DONE]':
+                            break
+                        try:
+                            chunk_data = json.loads(data)
+                            if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                choice = chunk_data['choices'][0]
+                                if 'delta' in choice and 'content' in choice['delta']:
+                                    content = choice['delta']['content']
+                                    if content:
+                                        yield ChatGenerationChunk(
+                                            message=AIMessage(content=content),
+                                            generation_info={"finish_reason": choice.get('finish_reason')}
+                                        )
+                        except json.JSONDecodeError:
+                            continue
+            
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            # Fallback to non-streaming
+            result = self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            if result.generations:
+                content = result.generations[0].message.content
+                yield ChatGenerationChunk(
+                    message=AIMessage(content=content),
+                    generation_info={"finish_reason": "stop"}
+                )
 
 ID = "ai/gemma3"
 NAME = "gemma3-airgap"
@@ -106,7 +170,8 @@ try:
         owner=OWNER,
         model=AirgapChatOpenAI(
             model=ID,
-            temperature=0.7,
+            temperature=0.2,  # Even lower temperature for faster, more focused responses
+            max_tokens=512,   # Shorter responses for speed
             base_url="http://localhost:12434/engines/v1",
             api_key="ignored",
         ),
