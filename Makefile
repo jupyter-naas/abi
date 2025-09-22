@@ -466,27 +466,27 @@ docker-cleanup: check-docker
 
 # Start Oxigraph knowledge graph database
 oxigraph-up: check-docker
-	@docker-compose -f docker-compose.yml --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
+	@docker compose -f docker-compose.yml --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
 # Stop Oxigraph database
 oxigraph-down: check-docker
-	@docker-compose -f docker-compose.yml --profile local stop oxigraph || true
+	@docker compose -f docker-compose.yml --profile local stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
 # Check Oxigraph container status
 oxigraph-status: check-docker
 	@echo "Oxigraph status:"
-	@docker-compose -f docker-compose.yml --profile local ps oxigraph
+	@docker compose -f docker-compose.yml --profile local ps oxigraph
 
 # Start all local development services
 local-up: check-docker
 	@echo "🚀 Starting local services..."
-	@if ! docker-compose -f docker-compose.yml --profile local up -d --timeout 60; then \
+	@if ! docker compose -f docker-compose.yml --profile local up -d --timeout 60; then \
 		echo "❌ Failed to start services. Running cleanup..."; \
 		./docker/scripts/cleanup.sh; \
 		echo "🔄 Retrying..."; \
-		docker-compose -f docker-compose.yml --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+		docker compose -f docker-compose.yml --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
 	@echo "✓ Local containers started"
 	@make dagster-up
@@ -501,32 +501,32 @@ local-up: check-docker
 
 # View logs from all local services
 local-logs: check-docker
-	@docker-compose -f docker-compose.yml --profile local logs -f
+	@docker compose -f docker-compose.yml --profile local logs -f
 
 # Stop all local services without removing containers
 local-stop: check-docker
-	@docker-compose -f docker-compose.yml --profile local stop
+	@docker compose -f docker-compose.yml --profile local stop
 	@echo "✓ All local services stopped"
 
 # Stop and remove all local service containers
 local-down: check-docker
 	@make dagster-down
-	@docker-compose -f docker-compose.yml --profile local down --timeout 10 || true
+	@docker compose -f docker-compose.yml --profile local down --timeout 10 || true
 	@echo "✓ All local services stopped"
 
 local-reload: check-docker
-	@docker-compose --profile local down -v
+	@docker compose --profile local down -v
 	@make local-up
 	@echo "✓ Local services reloaded"
 
 # Start ABI in container mode
 container-up:
-	@docker-compose -f docker-compose.yml --profile container up -d
+	@docker compose -f docker-compose.yml --profile container up -d
 	@echo "✓ ABI container started"
 
 # Stop ABI container
 container-down:
-	@docker-compose -f docker-compose.yml --profile container down
+	@docker compose -f docker-compose.yml --profile container down
 	@echo "✓ ABI container stopped"
 
 # Start Docker model for airgap AI
@@ -558,42 +558,42 @@ model-status: check-docker
 # Start Dagster development server in foreground
 dagster-dev:
 	@echo "🚀 Starting Dagster development server..."
-	@docker-compose -f docker-compose.yml --profile local up dagster
+	@docker compose -f docker-compose.yml --profile local up dagster
 
 # Start Dagster in background mode
 dagster-up:
 	@echo "🚀 Starting Dagster in background..."
-	@docker-compose -f docker-compose.yml --profile local up -d dagster
+	@docker compose -f docker-compose.yml --profile local up -d dagster
 	@echo "✓ Dagster started on http://localhost:3001"
 	@echo "📝 Logs: make dagster-logs"
 
 # Stop Dagster background service
 dagster-down:
 	@echo "🛑 Stopping Dagster..."
-	@docker-compose -f docker-compose.yml --profile local down dagster
+	@docker compose -f docker-compose.yml --profile local down dagster
 	@echo "✓ Dagster stopped"
 
 # View Dagster service logs
 dagster-logs:
 	@echo "📄 Showing Dagster logs..."
-	@docker-compose -f docker-compose.yml --profile local logs -f dagster
+	@docker compose -f docker-compose.yml --profile local logs -f dagster
 
 # Open Dagster web interface
 dagster-ui:
 	@echo "🌐 Opening Dagster web interface..."
 	@echo "📍 Visit: http://localhost:3001"
 	@command -v open >/dev/null 2>&1 && open "http://localhost:3001" || echo "Open the URL manually in your browser"
-	@docker-compose -f docker-compose.yml --profile local up dagster
+	@docker compose -f docker-compose.yml --profile local up dagster
 
 # Check status of Dagster assets
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker-compose -f docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
+	@docker compose -f docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
 
 # Materialize all Dagster assets
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker-compose -f docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
+	@docker compose -f docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
 
 # =============================================================================
 # DATA MANAGEMENT & OPERATIONS
