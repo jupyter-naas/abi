@@ -196,7 +196,7 @@ local-build: deps
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
 chat: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
