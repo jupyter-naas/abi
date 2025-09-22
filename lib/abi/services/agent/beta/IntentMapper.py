@@ -1,10 +1,11 @@
 from .VectorStore import VectorStore
-from .Embeddings import openai_embeddings_batch, openai_embeddings
+from .Embeddings import embeddings_batch, embeddings as embeddings
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from typing import Tuple, Any
 from enum import Enum
 from dataclasses import dataclass
+import os
 
 class IntentType(Enum):
     AGENT = "agent"
@@ -25,9 +26,13 @@ class IntentMapper:
     
     def __init__(self, intents: list[Intent]):
         self.intents = intents
-        self.vector_store = VectorStore()
+        
+        dimension = 1536
+        if os.environ.get('AI_MODE') == "airgap":
+            dimension = 768
+        self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
-        self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values))
+        self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values))
         
         self.model = ChatOpenAI(model="gpt-4o-mini")
         self.system_prompt = """
@@ -52,7 +57,7 @@ You: code a project
     
     
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
-        results = self.vector_store.similarity_search(openai_embeddings(intent), k=k)
+        results = self.vector_store.similarity_search(embeddings(intent), k=k)
         for result in results:
             result['intent'] = self.get_intent_from_value(result['text'])
     

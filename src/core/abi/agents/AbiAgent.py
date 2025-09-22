@@ -176,6 +176,7 @@ def create_agent(
     
     from src.core.abi.models.gpt_4_1 import model as cloud_model
     from src.core.abi.models.qwen3_8b import model as local_model
+    from src.core.abi.models.gemma3 import model as airgap_model
     from src import secret
 
     # Define model
@@ -190,8 +191,14 @@ def create_agent(
             logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
             return None
         selected_model = local_model.model
+    elif ai_mode == "airgap":
+        if not airgap_model:
+            logger.error("Airgapped model (ai/gemma3) not available - Docker Model Runner not active")
+            logger.error("   Start with: docker model run ai/gemma3")
+            return None
+        selected_model = airgap_model.model
     else:
-        logger.error("AI_MODE must be either 'cloud' or 'local'")
+        logger.error("AI_MODE must be 'cloud', 'local', or 'airgap'")
         return None
 
     # Define tools
