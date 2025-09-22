@@ -27,7 +27,8 @@ class IntentMapper:
         self.intents = intents
         self.vector_store = VectorStore()
         intents_values = [intent.intent_value for intent in intents]
-        self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values))
+        metadatas = [{"index": index} for index in range(len(intents_values))]
+        self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values), metadatas=metadatas)
         
         self.model = ChatOpenAI(model="gpt-4o-mini")
         self.system_prompt = """
@@ -54,7 +55,7 @@ You: code a project
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
         results = self.vector_store.similarity_search(openai_embeddings(intent), k=k)
         for result in results:
-            result['intent'] = self.get_intent_from_value(result['text'])
+            result['intent'] = self.intents[result['metadata']['index']]
     
         return results
     
