@@ -342,7 +342,7 @@ You can browse the data and run queries there."""
     # Add intents for all other available agents using a more compact approach
     agent_intents_map = {
         "ChatGPT": [
-            "web search", "online research", "real-time information", "factual answers", "current events"
+            "search news about", "web search", "online research", "real-time information", "factual answers", "current events"
         ],
         "Claude": [
             "complex analysis", "research synthesis", "report writing", "data analysis", "academic writing"
@@ -367,7 +367,7 @@ You can browse the data and run queries there."""
             "code generation", "code review", "code optimization", "technical documentation", "programming help"
         ],
         "Perplexity": [
-            "web search", "fact checking", "research", "current events", "real-time information"
+            "search news about", "web search", "fact checking", "research", "current events", "real-time information"
         ],
         "Qwen": [
             "code generation", "multilingual", "technical writing", "documentation", "private computing"
