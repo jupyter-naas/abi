@@ -41,10 +41,9 @@ class IntentMapper:
                 temperature=0.7,
                 base_url="http://localhost:12434/engines/v1",
                 api_key="ignored",
-            ),
+            )
         else:
             self.model = ChatOpenAI(model="gpt-4o-mini")
-        self.model = ChatOpenAI(model="gpt-4o-mini")
         self.system_prompt = """
 You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
 
