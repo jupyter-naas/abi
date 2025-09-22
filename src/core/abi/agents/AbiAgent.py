@@ -339,52 +339,38 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
     ]
-
     # Add intents for all other available agents using a more compact approach
     agent_intents_map = {
-        "Gemini": [
-            "use gemini", "switch to gemini", "google ai", "google gemini", "gemini 2.0", "gemini flash",
-            "use google ai", "switch to google", "ask gemini", "use google gemini", "multimodal analysis",
-            "analyze image", "image understanding", "video analysis", "audio analysis", "let's use google",
-            "try google ai", "google's model", "google's ai", "use bard", "switch to bard",
-            "generate image", "create image", "generate an image", "create a picture", "make an image",
-            "draw", "illustrate", "picture of", "image of", "visual representation", "generate an image of",
-            "create an image of", "make a picture of", "show me", "visualization"
-        ],
         "ChatGPT": [
-            "ask openai", "ask chatgpt", "use openai", "use chatgpt", "switch to openai", 
-            "switch to chatgpt", "openai gpt", "gpt-4o", "gpt4"
-        ],
-        "Mistral": [
-            "ask mistral", "use mistral", "switch to mistral", "mistral ai", "mistral large", "french ai"
+            "web search", "online research", "real-time information", "factual answers", "current events"
         ],
         "Claude": [
-            "ask claude", "use claude", "switch to claude", "claude 3.5", "anthropic", 
-            "anthropic claude", "claude sonnet"
-        ],
-        "Perplexity": [
-            "ask perplexity", "use perplexity", "switch to perplexity", "perplexity ai",
-            "search web", "web search", "search online", "search internet"
-        ],
-        "Llama": [
-            "ask llama", "use llama", "switch to llama", "llama 3.3", "meta llama", "meta ai"
-        ],
-        "Qwen": [
-            "ask qwen", "use qwen", "switch to qwen", "private ai", "local ai", "offline ai",
-            "qwen code", "private code"
+            "complex analysis", "research synthesis", "report writing", "data analysis", "academic writing"
         ],
         "DeepSeek": [
-            "ask deepseek", "use deepseek", "switch to deepseek", "complex reasoning", 
-            "mathematical proof", "step by step", "logical analysis", "private reasoning"
+            "mathematical analysis", "logical reasoning", "step-by-step solutions", "problem solving", "proofs"
+        ],
+        "Gemini": [
+            "multimodal analysis", "analyze image", "image understanding", "video analysis", "audio analysis",
+            "generate image", "create image", "draw", "illustrate", "visualization"
         ],
         "Gemma": [
-            "ask gemma", "use gemma", "switch to gemma", "quick question", "fast response",
-            "lightweight ai", "local gemini", "private chat"
+            "fast responses", "basic tasks", "quick answers", "simple queries", "lightweight processing"
         ],
         "Grok": [
-            "ask grok", "use grok", "switch to grok", "xai", "grok 4", "maximum intelligence",
-            "highest intelligence", "use xai", "switch to xai", "truth seeking", 
-            "contrarian analysis", "scientific reasoning"
+            "scientific analysis", "critical thinking", "truth seeking", "contrarian views", "rigorous reasoning"
+        ],
+        "Llama": [
+            "general knowledge", "conversation", "writing assistance", "creative tasks", "brainstorming"
+        ],
+        "Mistral": [
+            "code generation", "code review", "code optimization", "technical documentation", "programming help"
+        ],
+        "Perplexity": [
+            "web search", "fact checking", "research", "current events", "real-time information"
+        ],
+        "Qwen": [
+            "code generation", "multilingual", "technical writing", "documentation", "private computing"
         ]
     }
 
@@ -444,7 +430,7 @@ You can browse the data and run queries there."""
         description=DESCRIPTION,
         chat_model=selected_model,
         tools=tools,
-        agents=agents,  # Empty list for now
+        agents=agents,
         intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
