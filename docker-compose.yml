@@ -115,7 +115,6 @@ services:
       - ./README.md:/app/README.md
       - venv_cache:/app/.venv
       - dagster_home:/app/.dagster
-    platform: linux/arm64
     environment:
       - PYTHONPATH=/app
       - DAGSTER_HOME=/app/.dagster
