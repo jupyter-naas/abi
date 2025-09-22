@@ -126,12 +126,30 @@ services:
       - local
       - prod
 
+  model-puller:
+    image: alpine:latest
+    command: ["sleep", "infinity"]
+    models:
+      - llm
+      - embeddings
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+
 volumes:
   cargo-cache:
   venv_cache:
   oxigraph_data:
   postgres_data:
   dagster_home: 
+
+models:
+  llm:
+    model: ai/gemma3
+  embeddings:
+    model: ai/embeddinggemma
 
 networks:
   abi-network:

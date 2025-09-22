@@ -12,7 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-default: deps help
+default: deps airgap
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
@@ -94,6 +94,9 @@ help:
 	@echo "  local-reload             Stop and remove all local service containers and restart them"
 	@echo "  container-up             Start ABI in container mode"
 	@echo "  container-down           Stop ABI container"
+	@echo "  model-up                 Start Docker model for airgap AI operation"
+	@echo "  model-down               Stop Docker model"
+	@echo "  model-status             Check Docker model status"
 	@echo ""
 	@echo "DAGSTER DATA ORCHESTRATION:"
 	@echo "  dagster-dev              Start Dagster development server (foreground)"
@@ -146,6 +149,20 @@ help:
 
 # Master dependency target - ensures all dependencies are satisfied
 deps: uv git-deps .venv .env
+
+# Ensure airgap model is running if AI_MODE=airgap
+airgap:
+	@if grep -q "AI_MODE=airgap" .env 2>/dev/null; then \
+		echo "🤖 Checking airgap model status..."; \
+		if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
+			echo "🚀 Starting Docker model ai/gemma3 for airgap mode..."; \
+			docker model run ai/gemma3 & \
+			sleep 5; \
+			echo "✓ Docker model ai/gemma3 ready for airgap operation"; \
+		else \
+			echo "✓ Docker model ai/gemma3 already running"; \
+		fi \
+	fi
 
 # Ensure uv package manager is installed and Python 3.10 is available
 uv:
@@ -480,6 +497,7 @@ local-up: check-docker
 	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
+	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
 
 # View logs from all local services
 local-logs: check-docker
@@ -510,6 +528,28 @@ container-up:
 container-down:
 	@docker-compose -f docker-compose.yml --profile container down
 	@echo "✓ ABI container stopped"
+
+# Start Docker model for airgap AI
+model-up: check-docker
+	@echo "🤖 Starting Docker model ai/gemma3..."
+	@if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
+		docker model run ai/gemma3 & \
+		sleep 5; \
+		echo "✓ Docker model ai/gemma3 started and ready"; \
+	else \
+		echo "✓ Docker model ai/gemma3 already running"; \
+	fi
+
+# Stop Docker model
+model-down: check-docker
+	@echo "🛑 Stopping Docker model..."
+	@docker model stop ai/gemma3 || echo "Model not running"
+	@echo "✓ Docker model stopped"
+
+# Check Docker model status
+model-status: check-docker
+	@echo "🤖 Docker model status:"
+	@docker model ls | grep gemma3 || echo "No gemma3 model running"
 
 # =============================================================================
 # DAGSTER DATA ORCHESTRATION
@@ -651,4 +691,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize

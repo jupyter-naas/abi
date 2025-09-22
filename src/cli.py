@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 from dotenv import dotenv_values
+
 from rich.console import Console
 from rich.prompt import Prompt
 import requests
@@ -470,24 +471,41 @@ checks = [
 ]
     
 def main(agent_name="AbiAgent"):
-    for f in checks:
-        f()
+    # Load environment first to check AI_MODE
+    for key, value in dotenv_values().items():
+        os.environ[key] = value
+    
+    ai_mode = os.getenv("AI_MODE")
+    
+    
+    # Skip cloud service checks in airgap mode for instant startup
+    if ai_mode == "airgap":
+        # Only run essential checks for airgap mode
+        essential_checks = [
+            personnal_information,
+            define_ai_mode,
+            define_config_file,
+            define_abi_api_key,
+            define_oxigraph_url,
+            define_postgres_url,
+        ]
+        for f in essential_checks:
+            f()
+    else:
+        # Run all checks for cloud/local modes
+        for f in checks:
+            f()
 
     # Reload src/__init__.py to ensure latest changes
     import importlib
     import src
     importlib.reload(src)
     
-    for key, value in dotenv_values().items():
-        os.environ[key] = value
-
-    # Force local mode to avoid network calls
-    os.environ['ENV'] = ENV 
-    
     # Ensure all local services are running (Oxigraph, PostgreSQL, etc.)
     ensure_local_services_running()
     
-    console.print(f"Starting agent...", style="green")
+    if ai_mode != "airgap":
+        console.print(f"Starting agent...", style="green")
     from src.core.abi.apps.terminal_agent.main import generic_run_agent
     generic_run_agent(agent_name)
 
