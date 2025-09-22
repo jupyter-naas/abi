@@ -19,7 +19,7 @@ def analyze_module_dependencies(module_paths: List[str]) -> Dict[str, Set[str]]:
     dependencies = {path: set() for path in module_paths}
     
     for module_path in module_paths:
-        logger.debug(f"Analyzing dependencies for module: {module_path}")
+        # logger.debug(f"Analyzing dependencies for module: {module_path}")
         module_dir = Path(module_path)
         if not module_dir.exists():
             continue
@@ -50,7 +50,7 @@ def analyze_module_dependencies(module_paths: List[str]) -> Dict[str, Set[str]]:
                     for other_module in module_paths:
                         if other_module != module_path:
                             dependencies[module_path].add(other_module)
-                    logger.debug(f"Module {module_path} depends on ALL other modules")
+                    logger.warning(f"Module {module_path} depends on ALL other modules")
                 else:
                     # Regular dependency analysis for import statements
                     for node in ast.walk(tree):
@@ -75,13 +75,13 @@ def analyze_module_dependencies(module_paths: List[str]) -> Dict[str, Set[str]]:
                                         
                                         # Check if dependency exists in module_paths
                                         if not any(dep_module_path.startswith(path) for path in module_paths):
-                                            logger.debug(f"Analyzing file {py_file}")
+                                            # logger.debug(f"Analyzing file {py_file}")
                                             logger.warning(f"Module {module_path} imports from {dep_module_path} but that module is not in the module list")
                                         # Only add dependency if it's in our module list and different from current
                                         elif dep_module_path != module_path:
-                                            logger.debug(f"Analyzing file {py_file}")
+                                            # logger.debug(f"Analyzing file {py_file}")
                                             dependencies[module_path].add(dep_module_path)
-                                            logger.debug(f"Module {module_path} depends on {dep_module_path}")
+                                            # logger.debug(f"Module {module_path} depends on {dep_module_path}")
                                         
             except Exception as e:
                 logger.warning(f"Could not analyze dependencies for {py_file}: {e}")
@@ -154,7 +154,7 @@ def get_modules(config=None):
             if config is not None and hasattr(config, 'modules'):
                 enabled_modules = [m.path for m in config.modules if m.enabled]
             
-            logger.debug(f"Modules from config.yaml: {enabled_modules}")
+            # logger.debug(f"Modules from config.yaml: {enabled_modules}")
             
             # Filter valid modules
             valid_modules = []
@@ -173,11 +173,11 @@ def get_modules(config=None):
                     valid_modules.append(modulepath)
             
             # Analyze dependencies and sort modules
-            logger.debug("Analyzing module dependencies...")
+            # logger.debug("Analyzing module dependencies...")
             dependencies = analyze_module_dependencies(valid_modules)
             sorted_modules = topological_sort(valid_modules, dependencies)
             
-            logger.debug(f"Module loading order: {sorted_modules}")
+            logger.debug(f"Modules to load: {sorted_modules}")
             
             # Load modules in dependency order
             for modulepath in sorted_modules:
