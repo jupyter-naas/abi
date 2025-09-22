@@ -6,6 +6,8 @@ from abi.services.agent.Agent import (
 )
 from typing import Optional
 from src.core.perplexity.models.sonar_pro import model
+from langchain_core.messages import ToolMessage, ChatMessage
+
 
 NAME = "Perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
@@ -63,4 +65,21 @@ def create_agent(
     ) 
 
 class PerplexityAgent(Agent):
-    pass
+    
+    # This is required because langchain_perplexity does not handle ToolMessage properly.
+    # If we don't do this, the langchain_perplexity code will raise an error as it does not expect a ToolMessage.
+    # But they do have a ChatMessage check, so instead we convert the ToolMessage to a ChatMessage.
+    # And it seems to work fine :D 
+    def call_model(self, state):
+        _messages_without_tool_message = []
+        
+        for message in state["messages"]:
+            message = message.copy()
+            if isinstance(message, ToolMessage):
+                message = ChatMessage(content=message.content, role="tool", id=message.tool_call_id)
+            
+            _messages_without_tool_message.append(message)
+                
+        state["messages"] = _messages_without_tool_message
+        
+        return super().call_model(state)

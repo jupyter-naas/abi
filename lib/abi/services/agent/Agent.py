@@ -23,7 +23,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from langchain_core.messages import ToolMessage, ToolCall
+from langchain_core.messages import ToolMessage, ToolCall, ChatMessage
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
 from enum import Enum
@@ -112,6 +112,7 @@ class AgentSharedState:
 
     def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None):
         assert isinstance(thread_id, str)
+        
         self._thread_id = thread_id
         self._current_active_agent = current_active_agent
 
@@ -533,17 +534,19 @@ class Agent(Expose):
                 "properties"
             ]
 
+            # For tools with InjectedToolCallId, we must pass the full ToolCall object
+            # according to LangChain's requirements
             args: dict[str, Any] | ToolCall = tool_call
 
-            # this is simplified for demonstration purposes and
-            # is different from the ToolNode implementation
+            # Check if tool needs state injection or is a handoff tool
             if "state" in tool_input_fields:
                 # inject state
                 args = {**tool_call, "state": state}
 
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
-                args = {"state": state, "tool_call_id": tool_call["id"]}
+                args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
+                
             try:
                 tool_response = tool_.invoke(args)
 
@@ -559,13 +562,15 @@ class Agent(Expose):
                         f"Tool call {tool_call['name']} returned an unexpected type: {type(tool_response)}"
                     )
             except Exception as e:
+                if os.environ.get("LOG_LEVEL") == "DEBUG":
+                    raise e
                 # If the tool call fails, we want the model to interpret it.
                 results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
 
         assert len(results) > 0, state
 
         # If the last response is a ToolMessage, we want the model to interpret it.
-        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage):
+        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_"):
             logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
             results.append(Command(goto="call_model"))
 
@@ -976,18 +981,19 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
         # # optionally pass current graph state to the tool (will be ignored by the LLM)
         state: Annotated[dict, InjectedState],
         # optionally pass the current tool call ID (will be ignored by the LLM)
-        tool_call_id: Annotated[str, InjectedToolCallId],
+        tool_call: Annotated[ToolCall, ToolCall],
+        
     ):
         """Ask another agent for help."""
         agent_label = " ".join(
             word.capitalize() for word in agent.name.replace("_", " ").split()
         )
-        tool_message = {
-            "role": "tool",
-            "content": f"Conversation transferred to {agent_label}",
-            "name": tool_name,
-            "tool_call_id": tool_call_id,
-        }
+        
+        tool_message = ToolMessage(
+            content=f"Conversation transferred to {agent_label}",
+            name=tool_name,
+            tool_call_id=tool_call["id"],   
+        )
 
         return Command(
             # navigate to another agent node in the PARENT graph
