@@ -40,28 +40,28 @@ class CyberSecuritySPARQLAgent:
         """Load predefined SPARQL queries."""
         return {
             "dataset_overview": """
-                PREFIX : <http://example.org/cyber-security#>
+                PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 
                 SELECT ?event ?name ?date ?category ?severity WHERE {
-                    ?event rdf:type :CyberSecurityEvent ;
-                           :name ?name ;
-                           :date ?date ;
-                           :category ?category ;
-                           :severity ?severity .
+                    ?event rdf:type cse:CyberSecurityEvent ;
+                           cse:eventName ?name ;
+                           cse:eventDate ?date ;
+                           cse:category ?category ;
+                           cse:severity ?severity .
                 }
                 ORDER BY ?date
             """,
             
             "timeline_analysis": """
-                PREFIX : <http://example.org/cyber-security#>
+                PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 
                 SELECT ?event ?name ?date ?severity WHERE {
-                    ?event rdf:type :CyberSecurityEvent ;
-                           :name ?name ;
-                           :date ?date ;
-                           :severity ?severity .
+                    ?event rdf:type cse:CyberSecurityEvent ;
+                           cse:eventName ?name ;
+                           cse:eventDate ?date ;
+                           cse:severity ?severity .
                 }
                 ORDER BY ?date
             """,
@@ -109,12 +109,12 @@ class CyberSecuritySPARQLAgent:
             """,
             
             "severity_distribution": """
-                PREFIX : <http://example.org/cyber-security#>
+                PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 
                 SELECT ?severity (COUNT(?event) as ?count) WHERE {
-                    ?event rdf:type :CyberSecurityEvent ;
-                           :severity ?severity .
+                    ?event rdf:type cse:CyberSecurityEvent ;
+                           cse:severity ?severity .
                 }
                 GROUP BY ?severity
                 ORDER BY DESC(?count)
@@ -149,11 +149,11 @@ class CyberSecuritySPARQLAgent:
             events = []
             for row in results:
                 events.append({
-                    "event": str(row.event),
-                    "name": str(row.name),
-                    "date": str(row.date),
-                    "category": str(row.category),
-                    "severity": str(row.severity)
+                    "event": str(row[0]),
+                    "name": str(row[1]),
+                    "date": str(row[2]),
+                    "category": str(row[3]),
+                    "severity": str(row[4])
                 })
             
             # Get severity distribution
@@ -161,8 +161,8 @@ class CyberSecuritySPARQLAgent:
             severity_dist = []
             for row in sev_results:
                 severity_dist.append({
-                    "severity": str(row.severity),
-                    "count": int(row.count)
+                    "severity": str(row[0]),
+                    "count": int(row[1])
                 })
             
             return {
