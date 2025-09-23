@@ -1,51 +1,120 @@
 #!/usr/bin/env python3
 """
-Conversational Cyber Security CLI - Natural AI conversation with SPARQL function calls
+Cyber Security Agent CLI - Proper ABI IntentAgent with SPARQL function calls
 """
 
 import sys
+import os
 from pathlib import Path
-from typing import List, Dict, Any
 
 # Add the cyber-security-analyst module to path
 current_dir = Path(__file__).parent
 module_dir = current_dir.parent
 sys.path.insert(0, str(module_dir))
 
-class ConversationalCyberCLI:
-    """Conversational cyber security CLI with natural responses."""
+def main():
+    """Main CLI using proper ABI IntentAgent with function calls."""
     
-    def __init__(self):
-        """Initialize the conversational CLI."""
-        self.name = "CyberSec"
+    print("🤖 Cyber Security Agent (ABI IntentAgent)")
+    print("=" * 45)
+    
+    # Check for OpenAI API key
+    if not os.getenv('OPENAI_API_KEY'):
+        print("⚠️  OPENAI_API_KEY not set")
+        print("💡 Set your API key to enable full LLM conversation:")
+        print("   export OPENAI_API_KEY='your-key-here'")
+        print("\n🔄 Using fallback conversational mode...")
+        use_fallback = True
+    else:
+        use_fallback = False
+    
+    if not use_fallback:
+        # Try to use the real ConversationalCyberAgent
+        try:
+            from agents.ConversationalCyberAgent import create_agent
+            agent = create_agent()
+            print(f"✅ Loaded {agent.name} (ABI IntentAgent)")
+            print(f"🧠 LLM-powered with SPARQL function calls")
+            
+            print("\n💬 Chat with the agent (type 'quit' to exit)")
+            print("🔍 The agent will call SPARQL functions as needed")
+            print("-" * 50)
+            
+            while True:
+                try:
+                    user_input = input(f"\n💬 You: ").strip()
+                    
+                    if user_input.lower() in ['quit', 'exit', 'bye']:
+                        print(f"\n👋 Au revoir!")
+                        break
+                        
+                    if not user_input:
+                        continue
+                    
+                    # Use the agent's invoke method (ABI pattern)
+                    print(f"\n🧠 {agent.name} processing...")
+                    response = agent.invoke(user_input)
+                    print(f"\n🤖 {agent.name}: {response}")
+                        
+                except KeyboardInterrupt:
+                    print(f"\n\n👋 Au revoir!")
+                    break
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+                    
+        except Exception as e:
+            print(f"❌ Failed to load ABI agent: {e}")
+            use_fallback = True
+    
+    if use_fallback:
+        # Fallback conversational mode
+        print("✅ Loaded CyberSec (Fallback Mode)")
+        print("🧠 Natural conversation with SPARQL backend")
         
-        # Load SPARQL agent for data queries
+        # Load SPARQL agent for queries
         try:
             exec(open(module_dir / 'agents' / 'CyberSecuritySPARQLAgent.py').read())
-            self.sparql_agent = CyberSecuritySPARQLAgent()  # noqa: F821
-            self.has_knowledge_graph = self.sparql_agent.graph is not None
-            print(f"✅ Loaded knowledge graph: {len(self.sparql_agent.graph):,} triples")
+            sparql_agent = CyberSecuritySPARQLAgent()  # noqa: F821
+            has_knowledge_graph = sparql_agent.graph is not None
+            print(f"✅ Knowledge graph: {len(sparql_agent.graph):,} triples")
         except Exception as e:
-            print(f"❌ Failed to load SPARQL agent: {e}")
-            self.sparql_agent = None
-            self.has_knowledge_graph = False
-    
-    def handle_greeting(self, message: str) -> str:
-        """Handle greetings naturally."""
-        greetings = {
-            'salut': 'Salut!',
-            'hello': 'Hello!', 
-            'hi': 'Hi there!',
-            'hey': 'Hey!'
-        }
+            print(f"❌ SPARQL agent failed: {e}")
+            sparql_agent = None
+            has_knowledge_graph = False
         
-        greeting = 'Hello!'
-        for word, response in greetings.items():
-            if word in message.lower():
-                greeting = response
+        print("\n💬 Chat naturally (type 'quit' to exit)")
+        print("🔍 I'll show you SPARQL function calls")
+        print("-" * 50)
+        
+        while True:
+            try:
+                user_input = input(f"\n💬 You: ").strip()
+                
+                if user_input.lower() in ['quit', 'exit', 'bye']:
+                    print(f"\n👋 Au revoir!")
+                    break
+                    
+                if not user_input:
+                    continue
+                
+                print(f"\n🧠 CyberSec processing: '{user_input}'")
+                response = process_fallback_input(user_input, sparql_agent, has_knowledge_graph)
+                print(f"\n🤖 CyberSec: {response}")
+                    
+            except KeyboardInterrupt:
+                print(f"\n\n👋 Au revoir!")
                 break
-        
-        return f"""👋 {greeting} I'm {self.name}, your cyber security intelligence agent.
+            except Exception as e:
+                print(f"❌ Error: {e}")
+
+def process_fallback_input(user_input: str, sparql_agent, has_knowledge_graph: bool) -> str:
+    """Process input in fallback mode with SPARQL function calls."""
+    user_lower = user_input.lower().strip()
+    
+    # Greetings
+    if any(word in user_lower for word in ['salut', 'hello', 'hi', 'hey', 'bonjour']):
+        greeting = 'Salut!' if 'salut' in user_lower else 'Hello!'
+        return f"""👋 {greeting} I'm CyberSec, your cyber security intelligence agent.
 
 🛡️ **I can help you with:**
 • Analyzing 2025 cyber security threats and incidents
@@ -56,80 +125,47 @@ class ConversationalCyberCLI:
 💬 **Just ask me naturally:**
 • "What were the biggest threats this year?"
 • "Show me ransomware attacks"
-• "How can I defend against supply chain attacks?"
 • "Tell me about the timeline of events"
 
 What would you like to explore about cyber security?"""
     
-    def get_overview(self) -> str:
-        """Get dataset overview with SPARQL query."""
-        if not self.has_knowledge_graph:
-            return "❌ Knowledge graph not available. The ontology needs to be generated first."
+    # Overview requests
+    elif any(word in user_lower for word in ['overview', 'summary', 'what happened', 'show me data']):
+        if not has_knowledge_graph:
+            return "❌ Knowledge graph not available. Run the ontology generation pipeline first."
         
         print("🔍 Function call: get_dataset_overview()")
-        result = self.sparql_agent.get_dataset_overview()
+        result = sparql_agent.get_dataset_overview()
         
         response = f"""📊 **2025 Cyber Security Landscape Overview**
 
 **📈 Dataset Statistics:**
 • Total Events: {result.get('total_events', 0)}
-• Knowledge Graph: {len(self.sparql_agent.graph):,} RDF triples
+• Knowledge Graph: {len(sparql_agent.graph):,} RDF triples
 • Time Period: January - December 2025"""
         
         if result.get('severity_distribution'):
             response += "\n\n**⚠️ Severity Distribution:**"
             for sev in result['severity_distribution']:
-                emoji = "🔴" if sev['severity'] == "critical" else "🟡" if sev['severity'] == "high" else "🟢"
+                emoji = "🔴" if sev['severity'] == "critical" else "🟡"
                 response += f"\n{emoji} {sev['severity'].title()}: {sev['count']} events"
         
         response += f"""
 
 **🔍 SPARQL Audit Trail:**
-• Query: Dataset overview executed successfully
+• Function: get_dataset_overview() executed successfully
 • Data Source: Cyber Security Knowledge Graph
-• Results: Fully auditable and traceable
-
-Want to explore specific threats? Try asking about ransomware, supply chain attacks, or the timeline!"""
+• Results: Fully auditable and traceable"""
         
         return response
     
-    def search_threats(self, category: str) -> str:
-        """Search for specific threat categories."""
-        if not self.has_knowledge_graph:
-            return "❌ Knowledge graph not available."
-        
-        print(f"🔍 Function call: search_events_by_category(category='{category}')")
-        result = self.sparql_agent.search_events_by_criteria(category=category)
-        
-        if result.get('results'):
-            response = f"🔍 **{category.replace('_', ' ').title()} Analysis**\n\n"
-            response += f"**📊 Found {len(result['results'])} events:**\n"
-            
-            for event in result['results']:
-                emoji = "🔴" if event.get('severity') == "critical" else "🟡"
-                response += f"{emoji} {event.get('date', 'Unknown')} - {event.get('name', 'Unknown')}\n"
-                if event.get('description'):
-                    desc = event['description'][:100] + "..." if len(event['description']) > 100 else event['description']
-                    response += f"   {desc}\n"
-        else:
-            response = f"No {category.replace('_', ' ')} events found in the dataset."
-        
-        response += f"""
-
-**🔍 SPARQL Audit Trail:**
-• Query: Category search executed successfully
-• Search Criteria: {category}
-• Data Source: Cyber Security Knowledge Graph"""
-        
-        return response
-    
-    def get_timeline(self) -> str:
-        """Get timeline analysis."""
-        if not self.has_knowledge_graph:
+    # Timeline requests
+    elif any(word in user_lower for word in ['timeline', 'when', 'chronological', 'time']):
+        if not has_knowledge_graph:
             return "❌ Knowledge graph not available."
         
         print("🔍 Function call: get_timeline_analysis()")
-        result = self.sparql_agent.get_timeline_analysis()
+        result = sparql_agent.get_timeline_analysis()
         
         response = "📅 **2025 Cyber Security Timeline**\n\n"
         
@@ -147,41 +183,23 @@ Want to explore specific threats? Try asking about ransomware, supply chain atta
         response += f"""
 
 **🔍 SPARQL Audit Trail:**
-• Query: Timeline analysis executed successfully
+• Function: get_timeline_analysis() executed successfully
 • Total Events: {result.get('total_events', 0)}
 • Data Source: Cyber Security Knowledge Graph"""
         
         return response
     
-    def process_input(self, user_input: str) -> str:
-        """Process user input and generate natural responses."""
-        user_lower = user_input.lower().strip()
-        
-        # Greetings
-        if any(word in user_lower for word in ['salut', 'hello', 'hi', 'hey', 'bonjour']):
-            return self.handle_greeting(user_input)
-        
-        # Overview requests
-        elif any(word in user_lower for word in ['overview', 'summary', 'what happened', 'show me data']):
-            return self.get_overview()
-        
-        # Timeline requests
-        elif any(word in user_lower for word in ['timeline', 'when', 'chronological', 'time']):
-            return self.get_timeline()
-        
-        # Specific threat searches
-        elif 'satellite' in user_lower:
-            return self.search_threats('satellite_attack')
-        elif 'ransomware' in user_lower:
-            return self.search_threats('ransomware')
-        elif 'supply chain' in user_lower:
-            return self.search_threats('supply_chain_attack')
-        elif 'phishing' in user_lower:
-            return self.search_threats('phishing')
-        
-        # Help requests
-        elif any(word in user_lower for word in ['help', 'what can you do', 'capabilities']):
-            return """🤖 **What I can help you with:**
+    # Specific threat searches
+    elif 'satellite' in user_lower:
+        return search_events_fallback('satellite_attack', sparql_agent, has_knowledge_graph)
+    elif 'ransomware' in user_lower:
+        return search_events_fallback('ransomware', sparql_agent, has_knowledge_graph)
+    elif 'supply chain' in user_lower:
+        return search_events_fallback('supply_chain_attack', sparql_agent, has_knowledge_graph)
+    
+    # Help requests
+    elif any(word in user_lower for word in ['help', 'what can you do', 'capabilities']):
+        return """🤖 **What I can help you with:**
 
 **💬 Natural Conversation:**
 • Just ask me questions naturally in English or French
@@ -189,75 +207,67 @@ Want to explore specific threats? Try asking about ransomware, supply chain atta
 • "Tell me about ransomware attacks"
 • "Show me the timeline of events"
 
-**🔍 Available Analysis:**
-• Dataset overview and statistics
-• Timeline of 2025 cyber security events  
-• Specific threat category searches (ransomware, supply chain, etc.)
-• Attack vector analysis with D3FEND recommendations
+**🔍 Available Functions:**
+• get_dataset_overview() - Dataset statistics and threat categories
+• get_timeline_analysis() - Chronological analysis of events
+• search_events_by_category() - Search specific threat types
+• get_critical_events() - Critical incidents with D3FEND recommendations
 
-**🛡️ Threat Categories I know about:**
-• Ransomware attacks
-• Supply chain compromises
-• Satellite/space security incidents
-• Phishing campaigns
+**🛡️ Threat Categories:**
+• Ransomware attacks • Supply chain compromises
+• Satellite/space security • Phishing campaigns
 • Critical infrastructure attacks
 
 **🔍 Transparency:**
-• Every response shows the SPARQL query I executed
+• Every response shows the SPARQL function I called
 • Complete audit trail for all analysis
 • Data traceable to original cyber security events
 
 Just ask me anything about cyber security - I'll understand and help you!"""
-        
-        # Default response for unrecognized input
-        else:
-            return f"""💬 I understand you're asking about: "{user_input}"
+    
+    # Default response
+    else:
+        return f"""💬 I understand you're asking about: "{user_input}"
 
 I'm specialized in cyber security intelligence. Here are some things you can ask me:
 
 • "What happened with cyber security in 2025?"
-• "Show me ransomware attacks"
-• "Tell me about satellite security incidents"  
+• "Show me ransomware attacks"  
+• "Tell me about satellite security incidents"
 • "What's the timeline of major events?"
 • "Give me an overview of the threats"
 
-Or just say "help" to see all my capabilities. What would you like to know about cyber security?"""
+Or just say "help" to see all my capabilities. What would you like to know?"""
 
-def main():
-    """Main CLI function."""
-    print("🤖 Conversational Cyber Security Agent")
-    print("=" * 40)
+def search_events_fallback(category: str, sparql_agent, has_knowledge_graph: bool) -> str:
+    """Search for events by category in fallback mode."""
+    if not has_knowledge_graph:
+        return "❌ Knowledge graph not available."
     
-    cli = ConversationalCyberCLI()
+    print(f"🔍 Function call: search_events_by_category(category='{category}')")
+    result = sparql_agent.search_events_by_criteria(category=category)
     
-    print(f"✅ Loaded {cli.name} conversational agent")
-    print(f"🧠 Natural conversation with SPARQL backend")
+    if result.get('results'):
+        response = f"🔍 **{category.replace('_', ' ').title()} Analysis**\n\n"
+        response += f"**📊 Found {len(result['results'])} events:**\n"
+        
+        for event in result['results']:
+            emoji = "🔴" if event.get('severity') == "critical" else "🟡"
+            response += f"{emoji} {event.get('date', 'Unknown')} - {event.get('name', 'Unknown')}\n"
+            if event.get('description'):
+                desc = event['description'][:100] + "..." if len(event['description']) > 100 else event['description']
+                response += f"   {desc}\n"
+    else:
+        response = f"No {category.replace('_', ' ')} events found in the dataset."
     
-    print("\n💬 Chat naturally with the agent (type 'quit' to exit)")
-    print("🔍 I'll show you the SPARQL queries I execute")
-    print("-" * 50)
+    response += f"""
+
+**🔍 SPARQL Audit Trail:**
+• Function: search_events_by_category('{category}') executed
+• Search Criteria: {category}
+• Data Source: Cyber Security Knowledge Graph"""
     
-    while True:
-        try:
-            user_input = input(f"\n💬 You: ").strip()
-            
-            if user_input.lower() in ['quit', 'exit', 'bye', 'au revoir']:
-                print(f"\n👋 Au revoir! Stay secure!")
-                break
-                
-            if not user_input:
-                continue
-            
-            print(f"\n🧠 {cli.name} processing: '{user_input}'")
-            response = cli.process_input(user_input)
-            print(f"\n🤖 {cli.name}: {response}")
-                
-        except KeyboardInterrupt:
-            print(f"\n\n👋 Au revoir! Stay secure!")
-            break
-        except EOFError:
-            print(f"\n\n👋 Au revoir! Stay secure!")
-            break
+    return response
 
 if __name__ == "__main__":
     main()

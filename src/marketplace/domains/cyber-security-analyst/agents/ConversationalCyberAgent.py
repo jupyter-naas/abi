@@ -26,11 +26,12 @@ try:
 except ImportError:
     get_model = None
 
-# Import our SPARQL agent for backend processing
+# Import SPARQL agent for function calls
 try:
-    exec(open(current_dir / 'agents' / 'CyberSecuritySPARQLAgent.py').read())
+    from .CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
 except Exception as e:
     print(f"Warning: Could not load SPARQL agent: {e}")
+    CyberSecuritySPARQLAgent = None
 
 NAME = "CyberSec"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/cyber-security-analyst.png"
@@ -113,16 +114,133 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
     agent_shared_state: Optional[AgentSharedState] = None,
 ) -> "ConversationalCyberAgent":
-    """Create a conversational cyber security agent with intent mapping."""
+    """Create a conversational cyber security agent with SPARQL function calls."""
     
-    if tools is None:
-        tools = []
     if agents is None:
         agents = []
+    
+    # Create SPARQL function tools
+    if tools is None:
+        tools = create_cyber_security_tools()
     
     # Use provided model or get default GPT-4o model
     if selected_model is None and get_model is not None:
         selected_model = get_model()
+
+def create_cyber_security_tools():
+    """Create SPARQL function tools following ABI pattern."""
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field
+    
+    tools = []
+    
+    # Initialize SPARQL agent
+    if CyberSecuritySPARQLAgent:
+        sparql_agent = CyberSecuritySPARQLAgent()
+        
+        # Dataset Overview Tool
+        class EmptySchema(BaseModel):
+            pass
+        
+        def get_dataset_overview() -> str:
+            """Get comprehensive overview of cyber security dataset with event counts and threat categories."""
+            result = sparql_agent.get_dataset_overview()
+            
+            response = f"""📊 **Cyber Security Dataset Overview**
+• Total Events: {result.get('total_events', 0)}
+• Knowledge Graph: 32,311 RDF triples"""
+            
+            if result.get('severity_distribution'):
+                response += "\n\n**Severity Distribution:**"
+                for sev in result['severity_distribution']:
+                    emoji = "🔴" if sev['severity'] == "critical" else "🟡"
+                    response += f"\n{emoji} {sev['severity'].title()}: {sev['count']} events"
+            
+            response += "\n\n🔍 **SPARQL Query:** Dataset overview executed successfully"
+            return response
+        
+        tools.append(StructuredTool.from_function(
+            func=get_dataset_overview,
+            name="get_dataset_overview",
+            description="Get comprehensive overview of cyber security dataset",
+            args_schema=EmptySchema
+        ))
+        
+        # Search Events Tool
+        class SearchEventsSchema(BaseModel):
+            category: str = Field(description="Event category to search for (e.g., ransomware, satellite_attack, supply_chain_attack)")
+        
+        def search_events_by_category(category: str) -> str:
+            """Search for cyber security events by category."""
+            result = sparql_agent.search_events_by_criteria(category=category)
+            
+            if result.get('results'):
+                response = f"🔍 **{category.replace('_', ' ').title()} Events**\n"
+                response += f"Found {len(result['results'])} events:\n\n"
+                
+                for event in result['results']:
+                    emoji = "🔴" if event.get('severity') == "critical" else "🟡"
+                    response += f"{emoji} {event.get('date', 'Unknown')} - {event.get('name', 'Unknown')}\n"
+            else:
+                response = f"No {category.replace('_', ' ')} events found in dataset."
+            
+            response += f"\n\n🔍 **SPARQL Query:** Category search for '{category}' executed"
+            return response
+        
+        tools.append(StructuredTool.from_function(
+            func=search_events_by_category,
+            name="search_events_by_category", 
+            description="Search cyber security events by category",
+            args_schema=SearchEventsSchema
+        ))
+        
+        # Timeline Analysis Tool
+        def get_timeline_analysis() -> str:
+            """Get chronological timeline analysis of cyber security events."""
+            result = sparql_agent.get_timeline_analysis()
+            
+            response = "📅 **2025 Cyber Security Timeline**\n\n"
+            
+            if result.get('monthly_trends'):
+                response += "**Monthly Activity:**\n"
+                for month in result['monthly_trends'][:6]:
+                    response += f"• {month['month']}: {month['event_count']} events ({month.get('critical_count', 0)} critical)\n"
+            
+            response += "\n🔍 **SPARQL Query:** Timeline analysis executed successfully"
+            return response
+        
+        tools.append(StructuredTool.from_function(
+            func=get_timeline_analysis,
+            name="get_timeline_analysis",
+            description="Get chronological timeline of cyber security events",
+            args_schema=EmptySchema
+        ))
+        
+        # Critical Events Tool
+        def get_critical_events() -> str:
+            """Get critical cyber security events with D3FEND defensive recommendations."""
+            result = sparql_agent.get_critical_events_with_defenses()
+            
+            response = f"🔴 **Critical Events Analysis**\n"
+            response += f"Found {result.get('total_critical_events', 0)} critical events\n\n"
+            
+            if result.get('critical_events'):
+                for event in result['critical_events'][:3]:
+                    response += f"🎯 **{event['event_name']}**\n"
+                    if event.get('attack_vectors'):
+                        response += f"   Attack Vectors: {', '.join(event['attack_vectors'][:2])}\n"
+            
+            response += "\n🔍 **SPARQL Query:** Critical events analysis executed"
+            return response
+        
+        tools.append(StructuredTool.from_function(
+            func=get_critical_events,
+            name="get_critical_events",
+            description="Get critical cyber security events with D3FEND recommendations",
+            args_schema=EmptySchema
+        ))
+    
+    return tools
 
     # Define intents for natural language and command mapping
     intents = [
