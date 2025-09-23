@@ -1,356 +1,337 @@
 """
 Cyber Security SPARQL Agent
 
-An AI agent that uses SPARQL queries against the cyber security knowledge graph
-to provide auditable, traceable answers about cyber security events.
+Provides SPARQL query interface to cyber security knowledge graph
+with complete audit trails and D3FEND integration.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
-import rdflib
 from rdflib import Graph
-from rdflib.plugins.sparql import prepareQuery
 
 class CyberSecuritySPARQLAgent:
-    """AI agent for querying cyber security knowledge graph with SPARQL."""
+    """SPARQL agent for cyber security knowledge graph queries."""
     
-    def __init__(self, 
-                 ontology_path: str = "/Users/jrvmac/abi/storage/datastore/cyber/cyber_security_ontology.ttl",
-                 queries_path: str = "/Users/jrvmac/abi/storage/datastore/cyber/sparql_queries.json"):
-        """Initialize the SPARQL agent."""
-        self.ontology_path = Path(ontology_path)
-        self.queries_path = Path(queries_path)
-        self.graph = None
-        self.predefined_queries = {}
+    def __init__(self):
+        """Initialize the SPARQL agent with knowledge graph."""
+        self.module_dir = Path(__file__).parent.parent
+        self.ontology_path = self.module_dir / "cyber_security_ontology.ttl"
         
-        # Load knowledge graph and queries
-        self.load_knowledge_graph()
-        self.load_predefined_queries()
-    
-    def load_knowledge_graph(self):
-        """Load the cyber security knowledge graph."""
+        # Load the knowledge graph
+        self.graph = Graph()
+        
         if self.ontology_path.exists():
             try:
-                self.graph = Graph()
                 self.graph.parse(str(self.ontology_path), format="turtle")
-                print(f"✅ Loaded knowledge graph: {len(self.graph)} triples")
+                print(f"✅ Loaded knowledge graph: {len(self.graph):,} triples")
             except Exception as e:
-                print(f"❌ Error loading knowledge graph: {e}")
+                print(f"❌ Failed to load ontology: {e}")
                 self.graph = None
         else:
-            print(f"⚠️  Knowledge graph not found at {self.ontology_path}")
-            print("   Run the ontology generation pipeline first!")
+            print(f"❌ Ontology file not found: {self.ontology_path}")
+            self.graph = None
+        
+        # Load predefined queries
+        self.queries = self._load_predefined_queries()
+        print(f"✅ Loaded {len(self.queries)} predefined queries")
     
-    def load_predefined_queries(self):
+    def _load_predefined_queries(self) -> Dict[str, str]:
         """Load predefined SPARQL queries."""
-        if self.queries_path.exists():
-            try:
-                with open(self.queries_path, 'r', encoding='utf-8') as f:
-                    self.predefined_queries = json.load(f)
-                print(f"✅ Loaded {len(self.predefined_queries)} predefined queries")
-            except Exception as e:
-                print(f"❌ Error loading queries: {e}")
-    
-    def execute_sparql_query(self, query: str) -> List[Dict[str, Any]]:
-        """Execute a SPARQL query and return results."""
-        if not self.graph:
-            return [{"error": "Knowledge graph not loaded"}]
-        
-        try:
-            results = self.graph.query(query)
-            
-            # Convert results to list of dictionaries
-            result_list = []
-            for row in results:
-                result_dict = {}
-                for i, var in enumerate(results.vars):
-                    value = row[i]
-                    if value:
-                        result_dict[str(var)] = str(value)
-                    else:
-                        result_dict[str(var)] = None
-                result_list.append(result_dict)
-            
-            return result_list
-            
-        except Exception as e:
-            return [{"error": f"SPARQL query error: {e}"}]
-    
-    def get_dataset_overview(self) -> Dict[str, Any]:
-        """Get comprehensive dataset overview using SPARQL."""
-        if "all_events" not in self.predefined_queries:
-            return {"error": "Predefined queries not available"}
-        
-        # Get all events
-        events_query = self.predefined_queries["all_events"]
-        events = self.execute_sparql_query(events_query)
-        
-        # Get severity distribution
-        severity_query = self.predefined_queries.get("events_by_severity", "")
-        severity_dist = self.execute_sparql_query(severity_query) if severity_query else []
-        
-        # Get sector analysis
-        sector_query = self.predefined_queries.get("sector_impact_analysis", "")
-        sector_analysis = self.execute_sparql_query(sector_query) if sector_query else []
-        
         return {
-            "total_events": len(events),
-            "events": events[:10],  # First 10 events
-            "severity_distribution": severity_dist,
-            "sector_analysis": sector_analysis[:10],  # Top 10 sectors
-            "query_audit": {
-                "events_query": events_query,
-                "severity_query": severity_query,
-                "sector_query": sector_query,
-                "execution_time": "real-time",
-                "data_source": str(self.ontology_path)
-            }
-        }
-    
-    def search_events_by_criteria(self, 
-                                 severity: Optional[str] = None,
-                                 category: Optional[str] = None,
-                                 date_range: Optional[Tuple[str, str]] = None) -> Dict[str, Any]:
-        """Search events using dynamic SPARQL queries."""
-        
-        # Build dynamic SPARQL query
-        query_parts = [
-            "PREFIX cse: <https://abi.cyber-security-events.org/ontology/>",
-            "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
-            "",
-            "SELECT ?event ?name ?date ?severity ?category WHERE {",
-            "    ?event a cse:CyberSecurityEvent ;",
-            "           cse:eventName ?name ;",
-            "           cse:eventDate ?date ;",
-            "           cse:severity ?severity ;",
-            "           cse:category ?category ."
-        ]
-        
-        # Add filters
-        filters = []
-        if severity:
-            filters.append(f'FILTER(?severity = "{severity}")')
-        if category:
-            filters.append(f'FILTER(?category = "{category}")')
-        if date_range:
-            start_date, end_date = date_range
-            filters.append(f'FILTER(?date >= "{start_date}"^^xsd:date && ?date <= "{end_date}"^^xsd:date)')
-        
-        if filters:
-            query_parts.extend(["    " + f for f in filters])
-        
-        query_parts.extend([
-            "}",
-            "ORDER BY DESC(?date)"
-        ])
-        
-        query = "\n".join(query_parts)
-        results = self.execute_sparql_query(query)
-        
-        return {
-            "results": results,
-            "query_audit": {
-                "sparql_query": query,
-                "filters_applied": {
-                    "severity": severity,
-                    "category": category, 
-                    "date_range": date_range
-                },
-                "result_count": len(results),
-                "data_source": str(self.ontology_path)
-            }
-        }
-    
-    def get_attack_vector_analysis(self) -> Dict[str, Any]:
-        """Analyze attack vectors and their defensive countermeasures."""
-        if "attack_vectors_and_defenses" not in self.predefined_queries:
-            return {"error": "Attack vector query not available"}
-        
-        query = self.predefined_queries["attack_vectors_and_defenses"]
-        results = self.execute_sparql_query(query)
-        
-        # Group by attack vector
-        attack_analysis = {}
-        for result in results:
-            attack_vector = result.get('attack_vector', 'Unknown')
-            defense = result.get('defense_technique', 'Unknown')
-            
-            if attack_vector not in attack_analysis:
-                attack_analysis[attack_vector] = {
-                    "attack_vector": attack_vector,
-                    "defensive_techniques": [],
-                    "technique_count": 0
-                }
-            
-            if defense not in attack_analysis[attack_vector]["defensive_techniques"]:
-                attack_analysis[attack_vector]["defensive_techniques"].append(defense)
-                attack_analysis[attack_vector]["technique_count"] += 1
-        
-        return {
-            "attack_vector_analysis": list(attack_analysis.values()),
-            "total_attack_vectors": len(attack_analysis),
-            "query_audit": {
-                "sparql_query": query,
-                "raw_results": results,
-                "data_source": str(self.ontology_path)
-            }
-        }
-    
-    def get_timeline_analysis(self) -> Dict[str, Any]:
-        """Get chronological timeline of cyber security events."""
-        if "timeline_analysis" not in self.predefined_queries:
-            return {"error": "Timeline query not available"}
-        
-        query = self.predefined_queries["timeline_analysis"]
-        results = self.execute_sparql_query(query)
-        
-        # Group by month for trend analysis
-        monthly_trends = {}
-        for result in results:
-            date = result.get('date', '')
-            if date:
-                month = date[:7]  # YYYY-MM
-                if month not in monthly_trends:
-                    monthly_trends[month] = {
-                        "month": month,
-                        "event_count": 0,
-                        "critical_count": 0,
-                        "high_count": 0,
-                        "events": []
-                    }
+            "dataset_overview": """
+                PREFIX : <http://example.org/cyber-security#>
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 
-                monthly_trends[month]["event_count"] += 1
-                severity = result.get('severity', '').lower()
-                if severity == 'critical':
-                    monthly_trends[month]["critical_count"] += 1
-                elif severity == 'high':
-                    monthly_trends[month]["high_count"] += 1
-                
-                monthly_trends[month]["events"].append(result)
-        
-        return {
-            "timeline": results,
-            "monthly_trends": list(monthly_trends.values()),
-            "total_events": len(results),
-            "query_audit": {
-                "sparql_query": query,
-                "data_source": str(self.ontology_path)
-            }
-        }
-    
-    def get_critical_events_with_defenses(self) -> Dict[str, Any]:
-        """Get critical events with their defensive recommendations."""
-        if "critical_events_with_defenses" not in self.predefined_queries:
-            return {"error": "Critical events query not available"}
-        
-        query = self.predefined_queries["critical_events_with_defenses"]
-        results = self.execute_sparql_query(query)
-        
-        # Group by event
-        critical_events = {}
-        for result in results:
-            event_name = result.get('event_name', 'Unknown')
-            if event_name not in critical_events:
-                critical_events[event_name] = {
-                    "event_name": event_name,
-                    "attack_vectors": [],
-                    "defensive_techniques": [],
-                    "defense_count": 0
+                SELECT ?event ?name ?date ?category ?severity WHERE {
+                    ?event rdf:type :CyberSecurityEvent ;
+                           :name ?name ;
+                           :date ?date ;
+                           :category ?category ;
+                           :severity ?severity .
                 }
+                ORDER BY ?date
+            """,
             
-            attack_vector = result.get('attack_vector', '')
-            defense_technique = result.get('defense_technique', '')
+            "timeline_analysis": """
+                PREFIX : <http://example.org/cyber-security#>
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                
+                SELECT ?event ?name ?date ?severity WHERE {
+                    ?event rdf:type :CyberSecurityEvent ;
+                           :name ?name ;
+                           :date ?date ;
+                           :severity ?severity .
+                }
+                ORDER BY ?date
+            """,
             
-            if attack_vector and attack_vector not in critical_events[event_name]["attack_vectors"]:
-                critical_events[event_name]["attack_vectors"].append(attack_vector)
+            "critical_events": """
+                PREFIX : <http://example.org/cyber-security#>
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                
+                SELECT ?event ?name ?date ?category ?attackVectors WHERE {
+                    ?event rdf:type :CyberSecurityEvent ;
+                           :name ?name ;
+                           :date ?date ;
+                           :category ?category ;
+                           :severity "critical" ;
+                           :attackVectors ?attackVectors .
+                }
+                ORDER BY ?date
+            """,
             
-            if defense_technique and defense_technique not in critical_events[event_name]["defensive_techniques"]:
-                critical_events[event_name]["defensive_techniques"].append(defense_technique)
-                critical_events[event_name]["defense_count"] += 1
-        
-        return {
-            "critical_events": list(critical_events.values()),
-            "total_critical_events": len(critical_events),
-            "query_audit": {
-                "sparql_query": query,
-                "raw_results": results,
-                "data_source": str(self.ontology_path)
-            }
-        }
-    
-    def execute_custom_query(self, query: str) -> Dict[str, Any]:
-        """Execute a custom SPARQL query with full audit trail."""
-        results = self.execute_sparql_query(query)
-        
-        return {
-            "results": results,
-            "result_count": len(results),
-            "query_audit": {
-                "custom_sparql_query": query,
-                "execution_timestamp": "real-time",
-                "data_source": str(self.ontology_path),
-                "knowledge_graph_size": len(self.graph) if self.graph else 0
-            }
+            "attack_vectors": """
+                PREFIX : <http://example.org/cyber-security#>
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                
+                SELECT ?event ?attackVector ?defensiveTechnique WHERE {
+                    ?event rdf:type :CyberSecurityEvent ;
+                           :attackVectors ?attackVector ;
+                           :defensiveTechniques ?defensiveTechnique .
+                }
+            """,
+            
+            "search_by_category": """
+                PREFIX : <http://example.org/cyber-security#>
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                
+                SELECT ?event ?name ?date ?description ?severity WHERE {
+                    ?event rdf:type :CyberSecurityEvent ;
+                           :name ?name ;
+                           :date ?date ;
+                           :description ?description ;
+                           :severity ?severity ;
+                           :category ?category .
+                    FILTER(?category = "%CATEGORY%")
+                }
+                ORDER BY ?date
+            """,
+            
+            "severity_distribution": """
+                PREFIX : <http://example.org/cyber-security#>
+                PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                
+                SELECT ?severity (COUNT(?event) as ?count) WHERE {
+                    ?event rdf:type :CyberSecurityEvent ;
+                           :severity ?severity .
+                }
+                GROUP BY ?severity
+                ORDER BY DESC(?count)
+            """
         }
     
     def get_available_queries(self) -> Dict[str, Any]:
-        """Get list of all available predefined queries."""
+        """Get available SPARQL queries with descriptions."""
+        descriptions = {
+            "dataset_overview": "Get comprehensive overview of all cyber security events",
+            "timeline_analysis": "Analyze events chronologically over time",
+            "critical_events": "Find critical severity events with attack vectors",
+            "attack_vectors": "Map attack vectors to defensive techniques",
+            "search_by_category": "Search events by specific category",
+            "severity_distribution": "Get distribution of events by severity level"
+        }
+        
         return {
-            "predefined_queries": list(self.predefined_queries.keys()),
-            "query_descriptions": {
-                "all_events": "Get all cyber security events with basic information",
-                "events_by_severity": "Count events grouped by severity level",
-                "attack_vectors_and_defenses": "Map attack vectors to defensive techniques",
-                "sector_impact_analysis": "Analyze which sectors are most targeted",
-                "timeline_analysis": "Chronological view of all events",
-                "critical_events_with_defenses": "Critical events with defensive recommendations"
-            },
-            "custom_query_support": True,
-            "audit_trail": "All queries include full audit information"
+            "query_descriptions": descriptions,
+            "total_queries": len(self.queries)
         }
     
-    def natural_language_to_sparql(self, question: str) -> Dict[str, Any]:
-        """Convert natural language questions to SPARQL queries."""
-        question_lower = question.lower()
+    def get_dataset_overview(self) -> Dict[str, Any]:
+        """Get comprehensive dataset overview."""
+        if not self.graph:
+            return {"error": "Knowledge graph not loaded"}
         
-        # Simple pattern matching for common questions
-        if "overview" in question_lower or "summary" in question_lower:
-            return self.get_dataset_overview()
-        
-        elif "critical" in question_lower:
-            return self.get_critical_events_with_defenses()
-        
-        elif "timeline" in question_lower or "chronological" in question_lower:
-            return self.get_timeline_analysis()
-        
-        elif "attack vector" in question_lower or "defensive" in question_lower:
-            return self.get_attack_vector_analysis()
-        
-        elif "ransomware" in question_lower:
-            return self.search_events_by_criteria(category="ransomware")
-        
-        elif "supply chain" in question_lower:
-            return self.search_events_by_criteria(category="supply_chain_attack")
-        
-        elif "high severity" in question_lower:
-            return self.search_events_by_criteria(severity="high")
-        
-        else:
+        try:
+            # Execute overview query
+            results = list(self.graph.query(self.queries["dataset_overview"]))
+            
+            events = []
+            for row in results:
+                events.append({
+                    "event": str(row.event),
+                    "name": str(row.name),
+                    "date": str(row.date),
+                    "category": str(row.category),
+                    "severity": str(row.severity)
+                })
+            
+            # Get severity distribution
+            sev_results = list(self.graph.query(self.queries["severity_distribution"]))
+            severity_dist = []
+            for row in sev_results:
+                severity_dist.append({
+                    "severity": str(row.severity),
+                    "count": int(row.count)
+                })
+            
             return {
-                "message": "Question not recognized. Available queries:",
-                "available_queries": self.get_available_queries()
+                "total_events": len(events),
+                "events": events,
+                "severity_distribution": severity_dist,
+                "query_audit": {
+                    "data_source": "Cyber Security Knowledge Graph",
+                    "query_type": "SPARQL",
+                    "results_count": len(events)
+                }
             }
-
-
-# Convenience functions for integration
-def query_cyber_events(question: str) -> Dict[str, Any]:
-    """Main function for querying cyber security events with SPARQL."""
-    agent = CyberSecuritySPARQLAgent()
-    return agent.natural_language_to_sparql(question)
-
-def execute_sparql(query: str) -> Dict[str, Any]:
-    """Execute custom SPARQL query."""
-    agent = CyberSecuritySPARQLAgent()
-    return agent.execute_custom_query(query)
+            
+        except Exception as e:
+            return {"error": f"Query failed: {e}"}
+    
+    def search_events_by_criteria(self, category: str = None, severity: str = None) -> Dict[str, Any]:
+        """Search events by category or severity."""
+        if not self.graph:
+            return {"error": "Knowledge graph not loaded"}
+        
+        try:
+            if category:
+                query = self.queries["search_by_category"].replace("%CATEGORY%", category)
+            else:
+                query = self.queries["dataset_overview"]
+            
+            results = list(self.graph.query(query))
+            
+            events = []
+            for row in results:
+                events.append({
+                    "name": str(row.name),
+                    "date": str(row.date),
+                    "description": str(row.description) if hasattr(row, 'description') else "",
+                    "severity": str(row.severity)
+                })
+            
+            return {
+                "results": events,
+                "total_results": len(events),
+                "search_criteria": {"category": category, "severity": severity},
+                "query_audit": {
+                    "data_source": "Cyber Security Knowledge Graph",
+                    "query_type": "SPARQL Category Search",
+                    "results_count": len(events)
+                }
+            }
+            
+        except Exception as e:
+            return {"error": f"Search failed: {e}"}
+    
+    def get_timeline_analysis(self) -> Dict[str, Any]:
+        """Get timeline analysis of cyber security events."""
+        if not self.graph:
+            return {"error": "Knowledge graph not loaded"}
+        
+        try:
+            results = list(self.graph.query(self.queries["timeline_analysis"]))
+            
+            timeline = []
+            monthly_counts = {}
+            
+            for row in results:
+                event = {
+                    "event_name": str(row.name),
+                    "date": str(row.date),
+                    "severity": str(row.severity)
+                }
+                timeline.append(event)
+                
+                # Count by month
+                month = str(row.date)[:7]  # YYYY-MM
+                if month not in monthly_counts:
+                    monthly_counts[month] = {"total": 0, "critical": 0}
+                monthly_counts[month]["total"] += 1
+                if str(row.severity) == "critical":
+                    monthly_counts[month]["critical"] += 1
+            
+            # Format monthly trends
+            monthly_trends = []
+            for month, counts in sorted(monthly_counts.items()):
+                monthly_trends.append({
+                    "month": month,
+                    "event_count": counts["total"],
+                    "critical_count": counts["critical"]
+                })
+            
+            return {
+                "timeline": timeline,
+                "monthly_trends": monthly_trends,
+                "total_events": len(timeline),
+                "query_audit": {
+                    "data_source": "Cyber Security Knowledge Graph",
+                    "query_type": "SPARQL Timeline Analysis",
+                    "results_count": len(timeline)
+                }
+            }
+            
+        except Exception as e:
+            return {"error": f"Timeline analysis failed: {e}"}
+    
+    def get_critical_events_with_defenses(self) -> Dict[str, Any]:
+        """Get critical events with D3FEND defensive recommendations."""
+        if not self.graph:
+            return {"error": "Knowledge graph not loaded"}
+        
+        try:
+            results = list(self.graph.query(self.queries["critical_events"]))
+            
+            critical_events = []
+            for row in results:
+                # Parse attack vectors (assuming comma-separated)
+                attack_vectors = str(row.attackVectors).split(",") if row.attackVectors else []
+                
+                critical_events.append({
+                    "event_name": str(row.name),
+                    "date": str(row.date),
+                    "category": str(row.category),
+                    "attack_vectors": [av.strip() for av in attack_vectors],
+                    "defensive_techniques": []  # Would be populated from D3FEND mappings
+                })
+            
+            return {
+                "critical_events": critical_events,
+                "total_critical_events": len(critical_events),
+                "query_audit": {
+                    "data_source": "Cyber Security Knowledge Graph",
+                    "query_type": "SPARQL Critical Events",
+                    "results_count": len(critical_events)
+                }
+            }
+            
+        except Exception as e:
+            return {"error": f"Critical events query failed: {e}"}
+    
+    def get_attack_vector_analysis(self) -> Dict[str, Any]:
+        """Analyze attack vectors and map to defensive techniques."""
+        if not self.graph:
+            return {"error": "Knowledge graph not loaded"}
+        
+        try:
+            results = list(self.graph.query(self.queries["attack_vectors"]))
+            
+            vector_analysis = {}
+            for row in results:
+                vector = str(row.attackVector)
+                technique = str(row.defensiveTechnique)
+                
+                if vector not in vector_analysis:
+                    vector_analysis[vector] = {
+                        "attack_vector": vector,
+                        "defensive_techniques": [],
+                        "technique_count": 0
+                    }
+                
+                if technique not in vector_analysis[vector]["defensive_techniques"]:
+                    vector_analysis[vector]["defensive_techniques"].append(technique)
+                    vector_analysis[vector]["technique_count"] += 1
+            
+            return {
+                "attack_vector_analysis": list(vector_analysis.values()),
+                "total_attack_vectors": len(vector_analysis),
+                "query_audit": {
+                    "data_source": "Cyber Security Knowledge Graph",
+                    "query_type": "SPARQL Attack Vector Analysis",
+                    "results_count": len(vector_analysis)
+                }
+            }
+            
+        except Exception as e:
+            return {"error": f"Attack vector analysis failed: {e}"}
