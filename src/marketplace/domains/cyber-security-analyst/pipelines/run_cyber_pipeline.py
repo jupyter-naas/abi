@@ -15,7 +15,7 @@ current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
 
 # Add the cyber-security-analyst module to path
-module_dir = current_dir.parent.parent
+module_dir = current_dir.parent
 sys.path.insert(0, str(module_dir))
 
 # Import after path setup
@@ -29,7 +29,7 @@ def main():
     # Set paths relative to the cyber-security-analyst module
     events_yaml_path = module_dir / "events.yaml"
     storage_base_path = Path("/Users/jrvmac/abi/storage/datastore/cyber")
-    d3fend_ontology_path = module_dir / "legacy" / "ontologies" / "d3fend.ttl"
+    d3fend_ontology_path = module_dir / "ontologies" / "d3fend.ttl"
     
     print(f"📁 Events YAML: {events_yaml_path}")
     print(f"💾 Storage Path: {storage_base_path}")
