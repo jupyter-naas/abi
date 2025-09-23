@@ -6,6 +6,10 @@ Cyber Security Agent CLI - Proper ABI IntentAgent with SPARQL function calls
 import sys
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add the cyber-security-analyst module to path
 current_dir = Path(__file__).parent
@@ -29,11 +33,11 @@ def main():
         use_fallback = False
     
     if not use_fallback:
-        # Try to use the real ConversationalCyberAgent
+        # Try to use the real CyberSecurityAnalystAgent
         try:
-            from agents.ConversationalCyberAgent import create_agent
+            from agents.CyberSecurityAnalystAgent import create_agent
             agent = create_agent()
-            print(f"✅ Loaded {agent.name} (ABI IntentAgent)")
+            print(f"✅ Loaded {agent.name} (ABI Agent)")
             print(f"🧠 LLM-powered with SPARQL function calls")
             
             print("\n💬 Chat with the agent (type 'quit' to exit)")
