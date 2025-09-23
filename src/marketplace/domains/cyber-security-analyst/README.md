@@ -11,7 +11,7 @@ This agent provides **conversational AI** for cyber security analysis with full 
 ### Conversational Interface (Recommended)
 ```bash
 # Start the conversational CLI
-python apps/conversational_cli.py
+python apps/cli.py
 
 # Example interactions:
 💬 "Hello, what can you help me with?"
@@ -196,12 +196,12 @@ python apps/demo_conversational.py
 
 ### Architecture Components
 - **ConversationalCyberAgent.py**: ABI IntentAgent integration
-- **conversational_cli.py**: Standalone natural language interface
+- **cli.py**: Standalone natural language interface
 - **CyberSecuritySPARQLAgent.py**: SPARQL query engine
 - **OntologyGenerationPipeline.py**: Knowledge graph generation
 
 ### Extending the Agent
-1. **Add New Intents**: Update intent patterns in `conversational_cli.py`
+1. **Add New Intents**: Update intent patterns in `cli.py`
 2. **Custom Analysis**: Add methods for new threat categories
 3. **SPARQL Queries**: Extend query library in SPARQL agent
 4. **Data Sources**: Add new events to `events.yaml`
@@ -240,5 +240,5 @@ The agent is ready for:
 
 **Start chatting with your cyber security intelligence agent:**
 ```bash
-python apps/conversational_cli.py
+python apps/cli.py
 ```

@@ -12,13 +12,19 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 import sys
 from pathlib import Path
 
 # Add the cyber-security-analyst module to path
 current_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(current_dir))
+
+# Import model configuration
+try:
+    from models import get_model
+except ImportError:
+    get_model = None
 
 # Import our SPARQL agent for backend processing
 try:
@@ -113,6 +119,10 @@ def create_agent(
         tools = []
     if agents is None:
         agents = []
+    
+    # Use provided model or get default GPT-4o model
+    if selected_model is None and get_model is not None:
+        selected_model = get_model()
 
     # Define intents for natural language and command mapping
     intents = [

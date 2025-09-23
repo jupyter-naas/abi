@@ -4,7 +4,9 @@ Cyber Security Analyst Models
 Model configurations optimized for cyber security analysis tasks.
 """
 
-# Model configurations will be imported here when functional
-# from .gpt_4o import create_model, model
+from .gpt_4o import create_model, get_model
 
-__all__: list[str] = []
+__all__ = [
+    'create_model',
+    'get_model'
+]

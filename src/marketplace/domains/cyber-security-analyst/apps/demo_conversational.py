@@ -14,7 +14,7 @@ current_dir = Path(__file__).parent
 module_dir = current_dir.parent
 sys.path.insert(0, str(module_dir))
 
-from apps.conversational_cli import ConversationalCyberCLI
+from apps.cli import ConversationalCyberCLI
 
 
 def demo_conversation():
