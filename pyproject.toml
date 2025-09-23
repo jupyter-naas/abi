@@ -64,12 +64,13 @@ dependencies = [
     "langgraph-checkpoint-postgres>=2.0.23",
     "mypy>=1.17.1",
     "langchain-perplexity>=0.1.2",
+    "pdfplumber>=0.11.7",
 ]
 
 [project.scripts]
 abi = "src.cli:main"
 api = "src.api:api"
-mcp-server = "mcp_server:run"
+mcp-server = "src.mcp_server:run"
 chat-arxiv-agent = "src.apps.terminal_agent.main:run_arxiv_agent"
 
 [dependency-groups]

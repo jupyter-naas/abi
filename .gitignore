@@ -12,6 +12,7 @@ uv.lock
 
 # Config
 config.yaml
+config.*.yaml
 
 # Python
 __pycache__/

@@ -75,6 +75,8 @@ jobs:
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
+          # Get SHA256 digest for deployment
+          IMAGE_SHA=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ github.repository }}/abi:latest | cut -d'@' -f2)
 
           docker tag ghcr.io/${{ github.repository }}/abi:latest $URI:$TIMESTAMP
 
@@ -89,16 +91,51 @@ jobs:
             \"ABI_API_KEY\":\"$ABI_API_KEY\"\
           }"
 
-          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
-           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI@$IMAGE_SHA --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@$IMAGE_SHA --port=9879 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
 
       - name: Verify API deployment and version
         run: |
           echo "🔍 Verifying API deployment with expected version..."
           
-          # Get the expected version from git tag
-          EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
-          echo "Expected version: $EXPECTED_VERSION"
+          # Get current commit hash
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          CURRENT_COMMIT_SHORT=$(git rev-parse --short HEAD)
+          echo "Current commit (full): $CURRENT_COMMIT"
+          echo "Current commit (short): $CURRENT_COMMIT_SHORT"
+          
+          # Debug: Get all releases and their target commits
+          echo "🔍 Fetching releases from GitHub API..."
+          RELEASES_JSON=$(curl -s -H "Authorization: token ${{ secrets.ACCESS_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          
+          echo "📋 Available releases and their target commits (ordered by date):"
+          echo "$RELEASES_JSON" | jq -r '.[] | "\(.tag_name) -> \(.target_commitish) (created: \(.created_at))"' | head -10
+          
+          # Search for release that points to current commit
+          # Try multiple matching strategies
+          EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
+            jq -r --arg commit "$CURRENT_COMMIT" --arg short_commit "$CURRENT_COMMIT_SHORT" \
+            '.[] | select(.target_commitish == $commit or .target_commitish == $short_commit or .target_commitish == ("refs/heads/" + $commit) or .target_commitish == ("refs/heads/" + $short_commit)) | .tag_name' | \
+            head -1)
+          
+          # If still not found, try matching against the default branch
+          if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
+            echo "🔄 Trying to match against default branch releases..."
+            # Get the most recent release targeting main/master, sorted by creation date
+            EXPECTED_VERSION=$(echo "$RELEASES_JSON" | \
+              jq -r 'sort_by(.created_at) | reverse | .[] | select(.target_commitish == "main" or .target_commitish == "master" or .target_commitish == "") | .tag_name' | \
+              head -1)
+            echo "📌 Selected most recent release targeting main branch: $EXPECTED_VERSION"
+          fi
+          
+          # Fallback to git describe if no release found
+          if [ -z "$EXPECTED_VERSION" ] || [ "$EXPECTED_VERSION" = "null" ]; then
+            EXPECTED_VERSION=$(git describe --tags 2>/dev/null || echo "v0.0.1")
+            echo "❌ No release found for commit, using git describe: $EXPECTED_VERSION"
+          else
+            echo "✅ Found release for commit: $EXPECTED_VERSION"
+          fi
           
           # API URL based on registry name
           API_URL="https://${{ env.REGISTRY_NAME }}.default.space.naas.ai"
@@ -194,12 +231,14 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
 
-          docker build -t streamlit-demo -f src/marketplace/modules/applications/__demo__/apps/streamlit/Dockerfile .
+          docker build -t streamlit-demo -f src/marketplace/__demo__/apps/streamlit/Dockerfile .
 
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
+          # Get SHA256 digest for deployment
+          IMAGE_SHA=$(docker inspect --format='{{.Id}}' streamlit-demo | cut -d':' -f2)
 
           docker tag streamlit-demo $URI:$TIMESTAMP
 
@@ -215,8 +254,8 @@ jobs:
             \"GOOGLE_API_KEY\":\"$GOOGLE_API_KEY\"\
           }"
 
-          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
-           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=8501 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
 
   mcp-server:
     runs-on: ubuntu-latest
@@ -266,12 +305,14 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
 
-          docker build -t mcp-server -f Dockerfile.mcp .
+          docker build -t mcp-server -f docker/images/Dockerfile.mcp .
 
           export URI=`naas-python registry get -n ${{ env.REGISTRY_NAME }} | grep -v 'URI' | awk '{print $3}'`
 
           # Generate timestamp to tag image
           TIMESTAMP=$(date +%s)
+          # Get SHA256 digest for deployment
+          IMAGE_SHA=$(docker inspect --format='{{.Id}}' mcp-server | cut -d':' -f2)
 
           docker tag mcp-server $URI:$TIMESTAMP
 
@@ -288,5 +329,5 @@ jobs:
             \"MCP_TRANSPORT\":\"http\"\
           }"
 
-          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
-           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI:$TIMESTAMP --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"
+          naas-python space create --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG" \
+           || naas-python space update --name=${{ env.REGISTRY_NAME }} --image=$URI@sha256:$IMAGE_SHA --port=3000 --cpu=1 --memory=1Gi --env "$ENV_CONFIG"

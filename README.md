@@ -191,8 +191,6 @@ Moreover, this project is built with international standards and regulatory fram
 **For cloud users**, we offer **Naas AI Credits** that aggregate multiple AI models on our platform - giving you access to ChatGPT, Claude, Gemini, and more through a single, cost-optimized interface. Available for anyone with a [naas.ai](https://naas.ai) workspace account.
 
 ## Key Features
-<div align="left">
-<img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
 
 ### 🤖 **Multi-Models**
 
@@ -200,11 +198,9 @@ Moreover, this project is built with international standards and regulatory fram
 - **Cloud**: ChatGPT, Claude, Gemini, Grok, Llama, Mistral, Perplexity
 - **Local**: Privacy-focused Qwen, DeepSeek, Gemma (via Ollama)
 
-<br>
-<br>
-
 <div align="left">
-<img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="800">
+<img src="assets/llm-banner.png" alt="Supported AI Models" width="400">
+
 
 ### 🏪 **Marketplace**
 
@@ -212,11 +208,8 @@ Moreover, this project is built with international standards and regulatory fram
 - **Applications Module**: GitHub, LinkedIn, Google Search, PostgreSQL, ArXiv, Naas, Git, PowerPoint, and more
 - **Modular Architecture**: Enable/disable any module via `config.yaml`
 
-<br>
-<br>
-
 <div align="left">
-<img src="assets/knowledge-management-banner-v2.png" alt="Knowledge Management & Storage Technologies" width="400">
+<img src="assets/marketplace-banner.png" alt="Complete Marketplace Ecosystem" width="800">
 
 ### 🧠 **Knowledge Management**
 
@@ -225,12 +218,9 @@ Moreover, this project is built with international standards and regulatory fram
 - **Vector Search**: Intent matching via embeddings and similarity search
 - **Object Storage**: File storage and retrieval with MinIO compatibility
 - **Memory**: Persistent context and conversation history storage
-
-<br>
-<br>
-
+- 
 <div align="left">
-<img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="400">
+<img src="assets/knowledge-management-banner-v2.png" alt="Knowledge Management & Storage Technologies" width="400">
 
 ### ⚙️ **Automation & Orchestration**
 - **Integrations**: Seamless connectivity with external APIs and data export capabilities
@@ -239,8 +229,8 @@ Moreover, this project is built with international standards and regulatory fram
 - **Event-Driven**: Real-time reactivity with automatic triggers based on knowledge graph updates
 - **Cache System**: Intelligent caching layer to optimize API usage and manage rate limits efficiently
 
-<br>
-<br>
+<div align="left">
+<img src="assets/automation-orchestration-banner.png" alt="Automation & Orchestration Technologies" width="400">
 
 ### 🌐 **Multiple Interfaces**
 - **Terminal**: Interactive chat with any agent

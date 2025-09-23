@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, Union, Sequence, Generator
+from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict
 import os
 
 # LangChain Core imports for base components
@@ -23,7 +23,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from typing import Annotated, Optional
 from langchain_core.messages import ToolMessage, ToolCall
 from langchain_core.tools.base import InjectedToolCallId
 from langgraph.types import Command
@@ -43,6 +42,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
+# import base64
 import re
 
 
@@ -180,6 +180,7 @@ class Agent(Expose):
         __description (str): The description of the agent
         __chat_model (BaseChatModel): The underlying language model with tool binding capability
         __tools (list[Tool]): List of tools available to the agent
+        __native_tools (list[dict]): List of native tools available to the agent
         __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
         __thread_id (str): Identifier for the current conversation thread
         __app (CompiledStateGraph): The compiled workflow graph
@@ -211,6 +212,7 @@ class Agent(Expose):
     ]
     _tools: list[Union[Tool, "Agent"]]
     _tools_by_name: dict[str, Union[Tool, BaseTool]]
+    _native_tools: list[dict]
 
     # An agent can have other agents.
     # He will be responsible to load them as tools.
@@ -230,6 +232,8 @@ class Agent(Expose):
     # Avent queue used to stream tool usage and responses.
     _event_queue: Queue
 
+    _chat_model_output_version: Union[str, None] = None
+
     def __init__(
         self,
         name: str,
@@ -241,6 +245,7 @@ class Agent(Expose):
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
+        native_tools: list[dict] = [],
     ):
         """Initialize a new Agent instance.
 
@@ -257,6 +262,7 @@ class Agent(Expose):
 
         # We store the original list of provided tools. This will be usefull for duplication.
         self._tools = tools
+        self._native_tools = native_tools
 
         # Assertions
         assert isinstance(name, str)
@@ -286,9 +292,14 @@ class Agent(Expose):
 
         # TODO: Make sure the Agent does not call the version without tools.
         self._chat_model = chat_model
+        if hasattr(chat_model, "output_version"):
+            self._chat_model_output_version = chat_model.output_version
         self._chat_model_with_tools = chat_model
-        if self._tools:
-            self._chat_model_with_tools = chat_model.bind_tools(self._structured_tools)
+        if self._tools or self._native_tools:
+            tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
+            tools_to_bind.extend(self._structured_tools)
+            tools_to_bind.extend(self._native_tools)
+            self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
         
         # Use provided memory or create based on environment
         if memory is None:
@@ -323,7 +334,9 @@ class Agent(Expose):
         return tool
 
     def prepare_tools(
-        self, tools: list[Union[Tool, "Agent"]], agents: list
+        self, 
+        tools: list[Union[Tool, "Agent"]], 
+        agents: list
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
@@ -396,8 +409,73 @@ class Agent(Expose):
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
 
+    def handle_openai_response_v1(self, response: BaseMessage) -> Command:
+        content_str: str = ""
+        tool_call: list[ToolCall] = []
+        logger.debug(f"Chat model output version is responses/v1: {response}")
+        
+        if isinstance(response.content, list):
+            # Parse response content
+            for item in response.content:
+                # Ensure item is a dict before accessing attributes
+                if isinstance(item, dict):
+                    # Get text content
+                    if item.get("type") == "text":
+                        text_content = item.get("text", "")
+                        if isinstance(text_content, str):
+                            content_str += text_content
+                        
+                        # Add sources from annotations if any
+                        annotations = item.get("annotations", [])
+                        if isinstance(annotations, list) and len(annotations) > 0:
+                            content_str += "\n\n\n\n*Annotations:*\n"
+                            for annotation in annotations:
+                                if isinstance(annotation, dict) and annotation.get("type") == "url_citation":
+                                    title = annotation.get('title', '')
+                                    url = annotation.get('url', '')
+                                    content_str += f"- [{title}]({url})\n"
+
+                    if "action" in item:
+                        tool_call.append(ToolCall(
+                            name=item["type"],
+                            args={"query": item["action"].get("query", "")},
+                            id=item.get("id"),
+                            type="tool_call"
+                        ))
+
+                        
+                    # # Handle image generation output
+                    # if item.get("type") == "image_generation_call":
+                    #     image_data = base64.b64decode(item["result"])
+                    #     dir_path = "storage/datastore/chatgpt/image_generation_call"
+                    #     os.makedirs(dir_path, exist_ok=True)
+                    #     file_name = "generated_cat.png"
+                    #     with open(f"{dir_path}/{file_name}", "wb") as f:
+                    #         f.write(image_data)
+        
+        # Create AIMessage with the content
+        usage_metadata = None
+        if hasattr(response, 'usage_metadata'):
+            usage_metadata = response.usage_metadata
+        ai_message = AIMessage(content=content_str, usage_metadata=usage_metadata)
+        
+        # If action was detected, notify tool usage
+        if len(tool_call) > 0:
+            # Use the ai_message which is already the correct type
+            ai_message.tool_calls = tool_call
+            self._notify_tool_usage(ai_message)
+            tool_message = ToolMessage(
+                content=content_str,
+                tool_call_id=tool_call[0].get("id")
+            )
+            self._notify_tool_response(tool_message)
+            return Command(goto="__end__", update={"messages": [tool_message, ai_message]})
+        
+        return Command(goto="__end__", update={"messages": [ai_message]})
+
     def call_model(
-        self, state: MessagesState
+        self,
+        state: MessagesState,
     ) -> Command[Literal["call_tools", "__end__"]]:
         logger.info(f"call_model on: {self.name}")
         messages = state["messages"]
@@ -406,9 +484,11 @@ class Agent(Expose):
                 SystemMessage(content=self._system_prompt),
             ] + messages
 
-        logger.debug(f"messages: {messages}")
+        # logger.info(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
+        # logger.info(f"response: {response}")
+        # logger.info(f"response type: {type(response)}")
         if (
             isinstance(response, AIMessage)
             and hasattr(response, "tool_calls")
@@ -422,6 +502,12 @@ class Agent(Expose):
             # response.tool_calls = [response.tool_calls[0]]
 
             return Command(goto="call_tools", update={"messages": [response]})
+        
+        elif (
+            self._chat_model_output_version == "responses/v1"
+        ):
+            return self.handle_openai_response_v1(response)
+            
         # else:
         #     self._configuration._noti((self._name, response))
 

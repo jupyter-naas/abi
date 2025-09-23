@@ -1,15 +1,15 @@
 from src.__modules__ import get_modules
-from abi import logger
-from src.marketplace.modules.applications.naas.integrations.NaasIntegration import (
+from src.marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
 )
-from src.marketplace.modules.applications.github.integrations.GitHubIntegration import (
+from src.marketplace.applications.github.integrations.GitHubIntegration import (
     GitHubIntegration,
     GitHubIntegrationConfiguration,
 )
 from src import load_modules, config
 from fastapi import APIRouter
+from abi import logger
 
 def publish_remote_agent(
     naas_api_key: str, 
@@ -193,17 +193,32 @@ def publish_remote_agent(
 
 if __name__ == "__main__":
     import sys
-    from src import secret, config
+    import os
+    from src import config
+    from dotenv import load_dotenv
+    
+    # Load environment variables
+    load_dotenv()
     
     # Check for dry-run flag
     dry_run = "--dry-run" in sys.argv or "--dryrun" in sys.argv or "-n" in sys.argv
     
-    naas_api_key = secret.get("NAAS_API_KEY")
+    # Get environment variables (prioritize actual environment over .env file)
+    naas_api_key = os.getenv("NAAS_API_KEY")
     api_base_url = f"https://{config.space_name}-api.default.space.naas.ai"
-    abi_api_key = secret.get("ABI_API_KEY")
+    abi_api_key = os.getenv("ABI_API_KEY")
     workspace_id = config.workspace_id
-    github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
-    github_repository = config.github_project_repository
+    github_access_token = os.getenv("GITHUB_ACCESS_TOKEN")
+    github_repository = config.github_repository
+    
+    # Debug logging for environment variables
+    logger.debug(f"Environment variable status:")
+    logger.debug(f"  NAAS_API_KEY: {'✅ Set' if naas_api_key else '❌ Missing'}")
+    logger.debug(f"  ABI_API_KEY: {'✅ Set' if abi_api_key else '❌ Missing'}")
+    logger.debug(f"  GITHUB_ACCESS_TOKEN: {'✅ Set' if github_access_token else '❌ Missing'}")
+    logger.debug(f"  Workspace ID: {'✅ Set' if workspace_id else '❌ Missing'}")
+    logger.debug(f"  GitHub Repository: {'✅ Set' if github_repository else '❌ Missing'}")
+    logger.debug(f"  API Base URL: {api_base_url}")
     
     # Get auto-publish configuration
     auto_publish_config = getattr(config, 'auto_publish', {})
@@ -213,13 +228,20 @@ if __name__ == "__main__":
     
     # Legacy support for manual agent selection (when auto-publish is disabled)
     agents_to_publish = []
-    if not auto_publish_enabled:
+    if not auto_publish_enabled != "true":
         # Default agents when auto-publish is disabled (backward compatibility)
-        agents_to_publish = ["Abi", "Ontology", "Naas", "Multi_Models", "Support"]
+        agents_to_publish = ["Abi"]
     
-    # In dry-run mode, relax the API key requirements
-    if not dry_run and (naas_api_key is None or api_base_url is None or abi_api_key is None or workspace_id is None):
-        raise ValueError("NAAS_API_KEY, API_BASE_URL, ABI_API_KEY, WORKSPACE_ID must be set")
+    # Check each required variable individually when not in dry-run mode
+    if not dry_run:
+        if naas_api_key is None:
+            raise ValueError("NAAS_API_KEY must be set")
+        if api_base_url is None:
+            raise ValueError("API_BASE_URL must be set") 
+        if abi_api_key is None:
+            raise ValueError("ABI_API_KEY must be set")
+        if workspace_id is None:
+            raise ValueError("WORKSPACE_ID must be set")
     
     # Set dummy values for dry-run if missing
     if dry_run:

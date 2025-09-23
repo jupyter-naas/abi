@@ -1,11 +1,6 @@
 config:
   workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
-  auto_publish:
-    enabled: true # Enable automatic publishing of agents to workspace
-    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
-    default_agent: "Abi" # Which agent to set as default in workspace
-  github_project_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
-  github_support_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
+  github_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
   github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
   triple_store_path: "storage/triplestore" # Path to the ontology store
   api_title: "ABI API" # API title
@@ -16,99 +11,43 @@ config:
   space_name: "abi" # Name of the space
   cors_origins:
     - "http://localhost:9879"
+  auto_publish:
+    enabled: true # Enable automatic publishing of agents to workspace
+    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+    default_agent: "Abi" # Which agent to set as default in workspace
 
 modules:
-  - path: src/core/modules/abi
+  - path: src/core/abi
     enabled: true
-  - path: src/core/modules/chatgpt
-    enabled: false
-  - path: src/core/modules/claude
-    enabled: false
-  - path: src/core/modules/deepseek
-    enabled: false
-  - path: src/core/modules/gemini
-    enabled: false
-  - path: src/core/modules/gemma
-    enabled: false
-  - path: src/core/modules/grok
-    enabled: false
-  - path: src/core/modules/llama
-    enabled: false
-  - path: src/core/modules/mistral
-    enabled: false
-  - path: src/core/modules/perplexity
-    enabled: false
-  - path: src/core/modules/qwen
-    enabled: false
-  - path: src/core/modules/templatablesparqlquery
+  - path: src/core/chatgpt
     enabled: true
-  - path: src/marketplace/modules/applications/algolia
-    enabled: false
-  - path: src/marketplace/modules/applications/arxiv
-    enabled: false
-  - path: src/marketplace/modules/applications/git
+  - path: src/core/claude
     enabled: true
-  - path: src/marketplace/modules/applications/github
-    enabled: false
-  - path: src/marketplace/modules/applications/google_search
+  - path: src/core/deepseek
     enabled: true
-  - path: src/marketplace/modules/applications/linkedin
-    enabled: false
-  - path: src/marketplace/modules/applications/naas
+  - path: src/core/gemini
     enabled: true
-  - path: src/marketplace/modules/applications/postgres
-    enabled: false
-  - path: src/marketplace/modules/applications/powerpoint
-    enabled: false
-  - path: src/marketplace/modules/domains/account-executive
-    enabled: false
-  - path: src/marketplace/modules/domains/accountant
-    enabled: false
-  - path: src/marketplace/modules/domains/business-development-representative
-    enabled: false
-  - path: src/marketplace/modules/domains/campaign-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/community-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/content-analyst
-    enabled: false
-  - path: src/marketplace/modules/domains/content-creator
-    enabled: false
-  - path: src/marketplace/modules/domains/content-strategist
-    enabled: false
-  - path: src/marketplace/modules/domains/customer-success-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/cyber-security-analyst
+  - path: src/core/gemma
     enabled: true
-  - path: src/marketplace/modules/domains/data-engineer
-    enabled: false
-  - path: src/marketplace/modules/domains/devops-engineer
-    enabled: false
-  - path: src/marketplace/modules/domains/financial-controller
-    enabled: false
-  - path: src/marketplace/modules/domains/human-resources-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/inside-sales representative
-    enabled: false
-  - path: src/marketplace/modules/domains/osint-researcher
-    enabled: false
-  - path: src/marketplace/modules/domains/private-investigator
-    enabled: false
-  - path: src/marketplace/modules/domains/project-manager
-    enabled: false
-  - path: src/marketplace/modules/domains/sales-development-representative
-    enabled: false
-  - path: src/marketplace/modules/domains/software-engineer
-    enabled: false
-  - path: src/marketplace/modules/domains/support
+  - path: src/core/grok
     enabled: true
-  - path: src/marketplace/modules/domains/treasurer
-    enabled: false
-
-pipelines:
-  - name: github.GithubIssuesPipeline
-    cron: "0 0 * * *"
-    parameters:
-      - github_repository: "https://github.com/jupyter-naas/abi"
-      - github_repository: "https://github.com/jupyter-naas/docs"
-      - github_repository: "https://github.com/jupyter-naas/naaspython"
+  - path: src/core/llama
+    enabled: true
+  - path: src/core/mistral
+    enabled: true
+  - path: src/core/perplexity
+    enabled: true
+  - path: src/core/qwen
+    enabled: true
+  - path: src/core/templatablesparqlquery
+    enabled: true
+  - path: src/marketplace/applications/git
+    enabled: true
+  - path: src/marketplace/applications/github
+    enabled: true
+  - path: src/marketplace/applications/naas
+    enabled: true
+  - path: src/marketplace/domains/support
+    enabled: true
+  - path: src/marketplace/domains/cyber-security-analyst
+    enabled: true
