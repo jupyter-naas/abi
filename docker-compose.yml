@@ -131,6 +131,7 @@ services:
     models:
       - llm
       - embeddings
+      - qwen3
     networks:
       - abi-network
     profiles:
@@ -149,6 +150,8 @@ models:
     model: ai/gemma3
   embeddings:
     model: ai/embeddinggemma
+  qwen3:
+    model: ai/qwen3
 
 networks:
   abi-network:

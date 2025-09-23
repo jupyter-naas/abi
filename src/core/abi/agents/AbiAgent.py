@@ -7,6 +7,7 @@ from abi.services.agent.IntentAgent import (
 )
 from typing import Optional
 from abi import logger
+from langchain_core.tools import tool
 
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
@@ -178,9 +179,19 @@ def create_agent(
     
     from src.core.abi.models.gpt_4_1 import model as cloud_model
     from src.core.abi.models.qwen3_8b import model as local_model
-    from src.core.abi.models.gemma3 import model as airgap_model
-    from src import secret
 
+    # Gemma does not handle tool calling so we are moving to qwen3
+    # from src.core.abi.models.gemma3 import model as airgap_model
+    from langchain_openai import ChatOpenAI
+    airgap_model = ChatOpenAI(
+        model="ai/qwen3",
+        temperature=0.7,
+        api_key="no needed",
+        base_url="http://localhost:12434/engines/v1",
+    )
+
+    from src import secret
+    
     # Define model
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
@@ -195,10 +206,11 @@ def create_agent(
         selected_model = local_model.model
     elif ai_mode == "airgap":
         if not airgap_model:
-            logger.error("Airgapped model (ai/gemma3) not available - Docker Model Runner not active")
+            logger.error("Airgapped model (qwen3:8b) not available - Docker Model Runner not active")
             logger.error("   Start with: docker model run ai/gemma3")
             return None
-        selected_model = airgap_model.model
+        # selected_model = airgap_model.model
+        selected_model = airgap_model
     else:
         logger.error("AI_MODE must be 'cloud', 'local', or 'airgap'")
         return None
@@ -239,8 +251,9 @@ You can browse the data and run queries there."""
         "find_best_value_agents",
         "find_fastest_agents",
         "find_cheapest_agents",
-        "find_agents_by_provider",
-        "find_agents_by_process_type",
+        # Those two seems to generate a grammar error when using qwen3 served by DMR locally.
+        # "find_agents_by_provider",
+        # "find_agents_by_process_type",
         "list_all_agents",
         "find_best_for_meeting",
         "find_best_for_contract_analysis",
@@ -347,6 +360,9 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
+
+        Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
+    
     ]
 
     # Add intents for all other available agents using a more compact approach
@@ -448,6 +464,18 @@ You can browse the data and run queries there."""
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
+    # Uncomment this to randomize the thread id. Usefull for local debugging.
+    # import uuid
+    # agent_shared_state = AgentSharedState(thread_id=str(uuid.uuid4()))
+
+    @tool
+    def get_time(current_time: bool = False) -> str:
+        """Get the current time."""
+        from datetime import datetime
+        return datetime.now().strftime("%H:%M:%S")
+
+    tools.append(get_time)
+
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -459,7 +487,7 @@ You can browse the data and run queries there."""
         configuration=agent_configuration,
         memory=None,
         threshold=0.7,  # Lower threshold for better intent matching
-        threshold_neighbor=0.1,  # Allow more similar intents
+        threshold_neighbor=0.5,  # Allow more similar intents
     )
 
 
