@@ -5,17 +5,19 @@ Expert AI agents for cyber security analysis and management.
 """
 
 # Import agents conditionally to avoid dependency issues
-try:
-    from .ConversationalCyberAgent import (
-        ConversationalCyberAgent,
-        create_agent,
-        NAME,
-        DESCRIPTION,
-        AVATAR_URL
-    )
-    _conversational_available = True
-except ImportError:
-    _conversational_available = False
+_conversational_available = False
+# Disable conversational agent for now to avoid OpenAI dependency
+# try:
+#     from .ConversationalCyberAgent import (
+#         ConversationalCyberAgent,
+#         create_agent,
+#         NAME,
+#         DESCRIPTION,
+#         AVATAR_URL
+#     )
+#     _conversational_available = True
+# except ImportError:
+#     _conversational_available = False
 
 # Always available
 from .CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
