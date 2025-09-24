@@ -341,9 +341,9 @@ You can browse the data and run queries there."""
     ]
     # Add intents for all other available agents using a more compact approach
     agent_intents_map = {
-        "ChatGPT": [
-            "search news about", "web search", "online research", "real-time information", "factual answers", "current events"
-        ],
+        # "ChatGPT": [
+        #     "search news about", "web search", "online research", "real-time information", "factual answers", "current events"
+        # ],
         "Claude": [
             "complex analysis", "research synthesis", "report writing", "data analysis", "academic writing"
         ],
