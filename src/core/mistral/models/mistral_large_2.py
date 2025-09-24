@@ -3,7 +3,6 @@ from langchain_mistralai import ChatMistralAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
-from abi import logger
 
 ID = "mistral-large-2407"
 NAME = "mistral-large-2"

@@ -3,7 +3,6 @@ from langchain_xai import ChatXAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
-from abi import logger
 
 NAME = "grok-4-latest"
 ID = "grok-4-latest"

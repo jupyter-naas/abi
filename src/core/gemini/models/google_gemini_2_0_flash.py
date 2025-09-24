@@ -2,7 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src import secret
 from pydantic import SecretStr
-from abi import logger
 from typing import Optional
 
 ID = "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"
