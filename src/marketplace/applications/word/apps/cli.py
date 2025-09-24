@@ -57,20 +57,38 @@ class MarkdownProcessor:
                 i += 1
                 continue
             
-            # Handle headings
+            # Handle headings (including nested ones like #### inside paragraphs)
             if line.startswith('#'):
-                level = len(line) - len(line.lstrip('#'))
-                heading_text = line.lstrip('# ').strip()
+                # Count the number of # symbols
+                hash_count = 0
+                for char in line:
+                    if char == '#':
+                        hash_count += 1
+                    else:
+                        break
+                
+                # Extract heading text after the # symbols and any spaces
+                heading_text = line[hash_count:].strip()
                 
                 if heading_text:
+                    # Remove any remaining ** bold markers from the heading text
+                    heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
+                    
                     try:
-                        style_name = f'Heading {min(level, 3)}'
+                        # Use appropriate heading level (max 3 for Word)
+                        level = min(hash_count, 3)
+                        style_name = f'Heading {level}'
                         self.doc.add_paragraph(heading_text, style=style_name)
                     except:
+                        # Fallback to manual formatting
                         p = self.doc.add_paragraph(heading_text)
                         if p.runs:
                             p.runs[0].font.bold = True
-                            p.runs[0].font.size = Pt(max(14, 20 - level * 2))
+                            p.runs[0].font.size = Pt(max(12, 18 - hash_count * 1.5))
+                        else:
+                            run = p.add_run(heading_text)
+                            run.font.bold = True
+                            run.font.size = Pt(max(12, 18 - hash_count * 1.5))
                 i += 1
                 continue
             
@@ -131,11 +149,17 @@ class MarkdownProcessor:
     
     def _process_inline_formatting(self, text: str) -> str:
         """Process inline markdown formatting like **bold** and *italic*."""
-        # For now, just remove the markdown syntax
-        # In a more advanced version, we could apply actual formatting
+        # Remove markdown syntax for now - in future could apply actual Word formatting
         text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove **bold**
         text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove *italic*
         return text
+    
+    def _add_formatted_paragraph(self, text: str):
+        """Add a paragraph with proper inline formatting."""
+        # For now, just clean the text and add as regular paragraph
+        # Future enhancement: could parse **bold** and apply actual formatting
+        cleaned_text = self._process_inline_formatting(text)
+        self.doc.add_paragraph(cleaned_text)
 
 
 class WordCLI:
