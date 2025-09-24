@@ -20,9 +20,10 @@ from dataclasses import dataclass
 # Simple Word document processing using python-docx directly
 try:
     from docx import Document
-    from docx.shared import Pt
+    from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.style import WD_STYLE_TYPE
+    from docx.oxml.shared import OxmlElement, qn
 except ImportError as e:
     print(f"❌ Missing dependencies: {e}")
     print("Please install required packages:")
@@ -140,22 +141,24 @@ class MarkdownProcessor:
                 self.doc.add_paragraph(formatted_text)
     
     def _add_reference(self, text: str):
-        """Add a source reference with proper citation style."""
+        """Add a source reference with proper citation style and bookmark."""
         clean_text = self._process_inline_formatting(text)
+        
+        # Extract the reference number for bookmark
+        ref_match = re.match(r'^([¹²³⁴⁵⁶⁷⁸⁹⁰¹⁰¹⁰²⁰³⁰⁴⁰⁵⁰⁶⁰⁷⁰⁸⁰⁹¹¹¹²¹³¹⁴¹⁵¹⁶¹⁷¹⁸¹⁹²²¹²²²³²⁴²⁵²⁶²⁷²⁸²⁹³³¹³²³³³⁴³⁵³⁶³⁷³⁸³⁹⁴⁴¹⁴²⁴³⁴⁴⁴⁵⁴⁶⁴⁷⁴⁸⁴⁹⁵⁵¹⁵²⁵³⁵⁴⁵⁵⁵⁶⁵⁷⁵⁸⁵⁹⁶⁶¹⁶²⁶³⁶⁴⁶⁵⁶⁶⁶⁷⁶⁸⁶⁹⁷⁷¹⁷²⁷³⁷⁴⁷⁵⁷⁶⁷⁷⁷⁸⁷⁹⁸⁸¹⁸²⁸³⁸⁴⁸⁵⁸⁶⁸⁷⁸⁸⁸⁹⁹⁹¹⁹²⁹³⁹⁴⁹⁵⁹⁶⁹⁷⁹⁸⁹⁹]+)', text)
+        
+        # Just use normal paragraph since the template styles don't exist
+        p = self.doc.add_paragraph(clean_text)
         try:
-            # Use Subtle Reference style for citations
-            self.doc.add_paragraph(clean_text, style='Subtle Reference')
+            p.paragraph_format.space_after = Pt(3)
         except:
-            try:
-                # Fallback to Intense Reference if available
-                self.doc.add_paragraph(clean_text, style='Intense Reference')
-            except:
-                # Final fallback to normal paragraph with small spacing
-                p = self.doc.add_paragraph(clean_text)
-                try:
-                    p.paragraph_format.space_after = Pt(3)
-                except:
-                    pass
+            pass
+        
+        # Add bookmark for this reference
+        if ref_match:
+            ref_number = ref_match.group(1)
+            bookmark_name = f"source_{ref_number}"
+            self._add_bookmark(p, bookmark_name)
     
     def _add_footer_metadata(self, text: str):
         """Add footer metadata with italic center alignment."""
@@ -173,37 +176,79 @@ class MarkdownProcessor:
             pass
     
     def _add_paragraph(self, text: str):
-        """Add a regular paragraph with appropriate style."""
+        """Add a regular paragraph with appropriate style and reference hyperlinks."""
         # Check if this is a special paragraph type
         if text.startswith('**') and text.endswith('**'):
             # Strong/Bold paragraph - use Strong style
             clean_text = self._process_inline_formatting(text)
             try:
-                self.doc.add_paragraph(clean_text, style='Strong')
+                p = self.doc.add_paragraph(style='Strong')
+                self._process_text_with_references(clean_text, p)
             except:
-                p = self.doc.add_paragraph(clean_text)
+                p = self.doc.add_paragraph()
+                self._process_text_with_references(clean_text, p)
                 if p.runs:
                     p.runs[0].font.bold = True
         elif text.startswith('*') and text.endswith('*') and not text.startswith('**'):
             # Emphasis/Italic paragraph - use Emphasis style
             clean_text = self._process_inline_formatting(text)
             try:
-                self.doc.add_paragraph(clean_text, style='Emphasis')
+                p = self.doc.add_paragraph(style='Emphasis')
+                self._process_text_with_references(clean_text, p)
             except:
-                p = self.doc.add_paragraph(clean_text)
+                p = self.doc.add_paragraph()
+                self._process_text_with_references(clean_text, p)
                 if p.runs:
                     p.runs[0].font.italic = True
         else:
             # Regular paragraph - use Normal style
             clean_text = self._process_inline_formatting(text)
             try:
-                self.doc.add_paragraph(clean_text, style='Normal')
+                p = self.doc.add_paragraph(style='Normal')
+                self._process_text_with_references(clean_text, p)
             except:
-                self.doc.add_paragraph(clean_text)
+                p = self.doc.add_paragraph()
+                self._process_text_with_references(clean_text, p)
     
     def _add_page_break(self):
         """Add a page break."""
         self.doc.add_page_break()
+    
+    def _add_hyperlink(self, paragraph, text, bookmark_name):
+        """Add a hyperlink to a paragraph."""
+        # Create hyperlink element
+        hyperlink = OxmlElement('w:hyperlink')
+        hyperlink.set(qn('w:anchor'), bookmark_name)
+        
+        # Create run element
+        run = OxmlElement('w:r')
+        
+        # Create run properties for blue color
+        rPr = OxmlElement('w:rPr')
+        color = OxmlElement('w:color')
+        color.set(qn('w:val'), '0563C1')  # Blue color
+        rPr.append(color)
+        run.append(rPr)
+        
+        # Create text element
+        text_elem = OxmlElement('w:t')
+        text_elem.text = text
+        run.append(text_elem)
+        
+        hyperlink.append(run)
+        paragraph._p.append(hyperlink)
+    
+    def _add_bookmark(self, paragraph, bookmark_name):
+        """Add a bookmark to a paragraph."""
+        bookmark_start = OxmlElement('w:bookmarkStart')
+        bookmark_start.set(qn('w:id'), '0')
+        bookmark_start.set(qn('w:name'), bookmark_name)
+        
+        bookmark_end = OxmlElement('w:bookmarkEnd')
+        bookmark_end.set(qn('w:id'), '0')
+        
+        paragraph._p.insert(0, bookmark_start)
+        paragraph._p.append(bookmark_end)
         
     def process_markdown(self, markdown_content: str):
         """Process markdown content and add to Word document."""
@@ -316,6 +361,26 @@ class MarkdownProcessor:
         text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove **bold**
         text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove *italic*
         return text
+    
+    def _process_text_with_references(self, text: str, paragraph):
+        """Process text and convert reference numbers to hyperlinks."""
+        # Pattern to match superscript numbers like ¹, ², ³, etc.
+        reference_pattern = r'([¹²³⁴⁵⁶⁷⁸⁹⁰¹⁰¹⁰²⁰³⁰⁴⁰⁵⁰⁶⁰⁷⁰⁸⁰⁹¹¹¹²¹³¹⁴¹⁵¹⁶¹⁷¹⁸¹⁹²²¹²²²³²⁴²⁵²⁶²⁷²⁸²⁹³³¹³²³³³⁴³⁵³⁶³⁷³⁸³⁹⁴⁴¹⁴²⁴³⁴⁴⁴⁵⁴⁶⁴⁷⁴⁸⁴⁹⁵⁵¹⁵²⁵³⁵⁴⁵⁵⁵⁶⁵⁷⁵⁸⁵⁹⁶⁶¹⁶²⁶³⁶⁴⁶⁵⁶⁶⁶⁷⁶⁸⁶⁹⁷⁷¹⁷²⁷³⁷⁴⁷⁵⁷⁶⁷⁷⁷⁸⁷⁹⁸⁸¹⁸²⁸³⁸⁴⁸⁵⁸⁶⁸⁷⁸⁸⁸⁹⁹⁹¹⁹²⁹³⁹⁴⁹⁵⁹⁶⁹⁷⁹⁸⁹⁹]+)'
+        
+        # Split text by reference numbers
+        parts = re.split(reference_pattern, text)
+        
+        for i, part in enumerate(parts):
+            if i % 2 == 0:
+                # Regular text
+                if part:
+                    run = paragraph.add_run(part)
+            else:
+                # Reference number - make it a hyperlink
+                bookmark_name = f"source_{part}"
+                self._add_hyperlink(paragraph, part, bookmark_name)
+        
+        return paragraph
     
     def _add_formatted_paragraph(self, text: str):
         """Add a paragraph with proper inline formatting."""
