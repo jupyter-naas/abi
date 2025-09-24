@@ -67,7 +67,7 @@ class MarkdownProcessor:
     Regular text          → Normal
     
     SPECIAL:
-    ---                   → Page Break
+    ---                   → Section Separator (vertical spacing)
     *Footer metadata*     → Center-aligned italic (for Report prepared by, Date, Classification)
     """
     
@@ -214,6 +214,16 @@ class MarkdownProcessor:
         """Add a page break."""
         self.doc.add_page_break()
     
+    def _add_section_separator(self):
+        """Add a section separator instead of page break."""
+        # Add some vertical spacing to separate sections visually
+        p = self.doc.add_paragraph()
+        try:
+            p.paragraph_format.space_before = Pt(12)
+            p.paragraph_format.space_after = Pt(12)
+        except:
+            pass
+    
     def _add_hyperlink(self, paragraph, text, bookmark_name):
         """Add a hyperlink to a paragraph."""
         # Create hyperlink element
@@ -281,9 +291,9 @@ class MarkdownProcessor:
                 i += 1
                 continue
             
-            # Handle horizontal rules
+            # Handle horizontal rules - add section separator instead of page break
             if line.strip() == '---':
-                self._add_page_break()
+                self._add_section_separator()
                 i += 1
                 continue
             
