@@ -39,7 +39,36 @@ class WordConfig:
 
 
 class MarkdownProcessor:
-    """Simple markdown processor for Word conversion."""
+    """
+    Process markdown content and convert to Word document using proper style mappings.
+    
+    Markdown to Word Style Mappings:
+    ================================
+    
+    HEADINGS:
+    # Main Title          → Heading 1
+    ## Section            → Heading 2  
+    ### Subsection        → TOC Heading
+    #### Industry Overview → Subtitle
+    ##### Details         → Page subtitle
+    ###### Specifics      → Page title
+    
+    LISTS:
+    - Bullet point        → List Bullet (fallback: List Paragraph)
+    1. Numbered item      → List Number (fallback: List Paragraph)
+    
+    REFERENCES:
+    ¹ Source citation     → Subtle Reference (fallback: Intense Reference)
+    
+    PARAGRAPHS:
+    **Bold paragraph**    → Strong
+    *Italic paragraph*    → Emphasis  
+    Regular text          → Normal
+    
+    SPECIAL:
+    ---                   → Page Break
+    *Footer metadata*     → Center-aligned italic (for Report prepared by, Date, Classification)
+    """
     
     def __init__(self, doc):
         self.doc = doc
@@ -75,9 +104,22 @@ class MarkdownProcessor:
                     heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
                     
                     try:
-                        # Use appropriate heading level (Word supports up to Heading 9)
-                        level = min(hash_count, 9)
-                        style_name = f'Heading {level}'
+                        # Map markdown headings to specific Word styles from template
+                        style_mapping = {
+                            1: 'Heading 1',      # # Main Title
+                            2: 'Heading 2',      # ## Section  
+                            3: 'TOC Heading',    # ### Use TOC Heading for subsections
+                            4: 'Subtitle',       # #### Use Subtitle for H4
+                            5: 'Page subtitle',  # ##### Use Page subtitle for H5
+                            6: 'Page title'      # ###### Use Page title for H6
+                        }
+                        
+                        if hash_count in style_mapping:
+                            style_name = style_mapping[hash_count]
+                        else:
+                            # For H7+ use Heading styles
+                            style_name = f'Heading {min(hash_count, 9)}'
+                            
                         self.doc.add_paragraph(heading_text, style=style_name)
                     except:
                         # Fallback to manual formatting
@@ -99,38 +141,54 @@ class MarkdownProcessor:
                 i += 1
                 continue
             
-            # Handle bullet points
+            # Handle bullet points - map to proper Word list styles
             if line.startswith(('- ', '* ', '+ ')):
                 bullet_text = line[2:].strip()
                 # Handle bold text in bullets
                 bullet_text = self._process_inline_formatting(bullet_text)
                 try:
+                    # Try List Bullet first, fallback to List Paragraph
                     p = self.doc.add_paragraph(bullet_text, style='List Bullet')
                 except:
-                    p = self.doc.add_paragraph(f"• {bullet_text}")
+                    try:
+                        p = self.doc.add_paragraph(bullet_text, style='List Paragraph')
+                    except:
+                        p = self.doc.add_paragraph(f"• {bullet_text}")
                 i += 1
                 continue
             
-            # Handle numbered lists
+            # Handle numbered lists - map to proper Word numbered list styles
             if re.match(r'^\d+\.\s', line):
                 numbered_text = re.sub(r'^\d+\.\s', '', line)
                 numbered_text = self._process_inline_formatting(numbered_text)
                 try:
+                    # Try List Number first, fallback to List Paragraph
                     p = self.doc.add_paragraph(numbered_text, style='List Number')
                 except:
-                    p = self.doc.add_paragraph(numbered_text)
+                    try:
+                        p = self.doc.add_paragraph(numbered_text, style='List Paragraph')
+                    except:
+                        p = self.doc.add_paragraph(numbered_text)
                 i += 1
                 continue
             
             # Handle numbered references (like in Sources section with superscript numbers)
             if re.match(r'^[¹²³⁴⁵⁶⁷⁸⁹⁰]+\s', line):
                 reference_text = self._process_inline_formatting(line.strip())
-                p = self.doc.add_paragraph(reference_text)
-                # Add small spacing after each reference for readability
                 try:
-                    p.paragraph_format.space_after = Pt(3)
+                    # Use Subtle Reference style for citations
+                    p = self.doc.add_paragraph(reference_text, style='Subtle Reference')
                 except:
-                    pass
+                    try:
+                        # Fallback to Intense Reference if available
+                        p = self.doc.add_paragraph(reference_text, style='Intense Reference')
+                    except:
+                        # Final fallback to normal paragraph with small spacing
+                        p = self.doc.add_paragraph(reference_text)
+                        try:
+                            p.paragraph_format.space_after = Pt(3)
+                        except:
+                            pass
                 i += 1
                 continue
             
@@ -176,8 +234,32 @@ class MarkdownProcessor:
             # Join the paragraph lines and process
             paragraph_text = ' '.join(paragraph_lines).strip()
             if paragraph_text:
-                paragraph_text = self._process_inline_formatting(paragraph_text)
-                self.doc.add_paragraph(paragraph_text)
+                # Check if this is a special paragraph type
+                if paragraph_text.startswith('**') and paragraph_text.endswith('**'):
+                    # Strong/Bold paragraph - use Strong style
+                    clean_text = self._process_inline_formatting(paragraph_text)
+                    try:
+                        self.doc.add_paragraph(clean_text, style='Strong')
+                    except:
+                        p = self.doc.add_paragraph(clean_text)
+                        if p.runs:
+                            p.runs[0].font.bold = True
+                elif paragraph_text.startswith('*') and paragraph_text.endswith('*') and not paragraph_text.startswith('**'):
+                    # Emphasis/Italic paragraph - use Emphasis style
+                    clean_text = self._process_inline_formatting(paragraph_text)
+                    try:
+                        self.doc.add_paragraph(clean_text, style='Emphasis')
+                    except:
+                        p = self.doc.add_paragraph(clean_text)
+                        if p.runs:
+                            p.runs[0].font.italic = True
+                else:
+                    # Regular paragraph - use Normal style
+                    paragraph_text = self._process_inline_formatting(paragraph_text)
+                    try:
+                        self.doc.add_paragraph(paragraph_text, style='Normal')
+                    except:
+                        self.doc.add_paragraph(paragraph_text)
     
     def _process_inline_formatting(self, text: str) -> str:
         """Process inline markdown formatting like **bold** and *italic*."""
