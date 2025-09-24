@@ -250,11 +250,11 @@ class IntentAgent(Agent):
             
             # If we have no intents, we return an empty intent mapping
             if len(intents) == 0:
-                return {
+                return Command(update={
                     "intent_mapping": {
                         "intents": []
                     }
-                }
+                }, goto=self.should_filter(state))
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]['score']
@@ -273,12 +273,12 @@ class IntentAgent(Agent):
             final_intents = close_intents
 
         logger.debug(f"{len(final_intents)} intents mapped: {final_intents}")
-
-        return {
+        return Command(update={
             "intent_mapping": {
                 "intents": final_intents
             }
-        }
+        },
+        goto=self.should_filter(state))
     
     def should_filter(self, state: dict[str, Any]) -> str:
         """Determine if intent mapping should be filtered.
@@ -684,7 +684,7 @@ Last user message: "{last_human_message.content}"
         graph.add_node(self.map_intents)
         graph.add_edge(START, "map_intents")
         
-        graph.add_conditional_edges("map_intents", self.should_filter)
+        # graph.add_conditional_edges("map_intents", self.should_filter)
         
         graph.add_node(self.filter_out_intents)
         
