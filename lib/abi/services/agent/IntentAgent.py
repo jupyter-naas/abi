@@ -143,28 +143,6 @@ class IntentAgent(Agent):
             configuration=configuration,
             event_queue=event_queue,
         )
-
-
-    def filter_user_selection_messages(self, messages: list) -> list:
-        """Filter out the user selection messages from the conversation history.
-        
-        Args:
-            state (IntentState): Current conversation state with mapped intents
-            
-        Returns:
-            Command: Command to update state with filtered messages
-        """
-        indexes: list[int] = []
-        for i, message in enumerate(messages):
-            if isinstance(message, AIMessage) and "I found multiple intents that could handle your request" in message.content:
-                indexes.append(i)
-                indexes.append(i + 1)
-
-        filtered_messages: list[BaseMessage] = []
-        for i, message in enumerate(messages):
-            if i not in indexes:
-                filtered_messages.append(message)
-        return filtered_messages
     
 
     def map_intents(self, state: IntentState) -> Command:
@@ -553,6 +531,7 @@ Last user message: "{last_human_message.content}"
         
         return Command(goto=END, update={"messages": [ai_message]})
 
+
     def intent_mapping_router(self, state: IntentState) -> Command:
         """Route conversation flow based on intent mapping results.
         
@@ -675,8 +654,6 @@ Last user message: "{last_human_message.content}"
         
         graph.add_node(self.map_intents)
         graph.add_edge(START, "map_intents")
-        
-        # graph.add_conditional_edges("map_intents", self.should_filter)
         
         graph.add_node(self.filter_out_intents)
         
