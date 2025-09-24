@@ -183,6 +183,8 @@ class IntentAgent(Agent):
         # Reset intents rules in system prompt
         self._system_prompt = self._configuration.system_prompt
 
+
+
         # Get the last human message
         last_human_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
 
@@ -213,7 +215,7 @@ class IntentAgent(Agent):
                 return Command(goto=agent.name)
         
         # Handle multiples intents routing via numeric response to a validation request (e.g., "1", "2", etc.)
-        if isinstance(last_human_message.content, str) and last_human_message.content.strip().isdigit() and last_ai_message is not None and MULTIPLES_INTENTS_MESSAGE in last_ai_message.content:
+        if isinstance(last_human_message.content, str) and last_human_message.content.strip().isdigit() and last_ai_message is not None and MULTIPLES_INTENTS_MESSAGE in last_ai_message.content and last_ai_message.additional_kwargs.get("owner") == self.name:
             choice_num = int(last_human_message.content.strip())
             
             logger.debug("🔀 Handle multiples intents routing via numeric response to a validation request (e.g., '1', '2', etc.)")
@@ -223,8 +225,8 @@ class IntentAgent(Agent):
             intent_lines = [line for line in lines if line.strip().startswith(f"{choice_num}.")]
             if intent_lines:
                 command_update: dict = {
-                    "intent_mapping": {"intents": []},
-                    "messages": self.filter_user_selection_messages(state["messages"])
+                    "intent_mapping": {"intents": []}
+                    # "messages": self.filter_user_selection_messages(state["messages"])
                 }
                 logger.debug(f"Command update: {command_update}")
 
@@ -557,7 +559,7 @@ Last user message: "{last_human_message.content}"
         
         validation_message += "Please choose an intent by number (e.g., '1' or '2')\n"
         
-        ai_message = AIMessage(content=validation_message)
+        ai_message = AIMessage(content=validation_message, additional_kwargs={"owner": self.name})
         self._notify_ai_message(ai_message, self.name)
         
         return Command(goto=END, update={"messages": [ai_message]})
