@@ -42,6 +42,7 @@ import rich
 nlp = spacy.load("en_core_web_sm")
 MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your request"
 
+
 class IntentState(MessagesState):
     """State class for intent-based conversations.
     
@@ -53,6 +54,7 @@ class IntentState(MessagesState):
             and their associated metadata from the intent analysis process.
     """
     intent_mapping: Dict[str, Any]
+
 
 class IntentAgent(Agent):
     """Agent with intent mapping and routing capabilities.
@@ -75,6 +77,7 @@ class IntentAgent(Agent):
     _intents: list[Intent]
     _intent_mapper: IntentMapper
     
+
     def __init__(
         self,
         name: str,
@@ -141,6 +144,7 @@ class IntentAgent(Agent):
             event_queue=event_queue,
         )
 
+
     def filter_user_selection_messages(self, messages: list) -> list:
         """Filter out the user selection messages from the conversation history.
         
@@ -162,7 +166,8 @@ class IntentAgent(Agent):
                 filtered_messages.append(message)
         return filtered_messages
     
-    def map_intents(self, state: MessagesState) -> Command | dict:
+
+    def map_intents(self, state: IntentState) -> Command:
         """Map user messages to available intents.
         
         Analyzes the last human message to identify matching intents using
@@ -183,8 +188,6 @@ class IntentAgent(Agent):
         # Reset intents rules in system prompt
         self._system_prompt = self._configuration.system_prompt
 
-
-
         # Get the last human message
         last_human_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
 
@@ -197,9 +200,7 @@ class IntentAgent(Agent):
 
         logger.debug(f"💬 Starting conversation with agent '{self.name}'")
         logger.debug("🔍 Map intents")
-        logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
-        logger.debug(f"==> Last AI message: {last_ai_message.content if last_ai_message is not None else None}")
-        logger.debug(f"==> State: {state}")
+        logger.debug(state)
 
         # Handle agent routing via @mention
         if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
@@ -226,7 +227,6 @@ class IntentAgent(Agent):
             if intent_lines:
                 command_update: dict = {
                     "intent_mapping": {"intents": []}
-                    # "messages": self.filter_user_selection_messages(state["messages"])
                 }
                 logger.debug(f"Command update: {command_update}")
 
@@ -273,14 +273,10 @@ class IntentAgent(Agent):
             final_intents = close_intents
 
         logger.debug(f"{len(final_intents)} intents mapped: {final_intents}")
-        return Command(update={
-            "intent_mapping": {
-                "intents": final_intents
-            }
-        },
-        goto=self.should_filter(state))
+        return Command(goto=self.should_filter(state), update={"intent_mapping": {"intents": final_intents}})
     
-    def should_filter(self, state: dict[str, Any]) -> str:
+
+    def should_filter(self, state: IntentState) -> str:
         """Determine if intent mapping should be filtered.
         
         Checks if the intent mapping should be filtered based on the threshold
@@ -296,7 +292,7 @@ class IntentAgent(Agent):
         return "filter_out_intents"
     
     
-    def filter_out_intents(self, state: IntentState):
+    def filter_out_intents(self, state: IntentState) -> Command:
         """Filter out logically irrelevant intents using LLM analysis.
         
         Uses the chat model to analyze mapped intents and filter out those that
@@ -307,21 +303,13 @@ class IntentAgent(Agent):
             state (dict[str, Any]): Current conversation state with mapped intents
             
         Returns:
-            Command | None: Command to update state with filtered intents, or None
+            Command: Command to update state with filtered intents
             if no filtering is needed
         """
-        if "intent_mapping" not in state or len(state["intent_mapping"]["intents"]) <= 1:
-            return
-
-        if len(state["intent_mapping"]["intents"]) == 1 and state["intent_mapping"]["intents"][0]['score'] > self._threshold:
-            return
-        
+        logger.debug("🔍 Filter out irrelevant intents")
         last_human_message : Any = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
         assert last_human_message is not None
 
-        logger.debug("🔍 Filter out irrelevant intents")
-        logger.debug(state)
-        
         mapped_intents = state["intent_mapping"]["intents"]
         
         @tool
@@ -391,6 +379,7 @@ Last user message: "{last_human_message.content}"
 
         return Command(update={"intent_mapping": {"intents": filtered_intents}})
     
+
     def _extract_entities(self, text: str) -> list[str]:
         """Extract named entities from text using spaCy.
         
@@ -407,7 +396,8 @@ Last user message: "{last_human_message.content}"
         doc = nlp(text)
         return [ent.text.lower() for ent in doc.ents]
     
-    def entity_check(self, state: IntentState):
+
+    def entity_check(self, state: IntentState) -> Command:
         """Validate entity consistency between user message and intents.
         
         Performs entity checking to ensure that intents containing named entities
@@ -421,6 +411,8 @@ Last user message: "{last_human_message.content}"
             Command | None: Command to update state with entity-validated intents,
             or None if no intent mapping exists
         """ 
+        logger.debug("🔍 Entity Check")
+
         last_human_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
         
         assert last_human_message is not None
@@ -428,9 +420,6 @@ Last user message: "{last_human_message.content}"
         assert isinstance(last_human_message.content, str)
         assert "intent_mapping" in state
 
-        logger.debug("🔍 Entity Check")
-        logger.debug(state)
-        
         mapped_intents = state["intent_mapping"]["intents"]
         
         filtered_intents = []
@@ -583,6 +572,7 @@ Last user message: "{last_human_message.content}"
             intent_mapping = state["intent_mapping"]
             # If there are no intents, we check if there's an active agent for context preservation
             if len(intent_mapping["intents"]) == 0:
+                logger.debug("❌ No intents found, calling model for active agent")
                 # Check if there's an active agent for context preservation
                 if (hasattr(self, '_state') and 
                     hasattr(self._state, 'current_active_agent') and 
@@ -597,6 +587,7 @@ Last user message: "{last_human_message.content}"
             
             # If there's a single intent is mapped, we check the intent type to return the appropriate Command
             if len(intent_mapping["intents"]) == 1:
+                logger.debug("✅ Single intent found, routing to appropriate handler")
                 intent : Intent = intent_mapping["intents"][0]['intent']
                 if intent.intent_type == IntentType.RAW:
                     return Command(goto=END, update={
@@ -609,6 +600,7 @@ Last user message: "{last_human_message.content}"
                 
             # If there are multiple intents, we check intents type to return the appropriate Command
             elif len(intent_mapping["intents"]) > 1:
+                logger.debug("✅ Multiple intents found, routing to request human validation or inject intents in system prompt")
                 # Check if we have multiple agent intents above threshold
                 not_raw_intents = [
                     intent for intent in intent_mapping["intents"] if intent['intent'].intent_type in [IntentType.AGENT, IntentType.TOOL]
