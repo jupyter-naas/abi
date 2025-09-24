@@ -27,4 +27,3 @@ model = ChatModel(
     ),
     context_window=CONTEXT_WINDOW,
 )
-logger.debug("✅ GPT-4o model loaded successfully via OpenAI")

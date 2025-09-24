@@ -28,4 +28,3 @@ model = ChatModel(
     ),
     context_window=CONTEXT_WINDOW,
 )
-logger.debug("✅ O3 Mini model loaded successfully via OpenAI")
