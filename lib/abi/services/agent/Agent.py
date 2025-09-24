@@ -308,6 +308,9 @@ class Agent(Expose):
             self._checkpointer = memory
             
         self._state = state
+        # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
+        import uuid
+        self._state.set_thread_id(str(uuid.uuid4()))
 
         self._configuration = configuration
 
@@ -653,7 +656,7 @@ class Agent(Expose):
             if isinstance(payload, dict):
                 last_messages = []
 
-                logger.debug(f"payload: {payload}")
+                # logger.debug(f"payload: {payload}")
                 # print(f"{left} {self} payload: {payload}")
                 
                 # agent_name = self._name
@@ -699,11 +702,11 @@ class Agent(Expose):
                             if last_message["tool_call_id"] not in notified:
                                 self._notify_tool_response(last_message)
                                 notified[last_message["tool_call_id"]] = True
-                        else:
-                            print("\n\n Unknown message type:")
-                            print(type(last_message))
-                            print(last_message)
-                            print("\n\n")
+                        # else:
+                        #     print("\n\n Unknown message type:")
+                        #     print(type(last_message))
+                        #     print(last_message)
+                        #     print("\n\n")
 
             yield chunk
 
