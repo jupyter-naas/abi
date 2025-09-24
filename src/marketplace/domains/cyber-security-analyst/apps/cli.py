@@ -77,10 +77,13 @@ def main():
         
         # Load SPARQL agent for queries
         try:
-            exec(open(module_dir / 'agents' / 'CyberSecuritySPARQLAgent.py').read())
-            sparql_agent = CyberSecuritySPARQLAgent()  # noqa: F821
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            sparql_agent = CyberSecuritySPARQLAgent()
             has_knowledge_graph = sparql_agent.graph is not None
-            print(f"✅ Knowledge graph: {len(sparql_agent.graph):,} triples")
+            if has_knowledge_graph:
+                print(f"✅ Knowledge graph: {len(sparql_agent.graph):,} RDF triples")
+            else:
+                print("⚠️  Knowledge graph not loaded")
         except Exception as e:
             print(f"❌ SPARQL agent failed: {e}")
             sparql_agent = None

@@ -242,104 +242,88 @@ def create_cyber_security_tools():
     
     return tools
 
-    # Define intents for natural language and command mapping
     intents = [
         # Greeting and help intents
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="Hello, hi, hey, greetings",
-            intent_target="handle_greeting"
+            intent_target="handle_greeting",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="Help, what can you do, capabilities",
-            intent_target="show_help"
+            intent_target="show_help",
         ),
-        
+
         # Analysis intents - both natural and command-based
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="overview, dataset overview, show me the data, summary",
-            intent_target="get_overview"
+            intent_target="get_overview",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="timeline, chronological, when did events happen, show timeline",
-            intent_target="get_timeline"
+            intent_target="get_timeline",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="critical events, critical, most serious, high priority",
-            intent_target="get_critical_events"
+            intent_target="get_critical_events",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="attack vectors, attacks, how were they attacked, defensive techniques",
-            intent_target="get_attack_analysis"
+            intent_target="get_attack_analysis",
         ),
-        Intent(
-            intent_type=IntentType.FUNCTION,
-            intent_value="sectors, industries, who was affected, sector analysis",
-            intent_target="get_sector_analysis"
-        ),
-        
+
         # Specific threat type intents
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="ransomware, ransomware attacks, encryption attacks",
-            intent_target="analyze_ransomware"
+            intent_target="analyze_ransomware",
         ),
-        Intent(
-            intent_type=IntentType.FUNCTION,
-            intent_value="supply chain, supply chain attacks, software compromise",
-            intent_target="analyze_supply_chain"
-        ),
-        Intent(
-            intent_type=IntentType.FUNCTION,
-            intent_value="phishing, phishing attacks, email attacks",
-            intent_target="analyze_phishing"
-        ),
-        
+
         # Sector-specific intents
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="healthcare, medical, hospital attacks, healthcare threats",
-            intent_target="analyze_healthcare"
+            intent_target="analyze_healthcare",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="financial, banking, finance attacks, financial threats",
-            intent_target="analyze_financial"
+            intent_target="analyze_financial",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="government, government attacks, nation state, election security",
-            intent_target="analyze_government"
+            intent_target="analyze_government",
         ),
-        
+
         # Audit and transparency intents
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="audit, transparency, show queries, how do you know, sparql",
-            intent_target="show_audit_info"
+            intent_target="show_audit_info",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="queries, available queries, what queries, sparql queries",
-            intent_target="list_queries"
+            intent_target="list_queries",
         ),
-        
+
         # D3FEND specific intents
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="d3fend, defensive techniques, how to defend, mitigation",
-            intent_target="explain_d3fend"
+            intent_target="explain_d3fend",
         ),
         Intent(
             intent_type=IntentType.FUNCTION,
             intent_value="recommendations, defense recommendations, how to protect",
-            intent_target="get_recommendations"
-        )
+            intent_target="get_recommendations",
+        ),
     ]
 
     # Set configuration

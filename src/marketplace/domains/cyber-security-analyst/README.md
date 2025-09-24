@@ -30,10 +30,7 @@ python apps/cli.py
 ```
 
 ### Demo
-```bash
-# See conversational capabilities
-python apps/demo_conversational.py
-```
+Use the conversational CLI above to explore capabilities interactively.
 
 ## 🛡️ Features
 

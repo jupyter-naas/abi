@@ -5,10 +5,12 @@ Provides SPARQL query interface to cyber security knowledge graph
 with complete audit trails and D3FEND integration.
 """
 
-import json
+import logging
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
-from rdflib import Graph
+from typing import Dict, Any
+from rdflib import Graph, Literal
+
+logger = logging.getLogger(__name__)
 
 class CyberSecuritySPARQLAgent:
     """SPARQL agent for cyber security knowledge graph queries."""
@@ -24,17 +26,17 @@ class CyberSecuritySPARQLAgent:
         if self.ontology_path.exists():
             try:
                 self.graph.parse(str(self.ontology_path), format="turtle")
-                print(f"✅ Loaded knowledge graph: {len(self.graph):,} triples")
+                logger.info("Loaded knowledge graph: %s triples", len(self.graph))
             except Exception as e:
-                print(f"❌ Failed to load ontology: {e}")
+                logger.error("Failed to load ontology: %s", e)
                 self.graph = None
         else:
-            print(f"❌ Ontology file not found: {self.ontology_path}")
+            logger.error("Ontology file not found: %s", self.ontology_path)
             self.graph = None
         
         # Load predefined queries
         self.queries = self._load_predefined_queries()
-        print(f"✅ Loaded {len(self.queries)} predefined queries")
+        logger.info("Loaded %s predefined queries", len(self.queries))
     
     def _load_predefined_queries(self) -> Dict[str, str]:
         """Load predefined SPARQL queries."""
@@ -67,43 +69,54 @@ class CyberSecuritySPARQLAgent:
             """,
             
             "critical_events": """
-                PREFIX : <http://example.org/cyber-security#>
+                PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                 
-                SELECT ?event ?name ?date ?category ?attackVectors WHERE {
-                    ?event rdf:type :CyberSecurityEvent ;
-                           :name ?name ;
-                           :date ?date ;
-                           :category ?category ;
-                           :severity "critical" ;
-                           :attackVectors ?attackVectors .
+                SELECT ?event ?name ?date ?category ?attackVector ?attackVectorLabel ?defensiveTechnique ?defensiveTechniqueLabel WHERE {
+                    ?event rdf:type cse:CyberSecurityEvent ;
+                           cse:eventName ?name ;
+                           cse:eventDate ?date ;
+                           cse:category ?category ;
+                           cse:severity "critical" ;
+                           cse:hasAttackVector ?attackVector .
+                    OPTIONAL { ?event cse:hasDefensiveTechnique ?defensiveTechnique . }
+                    OPTIONAL { ?attackVector rdfs:label ?attackVectorLabel . }
+                    OPTIONAL { ?defensiveTechnique rdfs:label ?defensiveTechniqueLabel . }
                 }
                 ORDER BY ?date
             """,
             
             "attack_vectors": """
-                PREFIX : <http://example.org/cyber-security#>
+                PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
                 
-                SELECT ?event ?attackVector ?defensiveTechnique WHERE {
-                    ?event rdf:type :CyberSecurityEvent ;
-                           :attackVectors ?attackVector ;
-                           :defensiveTechniques ?defensiveTechnique .
+                SELECT ?attackVector ?attackVectorLabel ?defensiveTechnique ?defensiveTechniqueLabel WHERE {
+                    ?event rdf:type cse:CyberSecurityEvent ;
+                           cse:hasAttackVector ?attackVector .
+                    OPTIONAL { ?attackVector rdfs:label ?attackVectorLabel . }
+                    OPTIONAL {
+                        { ?event cse:hasDefensiveTechnique ?defensiveTechnique . }
+                        UNION
+                        { ?attackVector cse:mitigatedBy ?defensiveTechnique . }
+                        OPTIONAL { ?defensiveTechnique rdfs:label ?defensiveTechniqueLabel . }
+                    }
                 }
             """,
             
             "search_by_category": """
-                PREFIX : <http://example.org/cyber-security#>
+                PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
                 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
                 
-                SELECT ?event ?name ?date ?description ?severity WHERE {
-                    ?event rdf:type :CyberSecurityEvent ;
-                           :name ?name ;
-                           :date ?date ;
-                           :description ?description ;
-                           :severity ?severity ;
-                           :category ?category .
-                    FILTER(?category = "%CATEGORY%")
+                SELECT ?event ?name ?date ?description ?severity ?category WHERE {
+                    ?event rdf:type cse:CyberSecurityEvent ;
+                           cse:eventName ?name ;
+                           cse:eventDate ?date ;
+                           cse:description ?description ;
+                           cse:severity ?severity ;
+                           cse:category ?category .
+                    %FILTERS%
                 }
                 ORDER BY ?date
             """,
@@ -128,7 +141,7 @@ class CyberSecuritySPARQLAgent:
             "timeline_analysis": "Analyze events chronologically over time",
             "critical_events": "Find critical severity events with attack vectors",
             "attack_vectors": "Map attack vectors to defensive techniques",
-            "search_by_category": "Search events by specific category",
+            "search_by_category": "Search events with category and severity filters",
             "severity_distribution": "Get distribution of events by severity level"
         }
         
@@ -139,7 +152,7 @@ class CyberSecuritySPARQLAgent:
     
     def get_dataset_overview(self) -> Dict[str, Any]:
         """Get comprehensive dataset overview."""
-        if not self.graph:
+        if self.graph is None:
             return {"error": "Knowledge graph not loaded"}
         
         try:
@@ -160,9 +173,18 @@ class CyberSecuritySPARQLAgent:
             sev_results = list(self.graph.query(self.queries["severity_distribution"]))
             severity_dist = []
             for row in sev_results:
+                count_term = row[1]
+                try:
+                    count_val = count_term.toPython()  # type: ignore[attr-defined]
+                except Exception:
+                    count_val = count_term
+                try:
+                    count_int = int(count_val)
+                except Exception:
+                    count_int = int(str(count_val))
                 severity_dist.append({
                     "severity": str(row[0]),
-                    "count": int(row[1])
+                    "count": count_int
                 })
             
             return {
@@ -181,43 +203,49 @@ class CyberSecuritySPARQLAgent:
     
     def search_events_by_criteria(self, category: str = None, severity: str = None) -> Dict[str, Any]:
         """Search events by category or severity."""
-        if not self.graph:
+        if self.graph is None:
             return {"error": "Knowledge graph not loaded"}
         
         try:
+            filters = []
             if category:
-                query = self.queries["search_by_category"].replace("%CATEGORY%", category)
-            else:
-                query = self.queries["dataset_overview"]
-            
+                filters.append(f"FILTER(?category = {Literal(category).n3()})")
+            if severity:
+                filters.append(f"FILTER(?severity = {Literal(severity).n3()})")
+
+            filters_clause = "\n                    ".join(filters) if filters else ""
+            query = self.queries["search_by_category"].replace("%FILTERS%", filters_clause)
+
             results = list(self.graph.query(query))
-            
+
             events = []
             for row in results:
                 events.append({
+                    "event": str(row.event),
                     "name": str(row.name),
                     "date": str(row.date),
-                    "description": str(row.description) if hasattr(row, 'description') else "",
-                    "severity": str(row.severity)
+                    "description": str(getattr(row, "description", "")),
+                    "severity": str(row.severity),
+                    "category": str(row.category)
                 })
-            
+
             return {
                 "results": events,
                 "total_results": len(events),
                 "search_criteria": {"category": category, "severity": severity},
                 "query_audit": {
                     "data_source": "Cyber Security Knowledge Graph",
-                    "query_type": "SPARQL Category Search",
+                    "query_type": "SPARQL Event Search",
                     "results_count": len(events)
                 }
             }
-            
+
         except Exception as e:
             return {"error": f"Search failed: {e}"}
     
     def get_timeline_analysis(self) -> Dict[str, Any]:
         """Get timeline analysis of cyber security events."""
-        if not self.graph:
+        if self.graph is None:
             return {"error": "Knowledge graph not loaded"}
         
         try:
@@ -228,6 +256,7 @@ class CyberSecuritySPARQLAgent:
             
             for row in results:
                 event = {
+                    "event": str(row.event),
                     "event_name": str(row.name),
                     "date": str(row.date),
                     "severity": str(row.severity)
@@ -239,7 +268,7 @@ class CyberSecuritySPARQLAgent:
                 if month not in monthly_counts:
                     monthly_counts[month] = {"total": 0, "critical": 0}
                 monthly_counts[month]["total"] += 1
-                if str(row.severity) == "critical":
+                if str(row.severity).lower() == "critical":
                     monthly_counts[month]["critical"] += 1
             
             # Format monthly trends
@@ -267,25 +296,38 @@ class CyberSecuritySPARQLAgent:
     
     def get_critical_events_with_defenses(self) -> Dict[str, Any]:
         """Get critical events with D3FEND defensive recommendations."""
-        if not self.graph:
+        if self.graph is None:
             return {"error": "Knowledge graph not loaded"}
         
         try:
             results = list(self.graph.query(self.queries["critical_events"]))
-            
-            critical_events = []
+
+            events_by_id: Dict[str, Dict[str, Any]] = {}
             for row in results:
-                # Parse attack vectors (assuming comma-separated)
-                attack_vectors = str(row.attackVectors).split(",") if row.attackVectors else []
-                
-                critical_events.append({
+                event_iri = str(row.event)
+                event_entry = events_by_id.setdefault(event_iri, {
+                    "event": event_iri,
                     "event_name": str(row.name),
                     "date": str(row.date),
                     "category": str(row.category),
-                    "attack_vectors": [av.strip() for av in attack_vectors],
-                    "defensive_techniques": []  # Would be populated from D3FEND mappings
+                    "attack_vectors": [],
+                    "defensive_techniques": []
                 })
-            
+
+                attack_vector_label = getattr(row, "attackVectorLabel", None) or getattr(row, "attackVector", None)
+                if attack_vector_label is not None:
+                    attack_vector_value = str(attack_vector_label)
+                    if attack_vector_value not in event_entry["attack_vectors"]:
+                        event_entry["attack_vectors"].append(attack_vector_value)
+
+                defensive_label = getattr(row, "defensiveTechniqueLabel", None) or getattr(row, "defensiveTechnique", None)
+                if defensive_label is not None:
+                    defensive_value = str(defensive_label)
+                    if defensive_value not in event_entry["defensive_techniques"]:
+                        event_entry["defensive_techniques"].append(defensive_value)
+
+            critical_events = list(events_by_id.values())
+
             return {
                 "critical_events": critical_events,
                 "total_critical_events": len(critical_events),
@@ -295,43 +337,65 @@ class CyberSecuritySPARQLAgent:
                     "results_count": len(critical_events)
                 }
             }
-            
+
         except Exception as e:
             return {"error": f"Critical events query failed: {e}"}
     
     def get_attack_vector_analysis(self) -> Dict[str, Any]:
         """Analyze attack vectors and map to defensive techniques."""
-        if not self.graph:
+        if self.graph is None:
             return {"error": "Knowledge graph not loaded"}
         
         try:
             results = list(self.graph.query(self.queries["attack_vectors"]))
-            
-            vector_analysis = {}
+
+            vector_analysis: Dict[str, Dict[str, Any]] = {}
             for row in results:
-                vector = str(row.attackVector)
-                technique = str(row.defensiveTechnique)
-                
-                if vector not in vector_analysis:
-                    vector_analysis[vector] = {
-                        "attack_vector": vector,
-                        "defensive_techniques": [],
-                        "technique_count": 0
-                    }
-                
-                if technique not in vector_analysis[vector]["defensive_techniques"]:
-                    vector_analysis[vector]["defensive_techniques"].append(technique)
-                    vector_analysis[vector]["technique_count"] += 1
-            
+                attack_vector_term = getattr(row, "attackVector", None)
+                if attack_vector_term is None:
+                    continue
+
+                attack_vector_uri = str(attack_vector_term)
+                attack_vector_label = getattr(row, "attackVectorLabel", None)
+                attack_vector_display = str(attack_vector_label or attack_vector_term)
+
+                vector_entry = vector_analysis.setdefault(attack_vector_uri, {
+                    "attack_vector": attack_vector_display,
+                    "attack_vector_uri": attack_vector_uri,
+                    "defensive_techniques": [],
+                    "defensive_technique_uris": []
+                })
+
+                # Upgrade label if a better one is encountered later
+                if attack_vector_label and vector_entry["attack_vector"] == vector_entry["attack_vector_uri"]:
+                    vector_entry["attack_vector"] = attack_vector_display
+
+                defensive_term = getattr(row, "defensiveTechnique", None)
+                if defensive_term is None:
+                    continue
+
+                defensive_uri = str(defensive_term)
+                defensive_label = getattr(row, "defensiveTechniqueLabel", None)
+                defensive_display = str(defensive_label or defensive_term)
+
+                if defensive_uri not in vector_entry["defensive_technique_uris"]:
+                    vector_entry["defensive_technique_uris"].append(defensive_uri)
+                    vector_entry["defensive_techniques"].append(defensive_display)
+
+            attack_vector_analysis = []
+            for entry in vector_analysis.values():
+                entry["technique_count"] = len(entry["defensive_technique_uris"])
+                attack_vector_analysis.append(entry)
+
             return {
-                "attack_vector_analysis": list(vector_analysis.values()),
-                "total_attack_vectors": len(vector_analysis),
+                "attack_vector_analysis": attack_vector_analysis,
+                "total_attack_vectors": len(attack_vector_analysis),
                 "query_audit": {
                     "data_source": "Cyber Security Knowledge Graph",
                     "query_type": "SPARQL Attack Vector Analysis",
-                    "results_count": len(vector_analysis)
+                    "results_count": len(attack_vector_analysis)
                 }
             }
-            
+
         except Exception as e:
             return {"error": f"Attack vector analysis failed: {e}"}
