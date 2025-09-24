@@ -11,22 +11,16 @@ CONTEXT_WINDOW = 32768
 OWNER = "ollama"
 
 model: Optional[ChatModel] = None
-
-try:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatOllama(
-            model=ID,
-            temperature=0.1,  # Low temperature for precise reasoning
-            # num_predict=4096,  # Max tokens for detailed explanations
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ DeepSeek R1 8B model loaded successfully via Ollama")
-except Exception as e:
-    logger.error(f"⚠️  Error loading DeepSeek R1 8B model: {e}")
-    logger.error("   Make sure Ollama is running and 'deepseek-r1:8b' model is pulled.")
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatOllama(
+        model=ID,
+        temperature=0.1,  # Low temperature for precise reasoning
+        # num_predict=4096,  # Max tokens for detailed explanations
+    ),
+    context_window=CONTEXT_WINDOW,
+)

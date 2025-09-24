@@ -38,4 +38,3 @@ model = ChatModel(
         },
     )
 )
-logger.debug("✅ Grok 4 model loaded successfully via xAI")

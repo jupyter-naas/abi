@@ -34,4 +34,3 @@ model = ChatModel(
     ),
     context_window=CONTEXT_WINDOW,
 ) 
-logger.debug("✅ Claude 3.5 Sonnet model loaded successfully via Anthropic")
