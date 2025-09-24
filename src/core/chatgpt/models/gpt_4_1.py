@@ -2,7 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
-from abi import logger
 from typing import Optional
 
 ID = "gpt-4.1"
