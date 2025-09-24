@@ -119,17 +119,25 @@ class MarkdownProcessor:
             except:
                 self.doc.add_paragraph(f"• {clean_text}")
     
-    def _add_numbered_item(self, text: str):
+    def _add_numbered_item(self, text: str, number: str = None):
         """Add a numbered list item with proper list style."""
         clean_text = self._process_inline_formatting(text)
+        
+        # If we have a number, preserve it in case Word styles don't handle numbering
+        if number:
+            formatted_text = f"{number} {clean_text}"
+        else:
+            formatted_text = clean_text
+            
         try:
             # Try List Number first, fallback to List Paragraph
-            self.doc.add_paragraph(clean_text, style='List Number')
+            self.doc.add_paragraph(formatted_text, style='List Number')
         except:
             try:
-                self.doc.add_paragraph(clean_text, style='List Paragraph')
+                self.doc.add_paragraph(formatted_text, style='List Paragraph')
             except:
-                self.doc.add_paragraph(clean_text)
+                # Final fallback with manual numbering
+                self.doc.add_paragraph(formatted_text)
     
     def _add_reference(self, text: str):
         """Add a source reference with proper citation style."""
@@ -243,8 +251,16 @@ class MarkdownProcessor:
             
             # Handle numbered lists - map to proper Word numbered list styles
             if re.match(r'^\d+\.\s', line):
-                numbered_text = re.sub(r'^\d+\.\s', '', line)
-                self._add_numbered_item(numbered_text)
+                # Extract the number and the text separately
+                match = re.match(r'^(\d+\.)\s(.*)$', line)
+                if match:
+                    number = match.group(1)  # e.g., "1."
+                    numbered_text = match.group(2)  # e.g., "**Market Position:** While Big Four..."
+                    self._add_numbered_item(numbered_text, number)
+                else:
+                    # Fallback if regex doesn't match properly
+                    numbered_text = re.sub(r'^\d+\.\s', '', line)
+                    self._add_numbered_item(numbered_text)
                 i += 1
                 continue
             
