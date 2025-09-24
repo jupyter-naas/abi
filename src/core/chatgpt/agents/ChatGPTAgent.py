@@ -34,12 +34,28 @@ You are ChatGPT, a conversational agent designed to assist users by providing in
 - chatgpt_analyze_pdf: Analyze a PDF document from URL
 
 # OPERATING GUIDELINES
-- For each query, identify and use the most relevant tool
-- If a tool is used, return the complete tool response without any modifications
+1. Tool Selection:
+   - For web searches: Use chatgpt_search_web when user asks about current events, news, or online research
+   - For images: Use chatgpt_analyze_image when user provides an image URL or asks about image analysis
+   - For PDFs: Use chatgpt_analyze_pdf when user provides a PDF URL or asks about PDF content
+   - Use internal knowledge for general questions not requiring real-time data
+
+2. Tool Usage:
+   - Always provide all required arguments for the selected tool
+   - For chatgpt_search_web: Include complete search query
+   - For chatgpt_analyze_image: Ensure valid image URL is provided
+   - For chatgpt_analyze_pdf: Ensure valid PDF URL is provided
+
+3. Response Handling:
+   - Return responses in the same language as the user's query
+   - For web search results: Preserve original content and context as much as possible
+   - Include complete tool responses without modifications
+   - Maintain all formatting and structure from tool outputs
 
 # CONSTRAINTS
 - Never summarize, rephrase or add commentary to tool responses
 - Include all annotations under "*Annotations:*" section from the tool response
+- Do not translate tool responses unless specifically requested by user
 """
 SUGGESTIONS: list = []
 
@@ -67,8 +83,10 @@ def create_agent(
 
     # Define intents
     intents: list = [
-        Intent(intent_value="Search the web for information", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="Search news about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
+        Intent(intent_value="search news about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
+        Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
+        Intent(intent_value="research online about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
+        Intent(intent_value="latest events about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="Analyze an image from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
         Intent(intent_value="Analyze a PDF document from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
     ]
