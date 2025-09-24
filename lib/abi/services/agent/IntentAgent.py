@@ -587,8 +587,12 @@ Last user message: "{last_human_message.content}"
                 logger.debug("✅ Single intent found, routing to appropriate handler")
                 intent : Intent = intent_mapping["intents"][0]['intent']
                 if intent.intent_type == IntentType.RAW:
+                    
+                    ai_message = AIMessage(content=intent.intent_target)
+                    self._notify_ai_message(ai_message, self.name)
+                    
                     return Command(goto=END, update={
-                        "messages": [AIMessage(content=intent.intent_target)]
+                        "messages": [ai_message]
                     })
                 elif intent.intent_type == IntentType.AGENT:
                     return Command(goto=intent.intent_target)
