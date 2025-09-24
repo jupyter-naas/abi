@@ -75,8 +75,8 @@ class MarkdownProcessor:
                     heading_text = re.sub(r'\*\*(.*?)\*\*', r'\1', heading_text)
                     
                     try:
-                        # Use appropriate heading level (max 3 for Word)
-                        level = min(hash_count, 3)
+                        # Use appropriate heading level (Word supports up to Heading 9)
+                        level = min(hash_count, 9)
                         style_name = f'Heading {level}'
                         self.doc.add_paragraph(heading_text, style=style_name)
                     except:
