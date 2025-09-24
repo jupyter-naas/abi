@@ -308,9 +308,10 @@ class Agent(Expose):
             self._checkpointer = memory
             
         self._state = state
+        
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
-        import uuid
-        self._state.set_thread_id(str(uuid.uuid4()))
+        #import uuid
+        #self._state.set_thread_id(str(uuid.uuid4()))
 
         self._configuration = configuration
 
@@ -584,9 +585,14 @@ class Agent(Expose):
                 break
 
         # If the last response is a ToolMessage, we want the model to interpret it.
-        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_") and return_direct is False:
-            logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
-            results.append(Command(goto="call_model"))
+        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_"):
+            if return_direct is False:
+                logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
+                results.append(Command(goto="call_model"))
+            else:
+                logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
+                last_message = pd.get(results[-1], 'update.messages[-1]', None)
+                results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
 
         return results
 
@@ -697,14 +703,18 @@ class Agent(Expose):
                             # This is a tool call.
                             self._notify_tool_usage(last_message)
                         else:
-                            if 'call_model' in payload or 'intent_mapping_router' in payload:
+                            # This if is here to filter each source of AIMessage. Which means that it will notify ai message only if the methods:
+                            # - call_model
+                            # - call_tools
+                            # are called.
+                            # If you need another method to be able to return an AIMessage or a Command(..., update={"messages": [AIMessage(...)]}) we either need to add it to the list or have this specific method calling self._notify_ai_message directly.
+                            
+                            allowed_sources_of_ai_message = ['call_model', 'call_tools']
+                            
+                            if any(source in payload for source in allowed_sources_of_ai_message):
+                                logger.debug(f"Payload: {payload}")
                                 self._notify_ai_message(last_message, agent_name)
-                            # This is a message.
-                            # print("\n\nIntermediate AI Message:")
-                            # print(last_message.content)
-                            # print(last_message)
-                            # print('\n\n')
-                            pass
+
                     elif isinstance(last_message, ToolMessage):
                         if last_message.id not in notified:
                             self._notify_tool_response(last_message)
