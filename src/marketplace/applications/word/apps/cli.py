@@ -49,7 +49,7 @@ class MarkdownProcessor:
     # Main Title          → Heading 1
     ## Section            → Heading 2  
     ### Subsection        → Heading 3
-    #### Industry Overview → Heading 4
+    #### Subsection       → Heading 4
     ##### Details         → Heading 5
     ###### Specifics      → Heading 6
     
@@ -82,10 +82,10 @@ class MarkdownProcessor:
         style_mapping = {
             1: 'Heading 1',      # # Main Title
             2: 'Heading 2',      # ## Section  
-            3: 'Heading 3',      # ### Use Heading 3 for subsections
-            4: 'Heading 4',      # #### Use Heading 4 for H4 (better than Subtitle)
-            5: 'Heading 5',      # ##### Use Heading 5 for H5
-            6: 'Heading 6'       # ###### Use Heading 6 for H6
+            3: 'Heading 3',      # ### Subsection
+            4: 'Heading 4',      # #### Subsection
+            5: 'Heading 5',      # ##### Details
+            6: 'Heading 6'       # ###### Specifics
         }
         
         try:
@@ -328,7 +328,7 @@ class WordCLI:
                     else:
                         print(f"⚠️  Template conversion failed, using blank document with template styling")
                         self.document = Document()
-                        self._setup_forvis_mazars_styles()
+                        self._setup_custom_styles()
                 else:
                     raise e
         else:
@@ -381,33 +381,33 @@ class WordCLI:
         normal_font.name = self.config.default_font
         normal_font.size = Pt(self.config.default_font_size)
         
-    def _setup_forvis_mazars_styles(self):
-        """Setup Forvis Mazars specific styles."""
+    def _setup_custom_styles(self):
+        """Setup custom document styles."""
         if not self.document:
             return
             
-        # Configure Normal style with Forvis Mazars branding
+        # Configure Normal style with standard formatting
         normal_style = self.document.styles['Normal']
         normal_font = normal_style.font
         normal_font.name = "Calibri"
         normal_font.size = Pt(11)
         
-        # Add Forvis Mazars header styling
+        # Add custom header styling if needed
         try:
-            # Create custom heading style for Forvis Mazars
+            # Create custom heading styles if not present in template
             styles = self.document.styles
-            if 'Forvis Mazars Title' not in [s.name for s in styles]:
-                title_style = styles.add_style('Forvis Mazars Title', WD_STYLE_TYPE.PARAGRAPH)
+            if 'Custom Title' not in [s.name for s in styles]:
+                title_style = styles.add_style('Custom Title', WD_STYLE_TYPE.PARAGRAPH)
                 title_font = title_style.font
                 title_font.name = "Calibri"
                 title_font.size = Pt(24)
                 title_font.bold = True
-                title_font.color.rgb = (0, 102, 204)  # Forvis Mazars blue
+                title_font.color.rgb = (0, 102, 204)  # Professional blue
                 title_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 title_style.paragraph_format.space_after = Pt(12)
                 
-            if 'Forvis Mazars Subtitle' not in [s.name for s in styles]:
-                subtitle_style = styles.add_style('Forvis Mazars Subtitle', WD_STYLE_TYPE.PARAGRAPH)
+            if 'Custom Subtitle' not in [s.name for s in styles]:
+                subtitle_style = styles.add_style('Custom Subtitle', WD_STYLE_TYPE.PARAGRAPH)
                 subtitle_font = subtitle_style.font
                 subtitle_font.name = "Calibri"
                 subtitle_font.size = Pt(16)
@@ -536,8 +536,8 @@ Examples:
   # Process with placeholder replacement
   python cli.py --markdown content.md --replace "{{name}}" "John Doe" --output report.docx
   
-  # Process Forvis Mazars Markdown report
-  python cli.py --markdown forvismazars_ci_report.md --template fmz-word-template.docx --output forvis_report.docx
+  # Process Markdown report with template
+  python cli.py --markdown company_report.md --template company-template.docx --output company_report.docx
         """
     )
     
