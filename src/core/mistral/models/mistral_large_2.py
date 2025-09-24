@@ -32,4 +32,3 @@ model = ChatModel(
     ),
     context_window=CONTEXT_WINDOW,
 )
-logger.debug("✅ Mistral Large 2 model loaded successfully via Mistral")

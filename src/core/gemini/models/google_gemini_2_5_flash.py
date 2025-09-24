@@ -30,4 +30,3 @@ model = ChatModel(
     ),
     context_window=CONTEXT_WINDOW,
 )
-logger.debug("✅ Gemini 2.5 Flash model loaded successfully via Google")
