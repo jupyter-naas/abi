@@ -143,7 +143,25 @@ class IntentAgent(Agent):
             configuration=configuration,
             event_queue=event_queue,
         )
-    
+
+
+    def get_last_human_message(self, state: IntentState) -> Any | None:
+        """Get the appropriate human message based on AI message context.
+        
+        Args:
+            state (IntentState): Current conversation state
+            
+        Returns:
+            Any | None: The relevant human message
+        """
+        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
+        if last_ai_message is not None and last_ai_message.additional_kwargs.get("owner") == self.name:
+            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        elif last_ai_message is not None and hasattr(last_ai_message, "additional_kwargs") and last_ai_message.additional_kwargs is not None and "owner" in last_ai_message.additional_kwargs:
+            return pd.filter_(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))[1]
+        else:
+            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+
 
     def map_intents(self, state: IntentState) -> Command:
         """Map user messages to available intents.
@@ -166,18 +184,18 @@ class IntentAgent(Agent):
         # Reset intents rules in system prompt
         self._system_prompt = self._configuration.system_prompt
 
-        # Get the last human message
-        last_human_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        # Get the last AI message
+        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
+        last_human_message = self.get_last_human_message(state)
 
         # Assertions to ensure the last human message is valid
         assert last_human_message is not None
         assert isinstance(last_human_message, HumanMessage)
         assert isinstance(last_human_message.content, str)
 
-        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
-
         logger.debug(f"💬 Starting conversation with agent '{self.name}'")
         logger.debug("🔍 Map intents")
+        logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
         logger.debug(state)
 
         # Handle agent routing via @mention
@@ -285,7 +303,7 @@ class IntentAgent(Agent):
             if no filtering is needed
         """
         logger.debug("🔍 Filter out irrelevant intents")
-        last_human_message : Any = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        last_human_message = self.get_last_human_message(state)
         assert last_human_message is not None
 
         mapped_intents = state["intent_mapping"]["intents"]
@@ -391,7 +409,7 @@ Last user message: "{last_human_message.content}"
         """ 
         logger.debug("🔍 Entity Check")
 
-        last_human_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        last_human_message = self.get_last_human_message(state)
         
         assert last_human_message is not None
         assert isinstance(last_human_message, HumanMessage)
