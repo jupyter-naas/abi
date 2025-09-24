@@ -134,9 +134,9 @@ class MarkdownProcessor:
                 i += 1
                 continue
             
-            # Handle italic metadata lines (like report footer info)
-            if re.match(r'^\*.*\*\s*$', line.strip()):
-                # This is an italic line that should be on its own line
+            # Handle italic metadata lines (like report footer info) - match actual italic syntax
+            if re.match(r'^\*(?!.*\*\*)(?:Report prepared by|Date|Classification).*\*\s*$', line.strip()):
+                # This is a footer metadata line with single asterisks (italic) that should be centered
                 italic_text = self._process_inline_formatting(line.strip())
                 p = self.doc.add_paragraph(italic_text)
                 try:
@@ -160,13 +160,13 @@ class MarkdownProcessor:
             while i < len(lines):
                 next_line = lines[i].rstrip()
                 
-                # Stop if we hit an empty line, heading, list item, numbered reference, italic metadata, or horizontal rule
+                # Stop if we hit an empty line, heading, list item, numbered reference, footer metadata, or horizontal rule
                 if (not next_line or 
                     next_line.startswith('#') or 
                     next_line.startswith(('- ', '* ', '+ ')) or
                     re.match(r'^\d+\.\s', next_line) or
                     re.match(r'^[¹²³⁴⁵⁶⁷⁸⁹⁰]+\s', next_line) or
-                    re.match(r'^\*.*\*\s*$', next_line.strip()) or
+                    re.match(r'^\*(?!.*\*\*)(?:Report prepared by|Date|Classification).*\*\s*$', next_line.strip()) or
                     next_line.strip() == '---'):
                     break
                     
