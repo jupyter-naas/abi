@@ -529,6 +529,7 @@ class Agent(Expose):
         assert len(tool_calls) > 0, state["messages"][-1]
 
         results: list[Command] = []
+        called_tools: list[BaseTool] = []
         for tool_call in tool_calls:
             tool_: BaseTool = self._tools_by_name[tool_call["name"]]
 
@@ -551,6 +552,7 @@ class Agent(Expose):
                 
             try:
                 tool_response = tool_.invoke(args)
+                called_tools.append(tool_)
 
 
                 if isinstance(tool_response, ToolMessage):
@@ -569,10 +571,20 @@ class Agent(Expose):
                 # If the tool call fails, we want the model to interpret it.
                 results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
 
+
+
         assert len(results) > 0, state
 
+        # Checking if every called tools has return_direct set to True.
+        # This is used to know if we can send the ToolMessage to the call_model node.
+        return_direct : bool = True
+        for t in called_tools:
+            if t.return_direct is False:
+                return_direct = False
+                break
+
         # If the last response is a ToolMessage, we want the model to interpret it.
-        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_"):
+        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_") and return_direct is False:
             logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
             results.append(Command(goto="call_model"))
 
