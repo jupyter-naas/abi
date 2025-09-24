@@ -141,7 +141,7 @@ class IntentAgent(Agent):
             event_queue=event_queue,
         )
 
-    def filter_user_selection_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
+    def filter_user_selection_messages(self, messages: list) -> list:
         """Filter out the user selection messages from the conversation history.
         
         Args:
