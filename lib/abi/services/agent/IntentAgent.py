@@ -36,7 +36,6 @@ from langchain_core.tools import tool
 from abi import logger
 import pydash as pd
 import spacy
-import json
 import rich
 
 
@@ -195,7 +194,7 @@ class IntentAgent(Agent):
         last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
 
         logger.debug(f"💬 Starting conversation with agent '{self.name}'")
-        logger.debug(f"🔍 Map intents")
+        logger.debug("🔍 Map intents")
         logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
         logger.debug(f"==> Last AI message: {last_ai_message.content if last_ai_message is not None else None}")
         logger.debug(f"==> State: {state}")
@@ -204,7 +203,7 @@ class IntentAgent(Agent):
         if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
             at_mention = last_human_message.content.split(" ")[0].split("@")[1]
             
-            logger.debug(f"🤖 Handle agent routing via @mention")
+            logger.debug("🤖 Handle agent routing via @mention")
 
             # Check if we have an agent with this name.
             agent = pd.find(self._agents, lambda a: a.name == at_mention)
@@ -217,7 +216,7 @@ class IntentAgent(Agent):
         if isinstance(last_human_message.content, str) and last_human_message.content.strip().isdigit() and last_ai_message is not None and MULTIPLES_INTENTS_MESSAGE in last_ai_message.content:
             choice_num = int(last_human_message.content.strip())
             
-            logger.debug(f"🔀 Handle multiples intents routing via numeric response to a validation request (e.g., '1', '2', etc.)")
+            logger.debug("🔀 Handle multiples intents routing via numeric response to a validation request (e.g., '1', '2', etc.)")
 
             # Extract agent names from the validation message
             lines = last_ai_message.content.split('\n')
@@ -238,7 +237,7 @@ class IntentAgent(Agent):
                         logger.debug(f"✅ Calling agent: {intent_name}")
                         return Command(goto=intent_name, update=command_update)
                     else:
-                        logger.debug(f"✅ Calling model (Agent not found)")
+                        logger.debug("✅ Calling model (Agent not found)")
                         return Command(goto="call_model", update=command_update) 
 
         # Map intents using vector similarity search
@@ -519,7 +518,7 @@ Last user message: "{last_human_message.content}"
         Returns:
             Command: Command to end conversation with validation request message
         """
-        logger.debug(f"👀 Request Human Validation")
+        logger.debug("👀 Request Human Validation")
         
         if "intent_mapping" not in state or len(state["intent_mapping"]["intents"]) == 0:
             return Command(goto="call_model")
@@ -532,7 +531,6 @@ Last user message: "{last_human_message.content}"
             return Command(goto="inject_intents_in_system_prompt")
         
         # Create a list of unique agents with their scores
-        initial_human_message : Any | None = pd.find(state["messages"][::-2], lambda m: isinstance(m, HumanMessage))
         agents_info = []
         seen_agents = set()
         

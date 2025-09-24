@@ -3,7 +3,6 @@ from langchain_openai import ChatOpenAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
-from abi import logger
 
 ID = "gpt-4o"
 NAME = "gpt-4o"
