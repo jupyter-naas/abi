@@ -357,8 +357,8 @@ class WordCLI:
             print(f"✅ Replaced '{placeholder}' with '{replacement}'")
         return True
         
-    def save_document(self, output_path: str, add_timestamp: bool = True):
-        """Save the document with optional timestamp prefix."""
+    def save_document(self, output_path: str, input_filename: str = None, add_timestamp: bool = True):
+        """Save the document with optional timestamp prefix using input filename."""
         if not self.document:
             print("❌ Error: No document to save. Create and process content first.")
             return False
@@ -368,9 +368,18 @@ class WordCLI:
             if add_timestamp:
                 from datetime import datetime
                 timestamp = datetime.now().strftime("%Y%m%dT%H%M%S_")
-                output_file = Path(output_path)
-                timestamped_name = timestamp + output_file.name
-                final_output_path = output_file.parent / timestamped_name
+                
+                if input_filename:
+                    # Use input filename (without extension) with timestamp prefix
+                    input_path = Path(input_filename)
+                    base_name = input_path.stem  # filename without extension
+                    timestamped_name = timestamp + base_name + ".docx"
+                else:
+                    # Use provided output filename with timestamp prefix
+                    output_file = Path(output_path)
+                    timestamped_name = timestamp + output_file.name
+                
+                final_output_path = Path(output_path).parent / timestamped_name
             else:
                 final_output_path = Path(output_path)
             
@@ -477,7 +486,7 @@ def main():
     
     # Save document with timestamp control
     add_timestamp = not args.no_timestamp
-    if not cli.save_document(args.output, add_timestamp):
+    if not cli.save_document(args.output, args.markdown, add_timestamp):
         sys.exit(1)
     
     if args.verbose:
