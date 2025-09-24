@@ -3,7 +3,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src import secret
 from typing import Optional
 from pydantic import SecretStr
-from abi import logger
 
 ID = "gemini-2.5-flash"
 NAME = "gemini-2.5-flash"

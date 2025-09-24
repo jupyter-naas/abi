@@ -2,7 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_anthropic import ChatAnthropic
 from src import secret
 from pydantic import SecretStr
-from abi import logger
 from typing import Optional
 
 ID = "claude-3-5-sonnet-20241022"

@@ -1,7 +1,6 @@
 from abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
 from typing import Optional
-from abi import logger
 
 ID = "deepseek-r1:8b"
 NAME = "DeepSeek R1 8B"

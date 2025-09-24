@@ -1,7 +1,6 @@
 from abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
 from typing import Optional
-from abi import logger
 
 ID = "meta-llama/Llama-3.3-70B-Instruct"
 NAME = "llama-3.3-70b-instruct"
