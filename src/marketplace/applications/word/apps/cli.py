@@ -147,14 +147,14 @@ class MarkdownProcessor:
         # Extract the reference number for bookmark
         ref_match = re.match(r'^([¹²³⁴⁵⁶⁷⁸⁹⁰¹⁰¹⁰²⁰³⁰⁴⁰⁵⁰⁶⁰⁷⁰⁸⁰⁹¹¹¹²¹³¹⁴¹⁵¹⁶¹⁷¹⁸¹⁹²²¹²²²³²⁴²⁵²⁶²⁷²⁸²⁹³³¹³²³³³⁴³⁵³⁶³⁷³⁸³⁹⁴⁴¹⁴²⁴³⁴⁴⁴⁵⁴⁶⁴⁷⁴⁸⁴⁹⁵⁵¹⁵²⁵³⁵⁴⁵⁵⁵⁶⁵⁷⁵⁸⁵⁹⁶⁶¹⁶²⁶³⁶⁴⁶⁵⁶⁶⁶⁷⁶⁸⁶⁹⁷⁷¹⁷²⁷³⁷⁴⁷⁵⁷⁶⁷⁷⁷⁸⁷⁹⁸⁸¹⁸²⁸³⁸⁴⁸⁵⁸⁶⁸⁷⁸⁸⁸⁹⁹⁹¹⁹²⁹³⁹⁴⁹⁵⁹⁶⁹⁷⁹⁸⁹⁹]+)', text)
         
-        # Just use normal paragraph since the template styles don't exist
+        # Create paragraph with proper spacing
         p = self.doc.add_paragraph(clean_text)
         try:
             p.paragraph_format.space_after = Pt(3)
         except:
             pass
         
-        # Add bookmark for this reference
+        # Add bookmark for this reference so hyperlinks can target it
         if ref_match:
             ref_number = ref_match.group(1)
             bookmark_name = f"source_{ref_number}"
