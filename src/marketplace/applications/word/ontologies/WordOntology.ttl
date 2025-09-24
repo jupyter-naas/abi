@@ -1,0 +1,282 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix word: <http://ontology.naas.ai/abi/word/> .
+
+<http://ontology.naas.ai/abi/WordOntology> rdf:type owl:Ontology ;
+    dc11:contributor "ABI System" ;
+    dc:description "Domain ontology for Microsoft Word documents and document processing."@en ;
+    dc:title "Word Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+word:Document a owl:Class ;
+    rdfs:subClassOf cco:ont00001069 ; # Representational Information Content Entity
+    rdfs:label "Word Document" ;
+    skos:definition "A digital document created using Microsoft Word or compatible software, containing formatted text, images, tables, and other content elements."@en ;
+    skos:example "A business report with headers, paragraphs, and tables"@en ,
+                 "A technical specification document with structured content"@en .
+
+word:Paragraph a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Paragraph" ;
+    skos:definition "A distinct section of text within a document, typically containing one or more sentences that form a coherent unit of thought."@en ;
+    skos:example "A paragraph describing project objectives"@en ,
+                 "An introductory paragraph in a report"@en .
+
+word:Heading a owl:Class ;
+    rdfs:subClassOf word:Paragraph ;
+    rdfs:label "Heading" ;
+    skos:definition "A paragraph that serves as a title or section header, typically formatted with larger or bold text to indicate document structure."@en ;
+    skos:example "A chapter title in a document"@en ,
+                 "A section header in a report"@en .
+
+word:Table a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Table" ;
+    skos:definition "A structured arrangement of data in rows and columns within a document, used to present information in a tabular format."@en ;
+    skos:example "A data table showing quarterly sales figures"@en ,
+                 "A comparison table of product features"@en .
+
+word:Template a owl:Class ;
+    rdfs:subClassOf word:Document ;
+    rdfs:label "Document Template" ;
+    skos:definition "A pre-formatted document that serves as a starting point for creating new documents, containing placeholders and standard formatting."@en ;
+    skos:example "A business letter template with company letterhead"@en ,
+                 "A report template with predefined sections"@en .
+
+word:Style a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Document Style" ;
+    skos:definition "A set of formatting attributes that can be applied to text or paragraphs, including font, size, color, and spacing properties."@en ;
+    skos:example "A heading style with bold, 18pt font"@en ,
+                 "A body text style with 11pt Calibri font"@en .
+
+word:Section a owl:Class ;
+    rdfs:subClassOf cco:ont00000253 ; # Information Bearing Entity
+    rdfs:label "Document Section" ;
+    skos:definition "A logical division of a document that can have different formatting, headers, footers, or page layout settings."@en ;
+    skos:example "A section with landscape orientation for wide tables"@en ,
+                 "A section with different header content"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+word:hasDocument a owl:ObjectProperty ;
+    rdfs:domain cco:ont00001180 ; # Organization
+    rdfs:range word:Document ;
+    rdfs:label "has document" ;
+    skos:definition "Relates an Organization to a Word Document that it owns or is associated with."@en ;
+    skos:example "The organization 'Acme Corp' has the document 'Annual Report 2024'"@en .
+
+word:isDocumentOf a owl:ObjectProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range cco:ont00001180 ; # Organization
+    rdfs:label "is document of" ;
+    skos:definition "Relates a Word Document to the Organization that owns or is associated with it."@en ;
+    skos:example "The document 'Annual Report 2024' is associated with the organization 'Acme Corp'"@en .
+
+word:hasParagraph a owl:ObjectProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range word:Paragraph ;
+    rdfs:label "has paragraph" ;
+    skos:definition "Relates a Word Document to its constituent paragraphs."@en ;
+    skos:example "The document 'Project Plan' has paragraphs describing objectives and timeline"@en .
+
+word:isParagraphOf a owl:ObjectProperty ;
+    rdfs:domain word:Paragraph ;
+    rdfs:range word:Document ;
+    rdfs:label "is paragraph of" ;
+    skos:definition "Relates a Paragraph to the Word Document it is part of."@en ;
+    skos:example "The paragraph 'Project Objectives' is part of the document 'Project Plan'"@en .
+
+word:hasHeading a owl:ObjectProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range word:Heading ;
+    rdfs:label "has heading" ;
+    skos:definition "Relates a Word Document to its headings."@en ;
+    skos:example "The document 'User Manual' has headings for each chapter"@en .
+
+word:isHeadingOf a owl:ObjectProperty ;
+    rdfs:domain word:Heading ;
+    rdfs:range word:Document ;
+    rdfs:label "is heading of" ;
+    skos:definition "Relates a Heading to the Word Document it is part of."@en ;
+    skos:example "The heading 'Introduction' is part of the document 'User Manual'"@en .
+
+word:hasTable a owl:ObjectProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range word:Table ;
+    rdfs:label "has table" ;
+    skos:definition "Relates a Word Document to its tables."@en ;
+    skos:example "The document 'Financial Report' has tables showing revenue data"@en .
+
+word:isTableOf a owl:ObjectProperty ;
+    rdfs:domain word:Table ;
+    rdfs:range word:Document ;
+    rdfs:label "is table of" ;
+    skos:definition "Relates a Table to the Word Document it is part of."@en ;
+    skos:example "The table 'Q4 Sales Data' is part of the document 'Financial Report'"@en .
+
+word:hasTemplate a owl:ObjectProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range word:Template ;
+    rdfs:label "has template" ;
+    skos:definition "Relates a Word Document to the Template it was created from."@en ;
+    skos:example "The document 'Business Proposal' was created from the template 'Proposal Template'"@en .
+
+word:isTemplateFor a owl:ObjectProperty ;
+    rdfs:domain word:Template ;
+    rdfs:range word:Document ;
+    rdfs:label "is template for" ;
+    skos:definition "Relates a Template to Word Documents that were created from it."@en ;
+    skos:example "The template 'Report Template' is used for creating quarterly reports"@en .
+
+word:hasStyle a owl:ObjectProperty ;
+    rdfs:domain word:Paragraph ;
+    rdfs:range word:Style ;
+    rdfs:label "has style" ;
+    skos:definition "Relates a Paragraph to the Style applied to it."@en ;
+    skos:example "The paragraph uses the 'Heading 1' style"@en .
+
+word:isStyleOf a owl:ObjectProperty ;
+    rdfs:domain word:Style ;
+    rdfs:range word:Paragraph ;
+    rdfs:label "is style of" ;
+    skos:definition "Relates a Style to the Paragraphs that use it."@en ;
+    skos:example "The 'Body Text' style is applied to multiple paragraphs"@en .
+
+word:hasSection a owl:ObjectProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range word:Section ;
+    rdfs:label "has section" ;
+    skos:definition "Relates a Word Document to its sections."@en ;
+    skos:example "The document has sections with different page orientations"@en .
+
+word:isSectionOf a owl:ObjectProperty ;
+    rdfs:domain word:Section ;
+    rdfs:range word:Document ;
+    rdfs:label "is section of" ;
+    skos:definition "Relates a Section to the Word Document it is part of."@en ;
+    skos:example "The landscape section is part of the technical document"@en .
+
+#################################################################
+#    Data Properties
+#################################################################
+
+word:paragraph_text a owl:DatatypeProperty ;
+    rdfs:domain word:Paragraph ;
+    rdfs:range xsd:string ;
+    rdfs:label "paragraph text" ;
+    skos:definition "The textual content of a paragraph."@en .
+
+word:paragraph_style_name a owl:DatatypeProperty ;
+    rdfs:domain word:Paragraph ;
+    rdfs:range xsd:string ;
+    rdfs:label "paragraph style name" ;
+    skos:definition "The name of the style applied to the paragraph."@en .
+
+word:paragraph_alignment a owl:DatatypeProperty ;
+    rdfs:domain word:Paragraph ;
+    rdfs:range xsd:string ;
+    rdfs:label "paragraph alignment" ;
+    skos:definition "The text alignment of the paragraph (left, center, right, justify)."@en .
+
+word:heading_level a owl:DatatypeProperty ;
+    rdfs:domain word:Heading ;
+    rdfs:range xsd:integer ;
+    rdfs:label "heading level" ;
+    skos:definition "The hierarchical level of the heading (1-6)."@en .
+
+word:heading_text a owl:DatatypeProperty ;
+    rdfs:domain word:Heading ;
+    rdfs:range xsd:string ;
+    rdfs:label "heading text" ;
+    skos:definition "The textual content of the heading."@en .
+
+word:table_rows a owl:DatatypeProperty ;
+    rdfs:domain word:Table ;
+    rdfs:range xsd:integer ;
+    rdfs:label "table rows" ;
+    skos:definition "The number of rows in the table."@en .
+
+word:table_columns a owl:DatatypeProperty ;
+    rdfs:domain word:Table ;
+    rdfs:range xsd:integer ;
+    rdfs:label "table columns" ;
+    skos:definition "The number of columns in the table."@en .
+
+word:table_style_name a owl:DatatypeProperty ;
+    rdfs:domain word:Table ;
+    rdfs:range xsd:string ;
+    rdfs:label "table style name" ;
+    skos:definition "The name of the style applied to the table."@en .
+
+word:template_path a owl:DatatypeProperty ;
+    rdfs:domain word:Template ;
+    rdfs:range xsd:string ;
+    rdfs:label "template path" ;
+    skos:definition "The file system path to the template file."@en .
+
+word:placeholder_text a owl:DatatypeProperty ;
+    rdfs:domain word:Template ;
+    rdfs:range xsd:string ;
+    rdfs:label "placeholder text" ;
+    skos:definition "Placeholder text in the template that can be replaced with actual content."@en .
+
+word:style_font_name a owl:DatatypeProperty ;
+    rdfs:domain word:Style ;
+    rdfs:range xsd:string ;
+    rdfs:label "style font name" ;
+    skos:definition "The font family name used in the style."@en .
+
+word:style_font_size a owl:DatatypeProperty ;
+    rdfs:domain word:Style ;
+    rdfs:range xsd:integer ;
+    rdfs:label "style font size" ;
+    skos:definition "The font size in points used in the style."@en .
+
+word:style_is_bold a owl:DatatypeProperty ;
+    rdfs:domain word:Style ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "style is bold" ;
+    skos:definition "Whether the style applies bold formatting."@en .
+
+word:style_is_italic a owl:DatatypeProperty ;
+    rdfs:domain word:Style ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "style is italic" ;
+    skos:definition "Whether the style applies italic formatting."@en .
+
+word:document_page_count a owl:DatatypeProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range xsd:integer ;
+    rdfs:label "document page count" ;
+    skos:definition "The total number of pages in the document."@en .
+
+word:document_word_count a owl:DatatypeProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range xsd:integer ;
+    rdfs:label "document word count" ;
+    skos:definition "The total number of words in the document."@en .
+
+word:document_creation_date a owl:DatatypeProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "document creation date" ;
+    skos:definition "The date and time when the document was created."@en .
+
+word:document_last_modified a owl:DatatypeProperty ;
+    rdfs:domain word:Document ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "document last modified" ;
+    skos:definition "The date and time when the document was last modified."@en .
