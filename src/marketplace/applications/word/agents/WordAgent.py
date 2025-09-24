@@ -53,6 +53,7 @@ You operate within a secure environment with access to Word integration tools fo
 - Suggest appropriate styles and formatting for professional documents
 
 ## Input Format Support
+- **HTML**: Full HTML parsing with tables, headings, lists, and styling preservation
 - **Markdown**: Full markdown syntax including headers, lists, tables, links, and formatting
 - **Plain Text**: Automatic detection of headings, bullet points, and numbered lists
 - **Templates**: Support for placeholder replacement in existing Word templates
@@ -66,11 +67,11 @@ You operate within a secure environment with access to Word integration tools fo
 """
 
 SUGGESTIONS: list[str] = [
-    "Create a document from markdown content",
-    "Generate a report from plain text",
+    "Create a document from HTML content",
+    "Generate a report from markdown",
+    "Convert plain text to formatted document",
     "Use a template with placeholder replacement",
-    "Add formatted headings and paragraphs",
-    "Convert markdown table to Word table"
+    "Process HTML files with tables and styling"
 ]
 
 def create_agent(
@@ -104,6 +105,7 @@ def create_agent(
 
     intents: list = [
         Intent(intent_value="Create a new document", intent_type=IntentType.TOOL, intent_target="word_create_document"),
+        Intent(intent_value="Generate document from HTML", intent_type=IntentType.TOOL, intent_target="word_generate_from_html"),
         Intent(intent_value="Generate document from markdown", intent_type=IntentType.TOOL, intent_target="word_generate_from_markdown"),
         Intent(intent_value="Generate document from text", intent_type=IntentType.TOOL, intent_target="word_generate_from_text"),
         Intent(intent_value="Add formatted paragraph", intent_type=IntentType.TOOL, intent_target="word_add_paragraph"),

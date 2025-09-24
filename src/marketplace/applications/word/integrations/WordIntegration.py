@@ -134,6 +134,18 @@ class WordIntegration(Integration):
         # Convert HTML to Word content
         return self._html_to_word(document, html_content)
 
+    def generate_from_html(self, document: DocumentType, html_content: str) -> DocumentType:
+        """Generate document content from HTML input.
+
+        Args:
+            document (Document): Word document object
+            html_content (str): HTML content to convert
+
+        Returns:
+            Document: Updated document with HTML content converted to Word format
+        """
+        return self._html_to_word(document, html_content)
+
     def generate_from_text(self, document: DocumentType, text_content: str, 
                           preserve_formatting: bool = True) -> DocumentType:
         """Generate document content from plain text input.
@@ -212,8 +224,19 @@ class WordIntegration(Integration):
                 self.heading_level = 1
                 self.in_paragraph = False
                 self.in_list = False
+                self.in_table = False
+                self.table_data = []
+                self.current_row = []
+                self.in_cell = False
+                self.skip_tags = {'style', 'script', 'head', 'meta', 'title'}
+                self.current_tag = None
                 
             def handle_starttag(self, tag, attrs):
+                self.current_tag = tag
+                
+                if tag in self.skip_tags:
+                    return
+                    
                 if tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
                     self.in_heading = True
                     self.heading_level = int(tag[1])
@@ -225,8 +248,27 @@ class WordIntegration(Integration):
                     pass  # Handle in handle_data
                 elif tag == 'br':
                     self.current_text += '\n'
+                elif tag == 'table':
+                    self.in_table = True
+                    self.table_data = []
+                elif tag == 'tr' and self.in_table:
+                    self.current_row = []
+                elif tag in ['td', 'th'] and self.in_table:
+                    self.in_cell = True
+                elif tag in ['strong', 'b']:
+                    pass  # Handle bold formatting in text
+                elif tag in ['em', 'i']:
+                    pass  # Handle italic formatting in text
+                elif tag == 'div':
+                    # Check for special div classes
+                    class_attr = dict(attrs).get('class', '')
+                    if 'header' in class_attr:
+                        pass  # Special header handling
                     
             def handle_endtag(self, tag):
+                if tag in self.skip_tags:
+                    return
+                    
                 if tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
                     if self.current_text.strip():
                         style_name = f'Custom Heading {min(self.heading_level, 3)}'
@@ -234,7 +276,13 @@ class WordIntegration(Integration):
                             self.doc.add_paragraph(self.current_text.strip(), style=style_name)
                         else:
                             p = self.doc.add_paragraph(self.current_text.strip())
-                            p.style = self.doc.styles[f'Heading {min(self.heading_level, 3)}']
+                            try:
+                                p.style = self.doc.styles[f'Heading {min(self.heading_level, 3)}']
+                            except KeyError:
+                                # Fallback if heading style doesn't exist
+                                run = p.runs[0] if p.runs else p.add_run(self.current_text.strip())
+                                run.font.bold = True
+                                run.font.size = Pt(16 - self.heading_level * 2)
                     self.current_text = ""
                     self.in_heading = False
                 elif tag == 'p':
@@ -248,9 +296,49 @@ class WordIntegration(Integration):
                     if self.current_text.strip():
                         self.doc.add_paragraph(self.current_text.strip(), style='List Bullet')
                     self.current_text = ""
+                elif tag == 'table':
+                    if self.table_data:
+                        # Add table to document
+                        rows = len(self.table_data)
+                        cols = max(len(row) for row in self.table_data) if self.table_data else 0
+                        if rows > 0 and cols > 0:
+                            table = self.doc.add_table(rows=rows, cols=cols)
+                            table.style = 'Table Grid'
+                            for row_idx, row_data in enumerate(self.table_data):
+                                for col_idx, cell_data in enumerate(row_data):
+                                    if row_idx < rows and col_idx < cols:
+                                        cell = table.cell(row_idx, col_idx)
+                                        cell.text = str(cell_data)
+                    self.in_table = False
+                    self.table_data = []
+                elif tag == 'tr' and self.in_table:
+                    if self.current_row:
+                        self.table_data.append(self.current_row)
+                    self.current_row = []
+                elif tag in ['td', 'th'] and self.in_table:
+                    if self.current_text.strip():
+                        self.current_row.append(self.current_text.strip())
+                    else:
+                        self.current_row.append("")
+                    self.current_text = ""
+                    self.in_cell = False
+                elif tag == 'div':
+                    # Add paragraph break for div elements
+                    if self.current_text.strip():
+                        self.doc.add_paragraph(self.current_text.strip())
+                        self.current_text = ""
                     
             def handle_data(self, data):
-                self.current_text += data
+                # Skip data in style/script tags
+                if self.current_tag in self.skip_tags:
+                    return
+                    
+                # Clean up whitespace but preserve structure
+                cleaned_data = data.strip()
+                if cleaned_data:
+                    if self.current_text and not self.current_text.endswith(' '):
+                        self.current_text += ' '
+                    self.current_text += cleaned_data
                 
             def close(self):
                 # Handle any remaining text
@@ -453,6 +541,9 @@ def as_tools(configuration: WordIntegrationConfiguration):
     class GenerateFromMarkdownSchema(BaseModel):
         markdown_content: str = Field(..., description="Markdown content to convert to Word document")
 
+    class GenerateFromHtmlSchema(BaseModel):
+        html_content: str = Field(..., description="HTML content to convert to Word document")
+
     class GenerateFromTextSchema(BaseModel):
         text_content: str = Field(..., description="Plain text content to convert to Word document")
         preserve_formatting: bool = Field(True, description="Whether to preserve line breaks and spacing")
@@ -483,6 +574,12 @@ def as_tools(configuration: WordIntegrationConfiguration):
             integration.create_document()
         integration.generate_from_markdown(integration._WordIntegration__document, **kwargs)
         return "Content generated from markdown successfully"
+
+    def generate_from_html_wrapper(**kwargs):
+        if not integration._WordIntegration__document:
+            integration.create_document()
+        integration.generate_from_html(integration._WordIntegration__document, **kwargs)
+        return "Content generated from HTML successfully"
 
     def generate_from_text_wrapper(**kwargs):
         if not integration._WordIntegration__document:
@@ -531,6 +628,12 @@ def as_tools(configuration: WordIntegrationConfiguration):
             description="Generate Word document content from markdown input",
             func=generate_from_markdown_wrapper,
             args_schema=GenerateFromMarkdownSchema,
+        ),
+        StructuredTool(
+            name="word_generate_from_html",
+            description="Generate Word document content from HTML input",
+            func=generate_from_html_wrapper,
+            args_schema=GenerateFromHtmlSchema,
         ),
         StructuredTool(
             name="word_generate_from_text",

@@ -6,6 +6,7 @@ A comprehensive Word document generation module that creates professional docume
 
 ### Document Generation
 - **Template-based**: Use existing Word templates with placeholder replacement
+- **HTML conversion**: Convert HTML content to formatted Word documents with table support
 - **Markdown conversion**: Convert markdown content to formatted Word documents
 - **Plain text processing**: Intelligent conversion of plain text with automatic formatting detection
 
@@ -32,17 +33,22 @@ The Word module provides an agent that can:
    - Replace placeholders with dynamic content
    - Maintain template formatting and styles
 
-2. **Generate from markdown**
+2. **Generate from HTML**
+   - Convert HTML content to Word formatting
+   - Support for tables, headers, lists, and styling
+   - Preserve HTML structure in Word format
+
+3. **Generate from markdown**
    - Convert markdown syntax to Word formatting
    - Support for headers, lists, tables, and links
    - Preserve markdown structure in Word format
 
-3. **Process plain text**
+4. **Process plain text**
    - Automatic detection of headings and lists
    - Intelligent paragraph formatting
    - Structure preservation
 
-4. **Advanced formatting**
+5. **Advanced formatting**
    - Add custom paragraphs with specific styling
    - Insert headings at various levels
    - Create and format tables
