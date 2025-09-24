@@ -77,11 +77,9 @@ class OpenAIResponsesIntegration(Integration):
             "input": query
         }
         response = self._make_request(method="POST", json=payload)
-        output = response.get("output")
-        logger.info(f"Output: {output}")
         if return_text:
             # Extract text content and annotations from first message with valid content
-            for item in output:
+            for item in response.get("output", []):
                 if item.get("type") != "message":
                     continue
                     
@@ -111,7 +109,7 @@ class OpenAIResponsesIntegration(Integration):
             logger.warning("No valid text content found in response")
             return ""
             
-        return output
+        return response
     
     def analyze_image(
         self, 
@@ -172,12 +170,11 @@ class OpenAIResponsesIntegration(Integration):
             ],
         }
         response = self._make_request(method="POST", json=payload)
-        output = response.get("output", [])
 
         if return_text:
             try:
                 # Find first message with text content
-                for item in output:
+                for item in response.get("output", []):
                     if item.get("type") == "message":
                         content = item.get("content", [])
                         if content and isinstance(content[0], dict):
@@ -191,7 +188,7 @@ class OpenAIResponsesIntegration(Integration):
             except Exception as e:
                 logger.error(f"Error parsing response: {str(e)}")
                 return str(e)
-        return output
+        return response
     
     def analyze_pdf(
         self, 
@@ -234,14 +231,13 @@ class OpenAIResponsesIntegration(Integration):
         }
 
         response = self._make_request(method="POST", json=payload)
-        output = response.get("output", [])
         
         # Extract text and annotations from output
         if return_text:
             text = ""
             annotations = []
             try:
-                for item in output:
+                for item in response.get("output", []):
                     if item.get("type") == "message":
                         content = item.get("content", [])
                         for content_item in content:
@@ -264,7 +260,7 @@ class OpenAIResponsesIntegration(Integration):
                 logger.error(f"Error extracting text from output: {str(e)}")
                 return str(e)
                 
-        return output
+        return response
     
 def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
