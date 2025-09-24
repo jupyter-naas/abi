@@ -48,10 +48,10 @@ class MarkdownProcessor:
     HEADINGS:
     # Main Title          → Heading 1
     ## Section            → Heading 2  
-    ### Subsection        → TOC Heading
-    #### Industry Overview → Subtitle
-    ##### Details         → Page subtitle
-    ###### Specifics      → Page title
+    ### Subsection        → Heading 3
+    #### Industry Overview → Heading 4
+    ##### Details         → Heading 5
+    ###### Specifics      → Heading 6
     
     LISTS:
     - Bullet point        → List Bullet (fallback: List Paragraph)
@@ -82,10 +82,10 @@ class MarkdownProcessor:
         style_mapping = {
             1: 'Heading 1',      # # Main Title
             2: 'Heading 2',      # ## Section  
-            3: 'TOC Heading',    # ### Use TOC Heading for subsections
-            4: 'Subtitle',       # #### Use Subtitle for H4
-            5: 'Page subtitle',  # ##### Use Page subtitle for H5
-            6: 'Page title'      # ###### Use Page title for H6
+            3: 'Heading 3',      # ### Use Heading 3 for subsections
+            4: 'Heading 4',      # #### Use Heading 4 for H4 (better than Subtitle)
+            5: 'Heading 5',      # ##### Use Heading 5 for H5
+            6: 'Heading 6'       # ###### Use Heading 6 for H6
         }
         
         try:
