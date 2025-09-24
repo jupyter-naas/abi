@@ -122,6 +122,18 @@ class MarkdownProcessor:
                 i += 1
                 continue
             
+            # Handle numbered references (like in Sources section with superscript numbers)
+            if re.match(r'^[¹²³⁴⁵⁶⁷⁸⁹⁰]+\s', line):
+                reference_text = self._process_inline_formatting(line.strip())
+                p = self.doc.add_paragraph(reference_text)
+                # Add small spacing after each reference for readability
+                try:
+                    p.paragraph_format.space_after = Pt(3)
+                except:
+                    pass
+                i += 1
+                continue
+            
             # Handle regular paragraphs (including multi-line)
             paragraph_lines = [line]
             i += 1
@@ -130,11 +142,12 @@ class MarkdownProcessor:
             while i < len(lines):
                 next_line = lines[i].rstrip()
                 
-                # Stop if we hit an empty line, heading, list item, or horizontal rule
+                # Stop if we hit an empty line, heading, list item, numbered reference, or horizontal rule
                 if (not next_line or 
                     next_line.startswith('#') or 
                     next_line.startswith(('- ', '* ', '+ ')) or
                     re.match(r'^\d+\.\s', next_line) or
+                    re.match(r'^[¹²³⁴⁵⁶⁷⁸⁹⁰]+\s', next_line) or
                     next_line.strip() == '---'):
                     break
                     
