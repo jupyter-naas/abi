@@ -282,7 +282,8 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
             name="chatgpt_search_web",
             description="Search the web",
             func=lambda query: integration.search_web(query=query, search_context_size="medium", return_text=True),
-            args_schema=SearchWebSchema
+            args_schema=SearchWebSchema,
+            return_direct=True
         ),
         StructuredTool(
             name="chatgpt_analyze_image",
