@@ -12,6 +12,7 @@ Usage:
 import argparse
 import sys
 import os
+import re
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -22,12 +23,10 @@ try:
     from docx.shared import Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.style import WD_STYLE_TYPE
-    import markdown
-    from html.parser import HTMLParser
 except ImportError as e:
     print(f"❌ Missing dependencies: {e}")
     print("Please install required packages:")
-    print("pip install python-docx markdown")
+    print("pip install python-docx")
     sys.exit(1)
 
 
@@ -39,136 +38,104 @@ class WordConfig:
     default_font_size: int = 11
 
 
-class SimpleHTMLParser(HTMLParser):
-    """Enhanced HTML parser for Word conversion with template style support."""
+class MarkdownProcessor:
+    """Simple markdown processor for Word conversion."""
     
     def __init__(self, doc):
-        super().__init__()
         self.doc = doc
-        self.current_text = ""
-        self.in_heading = False
-        self.heading_level = 1
-        self.skip_tags = {'style', 'script', 'head', 'meta', 'title'}
-        self.current_tag = None
-        self.preserve_all_content = True  # Don't truncate sources
-        self.template_styles = self._get_template_styles()
         
-    def _get_template_styles(self):
-        """Get available styles from the template."""
-        styles = {}
-        try:
-            for style in self.doc.styles:
-                styles[style.name.lower()] = style.name
-        except:
-            pass
-        return styles
+    def process_markdown(self, markdown_content: str):
+        """Process markdown content and add to Word document."""
+        lines = markdown_content.split('\n')
+        i = 0
         
-    def _get_best_style(self, content_type):
-        """Get the best matching style from template."""
-        content_lower = content_type.lower()
-        
-        # Try to match template styles
-        for template_style_key, template_style_name in self.template_styles.items():
-            if any(keyword in template_style_key for keyword in ['title', 'heading', 'header']) and 'title' in content_lower:
-                return template_style_name
-            elif any(keyword in template_style_key for keyword in ['subtitle', 'sub']) and 'subtitle' in content_lower:
-                return template_style_name
-            elif any(keyword in template_style_key for keyword in ['body', 'normal', 'text']) and 'body' in content_lower:
-                return template_style_name
+        while i < len(lines):
+            line = lines[i].rstrip()
+            
+            # Skip empty lines
+            if not line:
+                i += 1
+                continue
+            
+            # Handle headings
+            if line.startswith('#'):
+                level = len(line) - len(line.lstrip('#'))
+                heading_text = line.lstrip('# ').strip()
                 
-        # Fallback to standard styles
-        if 'title' in content_lower:
-            return 'Title' if 'Title' in [s.name for s in self.doc.styles] else None
-        elif 'subtitle' in content_lower:
-            return 'Subtitle' if 'Subtitle' in [s.name for s in self.doc.styles] else None
-        elif 'heading' in content_lower:
-            return f'Heading {min(self.heading_level, 3)}'
-            
-        return None
-        
-    def handle_starttag(self, tag, attrs):
-        self.current_tag = tag
-        if tag in self.skip_tags:
-            return
-        if tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            self.in_heading = True
-            self.heading_level = int(tag[1])
-        elif tag == 'br':
-            self.current_text += '\n'
-        elif tag == 'div':
-            # Check for special div classes that might indicate content type
-            class_attr = dict(attrs).get('class', '')
-            if 'header' in class_attr:
-                self.current_tag = 'header'
-            elif 'title' in class_attr:
-                self.current_tag = 'title'
-            elif 'subtitle' in class_attr:
-                self.current_tag = 'subtitle'
-            
-    def handle_endtag(self, tag):
-        if tag in self.skip_tags:
-            return
-            
-        if tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-            if self.current_text.strip():
-                # Try to use template heading style
-                style_name = self._get_best_style('heading')
-                if style_name:
+                if heading_text:
                     try:
-                        p = self.doc.add_paragraph(self.current_text.strip(), style=style_name)
+                        style_name = f'Heading {min(level, 3)}'
+                        self.doc.add_paragraph(heading_text, style=style_name)
                     except:
-                        p = self.doc.add_paragraph(self.current_text.strip())
-                        run = p.runs[0] if p.runs else p.add_run(self.current_text.strip())
-                        run.font.bold = True
-                        run.font.size = Pt(18 - self.heading_level * 2)
-                else:
-                    p = self.doc.add_paragraph(self.current_text.strip())
-                    run = p.runs[0] if p.runs else p.add_run(self.current_text.strip())
-                    run.font.bold = True
-                    run.font.size = Pt(18 - self.heading_level * 2)
-            self.current_text = ""
-            self.in_heading = False
+                        p = self.doc.add_paragraph(heading_text)
+                        if p.runs:
+                            p.runs[0].font.bold = True
+                            p.runs[0].font.size = Pt(max(14, 20 - level * 2))
+                i += 1
+                continue
             
-        elif tag in ['p', 'div']:
-            if self.current_text.strip():
-                # Determine content type and use appropriate template style
-                content = self.current_text.strip()
-                style_name = None
+            # Handle horizontal rules
+            if line.strip() == '---':
+                # Add a page break or section break
+                self.doc.add_page_break()
+                i += 1
+                continue
+            
+            # Handle bullet points
+            if line.startswith(('- ', '* ', '+ ')):
+                bullet_text = line[2:].strip()
+                # Handle bold text in bullets
+                bullet_text = self._process_inline_formatting(bullet_text)
+                try:
+                    p = self.doc.add_paragraph(bullet_text, style='List Bullet')
+                except:
+                    p = self.doc.add_paragraph(f"• {bullet_text}")
+                i += 1
+                continue
+            
+            # Handle numbered lists
+            if re.match(r'^\d+\.\s', line):
+                numbered_text = re.sub(r'^\d+\.\s', '', line)
+                numbered_text = self._process_inline_formatting(numbered_text)
+                try:
+                    p = self.doc.add_paragraph(numbered_text, style='List Number')
+                except:
+                    p = self.doc.add_paragraph(numbered_text)
+                i += 1
+                continue
+            
+            # Handle regular paragraphs (including multi-line)
+            paragraph_lines = [line]
+            i += 1
+            
+            # Collect continuation lines for the same paragraph
+            while i < len(lines):
+                next_line = lines[i].rstrip()
                 
-                # Check if this looks like a title or subtitle
-                if any(keyword in content.lower() for keyword in ['competitive intelligence', 'report']):
-                    style_name = self._get_best_style('title')
-                elif any(keyword in content.lower() for keyword in ['week of', 'prepared:']):
-                    style_name = self._get_best_style('subtitle')
-                else:
-                    style_name = self._get_best_style('body')
-                
-                # Add paragraph with template style
-                if style_name:
-                    try:
-                        self.doc.add_paragraph(content, style=style_name)
-                    except:
-                        self.doc.add_paragraph(content)
-                else:
-                    self.doc.add_paragraph(content)
+                # Stop if we hit an empty line, heading, list item, or horizontal rule
+                if (not next_line or 
+                    next_line.startswith('#') or 
+                    next_line.startswith(('- ', '* ', '+ ')) or
+                    re.match(r'^\d+\.\s', next_line) or
+                    next_line.strip() == '---'):
+                    break
                     
-            self.current_text = ""
+                paragraph_lines.append(next_line)
+                i += 1
             
-    def handle_data(self, data):
-        if self.current_tag in self.skip_tags:
-            return
-            
-        # Preserve ALL content including sources - don't truncate
-        if data.strip():
-            if self.current_text and not self.current_text.endswith(' ') and not data.startswith(' '):
-                self.current_text += ' '
-            self.current_text += data.strip()
+            # Join the paragraph lines and process
+            paragraph_text = ' '.join(paragraph_lines).strip()
+            if paragraph_text:
+                paragraph_text = self._process_inline_formatting(paragraph_text)
+                self.doc.add_paragraph(paragraph_text)
     
-    def close(self):
-        # Ensure any remaining content is added
-        if self.current_text.strip():
-            self.doc.add_paragraph(self.current_text.strip())
-        super().close()
+    def _process_inline_formatting(self, text: str) -> str:
+        """Process inline markdown formatting like **bold** and *italic*."""
+        # For now, just remove the markdown syntax
+        # In a more advanced version, we could apply actual formatting
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove **bold**
+        text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove *italic*
+        return text
 
 
 class WordCLI:
@@ -289,29 +256,6 @@ class WordCLI:
             print(f"   Style setup warning: {e}")
             # Continue with basic styling
         
-    def process_html_file(self, input_path: str):
-        """Process an HTML file."""
-        try:
-            with open(input_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            
-            if not self.document:
-                self.create_document()
-                
-            parser = SimpleHTMLParser(self.document)
-            parser.feed(html_content)
-            parser.close()
-            
-            print(f"✅ Processed HTML file: {input_path}")
-            return True
-            
-        except FileNotFoundError:
-            print(f"❌ Error: HTML file not found: {input_path}")
-            return False
-        except Exception as e:
-            print(f"❌ Error processing HTML file: {e}")
-            return False
-            
     def process_markdown_file(self, input_path: str):
         """Process a Markdown file."""
         try:
@@ -321,11 +265,9 @@ class WordCLI:
             if not self.document:
                 self.create_document()
                 
-            # Convert markdown to HTML then process
-            html_content = markdown.markdown(markdown_content)
-            parser = SimpleHTMLParser(self.document)
-            parser.feed(html_content)
-            parser.close()
+            # Process markdown directly without HTML conversion
+            processor = MarkdownProcessor(self.document)
+            processor.process_markdown(markdown_content)
             
             print(f"✅ Processed Markdown file: {input_path}")
             return True
@@ -335,43 +277,6 @@ class WordCLI:
             return False
         except Exception as e:
             print(f"❌ Error processing Markdown file: {e}")
-            return False
-            
-    def process_text_file(self, input_path: str):
-        """Process a plain text file."""
-        try:
-            with open(input_path, 'r', encoding='utf-8') as f:
-                text_content = f.read()
-            
-            if not self.document:
-                self.create_document()
-                
-            # Simple text processing
-            lines = text_content.split('\n')
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                # Detect headings
-                if line.startswith('#'):
-                    level = len(line) - len(line.lstrip('#'))
-                    heading_text = line.lstrip('# ').strip()
-                    p = self.document.add_paragraph(heading_text)
-                    run = p.runs[0] if p.runs else p.add_run(heading_text)
-                    run.font.bold = True
-                    run.font.size = Pt(18 - level * 2)
-                else:
-                    self.document.add_paragraph(line)
-            
-            print(f"✅ Processed text file: {input_path}")
-            return True
-            
-        except FileNotFoundError:
-            print(f"❌ Error: Text file not found: {input_path}")
-            return False
-        except Exception as e:
-            print(f"❌ Error processing text file: {e}")
             return False
             
     def replace_placeholders(self, replacements: dict):
@@ -449,33 +354,27 @@ class WordCLI:
 def create_parser():
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
-        description="Word Module CLI - Generate professional Word documents from various input formats",
+        description="Word Module CLI - Generate professional Word documents from Markdown",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Process HTML with template
-  python cli.py --html input.html --template template.docx --output report.docx
-  
-  # Process Markdown file
-  python cli.py --markdown content.md --output document.docx
+  # Process Markdown file with template
+  python cli.py --markdown content.md --template template.docx --output document.docx
   
   # Process with placeholder replacement
-  python cli.py --html input.html --replace "{{name}}" "John Doe" --output report.docx
+  python cli.py --markdown content.md --replace "{{name}}" "John Doe" --output report.docx
   
-  # Process Forvis Mazars HTML
-  python cli.py --html storage/datastore/marketplace/applications/word/inputs/forvismazars_ci_docx.html --template "storage/datastore/marketplace/applications/word/templates/Forvis Mazars_Word Template Portrait_blank.dotx" --output forvis_report.docx
+  # Process Forvis Mazars Markdown report
+  python cli.py --markdown forvismazars_ci_report.md --template fmz-word-template.docx --output forvis_report.docx
         """
     )
     
-    # Input options
-    input_group = parser.add_mutually_exclusive_group()
-    input_group.add_argument('--html', help='HTML file to process')
-    input_group.add_argument('--markdown', '-m', help='Markdown file to process')
-    input_group.add_argument('--text', '-t', help='Text file to process')
+    # Input - only markdown
+    parser.add_argument('--markdown', '-m', required=True, help='Markdown file to process')
     
     # Template and output
-    parser.add_argument('--template', help='Word template file (.docx/.dotx)')
-    parser.add_argument('--output', '-o', help='Output Word document path')
+    parser.add_argument('--template', help='Word template file (.docx)')
+    parser.add_argument('--output', '-o', required=True, help='Output Word document path')
     
     # Placeholder replacement
     parser.add_argument('--replace', nargs=2, metavar=('PLACEHOLDER', 'VALUE'), 
@@ -494,35 +393,19 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     
-    # Validate arguments
-    if not any([args.html, args.markdown, args.text]):
-        print("❌ Error: Please specify an input file (--html, --markdown, or --text)")
-        parser.print_help()
-        sys.exit(1)
-    
-    if not args.output:
-        print("❌ Error: Please specify an output file with --output")
-        sys.exit(1)
-    
     # Initialize CLI
     config = WordConfig(template_path=args.template)
     cli = WordCLI(config)
     
     if args.verbose:
-        print("🔤 Word Module CLI")
-        print("=" * 20)
+        print("🔤 Word Module CLI - Markdown to Word")
+        print("=" * 35)
     
     # Create document
     cli.create_document(args.template)
     
-    # Process input
-    success = False
-    if args.html:
-        success = cli.process_html_file(args.html)
-    elif args.markdown:
-        success = cli.process_markdown_file(args.markdown)
-    elif args.text:
-        success = cli.process_text_file(args.text)
+    # Process markdown input
+    success = cli.process_markdown_file(args.markdown)
     
     if not success:
         sys.exit(1)
