@@ -260,8 +260,9 @@ class MarkdownProcessor:
                 i += 1
                 continue
             
-            # Check if this is a bold header followed by bullet points (like **Growth Areas:**)
-            if (line.startswith('**') and line.endswith(':**') and 
+            # Check if this is a bold header followed by bullet points 
+            # Covers patterns like **Growth Areas:** and **PwC (PricewaterhouseCoopers)**
+            if (line.startswith('**') and line.endswith('**') and 
                 i < len(lines) - 1 and lines[i + 1].startswith(('- ', '* ', '+ '))):
                 # This is a list header - skip it as it will be redundant with the bullet points
                 i += 1
