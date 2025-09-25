@@ -154,16 +154,26 @@ MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your req
 DEFAULT_INTENTS: list = [
     Intent(intent_value="what's your name?", intent_type=IntentType.AGENT, intent_target="call_model", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="what do you do?", intent_type=IntentType.AGENT, intent_target="call_model", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="comment tu t'appelles?", intent_type=IntentType.AGENT, intent_target="call_model", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="que fais-tu?", intent_type=IntentType.AGENT, intent_target="call_model", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hello", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hi", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hey", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Salut", intent_type=IntentType.RAW, intent_target="Bonjour, que puis-je faire pour vous?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Bonjour", intent_type=IntentType.RAW, intent_target="Bonjour, que puis-je faire pour vous?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Coucou", intent_type=IntentType.RAW, intent_target="Bonjour, que puis-je faire pour vous?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hi there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hello there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hello, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Hi, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Bonjour, comment vas-tu?", intent_type=IntentType.RAW, intent_target="Bonjour, je vais bien merci, comment puis-je vous aider aujourd'hui?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Salut, ça va?", intent_type=IntentType.RAW, intent_target="Bonjour, je vais bien merci, comment puis-je vous aider aujourd'hui?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Thank you", intent_type=IntentType.RAW, intent_target="You're welcome, can I help you with anything else?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Thank you very much", intent_type=IntentType.RAW, intent_target="You're welcome, can I help you with anything else?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Thank you so much", intent_type=IntentType.RAW, intent_target="You're welcome, can I help you with anything else?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Merci", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Merci beaucoup", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Merci bien", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
 ]
 
 
@@ -325,7 +335,7 @@ class IntentAgent(Agent):
         logger.debug(f"💬 Starting conversation with agent '{self.name}'")
         logger.debug("🔍 Map intents")
         logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
-        logger.debug(state)
+        # logger.debug(state)
 
         # Handle agent routing via @mention
         if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
@@ -379,7 +389,7 @@ class IntentAgent(Agent):
                     "intent_mapping": {
                         "intents": []
                     }
-                }, goto=self.should_filter(state))
+                }, goto=self.should_filter([]))
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]['score']
@@ -398,21 +408,22 @@ class IntentAgent(Agent):
             final_intents = close_intents
 
         logger.debug(f"{len(final_intents)} intents mapped: {final_intents}")
-        return Command(goto=self.should_filter(state), update={"intent_mapping": {"intents": final_intents}})
+        state['intent_mapping'] = {"intents": final_intents}
+        return Command(goto=self.should_filter(final_intents), update={"intent_mapping": {"intents": final_intents}})
     
 
-    def should_filter(self, state: IntentState) -> str:
+    def should_filter(self, intents: list) -> str:
         """Determine if intent mapping should be filtered.
         
         Checks if the intent mapping should be filtered based on the threshold
         and neighbor values.
         """
         
-        if "intent_mapping" in state:
-            if len(state["intent_mapping"]["intents"]) == 1 and state["intent_mapping"]["intents"][0]['score'] > self._threshold:
-                return "intent_mapping_router"
-            if len(state["intent_mapping"]["intents"]) == 0:
-                return "call_model"
+        if len(intents) == 1 and intents[0]['score'] > self._threshold:
+            return "intent_mapping_router"
+        if len(intents) == 0:
+            logger.debug("❌ No intents found, going to call_model")
+            return "call_model"
         
         return "filter_out_intents"
     
@@ -665,8 +676,8 @@ Last user message: "{last_human_message.content}"
                 })
                 seen_agents.add(agent_name)
         
-        # Sort by score (highest first)
-        agents_info.sort(key=lambda x: x['score'], reverse=True)
+        # Sort by score (descending) and then by agent name (ascending)
+        agents_info.sort(key=lambda x: (-x['score'], x['name']))
         
         # Create the validation message
         # validation_message = f"Validation Request: '{initial_human_message.content}'\n\n"
