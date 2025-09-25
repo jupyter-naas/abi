@@ -21,13 +21,11 @@ Dependencies:
 
 from typing import Union, Callable, Optional, Any, Dict
 from queue import Queue
-
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-
 from .Agent import Agent, AgentSharedState, AgentConfiguration, create_checkpointer
-from .beta.IntentMapper import IntentMapper, Intent, IntentType
+from .beta.IntentMapper import IntentMapper, Intent, IntentType, IntentScope
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from langgraph.graph.message import MessagesState
@@ -42,15 +40,18 @@ import rich
 nlp = spacy.load("en_core_web_sm")
 MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your request"
 DEFAULT_INTENTS: list = [
-    Intent(intent_value="what's your name?", intent_type=IntentType.AGENT, intent_target="call_model", intent_metadata="default"),
-    Intent(intent_value="what do you do?", intent_type=IntentType.AGENT, intent_target="call_model", intent_metadata="default"),
-    Intent(intent_value="Hello", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
-    Intent(intent_value="Hi", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
-    Intent(intent_value="Hey", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
-    Intent(intent_value="Hi there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
-    Intent(intent_value="Hello there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
-    Intent(intent_value="Hello, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_metadata="default"),
-    Intent(intent_value="Hi, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_metadata="default"),
+    Intent(intent_value="what's your name?", intent_type=IntentType.AGENT, intent_target="call_model", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="what do you do?", intent_type=IntentType.AGENT, intent_target="call_model", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hello", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hi", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hey", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hi there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hello there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hello, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Hi, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Thank you", intent_type=IntentType.RAW, intent_target="You're welcome, can I help you with anything else?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Thank you very much", intent_type=IntentType.RAW, intent_target="You're welcome, can I help you with anything else?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Thank you so much", intent_type=IntentType.RAW, intent_target="You're welcome, can I help you with anything else?", intent_scope=IntentScope.DIRECT),
 ]
 
 
@@ -212,6 +213,7 @@ class IntentAgent(Agent):
         logger.debug(f"💬 Starting conversation with agent '{self.name}'")
         logger.debug("🔍 Map intents")
         logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
+        logger.debug(state)
 
         # Handle agent routing via @mention
         if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
