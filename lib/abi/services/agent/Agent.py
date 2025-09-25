@@ -741,7 +741,14 @@ class Agent(Expose):
 
             chunks.append(chunk)
 
-        content = list(chunks[-1].values())[0]["messages"][-1].content
+        value = list(chunks[-1].values())[0]
+        if isinstance(value, dict):
+            messages = value["messages"]
+        elif isinstance(value, list):
+            messages = value[-1]["messages"]
+
+        content = messages[-1].content
+         # content = list(chunks[-1].values())[0]["messages"][-1].content
 
         return content
 
