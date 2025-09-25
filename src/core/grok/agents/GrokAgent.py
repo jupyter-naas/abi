@@ -69,6 +69,8 @@ def create_agent(
     
     # Define intents
     intents: list = [
+        Intent(intent_value="search news about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
+        Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="analyze scientific problems", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="think critically", intent_type=IntentType.AGENT, intent_target="call_model"), 
         Intent(intent_value="seek truth", intent_type=IntentType.AGENT, intent_target="call_model"),
