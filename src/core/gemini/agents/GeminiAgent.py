@@ -157,7 +157,8 @@ def create_agent(
     intents: list = [
         # Multimodal analysis intents
         Intent(intent_value="multimodal analysis", intent_type=IntentType.AGENT, intent_target="call_model"),
-        Intent(intent_value="analyze image", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="analyze this image", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="what can you tell about the content of this image", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="image understanding", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="video analysis", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="audio analysis", intent_type=IntentType.AGENT, intent_target="call_model"),

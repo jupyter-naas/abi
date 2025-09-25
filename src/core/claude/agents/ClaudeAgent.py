@@ -53,6 +53,7 @@ def create_agent(
         Intent(intent_value="help me with report writing", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="help me with data analysis", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="help me with academic writing", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="help me write python code", intent_type=IntentType.AGENT, intent_target="call_model"),
     ]
 
     # Set configuration
