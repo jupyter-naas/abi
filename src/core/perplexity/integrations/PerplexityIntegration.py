@@ -119,19 +119,27 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
 
     class AskQuestionSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
-        search_context_size: str = Field("medium", description="The context size to use for the search")
 
     return [
         StructuredTool(
             name="perplexity_quick_search",
             description="A lightweight, cost-effective search model optimized for quick, grounded answers with real-time web search.",
-            func=lambda question, search_context_size: integration.search_web(question=question, search_context_size=search_context_size, model="sonar"),
-            args_schema=AskQuestionSchema
+            func=lambda question: integration.search_web(question=question, model="sonar"),
+            args_schema=AskQuestionSchema,
+            return_direct=True
         ),
         StructuredTool(
             name="perplexity_search",
             description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar.",
-            func=lambda question, search_context_size: integration.search_web(question=question, search_context_size=search_context_size, model="sonar-pro"),
-            args_schema=AskQuestionSchema
+            func=lambda question: integration.search_web(question=question, model="sonar-pro"),
+            args_schema=AskQuestionSchema,
+            return_direct=True
+        ),
+        StructuredTool(
+            name="perplexity_advanced_search",
+            description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size",
+            func=lambda question: integration.search_web(question=question, search_context_size="high", model="sonar-pro"),
+            args_schema=AskQuestionSchema,
+            return_direct=True
         ),
     ]

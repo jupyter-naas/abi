@@ -27,6 +27,7 @@ You receive prompts directly from users or from other agents.
 # TOOLS
 - perplexity_quick_search: Search the web for information
 - perplexity_search: Search the web for information
+- perplexity_advanced_search: Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size
 
 # OPERATING GUIDELINES
 1. Tool Selection:
@@ -101,8 +102,10 @@ def create_agent(
         Intent(intent_value="quick search about", intent_type=IntentType.TOOL, intent_target="perplexity_quick_search"),
         Intent(intent_value="search news about", intent_type=IntentType.TOOL, intent_target="perplexity_search"),
         Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="perplexity_search"),
-        Intent(intent_value="Search information about", intent_type=IntentType.TOOL, intent_target="perplexity_search"), 
-        Intent(intent_value="where can i find information about perplexity models", intent_type=IntentType.AGENT, intent_target="Here is the link to the documentation: https://docs.perplexity.ai/getting-started/models"),
+        Intent(intent_value="search information about", intent_type=IntentType.TOOL, intent_target="perplexity_search"), 
+        Intent(intent_value="advanced search about", intent_type=IntentType.TOOL, intent_target="perplexity_advanced_search"),
+        Intent(intent_value="search web with high context size about", intent_type=IntentType.TOOL, intent_target="perplexity_advanced_search"),
+        Intent(intent_value="where can i find information about perplexity models", intent_type=IntentType.RAW, intent_target="Here is the link to the documentation: https://docs.perplexity.ai/getting-started/models"),
     ]
 
     # Set configuration
