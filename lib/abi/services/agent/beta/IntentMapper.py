@@ -6,6 +6,10 @@ from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 
+class IntentScope(Enum):
+    DIRECT = "direct"
+    ALL = "all"
+
 class IntentType(Enum):
     AGENT = "agent"
     TOOL = "tool"
@@ -16,7 +20,7 @@ class Intent:
     intent_value: str
     intent_type: IntentType
     intent_target: Any
-    intent_metadata: Optional[Any] = None
+    intent_scope: Optional[IntentScope] = IntentScope.ALL
 
 class IntentMapper:
     intents: list[Intent]
