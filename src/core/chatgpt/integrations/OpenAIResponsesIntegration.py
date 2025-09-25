@@ -251,9 +251,17 @@ class OpenAIResponsesIntegration(Integration):
                     return "No text content found in output"
                     
                 if annotations:
+                    seen_urls = set()
+                    unique_annotations = []
+                    for a in annotations:
+                        url = a.get('url', '')
+                        if url not in seen_urls:
+                            seen_urls.add(url)
+                            unique_annotations.append(a)
+                    
                     text += "\n\nAnnotations:\n" + "\n".join(
-                        f"- [{a.get('title', '')}]({a.get('url', '')})" 
-                        for a in annotations
+                        f"- [{a.get('title', '')}]({a.get('url', '')})"
+                        for a in unique_annotations
                     )
                 return text
             except Exception as e:
@@ -289,12 +297,14 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
             name="chatgpt_analyze_image",
             description="Analyze an image from URL",
             func=lambda image_urls, user_prompt: integration.analyze_image(image_urls=image_urls, user_prompt=user_prompt, return_text=True),
-            args_schema=AnalyzeImageSchema
+            args_schema=AnalyzeImageSchema,
+            return_direct=True
         ),
         StructuredTool(
             name="chatgpt_analyze_pdf",
             description="Analyze a PDF document from URL",
             func=lambda pdf_url, user_prompt: integration.analyze_pdf(pdf_url=pdf_url, user_prompt=user_prompt, return_text=True),
-            args_schema=AnalyzePdfSchema
+            args_schema=AnalyzePdfSchema,
+            return_direct=True
         )
     ]
