@@ -85,7 +85,7 @@ class PerplexityAgent(IntentAgent):
         for message in state["messages"]:
             message = message.copy()
             if isinstance(message, ToolMessage):
-                message = ChatMessage(content=message.content, role="tool", id=message.tool_call_id)
+                message = ChatMessage(content=message.content, role="tool", id=message.tool_call_id[:40])
             
             _messages_without_tool_message.append(message)
                 
