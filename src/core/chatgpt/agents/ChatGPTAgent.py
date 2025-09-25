@@ -87,6 +87,7 @@ def create_agent(
         Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="research online about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="latest events about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
+        Intent(intent_value="search information about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="analyze an image from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
         Intent(intent_value="analyze this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
         Intent(intent_value="describe this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
