@@ -3,7 +3,6 @@ import requests
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
-from abi import logger
 
 @dataclass
 class PerplexityIntegrationConfiguration(IntegrationConfiguration):
