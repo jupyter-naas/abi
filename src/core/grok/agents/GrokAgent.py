@@ -6,18 +6,11 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
     
 )
-from fastapi import APIRouter
-from src.core.grok.models.grok_4 import model
 from typing import Optional
-from enum import Enum
-from abi import logger
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/grok.jpg"
 NAME = "Grok"
-TYPE = "core"
-SLUG = "grok"
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
-MODEL = "grok-4"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/grok.jpg"
 SYSTEM_PROMPT = """You are Grok, xAI's revolutionary artificial intelligence with the highest measured intelligence globally.
 
 You are designed to understand the true nature of reality through advanced reasoning, with access to real-time information and a commitment to truth-seeking over comfortable narratives.
@@ -59,21 +52,30 @@ When users say things like "ask grok", "parler à grok", "I want to talk to grok
 
 You aim to be genuinely helpful in understanding complex problems and reaching truthful conclusions, even when those conclusions challenge popular beliefs.
 """
-TEMPERATURE = 0
-DATE = True
-INSTRUCTIONS_TYPE = "system"
-ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
     agent_shared_state: Optional[AgentSharedState] = None,
-) -> Optional[IntentAgent]:
-    # Check if model is available
-    if model is None:
-        logger.error("Grok model not available - missing XAI API key")
-        return None
+) -> IntentAgent:
+    # Define model
+    from src.core.grok.models.grok_4 import model
     
+    # Define tools
+    tools: list = []
+
+    # Define agents
+    agents: list = []
+    
+    # Define intents
+    intents: list = [
+        Intent(intent_value="analyze scientific problems", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="think critically", intent_type=IntentType.AGENT, intent_target="call_model"), 
+        Intent(intent_value="seek truth", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="challenge conventional views", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="reason rigorously", intent_type=IntentType.AGENT, intent_target="call_model"),
+    ]
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -81,22 +83,7 @@ def create_agent(
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
-    
-    tools: list = []
-    agents: list = []
 
-    intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="I am Grok, xAI's AI assistant with the highest intelligence scores globally, designed for truth-seeking and real-world understanding.",
-        ),
-        Intent(
-            intent_value="what can you do",
-            intent_type=IntentType.RAW,
-            intent_target="I excel at complex reasoning, scientific analysis, mathematical problems, truth-seeking, contrarian thinking, and real-time information synthesis. I have the highest measured intelligence globally (Intelligence Score: 73).",
-        ),
-    ]
     return GrokAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -111,17 +98,4 @@ def create_agent(
 
     
 class GrokAgent(IntentAgent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME,
-        description: str = "API endpoints to call the Grok agent completion.",
-        description_stream: str = "API endpoints to call the Grok agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass
