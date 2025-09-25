@@ -1,7 +1,5 @@
-from abi.services.agent.IntentAgent import (
-    IntentAgent,
-    Intent,
-    IntentType,
+from abi.services.agent.Agent import (
+    Agent,
     AgentConfiguration,
     AgentSharedState,
 )
@@ -44,17 +42,9 @@ SUGGESTIONS: list = []
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
-) -> IntentAgent:  
+) -> Agent:  
     # Define model
     from src.core.perplexity.models.sonar_pro import model
-    
-    # Define intents
-    intents: list = [
-        Intent(intent_value="search news about", intent_type=IntentType.AGENT, intent_target="call_model"),
-        Intent(intent_value="search web about", intent_type=IntentType.AGENT, intent_target="call_model"),
-        Intent(intent_value="research online about", intent_type=IntentType.AGENT, intent_target="call_model"), 
-        Intent(intent_value="latest events about", intent_type=IntentType.AGENT, intent_target="call_model"),
-    ]
 
     # Set configuration
     if agent_configuration is None:
@@ -70,13 +60,12 @@ def create_agent(
         chat_model=model,
         tools=[], # Tool calling not available for Perplexity in LangChain
         agents=[], # Agent calling not available for Perplexity in LangChain
-        intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration, 
         memory=None,
     ) 
 
-class PerplexityResearchAgent(IntentAgent):
+class PerplexityResearchAgent(Agent):
     
     # This is required because langchain_perplexity does not handle ToolMessage properly.
     # If we don't do this, the langchain_perplexity code will raise an error as it does not expect a ToolMessage.
