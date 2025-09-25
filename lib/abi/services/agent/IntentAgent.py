@@ -196,7 +196,6 @@ class IntentAgent(Agent):
         logger.debug(f"💬 Starting conversation with agent '{self.name}'")
         logger.debug("🔍 Map intents")
         logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
-        logger.debug(state)
 
         # Handle agent routing via @mention
         if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
@@ -355,7 +354,12 @@ Last user message: "{last_human_message.content}"
             if not isinstance(message, SystemMessage):
                 messages.append(message)
         
-        response = self._chat_model.bind_tools([filter_intents]).invoke(messages)
+        try:
+            response = self._chat_model.bind_tools([filter_intents]).invoke(messages)
+        except Exception as e:
+            logger.warning(f"Error filtering intents going to 'entity_check'")
+            return Command(goto="entity_check")
+        
         assert isinstance(response, AIMessage)
         
         filtered_intents : list[Intent] = []

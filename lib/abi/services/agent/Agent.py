@@ -672,15 +672,7 @@ class Agent(Expose):
             source, payload = chunk
             agent_name = self._name if len(source) == 0 else source[0].split(':')[0]
             if isinstance(payload, dict):
-                last_messages = []
-
-                # logger.debug(f"payload: {payload}")
-                # print(f"{left} {self} payload: {payload}")
-                
-                # agent_name = self._name
-                # if 'call_model' not in payload:
-                #     agent_name = list(payload.keys())[0]
-                
+                last_messages = []                
                 v = list(payload.values())[0]
                 
                 if v is None:
@@ -724,12 +716,6 @@ class Agent(Expose):
                             if last_message["tool_call_id"] not in notified:
                                 self._notify_tool_response(last_message)
                                 notified[last_message["tool_call_id"]] = True
-                        # else:
-                        #     print("\n\n Unknown message type:")
-                        #     print(type(last_message))
-                        #     print(last_message)
-                        #     print("\n\n")
-
             yield chunk
 
     def invoke(self, prompt: str) -> str:
