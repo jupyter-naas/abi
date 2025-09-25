@@ -2,7 +2,6 @@ from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
     IntentType,
-    IntentState,
     AgentConfiguration,
     AgentSharedState,
 )
@@ -80,8 +79,8 @@ class PerplexityAgent(IntentAgent):
     # If we don't do this, the langchain_perplexity code will raise an error as it does not expect a ToolMessage.
     # But they do have a ChatMessage check, so instead we convert the ToolMessage to a ChatMessage.
     # And it seems to work fine :D 
-    def call_model(self, state: IntentState):
-        _messages_without_tool_message = []
+    def call_model(self, state):
+        _messages_without_tool_message: list = []
         
         for message in state["messages"]:
             message = message.copy()
