@@ -41,6 +41,17 @@ import rich
 
 nlp = spacy.load("en_core_web_sm")
 MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your request"
+DEFAULT_INTENTS: list = [
+    Intent(intent_value="what's your name?", intent_type=IntentType.AGENT, intent_target="call_model"),
+    Intent(intent_value="what do you do?", intent_type=IntentType.AGENT, intent_target="call_model"),
+    Intent(intent_value="Hello", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
+    Intent(intent_value="Hi", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
+    Intent(intent_value="Hey", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
+    Intent(intent_value="Hi there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
+    Intent(intent_value="Hello there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
+    Intent(intent_value="Hello, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?"),
+    Intent(intent_value="Hi, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?"),
+]
 
 
 class IntentState(MessagesState):
@@ -122,7 +133,12 @@ class IntentAgent(Agent):
             threshold_neighbor (float, optional): Maximum score difference for similar intents.
                 Defaults to 0.05.
         """
-        # We set class specific properties before calling the super constructor because it will call the build_graph method.
+        # Add default intents while avoiding duplicates
+        intent_values = {(intent.intent_value, intent.intent_type, intent.intent_target) for intent in intents}
+        for default_intent in DEFAULT_INTENTS:
+            if (default_intent.intent_value, default_intent.intent_type, default_intent.intent_target) not in intent_values:
+                intents.append(default_intent)
+
         self._intents = intents
         self._intent_mapper = IntentMapper(self._intents)
         self._threshold = threshold
@@ -356,8 +372,8 @@ Last user message: "{last_human_message.content}"
         
         try:
             response = self._chat_model.bind_tools([filter_intents]).invoke(messages)
-        except Exception as e:
-            logger.warning(f"Error filtering intents going to 'entity_check'")
+        except Exception:
+            logger.warning("Error filtering intents going to 'entity_check'")
             return Command(goto="entity_check")
         
         assert isinstance(response, AIMessage)
