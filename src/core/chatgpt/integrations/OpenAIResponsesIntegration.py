@@ -113,7 +113,7 @@ class OpenAIResponsesIntegration(Integration):
     
     def analyze_image(
         self, 
-        image_url: str,
+        image_urls: list[str],
         user_prompt: str = "Describe this image:",
         detail: str = "auto",
         return_text: bool = False
@@ -160,11 +160,11 @@ class OpenAIResponsesIntegration(Integration):
                             "type": "input_text", 
                             "text": user_prompt
                         },
-                        {
+                        *[{
                             "type": "input_image",
-                            "image_url": image_url,
+                            "image_url": url,
                             "detail": detail
-                        },
+                        } for url in image_urls],
                     ],
                 },
             ],
@@ -268,9 +268,9 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
 
     class SearchWebSchema(BaseModel):
         query: str = Field(..., description="The query to search the web")
-
+    
     class AnalyzeImageSchema(BaseModel):
-        image_url: str = Field(..., description="The URL of the image to analyze")
+        image_urls: list[str] = Field(..., description="The URLs of the images to analyze")
         user_prompt: str = Field(..., description="The user prompt to use")
 
     class AnalyzePdfSchema(BaseModel):

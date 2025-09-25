@@ -87,8 +87,15 @@ def create_agent(
         Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="research online about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
         Intent(intent_value="latest events about", intent_type=IntentType.TOOL, intent_target="chatgpt_search_web"),
-        Intent(intent_value="Analyze an image from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
-        Intent(intent_value="Analyze a PDF document from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
+        Intent(intent_value="analyze an image from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
+        Intent(intent_value="analyze this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
+        Intent(intent_value="describe this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
+        Intent(intent_value="what can you tell about the content of this image", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_image"),
+        Intent(intent_value="analyze a PDF document from URL", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
+        Intent(intent_value="analyze this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
+        Intent(intent_value="what can you tell about the content of this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
+        Intent(intent_value="Summarize the content of this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
+        Intent(intent_value="Extract all people cited in this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
     ]
 
     # Set configuration
