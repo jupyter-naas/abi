@@ -96,6 +96,8 @@ def create_agent(
         Intent(intent_value="what can you tell about the content of this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
         Intent(intent_value="Summarize the content of this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
         Intent(intent_value="Extract all people cited in this PDF document", intent_type=IntentType.TOOL, intent_target="chatgpt_analyze_pdf"),
+        Intent(intent_value="help me write python code", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="Access OpenAI models documentation", intent_type=IntentType.RAW, intent_target="🚀 **OpenAI Models Documentation**\n\n[OpenAI Models Documentation](https://platform.openai.com/docs/models)\n\nFeatures: Available models, capabilities, pricing, and usage guidelines"),
     ]
 
     # Set configuration
