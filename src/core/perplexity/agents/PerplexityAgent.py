@@ -1,35 +1,86 @@
-from abi.services.agent.Agent import (
-    Agent,
+from abi.services.agent.IntentAgent import (
+    IntentAgent,
+    Intent,
+    IntentType,
     AgentConfiguration,
     AgentSharedState,
-    MemorySaver,
 )
 from typing import Optional
-from src.core.perplexity.models.sonar_pro import model
 
 NAME = "Perplexity"
 DESCRIPTION = "Perplexity Agent that provides real-time answers to any question on the web using Perplexity AI."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/perplexity.png"
+SYSTEM_PROMPT = """# ROLE
+You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine. 
+You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge. 
+
+# OBJECTIVE
+- Deliver comprehensive, well-researched answers by leveraging real-time web search capabilities
+- Synthesize information from multiple reliable sources to provide balanced perspectives
+- Present complex topics in a clear, accessible manner while maintaining accuracy
+- Proactively fact-check information and acknowledge any limitations in available data
+- Include relevant context and background information when beneficial to understanding
+
+# CONTEXT
+You receive prompts directly from users or from other agents.
+
+# TOOLS
+- perplexity_quick_search: Search the web for information
+- perplexity_search: Search the web for information
+- perplexity_advanced_search: Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size
+
+# OPERATING GUIDELINES
+1. Tool Selection:
+   - For quick searches: Use perplexity_quick_search when user asks about current events, news, or online research
+   - For advanced searches: Use perplexity_search when user asks about complex queries or needs deeper analysis
+
+2. Tool Usage:
+   - Always provide all required arguments for the selected tool
+
+# CONSTRAINTS
+- You maintain a professional yet approachable tone, always striving for accuracy and clarity in your responses.
+- Only include source references when you have actual URLs to cite
+- When citing sources, place them at the end of your response after two blank lines
+- Format sources exactly as shown in the example below:
+
+Examples:
+```
+**Sources:**
+- [1](https://www.lesechos.fr/entreprises-et-marches/actualites/2025-06-25/)
+- [2](https://www.lemonde.fr/economie/article)
+- [3](https://www.leparisien.fr/economie/article)
+```
+"""
 SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
-) -> Agent:  
-    # System prompt
-    SYSTEM_PROMPT = """
-    Role:
-    You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine. 
-    You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge. 
+) -> IntentAgent:  
+    # Define model
+    from src.core.perplexity.models.gpt_4_1 import model
 
-    Objective:
+    # Define tools
+    from src.core.perplexity.integrations.PerplexityIntegration import as_tools
+    from src.core.perplexity.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
+    from src import secret
+    integration_config = PerplexityIntegrationConfiguration(
+        api_key=secret.get("PERPLEXITY_API_KEY"),
+        system_prompt="""# ROLE
+    You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine.
+    You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge.
+
+    # OBJECTIVE
     - Deliver comprehensive, well-researched answers by leveraging real-time web search capabilities
     - Synthesize information from multiple reliable sources to provide balanced perspectives
     - Present complex topics in a clear, accessible manner while maintaining accuracy
     - Proactively fact-check information and acknowledge any limitations in available data
     - Include relevant context and background information when beneficial to understanding
 
-    Constraints:
+    # CONTEXT
+    You receive prompts directly from users or from other agents.
+
+    # CONSTRAINTS
     - You maintain a professional yet approachable tone, always striving for accuracy and clarity in your responses.
     - Only include source references when you have actual URLs to cite
     - When citing sources, place them at the end of your response after two blank lines
@@ -43,6 +94,20 @@ def create_agent(
     - [3](https://www.leparisien.fr/economie/article)
     ```
     """
+    )
+    tools: list = as_tools(integration_config)
+    
+    # Define intents
+    intents: list = [
+        Intent(intent_value="quick search about", intent_type=IntentType.TOOL, intent_target="perplexity_quick_search"),
+        Intent(intent_value="search news about", intent_type=IntentType.TOOL, intent_target="perplexity_search"),
+        Intent(intent_value="search web about", intent_type=IntentType.TOOL, intent_target="perplexity_search"),
+        Intent(intent_value="search information about", intent_type=IntentType.TOOL, intent_target="perplexity_search"), 
+        Intent(intent_value="advanced search about", intent_type=IntentType.TOOL, intent_target="perplexity_advanced_search"),
+        Intent(intent_value="search web with high context size about", intent_type=IntentType.TOOL, intent_target="perplexity_advanced_search"),
+        Intent(intent_value="where can i find information about perplexity models", intent_type=IntentType.RAW, intent_target="Here is the link to the documentation: https://docs.perplexity.ai/getting-started/models"),
+    ]
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -54,13 +119,14 @@ def create_agent(
     return PerplexityAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
-        tools=[],
-        agents=[],
+        chat_model=model.model,
+        tools=tools,
+        agents=[], # Agent calling not available for Perplexity in LangChain
+        intents=intents,
         state=agent_shared_state, 
         configuration=agent_configuration, 
-        memory=MemorySaver()
-    ) 
+        memory=None,
+    )
 
-class PerplexityAgent(Agent):
+class PerplexityAgent(IntentAgent):
     pass

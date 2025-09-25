@@ -2,8 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_anthropic import ChatAnthropic
 from src import secret
 from pydantic import SecretStr
-from abi import logger
-from typing import Optional
 
 ID = "claude-3-5-sonnet-20241022"
 NAME = "claude-3-5-sonnet"
@@ -15,9 +13,7 @@ TEMPERATURE = 0
 MAX_TOKENS = 4096
 MAX_RETRIES = 2
 
-model: Optional[ChatModel] = None
-anthropic_api_key = secret.get("ANTHROPIC_API_KEY")
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
@@ -30,8 +26,7 @@ model = ChatModel(
         timeout=None,
         max_retries=MAX_RETRIES,
         stop=None,
-        api_key=SecretStr(anthropic_api_key),
+        api_key=SecretStr(secret.get("ANTHROPIC_API_KEY")),
     ),
     context_window=CONTEXT_WINDOW,
 ) 
-logger.debug("✅ Claude 3.5 Sonnet model loaded successfully via Anthropic")

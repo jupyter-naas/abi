@@ -35,15 +35,23 @@ help:
 	@echo "  lock                     Update dependency lock files"
 	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
 	@echo ""
-	@echo "CHAT & AGENT COMMANDS:"
+	@echo "CHAT WITH CORE AGENTS:"
 	@echo "  chat-abi-agent           Start the main ABI agent (default target)"
+	@echo "  chat-chatgpt-agent       Start ChatGPT-based agent"
+	@echo "  chat-claude-agent        Start Claude-based agent"
+	@echo "  chat-deepseek-agent      Start DeepSeek-based agent"
+	@echo "  chat-gemini-agent        Start Gemini-based agent"
+	@echo "  chat-gemma-agent         Start Gemma-based agent"
+	@echo "  chat-grok-agent          Start Grok-based agent"
+	@echo "  chat-llama-agent         Start Llama-based agent"
+	@echo "  chat-mistral-agent       Start Mistral-based agent"
+	@echo "  chat-perplexity-agent    Start Perplexity-based agent"
+	@echo "  chat-qwen-agent          Start Qwen-based agent"
+	@echo ""
+	@echo "CHAT WITH MARKETPLACE AGENTS:"
+	@echo "  pull-request-description Generate pull request descriptions using AI"
 	@echo "  chat-naas-agent          Start the Naas platform integration agent"
 	@echo "  chat-support-agent       Start the customer support specialized agent"
-	@echo ""
-	@echo "LOCAL AI AGENTS (Privacy-focused via Ollama):"
-	@echo "  chat-qwen-agent          Start Qwen3 8B agent (multilingual, coding)"
-	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (reasoning, math)"
-	@echo "  chat-gemma-agent         Start Gemma3 4B agent (lightweight, fast)"
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
 	@echo "  api                      Start API server for local development (port 9879)"
@@ -120,7 +128,6 @@ help:
 	@echo "  docs-ontology            Generate ontology documentation"
 	@echo "  publish-remote-agents    Publish remote agents to workspace"
 	@echo "  publish-remote-agents-dry-run Preview remote agent publishing (dry-run mode)"
-	@echo "  pull-request-description Generate pull request description using AI agent"
 	@echo ""
 	@echo "CLEANUP & MAINTENANCE:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
@@ -190,17 +197,55 @@ local-build: deps
 	@ docker compose build
 
 # =============================================================================
-# CHAT & AGENT COMMANDS
+# CORE AGENTS
 # =============================================================================
 
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
 chat: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+
+chat-chatgpt-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli ChatGPTAgent
+
+chat-claude-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli ClaudeAgent
+
+chat-deepseek-agent: deps 
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
+
+chat-gemini-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli GeminiAgent
+
+chat-gemma-agent: deps
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
+
+chat-grok-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli GrokAgent
+
+chat-llama-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli LlamaAgent
+
+chat-mistral-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli MistralAgent
+
+chat-perplexity-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli PerplexityAgent
+
+chat-qwen-agent: deps
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
+
+# =============================================================================
+# CHAT WITH MARKETPLACE AGENTS
+# =============================================================================
+
+# Generate pull request description using AI agent
+pull-request-description: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli PullRequestDescriptionAgent
 
 # Naas platform integration agent
 chat-naas-agent: deps
@@ -209,22 +254,6 @@ chat-naas-agent: deps
 # Customer support specialized agent
 chat-support-agent: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli SupportAgent
-
-# =============================================================================
-# LOCAL AI AGENTS (Privacy-focused, runs on local hardware via Ollama)
-# =============================================================================
-
-# Qwen3 8B - Multilingual coding assistant (local)
-chat-qwen-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
-
-# DeepSeek R1 8B - Advanced reasoning and mathematics (local)
-chat-deepseek-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
-
-# Gemma3 4B - Lightweight and fast responses (local)
-chat-gemma-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
@@ -626,10 +655,6 @@ publish-remote-agents: deps
 publish-remote-agents-dry-run: deps
 	@ echo "Dry-run: Previewing remote agent publishing..."
 	@ uv run python scripts/publish_remote_agents.py --dry-run
-
-# Generate pull request description using AI agent
-pull-request-description: deps
-	@ uv run python -m src.core.abi.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 # =============================================================================
 # CLEANUP & MAINTENANCE
