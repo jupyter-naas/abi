@@ -1,3 +1,184 @@
+"""Advanced Conversational AI Agent Framework.
+
+This module provides a comprehensive framework for building sophisticated AI agents that can
+interact with users through natural language while seamlessly integrating with external tools
+and services. The framework is built on top of LangChain and LangGraph, providing robust
+state management, conversation persistence, and extensible workflow orchestration.
+
+Core Architecture:
+    The Agent framework employs a graph-based workflow system that enables sophisticated
+    conversation flows with the following key components:
+    
+    • State Management: Persistent conversation state using configurable checkpointers
+    • Tool Integration: Seamless integration with external tools and APIs
+    • Workflow Orchestration: Graph-based conversation flow with conditional routing
+    • Event System: Real-time event streaming for tool usage and responses
+    • Multi-Agent Coordination: Hierarchical agent systems with handoff capabilities
+
+Key Features:
+    • Dynamic Tool Binding: Automatic tool discovery and binding to language models
+    • Conversation Persistence: Configurable memory backends (PostgreSQL, in-memory)
+    • Real-time Streaming: Server-sent events for real-time conversation updates
+    • API Integration: Automatic FastAPI endpoint generation for HTTP access
+    • Agent Hierarchies: Support for supervisor-subordinate agent relationships
+    • Error Handling: Comprehensive error handling with graceful degradation
+    • Thread Safety: Safe concurrent conversation handling across multiple threads
+
+Workflow Engine:
+    The agent operates through a sophisticated state graph with the following nodes:
+    
+    1. Model Invocation (call_model):
+       - Processes user messages using the configured language model
+       - Manages system prompts and conversation context
+       - Determines whether to use tools or provide direct responses
+    
+    2. Tool Execution (call_tools):
+       - Executes requested tools with proper parameter validation
+       - Handles tool responses and error conditions
+       - Manages agent handoffs and workflow routing
+    
+    3. Sub-Agent Integration:
+       - Seamlessly integrates with specialized sub-agents
+       - Maintains conversation context across agent boundaries
+       - Supports complex multi-agent collaboration patterns
+
+Memory and Persistence:
+    • PostgreSQL Backend: Production-ready persistent conversation storage
+    • In-Memory Backend: Fast development and testing with volatile storage
+    • Automatic Migration: Seamless switching between memory backends
+    • Thread Management: Isolated conversation threads for concurrent users
+
+Tool Integration:
+    • Structured Tools: Type-safe tool definitions with automatic validation
+    • Native Tools: Direct integration with language model native tools
+    • Agent Tools: Other agents can be used as tools for delegation
+    • State Injection: Tools can access and modify conversation state
+    • Return Direct: Tools can bypass model interpretation for direct responses
+
+Event System:
+    The framework provides a comprehensive event system for monitoring and reacting
+    to conversation events:
+    
+    • Tool Usage Events: Triggered when tools are invoked
+    • Tool Response Events: Triggered when tools complete execution
+    • AI Message Events: Triggered when the model generates responses
+    • Final State Events: Triggered when conversations complete
+
+API Integration:
+    Automatic generation of RESTful API endpoints with the following capabilities:
+    
+    • Synchronous Completion: Standard request-response API pattern
+    • Streaming Completion: Real-time response streaming via Server-Sent Events
+    • Thread Management: Per-conversation thread isolation
+    • Error Handling: Comprehensive error responses with debugging information
+
+Multi-Agent Architecture:
+    The framework supports sophisticated multi-agent systems:
+    
+    • Supervisor Agents: Coordinate multiple specialized agents
+    • Delegation: Seamless handoff between agents based on expertise
+    • Context Preservation: Maintain conversation context across agent boundaries
+    • Tool Sharing: Agents can share tools and capabilities
+
+Configuration and Extensibility:
+    • Flexible Configuration: Extensive configuration options for customization
+    • Callback System: Hooks for custom behavior at key points
+    • Graph Patching: Ability to modify workflow graphs before compilation
+    • Custom Tools: Easy integration of custom tools and services
+
+Performance Optimization:
+    • Lazy Loading: Efficient resource utilization through lazy initialization
+    • Connection Pooling: Optimized database connections for memory backends
+    • Caching: Intelligent caching of tool results and model responses
+    • Parallel Execution: Concurrent tool execution where possible
+
+Usage Examples:
+    ```python
+    from langchain_openai import ChatOpenAI
+    from lib.abi.services.agent.Agent import Agent, AgentConfiguration
+    
+    # Basic agent setup
+    agent = Agent(
+        name="assistant",
+        description="A helpful AI assistant",
+        chat_model=ChatOpenAI(model="gpt-4"),
+        tools=[custom_tool1, custom_tool2]
+    )
+    
+    # Process a conversation
+    response = agent.invoke("Help me with my task")
+    
+    # Stream responses in real-time
+    for chunk in agent.stream("Tell me about the weather"):
+        print(chunk)
+    
+    # Multi-agent setup with delegation
+    specialist = Agent(
+        name="specialist",
+        description="Domain specialist",
+        chat_model=ChatOpenAI(model="gpt-4"),
+        tools=[specialized_tool]
+    )
+    
+    supervisor = Agent(
+        name="supervisor", 
+        description="Supervisor agent",
+        chat_model=ChatOpenAI(model="gpt-4"),
+        agents=[specialist]  # Can delegate to specialist
+    )
+    ```
+
+Classes:
+    Agent: Primary agent class with full conversation and tool capabilities
+    AgentSharedState: Manages conversation state and thread information
+    AgentConfiguration: Configuration container for agent behavior
+    Event: Base event class for the event system
+    ToolUsageEvent: Event triggered when tools are used
+    ToolResponseEvent: Event triggered when tools respond
+    AIMessageEvent: Event triggered when AI generates responses
+    FinalStateEvent: Event triggered when conversations complete
+
+Functions:
+    create_checkpointer: Factory function for creating memory backends
+    make_handoff_tool: Creates tools for agent-to-agent handoffs
+
+Dependencies:
+    Core Framework:
+        • langchain_core: Language model abstractions and message types
+        • langgraph: State graph orchestration and workflow management
+    
+    Persistence:
+        • psycopg: PostgreSQL adapter for persistent memory
+        • langgraph.checkpoint: Memory and checkpoint management
+    
+    Web Integration:
+        • fastapi: REST API framework for web endpoints
+        • sse_starlette: Server-sent events for real-time streaming
+    
+    Utilities:
+        • pydantic: Data validation and serialization
+        • pydash: Functional programming utilities
+        • abi: Internal utilities and logging
+
+Error Handling:
+    • Graceful Degradation: Fallback behaviors when components fail
+    • Comprehensive Logging: Detailed logging for debugging and monitoring
+    • Validation: Input validation at all system boundaries
+    • Recovery: Automatic recovery from transient failures
+
+Thread Safety:
+    The framework is designed for concurrent use with proper isolation between
+    conversation threads. Each agent instance can safely handle multiple concurrent
+    conversations through the thread-based state management system.
+
+Extension Points:
+    • Custom Tools: Implement new tools using the Tool interface
+    • Workflow Modification: Use graph patchers to customize conversation flows
+    • Event Handlers: Register callbacks for custom event processing
+    • Memory Backends: Implement custom checkpoint savers for specialized storage
+    • Message Processing: Override message handling methods for custom behavior
+"""
+
 # Standard library imports for type hints
 from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict
 import os
@@ -171,32 +352,141 @@ class AgentConfiguration:
 class Agent(Expose):
     """An Agent class that orchestrates interactions between a language model and tools.
 
-    This class implements an agent that can engage in conversations and use tools through a workflow graph.
-    It manages the interaction between a chat model and a set of tools, maintaining conversation state
-    and handling tool usage in a structured way.
+    Performance Features:
+        • Lazy Initialization: Efficient resource utilization through lazy loading
+        • Connection Pooling: Optimized database connections for memory backends
+        • Parallel Execution: Concurrent tool execution where dependencies allow
+        • Caching: Intelligent caching of tool results and model responses
+        • Resource Management: Proper cleanup and resource management
 
     Attributes:
-        __name (str): The name of the agent
-        __description (str): The description of the agent
-        __chat_model (BaseChatModel): The underlying language model with tool binding capability
-        __tools (list[Tool]): List of tools available to the agent
-        __native_tools (list[dict]): List of native tools available to the agent
-        __checkpointer (BaseCheckpointSaver): Component that handles saving conversation state
-        __thread_id (str): Identifier for the current conversation thread
-        __app (CompiledStateGraph): The compiled workflow graph
-        __workflow (StateGraph): The workflow definition graph
-        __on_tool_usage (Callable[[AnyMessage], None]): Callback triggered when a tool is used
-        __on_tool_response (Callable[[AnyMessage], None]): Callback triggered when a tool responds
+        _name (str): Unique identifier for the agent
+        _description (str): Human-readable description of the agent's purpose
+        _system_prompt (str): System prompt that defines the agent's behavior
+        _chat_model (BaseChatModel): The underlying language model with tool binding
+        _chat_model_with_tools (Runnable): Language model configured with available tools
+        _tools (list[Union[Tool, Agent]]): Original list of provided tools and agents
+        _structured_tools (list[Union[Tool, BaseTool]]): Processed and validated tools
+        _tools_by_name (dict[str, Union[Tool, BaseTool]]): Tool lookup dictionary
+        _native_tools (list[dict]): Native tools compatible with the language model
+        _agents (list[Agent]): List of sub-agents for delegation
+        _checkpointer (BaseCheckpointSaver): Memory backend for conversation persistence
+        _state (AgentSharedState): Shared state management for conversation threads
+        graph (CompiledStateGraph): Compiled workflow graph for conversation execution
+        _configuration (AgentConfiguration): Configuration settings for agent behavior
+        _event_queue (Queue): Event queue for real-time event streaming
+        _chat_model_output_version (str|None): Version identifier for model output format
 
-    The agent uses a graph-based workflow system where:
-    - The agent node processes messages using the language model
-    - The tools node executes tool actions
-    - The workflow alternates between these nodes based on the agent's decisions
+    Methods:
+        Core Conversation:
+            invoke(prompt: str) -> str: Process a single conversation turn
+            stream(prompt: str) -> Generator: Stream conversation responses in real-time
+            reset(): Reset conversation state to start fresh
 
-    The workflow is configured to:
-    1. Start with the agent node
-    2. Conditionally route to either tools or end based on agent output
-    3. Route back to agent after tool usage
+        Tool and Agent Management:
+            prepare_tools(tools, agents) -> tuple: Process and validate tools and agents
+            as_tools(parent_graph: bool) -> list[BaseTool]: Convert agent to tool
+            validate_tool_name(tool: BaseTool) -> BaseTool: Ensure tool name compliance
+
+        Workflow Management:
+            build_graph(patcher: Optional[Callable]): Construct the conversation workflow
+            call_model(state: MessagesState) -> Command: Process messages with language model
+            call_tools(state: MessagesState) -> list[Command]: Execute tool calls
+
+        Event Handling:
+            on_tool_usage(callback): Register tool usage event handler
+            on_tool_response(callback): Register tool response event handler  
+            on_ai_message(callback): Register AI message event handler
+
+        API Integration:
+            as_api(router: APIRouter, ...): Add REST endpoints to FastAPI router
+            stream_invoke(prompt: str): Generator for SSE-compatible streaming
+
+        State Management:
+            duplicate(queue: Queue|None) -> Agent: Create independent agent copy
+
+    Usage Examples:
+        Basic Agent Setup:
+            ```python
+            from langchain_openai import ChatOpenAI
+            
+            agent = Agent(
+                name="assistant",
+                description="A helpful AI assistant",
+                chat_model=ChatOpenAI(model="gpt-4"),
+                tools=[calculator_tool, web_search_tool]
+            )
+            
+            response = agent.invoke("What's 15 * 23 + 45?")
+            ```
+
+        Multi-Agent System:
+            ```python
+            # Create specialized agents
+            calculator = Agent(
+                name="calculator",
+                description="Mathematical calculations",
+                chat_model=ChatOpenAI(model="gpt-4"),
+                tools=[math_tools]
+            )
+            
+            researcher = Agent(
+                name="researcher", 
+                description="Web research and information gathering",
+                chat_model=ChatOpenAI(model="gpt-4"),
+                tools=[web_search, wikipedia]
+            )
+            
+            # Create supervisor agent
+            supervisor = Agent(
+                name="supervisor",
+                description="Coordinates specialized agents",
+                chat_model=ChatOpenAI(model="gpt-4"),
+                agents=[calculator, researcher]
+            )
+            ```
+
+        Real-time Streaming:
+            ```python
+            for chunk in agent.stream("Tell me about recent AI developments"):
+                if chunk[1] and 'messages' in chunk[1]:
+                    message = chunk[1]['messages'][-1]
+                    if hasattr(message, 'content'):
+                        print(message.content, end='')
+            ```
+
+        API Integration:
+            ```python
+            from fastapi import FastAPI, APIRouter
+            
+            app = FastAPI()
+            router = APIRouter()
+            
+            agent.as_api(router, route_name="assistant")
+            app.include_router(router)
+            
+            # Now available at:
+            # POST /assistant/completion
+            # POST /assistant/stream-completion
+            ```
+
+    Error Handling:
+        The Agent class implements comprehensive error handling with:
+        • Graceful degradation when tools fail
+        • Automatic retry mechanisms for transient failures
+        • Detailed error logging for debugging
+        • Fallback responses when critical components fail
+        • Validation of all inputs and configurations
+
+    Thread Safety:
+        The Agent is designed for concurrent use with proper thread isolation.
+        Each conversation thread maintains independent state, allowing safe
+        concurrent operation across multiple users and conversations.
+
+    See Also:
+        IntentAgent: Specialized agent with intent recognition capabilities
+        AgentConfiguration: Configuration options for agent behavior
+        AgentSharedState: State management for conversation threads
     """
 
     _name: str
