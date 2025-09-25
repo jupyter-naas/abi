@@ -271,11 +271,6 @@ You can browse the data and run queries there."""
 
     # Define intents
     intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="My name is ABI",
-        ),
         # Abi Agent return intents (route to call_model to return to parent)
         Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="call_model"),
         Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="call_model"),
@@ -339,73 +334,18 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
     ]
-    # Add intents for all other available agents using a more compact approach
-    agent_intents_map = {
-        # "ChatGPT": [
-        #     "search news about", "web search", "online research", "real-time information", "factual answers", "current events"
-        # ],
-        "Claude": [
-            "complex analysis", "research synthesis", "report writing", "data analysis", "academic writing"
-        ],
-        "DeepSeek": [
-            "mathematical analysis", "logical reasoning", "step-by-step solutions", "problem solving", "proofs"
-        ],
-        "Gemini": [
-            "multimodal analysis", "analyze image", "image understanding", "video analysis", "audio analysis",
-            "generate image", "create image", "draw", "illustrate", "visualization"
-        ],
-        "Gemma": [
-            "fast responses", "basic tasks", "quick answers", "simple queries", "lightweight processing"
-        ],
-        "Grok": [
-            "scientific analysis", "critical thinking", "truth seeking", "contrarian views", "rigorous reasoning"
-        ],
-        "Llama": [
-            "general knowledge", "conversation", "writing assistance", "creative tasks", "brainstorming"
-        ],
-        "Mistral": [
-            "code generation", "code review", "code optimization", "technical documentation", "programming help"
-        ],
-        "Perplexity": [
-            "search news about", "web search", "fact checking", "research", "current events", "real-time information"
-        ],
-        "Qwen": [
-            "code generation", "multilingual", "technical writing", "documentation", "private computing"
-        ]
-    }
 
     # Add intents for each agent (using agent names directly to avoid recursion)
     for agent in agents:
         logger.debug(f"Adding intents for agent: {agent.name}")
-        if agent.name in agent_intents_map:
-            # Add default intents for agent name and description
-            intents.append(Intent(
-                intent_type=IntentType.AGENT,
-                intent_value=agent.name,
-                intent_target=agent.name
-            ))
-            intents.append(Intent(
-                intent_type=IntentType.AGENT,
-                intent_value=agent.description,
-                intent_target=agent.name
-            ))
-            
-            # Add chat intent
-            intents.append(Intent(
-                intent_type=IntentType.AGENT,
-                intent_value=f"Chat with {agent.name}",
-                intent_target=agent.name
-            ))
-
-            # Add mapped intents
-            for intent_value in agent_intents_map[agent.name]:
-                intents.append(Intent(
-                    intent_type=IntentType.AGENT,
-                    intent_value=intent_value,
-                    intent_target=agent.name
-                ))
+        # Add default intents to chat with any agent
+        intents.append(Intent(
+            intent_type=IntentType.AGENT,
+            intent_value=f"Chat with {agent.name}",
+            intent_target=agent.name
+        ))
                 
-        if hasattr(agent, 'intents') and agent.name not in agent_intents_map:
+        if hasattr(agent, 'intents'):
             for intent in agent.intents:
                 # Create new intent with target set to agent name
                 new_intent = Intent(
@@ -414,7 +354,6 @@ You can browse the data and run queries there."""
                     intent_target=agent.name
                 )
                 intents.append(new_intent)
-
     logger.debug(f"Intents: {intents}")
 
     # Set configuration
