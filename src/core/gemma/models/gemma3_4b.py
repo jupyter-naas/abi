@@ -1,6 +1,5 @@
 from abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
-from typing import Optional
 
 ID = "gemma3:4b"
 NAME = "Gemma3 4B"
@@ -9,8 +8,7 @@ IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.p
 CONTEXT_WINDOW = 8192
 OWNER = "ollama"
 
-model: Optional[ChatModel] = None
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,

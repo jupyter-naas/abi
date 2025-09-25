@@ -1,7 +1,6 @@
 from lib.abi.models.Model import ChatModel
 from langchain_xai import ChatXAI
 from src import secret
-from typing import Optional
 from pydantic import SecretStr
 
 NAME = "grok-4-latest"
@@ -15,10 +14,7 @@ IMAGE = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOv3K6RevHQCscoWP
 DESCRIPTION = "xAI's revolutionary AI with the highest intelligence scores globally, designed for truth-seeking and real-world understanding."
 CONTEXT_WINDOW = 200000
 
-model: Optional[ChatModel] = None
-
-xai_api_key = secret.get("XAI_API_KEY")
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
@@ -29,7 +25,7 @@ model = ChatModel(
         model=ID,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        api_key=SecretStr(xai_api_key),
+        api_key=SecretStr(secret.get("XAI_API_KEY")),
         # Enable Live Search for real-time information
         search_parameters={
             "mode": SEARCH_MODE,

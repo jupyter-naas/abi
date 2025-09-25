@@ -1,6 +1,5 @@
 from abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
-from typing import Optional
 
 ID = "deepseek-r1:8b"
 NAME = "DeepSeek R1 8B"
@@ -9,8 +8,7 @@ IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/logos/ollama_100x100.p
 CONTEXT_WINDOW = 32768
 OWNER = "ollama"
 
-model: Optional[ChatModel] = None
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
