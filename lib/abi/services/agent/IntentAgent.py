@@ -42,15 +42,15 @@ import rich
 nlp = spacy.load("en_core_web_sm")
 MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your request"
 DEFAULT_INTENTS: list = [
-    Intent(intent_value="what's your name?", intent_type=IntentType.AGENT, intent_target="call_model"),
-    Intent(intent_value="what do you do?", intent_type=IntentType.AGENT, intent_target="call_model"),
-    Intent(intent_value="Hello", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
-    Intent(intent_value="Hi", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
-    Intent(intent_value="Hey", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
-    Intent(intent_value="Hi there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
-    Intent(intent_value="Hello there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?"),
-    Intent(intent_value="Hello, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?"),
-    Intent(intent_value="Hi, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?"),
+    Intent(intent_value="what's your name?", intent_type=IntentType.AGENT, intent_target="call_model", intent_metadata="default"),
+    Intent(intent_value="what do you do?", intent_type=IntentType.AGENT, intent_target="call_model", intent_metadata="default"),
+    Intent(intent_value="Hello", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
+    Intent(intent_value="Hi", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
+    Intent(intent_value="Hey", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
+    Intent(intent_value="Hi there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
+    Intent(intent_value="Hello there", intent_type=IntentType.RAW, intent_target="Hello, what can I do for you?", intent_metadata="default"),
+    Intent(intent_value="Hello, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_metadata="default"),
+    Intent(intent_value="Hi, how are you?", intent_type=IntentType.RAW, intent_target="Hello, I am doing well thank you, how can I help you today?", intent_metadata="default"),
 ]
 
 

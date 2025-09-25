@@ -2,7 +2,7 @@ from .VectorStore import VectorStore
 from .Embeddings import openai_embeddings_batch, openai_embeddings
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from typing import Tuple, Any
+from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 
@@ -16,6 +16,7 @@ class Intent:
     intent_value: str
     intent_type: IntentType
     intent_target: Any
+    intent_metadata: Optional[Any] = None
 
 class IntentMapper:
     intents: list[Intent]
