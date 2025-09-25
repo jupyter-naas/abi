@@ -2,6 +2,7 @@ from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
     IntentType,
+    IntentScope,
     AgentConfiguration,
     AgentSharedState,
 )
@@ -264,27 +265,13 @@ You can browse the data and run queries there."""
         logger.debug(f"Getting agents from module: {module.module_import_path}")
         if hasattr(module, 'agents'):
             for agent in module.agents:
-                if agent is not None and agent.name != "Abi":
+                if agent is not None and agent.name != "Abi" or agent.name.endswith("ResearchAgent"): #exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
                     logger.debug(f"Adding agent: {agent.name}")
                     agents.append(agent)
     logger.debug(f"Agents: {agents}")
 
     # Define intents
-    intents: list = [
-        # Abi Agent return intents (route to call_model to return to parent)
-        Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="call_model"),
-        
+    intents: list = [        
         # Service opening intents - simple RAW responses
         Intent(intent_type=IntentType.RAW, intent_value="open oxigraph", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
         Intent(intent_type=IntentType.RAW, intent_value="open oxigraph server", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
@@ -347,7 +334,7 @@ You can browse the data and run queries there."""
                 
         if hasattr(agent, 'intents'):
             for intent in agent.intents:
-                if intent.intent_metadata is not None and intent.intent_metadata == "default":
+                if intent.intent_scope is not None and intent.intent_scope == IntentScope.DIRECT:
                     continue
                 # Create new intent with target set to agent name
                 new_intent = Intent(
