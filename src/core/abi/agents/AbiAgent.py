@@ -347,6 +347,8 @@ You can browse the data and run queries there."""
                 
         if hasattr(agent, 'intents'):
             for intent in agent.intents:
+                if intent.intent_metadata is not None and intent.intent_metadata == "default":
+                    continue
                 # Create new intent with target set to agent name
                 new_intent = Intent(
                     intent_type=IntentType.AGENT,
