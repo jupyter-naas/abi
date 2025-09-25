@@ -3,6 +3,7 @@ import requests
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
+from abi import logger
 
 @dataclass
 class PerplexityIntegrationConfiguration(IntegrationConfiguration):
@@ -14,6 +15,7 @@ class PerplexityIntegrationConfiguration(IntegrationConfiguration):
     """
     api_key: str
     base_url: str = "https://api.perplexity.ai"
+    system_prompt: str = "Be precise and concise and answer the question with sources."
 
 class PerplexityIntegration(Integration):
     """Perplexity API integration client.
@@ -52,7 +54,7 @@ class PerplexityIntegration(Integration):
     def search_web(
         self,
         question: str,
-        system_prompt: str = "Be precise and concise and answer the question with sources.",
+        system_prompt: str | None = None,
         model: str = "sonar-pro",
         reasoning_effort: str = "medium",
         frequency_penalty: float = 1,
@@ -69,9 +71,11 @@ class PerplexityIntegration(Integration):
         return_related_questions: bool = False,
         search_mode: str = "web",
         search_context_size: str = "medium",
-        user_location: str = "FR"
+        user_location: str = "FR",
     ) -> str:
         """Search the web for information."""
+        if system_prompt is None:
+            system_prompt = self.__configuration.system_prompt
         payload = {
             "model": model,
             "messages": [
@@ -108,6 +112,7 @@ class PerplexityIntegration(Integration):
         response = self._make_request("POST", "/chat/completions", payload)
         return response['choices'][0]['message']['content']
 
+
 def as_tools(configuration: PerplexityIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
     
@@ -115,12 +120,19 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
 
     class AskQuestionSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
+        search_context_size: str = Field("medium", description="The context size to use for the search")
 
     return [
         StructuredTool(
-            name="perplexity_search_web",
-            description="Ask a question to Perplexity AI to get external data/open data from web.",
-            func=lambda **kwargs: integration.search_web(**kwargs),
+            name="perplexity_quick_search",
+            description="A lightweight, cost-effective search model optimized for quick, grounded answers with real-time web search.",
+            func=lambda question, search_context_size: integration.search_web(question=question, search_context_size=search_context_size, model="sonar"),
             args_schema=AskQuestionSchema
-        )
+        ),
+        StructuredTool(
+            name="perplexity_search",
+            description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar.",
+            func=lambda question, search_context_size: integration.search_web(question=question, search_context_size=search_context_size, model="sonar-pro"),
+            args_schema=AskQuestionSchema
+        ),
     ]
