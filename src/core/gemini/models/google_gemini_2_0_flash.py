@@ -2,7 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src import secret
 from pydantic import SecretStr
-from typing import Optional
 
 ID = "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"
 NAME = "gemini-2.0-flash"
@@ -12,10 +11,7 @@ CONTEXT_WINDOW = 1000000  # Updated to 1M token context window
 OWNER = "google"
 TEMPERATURE = 0.7
 
-model: Optional[ChatModel] = None
-
-google_api_key = secret.get("GOOGLE_API_KEY")
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
@@ -27,7 +23,7 @@ model = ChatModel(
         max_tokens=None,
         timeout=None,
         max_retries=2,
-        api_key=SecretStr(google_api_key),
+        api_key=SecretStr(secret.get("GOOGLE_API_KEY")),
     ),
     context_window=CONTEXT_WINDOW,
 )

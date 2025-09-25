@@ -1,5 +1,4 @@
 from abi.models.Model import ChatModel
-from typing import Optional
 from langchain_ollama import ChatOllama
 
 ID = "qwen3:8b"
@@ -10,8 +9,7 @@ CONTEXT_WINDOW = 32768
 OWNER = "ollama"
 TEMPERATURE = 0.3 # Slightly creative for code/reasoning tasks
 
-model: Optional[ChatModel] = None
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,

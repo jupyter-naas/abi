@@ -1,6 +1,5 @@
 from abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
-from typing import Optional
 
 ID = "meta-llama/Llama-3.3-70B-Instruct"
 NAME = "llama-3.3-70b-instruct"
@@ -12,8 +11,7 @@ TEMPERATURE = 0
 MAX_TOKENS = 4096
 MAX_RETRIES = 2
 
-model: Optional[ChatModel] = None
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
