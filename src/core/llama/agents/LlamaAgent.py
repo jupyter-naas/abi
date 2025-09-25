@@ -59,6 +59,7 @@ def create_agent(
         Intent(intent_value="writing assistance", intent_type=IntentType.AGENT, intent_target="call_model"), 
         Intent(intent_value="creative tasks", intent_type=IntentType.AGENT, intent_target="call_model"),
         Intent(intent_value="brainstorming", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="help me write python code", intent_type=IntentType.AGENT, intent_target="call_model"),
     ]
 
     # Set configuration
