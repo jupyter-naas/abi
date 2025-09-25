@@ -268,7 +268,7 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
 
     class SearchWebSchema(BaseModel):
         query: str = Field(..., description="The query to search the web")
-    
+
     class AnalyzeImageSchema(BaseModel):
         image_urls: list[str] = Field(..., description="The URLs of the images to analyze")
         user_prompt: str = Field(..., description="The user prompt to use")
@@ -288,7 +288,7 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
         StructuredTool(
             name="chatgpt_analyze_image",
             description="Analyze an image from URL",
-            func=lambda image_url, user_prompt: integration.analyze_image(image_url=image_url, user_prompt=user_prompt, return_text=True),
+            func=lambda image_urls, user_prompt: integration.analyze_image(image_urls=image_urls, user_prompt=user_prompt, return_text=True),
             args_schema=AnalyzeImageSchema
         ),
         StructuredTool(
