@@ -1,136 +1,3 @@
-"""Advanced Intent-Based Conversational Agent.
-
-This module implements a sophisticated conversational AI agent that leverages intent 
-recognition and mapping to provide contextually aware responses and intelligent routing.
-The IntentAgent extends the base Agent class with advanced capabilities for understanding
-user intentions, managing conversation flow, and coordinating with specialized sub-agents.
-
-Core Features:
-    • Intelligent Intent Mapping: Uses vector similarity search to map user messages to 
-      predefined intents with configurable confidence thresholds
-    • Multi-Stage Intent Filtering: Employs LLM-based filtering to eliminate logically 
-      irrelevant intents that may have high surface similarity
-    • Entity Consistency Validation: Validates that named entities in intents match 
-      those referenced in user messages using spaCy NLP processing
-    • Dynamic Agent Routing: Routes conversations to specialized sub-agents based on 
-      intent analysis and @mention syntax
-    • Human Validation Workflow: Requests user clarification when multiple high-confidence 
-      intents are detected
-    • Context-Aware System Prompts: Dynamically injects relevant intent information 
-      into system prompts for enhanced model performance
-
-Architecture:
-    The agent operates through a sophisticated state graph with the following stages:
-    
-    1. Intent Mapping (map_intents):
-       - Analyzes user messages using vector similarity search
-       - Handles special routing patterns (@mentions, numeric responses)
-       - Applies initial confidence filtering
-    
-    2. Intent Filtering (filter_out_intents):
-       - Uses LLM analysis to filter logically irrelevant intents
-       - Addresses limitations of pure vector similarity matching
-    
-    3. Entity Validation (entity_check):
-       - Extracts named entities using spaCy NLP
-       - Validates entity consistency between user messages and intents
-       - Employs both rule-based and LLM-based validation
-    
-    4. Intent Routing (intent_mapping_router):
-       - Determines conversation flow based on intent analysis results
-       - Routes to appropriate handlers (agents, tools, raw responses)
-    
-    5. Human Validation (request_human_validation):
-       - Manages disambiguation when multiple valid intents exist
-       - Provides interactive selection interface for users
-    
-    6. System Prompt Enhancement (inject_intents_in_system_prompt):
-       - Dynamically enhances system prompts with relevant intent context
-       - Enables intent-aware response generation
-
-Intent Types:
-    • RAW: Direct text responses without additional processing
-    • AGENT: Routes to specialized sub-agents for domain-specific handling
-    • TOOL: Executes specific tools or functions
-
-Integration Points:
-    • LangGraph: Provides state management and conversation flow orchestration
-    • LangChain: Supplies chat models, tools, and message abstractions
-    • spaCy: Enables advanced natural language processing for entity extraction
-    • Vector Stores: Powers similarity-based intent matching capabilities
-
-Configuration:
-    The agent supports extensive configuration including:
-    • Confidence thresholds for intent matching
-    • Neighbor thresholds for similar intent handling
-    • Custom intent definitions and mappings
-    • Memory and checkpoint management
-    • Event queue integration for real-time updates
-
-Usage Example:
-    ```python
-    from langchain_openai import ChatOpenAI
-    from lib.abi.services.agent.IntentAgent import IntentAgent, Intent, IntentType
-    
-    # Define custom intents
-    intents = [
-        Intent("book a meeting", IntentType.AGENT, "calendar_agent"),
-        Intent("get weather", IntentType.AGENT, "weather_agent"),
-        Intent("hello", IntentType.RAW, "Hello! How can I help you today?")
-    ]
-    
-    # Initialize agent
-    agent = IntentAgent(
-        name="assistant",
-        description="AI assistant with intent recognition",
-        chat_model=ChatOpenAI(model="gpt-4"),
-        intents=intents,
-        threshold=0.85,
-        threshold_neighbor=0.05
-    )
-    
-    # Process user message
-    response = agent.invoke("I need to schedule a meeting")
-    ```
-
-Classes:
-    IntentState: Extended message state with intent mapping capabilities
-    IntentAgent: Primary agent class with full intent recognition pipeline
-
-Constants:
-    DEFAULT_INTENTS: Predefined set of common conversational intents
-    MULTIPLES_INTENTS_MESSAGE: Template for multi-intent validation requests
-
-Dependencies:
-    Core Framework:
-        • langchain_core: Chat models, tools, and message abstractions
-        • langgraph: State graphs, checkpoints, and conversation flow
-    
-    NLP Processing:
-        • spaCy: Named entity recognition and text processing
-    
-    Utilities:
-        • pydash: Functional programming utilities for data manipulation
-        • rich: Enhanced console output for debugging
-        • abi: Internal logging and configuration management
-
-Performance Considerations:
-    • Vector similarity searches are optimized for real-time performance
-    • Intent filtering is cached to avoid redundant LLM calls
-    • Entity extraction uses efficient spaCy models
-    • State management is checkpointed for conversation persistence
-
-Error Handling:
-    • Graceful degradation when intent mapping fails
-    • Fallback to direct model calls when no intents match
-    • Comprehensive logging for debugging and monitoring
-    • Validation of all critical data structures and flows
-
-Thread Safety:
-    The agent is designed to be thread-safe with proper state isolation
-    between concurrent conversations through LangGraph's checkpoint system.
-"""
-
 from typing import Union, Callable, Optional, Any, Dict
 from queue import Queue
 from langchain_core.language_models import BaseChatModel
@@ -146,7 +13,6 @@ from langchain_core.tools import tool
 from abi import logger
 import pydash as pd
 import spacy
-import rich
 
 
 nlp = spacy.load("en_core_web_sm")
@@ -397,15 +263,14 @@ class IntentAgent(Agent):
         
         assert isinstance(close_intents, list)
         
-        # If we have multiple intents, we want to count the number of different intent targets. If we have only one target, we can use it because it
-        # means that we have multiple intents mapping to the same target.
-        unique_targets = pd.uniq(pd.map_(close_intents, lambda intent: intent['intent'].intent_target))
-        
+        # Filter out intents with duplicate targets, keeping the highest scoring one
+        seen_targets = set()
         final_intents = []
-        if len(unique_targets) == 1:
-            final_intents = [close_intents[0]]
-        else:
-            final_intents = close_intents
+        for intent in close_intents:
+            target = intent['intent'].intent_target
+            if target not in seen_targets:
+                seen_targets.add(target)
+                final_intents.append(intent)
 
         logger.debug(f"{len(final_intents)} intents mapped: {final_intents}")
         state['intent_mapping'] = {"intents": final_intents}
@@ -503,7 +368,7 @@ Last user message: "{last_human_message.content}"
         
         assert isinstance(response, AIMessage)
         
-        filtered_intents : list[Intent] = []
+        filtered_intents: list = []
         
         assert isinstance(response.tool_calls, list), response.tool_calls
         assert len(response.tool_calls) > 0, response.tool_calls
@@ -517,9 +382,10 @@ Last user message: "{last_human_message.content}"
                 filtered_intents.append(mapped_intents[i])
 
         logger.debug(f"{len(filtered_intents)} intents filtered: {filtered_intents}")
-
-        return Command(update={"intent_mapping": {"intents": filtered_intents}})
-    
+        state['intent_mapping'] = {"intents": filtered_intents}
+        if len(filtered_intents) == 1 and filtered_intents[0]['score'] > self._threshold:
+            return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": filtered_intents}})
+        return Command(goto="entity_check", update={"intent_mapping": {"intents": filtered_intents}})
 
     def _extract_entities(self, text: str) -> list[str]:
         """Extract named entities from text using spaCy.
@@ -627,9 +493,9 @@ Last user message: "{last_human_message.content}"
             
             response = self._chat_model.invoke(messages)
             
-            rich.print(messages)
-            rich.print(response.content)
-            rich.print(response.content == "true")
+            # rich.print(messages)
+            # rich.print(response.content)
+            # rich.print(response.content == "true")
             if response.content == "true":
                 filtered_intents.append(intent)
 
@@ -732,16 +598,19 @@ Last user message: "{last_human_message.content}"
                 logger.debug("✅ Single intent found, routing to appropriate handler")
                 intent : Intent = intent_mapping["intents"][0]['intent']
                 if intent.intent_type == IntentType.RAW:
+                    logger.debug(f"📝 Raw intent found, routing to '{intent.intent_target}'")
                     
                     ai_message = AIMessage(content=intent.intent_target)
                     self._notify_ai_message(ai_message, self.name)
-                    
+
                     return Command(goto=END, update={
                         "messages": [ai_message]
                     })
                 elif intent.intent_type == IntentType.AGENT:
+                    logger.debug(f"🤖 Agent intent found, routing to {intent.intent_target}")
                     return Command(goto=intent.intent_target)
                 else:
+                    logger.debug("🔧 Tool intent found, routing to inject intents in system prompt")
                     return Command(goto="inject_intents_in_system_prompt")
                 
             # If there are multiple intents, we check intents type to return the appropriate Command
@@ -825,7 +694,7 @@ Last user message: "{last_human_message.content}"
         graph.add_node(self.filter_out_intents)
         
         graph.add_node(self.entity_check)
-        graph.add_edge("filter_out_intents", "entity_check")
+        # graph.add_edge("filter_out_intents", "entity_check")
         
         graph.add_node(self.intent_mapping_router)
         graph.add_edge("entity_check", "intent_mapping_router")
