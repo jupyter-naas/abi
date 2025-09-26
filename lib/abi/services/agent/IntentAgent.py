@@ -610,7 +610,7 @@ Last user message: "{last_human_message.content}"
                     logger.debug(f"🤖 Agent intent found, routing to {intent.intent_target}")
                     return Command(goto=intent.intent_target)
                 else:
-                    logger.debug(f"🔧 Tool intent found, routing to inject intents in system prompt")
+                    logger.debug("🔧 Tool intent found, routing to inject intents in system prompt")
                     return Command(goto="inject_intents_in_system_prompt")
                 
             # If there are multiple intents, we check intents type to return the appropriate Command
