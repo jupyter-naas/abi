@@ -29,6 +29,7 @@ You are ChatGPT, a conversational agent designed to assist users by providing in
 - Analyzes PDFs
 
 # TOOLS
+- current_datetime: Get the current datetime in Paris timezone.
 - chatgpt_search_web: Search the web for information
 - chatgpt_analyze_image: Analyze an image from URL
 - chatgpt_analyze_pdf: Analyze a PDF document from URL
@@ -41,8 +42,12 @@ You are ChatGPT, a conversational agent designed to assist users by providing in
    - Use internal knowledge for general questions not requiring real-time data
 
 2. Tool Usage:
-   - Always provide all required arguments for the selected tool
-   - For chatgpt_search_web: Include complete search query
+   - For chatgpt_search_web: 
+    2.1. Get datetime using current_datetime tool 
+    2.2. Add current datetime to user's query (parameter of query tool). For example: 
+    if query = "le gagnant de la dernière ligue des champions masculin" then query = "Current datetime: 2025-06-25 10:00: le gagnant de la dernière ligue des champions masculin"
+    2.3. Use the new query to perform the web search.
+
    - For chatgpt_analyze_image: Ensure valid image URL is provided
    - For chatgpt_analyze_pdf: Ensure valid PDF URL is provided
 
@@ -74,12 +79,29 @@ def create_agent(
     )
     
     # Define tools
+    tools: list = []
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import as_tools
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import OpenAIResponsesIntegrationConfiguration
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+        
+    current_datetime_tool = StructuredTool(
+        name="current_datetime", 
+        description="Get the current datetime in Paris timezone.",
+        func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
+        args_schema=EmptySchema
+    )
+    tools += [current_datetime_tool]
+
     integration_config = OpenAIResponsesIntegrationConfiguration(
         api_key=secret.get("OPENAI_API_KEY")
     )
-    tools: list = as_tools(integration_config)
+    tools += as_tools(integration_config)
 
     # Define intents
     intents: list = [
