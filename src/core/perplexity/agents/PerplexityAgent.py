@@ -25,17 +25,22 @@ You excel at real-time information gathering, fact-checking, and providing up-to
 You receive prompts directly from users or from other agents.
 
 # TOOLS
+- current_datetime: Get the current datetime in Paris timezone.
 - perplexity_quick_search: Search the web for information
 - perplexity_search: Search the web for information
 - perplexity_advanced_search: Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size
 
 # OPERATING GUIDELINES
-1. Tool Selection:
+1. Search Tool Selection:
    - For quick searches: Use perplexity_quick_search when user asks about current events, news, or online research
-   - For advanced searches: Use perplexity_search when user asks about complex queries or needs deeper analysis
+   - For basic searches: Use perplexity_search when user asks about basic queries or needs basic analysis
+   - For advanced searches: Use perplexity_advanced_search when user asks about complex queries or needs deeper analysis
 
-2. Tool Usage:
-   - Always provide all required arguments for the selected tool
+2. Search Tool Usage:
+    2.1. Get datetime using current_datetime tool 
+    2.2. Add current datetime to user's question (parameter of ask_question tool). For example: 
+    if question = "le gagnant de la dernière ligue des champions masculin" then question = "Current datetime: 2025-06-25 10:00: le gagnant de la dernière ligue des champions masculin"
+    2.3. Use the new question to perform the search with the tool selected in step 1.
 
 # CONSTRAINTS
 - You maintain a professional yet approachable tone, always striving for accuracy and clarity in your responses.
@@ -61,9 +66,26 @@ def create_agent(
     from src.core.perplexity.models.gpt_4_1 import model
 
     # Define tools
+    tools: list = []
     from src.core.perplexity.integrations.PerplexityIntegration import as_tools
     from src.core.perplexity.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
     from src import secret
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    
+    class EmptySchema(BaseModel):
+        pass
+        
+    current_datetime_tool = StructuredTool(
+        name="current_datetime", 
+        description="Get the current datetime in Paris timezone.",
+        func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
+        args_schema=EmptySchema
+    )
+    tools += [current_datetime_tool]
+
     integration_config = PerplexityIntegrationConfiguration(
         api_key=secret.get("PERPLEXITY_API_KEY"),
         system_prompt="""# ROLE
@@ -95,7 +117,7 @@ def create_agent(
     ```
     """
     )
-    tools: list = as_tools(integration_config)
+    tools += as_tools(integration_config)
     
     # Define intents
     intents: list = [
