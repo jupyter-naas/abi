@@ -147,12 +147,19 @@ def define_ai_mode():
     if "AI_MODE" in dv:
         return
     
-    # Simple AI mode choice
-    print("I can run in two ways:")
-    print("  1. Locally for privacy")
-    print("  2. In the cloud for more power")
-    mode_choice = Prompt.ask("Which would you prefer?", choices=["1", "2"], default="1")
-    ai_mode = "local" if mode_choice == "1" else "cloud"
+    # Simple AI mode choice optimized for Docker Model Runner
+    print("I can run in three ways:")
+    print("  1. Airgap (Docker Model Runner - fully offline)")
+    print("  2. Local (Ollama + some cloud agents)")
+    print("  3. Cloud (full cloud power)")
+    mode_choice = Prompt.ask("Which would you prefer?", choices=["1", "2", "3"], default="1")
+    
+    if mode_choice == "1":
+        ai_mode = "airgap"
+    elif mode_choice == "2":
+        ai_mode = "local"
+    else:
+        ai_mode = "cloud"
     
     append_to_dotenv("AI_MODE", ai_mode)
 
