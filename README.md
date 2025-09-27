@@ -53,12 +53,11 @@ make
 2. **Setup wizard** - Choose your AI mode (Airgap/Local/Cloud) and configure preferences  
 3. **ABI chat** - Your AI SuperAssistant that routes to the best model for each task
 
-**Chat commands:**
-- `@claude analyze this data` - Route to Claude for analysis
-- `@qwen write some code` - Use local Qwen for privacy
-- `make chat agent=ChatGPTAgent` - Run ChatGPT directly
-- `/?` - Show all available agents and commands
-- `/exit` - End session
+**Chat interface:**
+- **Natural conversation** - Just talk to ABI, it routes to the best agent automatically
+- **Agent routing** - `@claude help me analyze` or `ask qwen to code this`
+- **Commands** - `/?` (help), `/reset` (fresh start), `/exit` (end session)
+- **Direct agents** - `make chat agent=ClaudeAgent` to bypass ABI routing
 
 **Services running:**
 - **Oxigraph** (Knowledge Graph): http://localhost:7878
