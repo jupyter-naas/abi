@@ -22,6 +22,50 @@
 > A multi-agent AI System that uses ontologies to unify data, AI models, and workflows. 
 ⭐ **Star and follow to stay updated!**
 
+## Requirements
+
+**System:**
+- **Python 3.10+** - Core runtime (auto-installed via uv)
+- **uv package manager** - Fast Python installer ([auto-setup instructions](https://docs.astral.sh/uv/getting-started/installation/))
+- **Docker Desktop** - Auto-starts if not running (macOS/Linux)
+- **Git** - For cloning the repository
+
+**Hardware:**
+- **8GB+ RAM** - For local AI models and knowledge graph
+- **10GB+ disk space** - For Docker images and models
+
+**Optional (for cloud modes):**
+- OpenAI API key
+- Anthropic API key  
+- Google AI API key
+- Other LLM provider keys
+
+## Quick Start
+
+```bash
+git clone https://github.com/jupyter-naas/abi.git
+cd abi
+make
+```
+
+**What happens:**
+1. **Auto-infrastructure** - Docker Desktop, PostgreSQL, Oxigraph, and AI models start automatically
+2. **Setup wizard** - Choose your AI mode (Airgap/Local/Cloud) and configure preferences  
+3. **ABI chat** - Your AI SuperAssistant that routes to the best model for each task
+
+**Chat commands:**
+- `@claude analyze this data` - Route to Claude for analysis
+- `@qwen write some code` - Use local Qwen for privacy
+- `make chat agent=ChatGPTAgent` - Run ChatGPT directly
+- `/?` - Show all available agents and commands
+- `/exit` - End session
+
+**Services running:**
+- **Oxigraph** (Knowledge Graph): http://localhost:7878
+- **YasGUI** (SPARQL Editor): http://localhost:3000  
+- **PostgreSQL** (Agent Memory): localhost:5432
+- **Dagster** (Orchestration): http://localhost:3001
+
 ## Overview
 
 **ABI** (Agentic Brain Infrastructure) is an AI Operating System that uses intent-driven routing to match user requests with pre-configured responses and actions. When you make a request, ABI identifies your intent and triggers the appropriate response - whether that's a direct answer, tool usage, or routing to a specific AI agent.
@@ -237,26 +281,6 @@ Moreover, this project is built with international standards and regulatory fram
 - **REST API**: HTTP endpoints for all agents and workflows  
 - **MCP Protocol**: Integration with Claude Desktop and VS Code
 - **Web UI**: Knowledge graph explorer and SPARQL editor
-
-## Quick Start
-
-```bash
-git clone https://github.com/jupyter-naas/abi.git
-cd abi
-make
-```
-
-**What happens:**
-1. **Setup wizard** walks you through configuration (API keys, preferences)
-2. **Local services** start automatically (knowledge graph, database)
-3. **ABI chat** opens - your AI SuperAssistant that routes to the best model for each task
-
-**Chat commands:**
-- `@claude analyze this data` - Route to Claude for analysis
-- `@qwen write some code` - Use local Qwen for privacy
-- `make chat agent=ChatGPTAgent` - Run ChatGPT directly
-- `/?` - Show all available agents and commands
-- `/exit` - End session
 
 **Other interfaces:**
 ```bash

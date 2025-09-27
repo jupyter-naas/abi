@@ -12,7 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-default: deps airgap
+default: deps local-up airgap
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
@@ -483,9 +483,37 @@ build.linux.x86_64: deps
 # Check if Docker is running before executing docker commands
 check-docker:
 	@if ! docker info > /dev/null 2>&1; then \
-		echo "❌ Docker is not running. Please start Docker Desktop first."; \
-		echo "💡 After starting Docker, run: make docker-cleanup && make local-up"; \
-		exit 1; \
+		echo "🐳 Docker not running. Attempting to start..."; \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			echo "🍎 Starting Docker Desktop on macOS..."; \
+			open -a Docker && echo "⏳ Waiting for Docker Desktop to start..." && sleep 10; \
+			for i in 1 2 3 4 5 6; do \
+				if docker info > /dev/null 2>&1; then \
+					echo "✅ Docker Desktop started successfully!"; \
+					break; \
+				fi; \
+				echo "⏳ Still waiting for Docker ($$i/6)..."; \
+				sleep 5; \
+			done; \
+		elif [ "$$(uname)" = "Linux" ]; then \
+			echo "🐧 Starting Docker service on Linux..."; \
+			if command -v systemctl > /dev/null 2>&1; then \
+				sudo systemctl start docker && echo "✅ Docker service started!"; \
+			elif command -v service > /dev/null 2>&1; then \
+				sudo service docker start && echo "✅ Docker service started!"; \
+			else \
+				echo "❌ Cannot auto-start Docker. Please start Docker manually."; \
+				exit 1; \
+			fi; \
+		else \
+			echo "❌ Unsupported OS. Please start Docker manually."; \
+			exit 1; \
+		fi; \
+		if ! docker info > /dev/null 2>&1; then \
+			echo "❌ Docker failed to start. Please start Docker Desktop manually."; \
+			echo "💡 After starting Docker, run: make docker-cleanup && make local-up"; \
+			exit 1; \
+		fi; \
 	fi
 
 # Enhanced cleanup with conflict detection

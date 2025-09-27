@@ -451,14 +451,20 @@ def main(agent_name="AbiAgent"):
     for key, value in dotenv_values().items():
         os.environ[key] = value
     
-    ai_mode = os.getenv("AI_MODE")
+    # Always run AI mode definition first
+    define_ai_mode()
     
+    # Reload environment variables after AI mode is set
+    for key, value in dotenv_values().items():
+        os.environ[key] = value
+    
+    # Now check the AI mode after it's been set
+    ai_mode = os.getenv("AI_MODE")
     
     # Skip cloud service checks in airgap mode for instant startup
     if ai_mode == "airgap":
-        # Only run essential checks for airgap mode
+        # Only run essential checks for airgap mode - no module requirements checking
         essential_checks = [
-            define_ai_mode,
             define_config_file,
             define_abi_api_key,
             define_oxigraph_url,
@@ -466,9 +472,11 @@ def main(agent_name="AbiAgent"):
         ]
         for f in essential_checks:
             f()
+        console.print("🔒 Airgap mode: Skipping cloud service and module requirements checks", style="dim")
     else:
-        # Run all checks for cloud/local modes
-        for f in checks:
+        # Run all checks for cloud/local modes (excluding define_ai_mode since we already ran it)
+        remaining_checks = [f for f in checks if f != define_ai_mode]
+        for f in remaining_checks:
             f()
 
     # Reload src/__init__.py to ensure latest changes
