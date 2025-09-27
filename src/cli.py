@@ -440,7 +440,6 @@ def check_modules_requirements():
 
 checks = [
     define_ai_mode,
-    define_naas_api_key,
     define_config_file,
     define_abi_api_key,
     define_oxigraph_url,
@@ -460,7 +459,6 @@ def main(agent_name="AbiAgent"):
     if ai_mode == "airgap":
         # Only run essential checks for airgap mode
         essential_checks = [
-            personnal_information,
             define_ai_mode,
             define_config_file,
             define_abi_api_key,
