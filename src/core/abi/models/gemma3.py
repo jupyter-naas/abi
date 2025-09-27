@@ -4,7 +4,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.outputs.chat_generation import ChatGenerationChunk
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
 from typing import Optional, List, Any, Iterator
 from abi import logger
 import json
@@ -43,8 +43,10 @@ class AirgapChatOpenAI(ChatOpenAI):
                     user_msg = msg.content
         
         # Always ensure we have a valid user message
-        if not user_msg or not user_msg.strip():
+        if not user_msg or (isinstance(user_msg, str) and not user_msg.strip()):
             user_msg = "Hello"
+        elif not isinstance(user_msg, str):
+            user_msg = str(user_msg)
         
         # Build GPT-style prompt with clear instruction formatting
         if system_prompt.strip():
@@ -65,7 +67,6 @@ class AirgapChatOpenAI(ChatOpenAI):
         # Simple tool call handling - just ensure we have proper AIMessage format
         if result.generations:
             content = result.generations[0].message.content
-            from langchain_core.messages import AIMessage
             
             # Always create AIMessage with empty tool_calls to prevent routing issues
             ai_message = AIMessage(
@@ -92,8 +93,10 @@ class AirgapChatOpenAI(ChatOpenAI):
                     user_msg = msg.content
         
         # Always ensure we have a valid user message
-        if not user_msg or not user_msg.strip():
+        if not user_msg or (isinstance(user_msg, str) and not user_msg.strip()):
             user_msg = "Hello"
+        elif not isinstance(user_msg, str):
+            user_msg = str(user_msg)
         
         # Build GPT-style prompt with clear instruction formatting
         if system_prompt.strip():
@@ -107,7 +110,7 @@ class AirgapChatOpenAI(ChatOpenAI):
         # Make streaming request to Docker Model Runner
         try:
             response = requests.post(
-                f"{self.base_url}/chat/completions",
+                f"{self.openai_api_base}/chat/completions",
                 json={
                     "model": self.model_name,
                     "messages": [{"role": "user", "content": prompt}],
@@ -136,7 +139,7 @@ class AirgapChatOpenAI(ChatOpenAI):
                                     content = choice['delta']['content']
                                     if content:
                                         yield ChatGenerationChunk(
-                                            message=AIMessage(content=content),
+                                            message=AIMessageChunk(content=content),
                                             generation_info={"finish_reason": choice.get('finish_reason')}
                                         )
                         except json.JSONDecodeError:
@@ -149,7 +152,7 @@ class AirgapChatOpenAI(ChatOpenAI):
             if result.generations:
                 content = result.generations[0].message.content
                 yield ChatGenerationChunk(
-                    message=AIMessage(content=content),
+                    message=AIMessageChunk(content=content),
                     generation_info={"finish_reason": "stop"}
                 )
 
