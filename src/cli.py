@@ -142,27 +142,6 @@ def ensure_ollama_running():
                 json.loads(line)
                 # Don't show progress bar - just let it happen quietly
 
-def personnal_information():
-    if "FIRST_NAME" in dv:
-        return
-    
-    # Natural setup experience
-    print("\nHello! I'm ABI, your AI assistant.")
-    print("Since this is our first time meeting, I'd like to ask you a few quick questions.")
-    print("This will help me understand how to work best with you.\n")
-    
-    # Collect basic user info
-    first_name = Prompt.ask("What's your first name?")
-    last_name = Prompt.ask("And your last name?")
-    email = Prompt.ask("What's your email address?", default="")
-    
-    print(f"\nNice to meet you, {first_name}.")
-    
-    append_to_dotenv("FIRST_NAME", first_name)
-    append_to_dotenv("LAST_NAME", last_name)
-    append_to_dotenv("EMAIL", email)
-
-
 def define_ai_mode():
     if "AI_MODE" in dv:
         return
@@ -459,7 +438,6 @@ def check_modules_requirements():
         console.print("\n🎉 All enabled modules have their requirements satisfied!\n", style="green")
 
 checks = [
-    personnal_information,
     define_ai_mode,
     define_naas_api_key,
     define_config_file,
