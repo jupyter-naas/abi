@@ -2,10 +2,14 @@ from .VectorStore import VectorStore
 from .Embeddings import embeddings_batch, embeddings as embeddings
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from typing import Tuple, Any
+from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 import os
+
+class IntentScope(Enum):
+    DIRECT = "direct"
+    ALL = "all"
 
 class IntentType(Enum):
     AGENT = "agent"
@@ -17,6 +21,7 @@ class Intent:
     intent_value: str
     intent_type: IntentType
     intent_target: Any
+    intent_scope: Optional[IntentScope] = IntentScope.ALL
 
 class IntentMapper:
     intents: list[Intent]
@@ -32,7 +37,8 @@ class IntentMapper:
             dimension = 768
         self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
-        self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values))
+        metadatas = [{"index": index} for index in range(len(intents_values))]
+        self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
         
         if os.getenv("AI_MODE") == "airgap":
             from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
@@ -68,7 +74,7 @@ You: code a project
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
         results = self.vector_store.similarity_search(embeddings(intent), k=k)
         for result in results:
-            result['intent'] = self.get_intent_from_value(result['text'])
+            result['intent'] = self.intents[result['metadata']['index']]
     
         return results
     

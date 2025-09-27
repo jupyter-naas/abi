@@ -1,9 +1,7 @@
 from lib.abi.models.Model import ChatModel
 from langchain_mistralai import ChatMistralAI
 from src import secret
-from typing import Optional
 from pydantic import SecretStr
-from abi import logger
 
 ID = "mistral-large-2407"
 NAME = "mistral-large-2"
@@ -15,9 +13,8 @@ TEMPERATURE = 0
 MAX_TOKENS = 4096
 MAX_RETRIES = 2
 
-model: Optional[ChatModel] = None
 mistral_api_key = secret.get("MISTRAL_API_KEY")
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
@@ -32,4 +29,3 @@ model = ChatModel(
     ),
     context_window=CONTEXT_WINDOW,
 )
-logger.debug("✅ Mistral Large 2 model loaded successfully via Mistral")
