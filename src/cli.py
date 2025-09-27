@@ -326,15 +326,21 @@ def check_modules_requirements():
     modules_to_enable: list = []
     modules_to_disable: list = []
     
+    # Show available modules info once instead of prompting for each one
+    available_modules = [m for m in sorted(all_modules) if m not in config_modules]
+    if available_modules:
+        console.print(f"\n💡 {len(available_modules)} additional modules are available but not configured.", style="dim")
+        console.print("   To enable modules, edit your config.yaml file and set enabled: true", style="dim")
+        console.print(f"   Available: {', '.join([m.split('/')[-1] for m in available_modules[:5]])}", style="dim")
+        if len(available_modules) > 5:
+            console.print(f"   ... and {len(available_modules) - 5} more", style="dim")
+        console.print()
+
     for module_path in sorted(all_modules):
         try:
             if module_path not in config_modules:
-                module_to_add = Prompt.ask(f"Module '{module_path}' is available in the project but not enabled in your config file. Do you want to enable it? (Press Enter to skip)", choices=["y", "n"], default="n")
-                if module_to_add != "y":
-                    modules_to_disable.append(module_path)
-                    continue
-                modules_to_enable.append(module_path)
-                enabled_modules.append(module_path)
+                # Skip unconfigured modules - just show info above
+                continue
 
             if module_path not in enabled_modules:
                 continue
@@ -371,11 +377,8 @@ def check_modules_requirements():
                         else:
                             console.print(f"⏭️  {key} skipped", style="yellow")
                             all_keys_provided = False
-                            # If module not previously enabled, don't add it to modules_to_enable
-                            if module_path in modules_to_enable:
-                                modules_to_enable.remove(module_path)
-                            if module_path in modules_to_disable:
-                                modules_to_disable.append(module_path)
+                            # Module will be disabled due to missing keys
+                            modules_to_disable.append(module_path)
                             break  # Exit loop early since module will be disabled
                 
                 # If any key was skipped, disable the module
@@ -398,16 +401,7 @@ def check_modules_requirements():
     # Sort modules to maintain consistent order
     config["modules"] = sorted(config["modules"], key=lambda x: x["path"])
         
-    # Add new modules to enable
-    if len(modules_to_enable) > 0:
-        console.print(f"\nEnabling {len(modules_to_enable)} modules...\n", style="green")
-    for module_path in modules_to_enable:
-        if not any(m["path"] == module_path for m in config["modules"]):
-            config["modules"].append({
-                "path": module_path,
-                "enabled": True
-            })
-            console.print(f"   • {module_path} enabled", style="green")
+    # No longer enabling modules automatically - users must edit config.yaml
     
     # Disable modules with missing requirements
     if len(modules_to_disable) > 0:
@@ -433,8 +427,6 @@ def check_modules_requirements():
     
     if modules_to_disable:
         console.print(f"\n✅ Configuration updated in {config_file} - {len(modules_to_disable)} modules disabled\n", style="yellow")
-    elif modules_to_enable:
-        console.print(f"\n✅ Configuration updated in {config_file} - {len(modules_to_enable)} modules enabled\n", style="green")
     else:
         console.print("\n🎉 All enabled modules have their requirements satisfied!\n", style="green")
 
