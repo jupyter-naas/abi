@@ -6,8 +6,8 @@ from abi.services.agent.Agent import (
 from typing import Optional
 
 
-NAME = "ChatGPT_Responses"
-DESCRIPTION = "ChatGPT Responses Agent provides real-time answers to any question on the web using responses v1 OpenAI api."
+NAME = "ChatGPT_Research"
+DESCRIPTION = "ChatGPT Research Agent provides real-time answers to any question on the web using responses v1 OpenAI api."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
 MODEL = "gpt-5-mini"
 SUGGESTIONS: list = []

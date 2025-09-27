@@ -77,11 +77,9 @@ class OpenAIResponsesIntegration(Integration):
             "input": query
         }
         response = self._make_request(method="POST", json=payload)
-        output = response.get("output")
-        logger.info(f"Output: {output}")
         if return_text:
             # Extract text content and annotations from first message with valid content
-            for item in output:
+            for item in response.get("output", []):
                 if item.get("type") != "message":
                     continue
                     
@@ -111,11 +109,11 @@ class OpenAIResponsesIntegration(Integration):
             logger.warning("No valid text content found in response")
             return ""
             
-        return output
+        return response
     
     def analyze_image(
         self, 
-        image_url: str,
+        image_urls: list[str],
         user_prompt: str = "Describe this image:",
         detail: str = "auto",
         return_text: bool = False
@@ -162,22 +160,21 @@ class OpenAIResponsesIntegration(Integration):
                             "type": "input_text", 
                             "text": user_prompt
                         },
-                        {
+                        *[{
                             "type": "input_image",
-                            "image_url": image_url,
+                            "image_url": url,
                             "detail": detail
-                        },
+                        } for url in image_urls],
                     ],
                 },
             ],
         }
         response = self._make_request(method="POST", json=payload)
-        output = response.get("output", [])
 
         if return_text:
             try:
                 # Find first message with text content
-                for item in output:
+                for item in response.get("output", []):
                     if item.get("type") == "message":
                         content = item.get("content", [])
                         if content and isinstance(content[0], dict):
@@ -191,7 +188,7 @@ class OpenAIResponsesIntegration(Integration):
             except Exception as e:
                 logger.error(f"Error parsing response: {str(e)}")
                 return str(e)
-        return output
+        return response
     
     def analyze_pdf(
         self, 
@@ -234,14 +231,13 @@ class OpenAIResponsesIntegration(Integration):
         }
 
         response = self._make_request(method="POST", json=payload)
-        output = response.get("output", [])
         
         # Extract text and annotations from output
         if return_text:
             text = ""
             annotations = []
             try:
-                for item in output:
+                for item in response.get("output", []):
                     if item.get("type") == "message":
                         content = item.get("content", [])
                         for content_item in content:
@@ -255,16 +251,24 @@ class OpenAIResponsesIntegration(Integration):
                     return "No text content found in output"
                     
                 if annotations:
+                    seen_urls = set()
+                    unique_annotations = []
+                    for a in annotations:
+                        url = a.get('url', '')
+                        if url not in seen_urls:
+                            seen_urls.add(url)
+                            unique_annotations.append(a)
+                    
                     text += "\n\nAnnotations:\n" + "\n".join(
-                        f"- [{a.get('title', '')}]({a.get('url', '')})" 
-                        for a in annotations
+                        f"- [{a.get('title', '')}]({a.get('url', '')})"
+                        for a in unique_annotations
                     )
                 return text
             except Exception as e:
                 logger.error(f"Error extracting text from output: {str(e)}")
                 return str(e)
                 
-        return output
+        return response
     
 def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
@@ -274,7 +278,7 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
         query: str = Field(..., description="The query to search the web")
 
     class AnalyzeImageSchema(BaseModel):
-        image_url: str = Field(..., description="The URL of the image to analyze")
+        image_urls: list[str] = Field(..., description="The URLs of the images to analyze")
         user_prompt: str = Field(..., description="The user prompt to use")
 
     class AnalyzePdfSchema(BaseModel):
@@ -286,18 +290,21 @@ def as_tools(configuration: OpenAIResponsesIntegrationConfiguration):
             name="chatgpt_search_web",
             description="Search the web",
             func=lambda query: integration.search_web(query=query, search_context_size="medium", return_text=True),
-            args_schema=SearchWebSchema
+            args_schema=SearchWebSchema,
+            return_direct=True
         ),
         StructuredTool(
             name="chatgpt_analyze_image",
             description="Analyze an image from URL",
-            func=lambda image_url, user_prompt: integration.analyze_image(image_url=image_url, user_prompt=user_prompt, return_text=True),
-            args_schema=AnalyzeImageSchema
+            func=lambda image_urls, user_prompt: integration.analyze_image(image_urls=image_urls, user_prompt=user_prompt, return_text=True),
+            args_schema=AnalyzeImageSchema,
+            return_direct=True
         ),
         StructuredTool(
             name="chatgpt_analyze_pdf",
             description="Analyze a PDF document from URL",
             func=lambda pdf_url, user_prompt: integration.analyze_pdf(pdf_url=pdf_url, user_prompt=user_prompt, return_text=True),
-            args_schema=AnalyzePdfSchema
+            args_schema=AnalyzePdfSchema,
+            return_direct=True
         )
     ]
