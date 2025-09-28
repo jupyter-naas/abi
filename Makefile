@@ -161,14 +161,14 @@ deps: uv git-deps .venv .env
 airgap:
 	@if grep -q "AI_MODE=airgap" .env 2>/dev/null; then \
 		echo "🤖 Checking airgap model status..."; \
-		if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
-			echo "🚀 Starting lightweight Docker model ai/gemma3 for airgap mode..."; \
-			echo "💡 Using Gemma3 (3.88B params) for better performance vs Qwen3 (8.19B params)"; \
-			docker model run ai/gemma3 --memory 4g --cpus 2 & \
+		if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/qwen3" 2>/dev/null; then \
+			echo "🚀 Starting Qwen3 8B model for airgap mode..."; \
+			echo "💡 Optimized for 16GB+ RAM systems"; \
+			docker model run ai/qwen3 --memory 12g --cpus 4 & \
 			sleep 5; \
-			echo "✓ Docker model ai/gemma3 ready for airgap operation"; \
+			echo "✓ Docker model ai/qwen3 ready for airgap operation"; \
 		else \
-			echo "✓ Docker model ai/gemma3 already running"; \
+			echo "✓ Docker model ai/qwen3 already running"; \
 		fi \
 	fi
 
@@ -596,26 +596,27 @@ container-down:
 
 # Start Docker model for airgap AI
 model-up: check-docker
-	@echo "🤖 Starting lightweight Docker model ai/gemma3..."
-	@echo "💡 Using Gemma3 (3.88B params) - optimized for performance"
-	@if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
-		docker model run ai/gemma3 --memory 4g --cpus 2 & \
+	@echo "🤖 Starting Qwen3 8B model for airgap AI..."
+	@echo "💡 Optimized for 16GB+ RAM systems"
+	@if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/qwen3" 2>/dev/null; then \
+		docker model run ai/qwen3 --memory 12g --cpus 4 & \
 		sleep 5; \
-		echo "✓ Docker model ai/gemma3 started and ready"; \
+		echo "✓ Docker model ai/qwen3 started and ready"; \
 	else \
-		echo "✓ Docker model ai/gemma3 already running"; \
+		echo "✓ Docker model ai/qwen3 already running"; \
 	fi
 
 # Stop Docker model
 model-down: check-docker
 	@echo "🛑 Stopping Docker model..."
-	@docker model stop ai/gemma3 || echo "Model not running"
+	@docker model stop ai/qwen3 || echo "Model not running"
+	@docker model stop ai/gemma3 || echo "Gemma3 not running"
 	@echo "✓ Docker model stopped"
 
 # Check Docker model status
 model-status: check-docker
 	@echo "🤖 Docker model status:"
-	@docker model ls | grep gemma3 || echo "No gemma3 model running"
+	@docker model ls | grep -E "(qwen3|gemma3)" || echo "No models running"
 
 # =============================================================================
 # DAGSTER DATA ORCHESTRATION
