@@ -8,6 +8,26 @@
 # - Workflow orchestration (Dagster)
 # =============================================================================
 
+models:
+  gemma3:
+    model: ai/gemma3
+    context_size: 8192
+    runtime_flags:
+      - --memory=4g
+      - --cpus=2
+  embeddinggemma:
+    model: ai/embeddinggemma
+    context_size: 2048
+    runtime_flags:
+      - --memory=2g
+      - --cpus=1
+  qwen3:
+    model: ai/qwen3
+    context_size: 32768
+    runtime_flags:
+      - --memory=12g
+      - --cpus=4
+
 services:
   # -----------------------------------------------------------------------------
   # ABI Main Service - AI Agent Coordinator
@@ -41,9 +61,10 @@ services:
     env_file:
       - .env  # Load environment variables (API keys, AI_MODE, etc.)
     command: ["uv", "run"]  # Start ABI application
-    # AI Models: ABI connects directly to Docker Model Runner on localhost:12434
-    # Available models: ai/gemma3, ai/qwen3, ai/embeddinggemma
-    # No Docker Compose models integration - using direct Docker Model Runner API
+    models:
+      - gemma3        # Primary conversational AI model
+      - embeddinggemma # Text embedding model for semantic search
+      - qwen3         # Advanced reasoning model
     depends_on:
       oxigraph:
         condition: service_healthy  # Wait for knowledge graph to be ready
@@ -142,7 +163,7 @@ services:
     networks:
       - abi-network
     profiles:
-      - local  # Development tool for knowledge graph exploration
+      - local 
       - prod
 
   # -----------------------------------------------------------------------------
@@ -188,21 +209,6 @@ volumes:
   oxigraph_data:  # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
-
-# =============================================================================
-# AI MODELS - DOCKER MODEL RUNNER INTEGRATION
-# =============================================================================
-# ABI uses Docker Model Runner directly via http://localhost:12434/engines/v1
-# Models are managed outside Docker Compose using 'docker model' commands
-# Available models: ai/gemma3, ai/qwen3, ai/embeddinggemma
-# 
-# To manage models:
-#   docker model run ai/qwen3    # Start a model
-#   docker model ls              # List running models  
-#   docker model stop ai/qwen3   # Stop a model
-#
-# Note: We don't use Docker Compose 'models:' section because ABI connects
-# directly to Docker Model Runner API, not via Compose environment variables
 
 # =============================================================================
 # NETWORK CONFIGURATION

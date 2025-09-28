@@ -33,7 +33,7 @@ if os.environ.get("AI_MODE") == "airgap":
         
         return res.json()["data"][0]["embedding"]
         
-    # @cache(lambda texts: _sha1s(texts), cache_type=DataType.PICKLE)
+    @cache(lambda texts: _sha1s(texts), cache_type=DataType.PICKLE)
     def embeddings_batch(texts) -> list[list[float]]:
         ret = []
         
