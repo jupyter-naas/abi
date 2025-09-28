@@ -145,16 +145,24 @@ class AirgapChatOpenAI(ChatOpenAI):
                         except json.JSONDecodeError:
                             continue
             
+        except requests.exceptions.Timeout:
+            logger.error("Docker Model Runner timeout - model may be overloaded")
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="⚠️ Model response timeout. Try a shorter message or switch to cloud mode."),
+                generation_info={"finish_reason": "timeout"}
+            )
+        except requests.exceptions.ConnectionError:
+            logger.error("Docker Model Runner connection failed")
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="❌ Local model unavailable. Use 'make model-up' or switch to cloud mode."),
+                generation_info={"finish_reason": "connection_error"}
+            )
         except Exception as e:
-            logger.error(f"Streaming error: {e}")
-            # Fallback to non-streaming
-            result = self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-            if result.generations:
-                content = result.generations[0].message.content
-                yield ChatGenerationChunk(
-                    message=AIMessageChunk(content=content),
-                    generation_info={"finish_reason": "stop"}
-                )
+            logger.error(f"Docker Model Runner error: {e}")
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="🔄 Model error. Try restarting with 'make model-down && make model-up'"),
+                generation_info={"finish_reason": "error"}
+            )
 
 ID = "ai/gemma3"
 NAME = "gemma3-airgap"
