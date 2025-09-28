@@ -44,13 +44,20 @@ if os.environ.get("AI_MODE") == "airgap":
 
 else:
     from langchain_openai import OpenAIEmbeddings
-    embeddings_model = OpenAIEmbeddings(model="text-embedding-ada-002")
-
+    
+    # Lazy initialization to avoid import-time API key requirement
+    _embeddings_model = None
+    
+    def _get_embeddings_model():
+        global _embeddings_model
+        if _embeddings_model is None:
+            _embeddings_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+        return _embeddings_model
 
     @cache(lambda texts: _sha1s(texts), cache_type=DataType.PICKLE)
     def embeddings_batch(texts):
         for e in tqdm([texts], "Embedding intents"):
-            return embeddings_model.embed_documents(e)
+            return _get_embeddings_model().embed_documents(e)
     
     @cache(lambda text: _sha1(text), cache_type=DataType.PICKLE)
     def embeddings(text):
@@ -63,6 +70,6 @@ else:
             List[float]: The embedding vector
         """
 
-        return embeddings_model.embed_query(text)
+        return _get_embeddings_model().embed_query(text)
 
 

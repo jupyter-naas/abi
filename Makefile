@@ -66,6 +66,7 @@ help:
 	@echo ""
 	@echo "TESTING & QUALITY ASSURANCE:"
 	@echo "  test                     Run all Python tests using pytest"
+	@echo "  test-coverage            Run tests with coverage reporting and badge generation"
 	@echo "  test-abi                 Run tests specifically for the abi library"
 	@echo "  test-api                 Run API-specific tests"
 	@echo "  test-api-init            Test API initialization with production secrets"
@@ -324,6 +325,15 @@ oxigraph-explorer:
 path=tests/
 test: deps
 	@ uv run python -m pytest .
+
+# Run tests with coverage reporting
+test-coverage: deps
+	@ uv run python -m pytest tests/ lib/abi/services/cache/ lib/abi/services/secret/ lib/abi/services/triple_store/ --cov=lib --cov-report=html --cov-report=term --cov-report=xml
+	@ coverage-badge -o coverage.svg
+	@ echo "📊 Coverage report generated:"
+	@ echo "  - HTML: htmlcov/index.html"
+	@ echo "  - XML: coverage.xml" 
+	@ echo "  - Badge: coverage.svg"
 
 # Run tests specifically for the abi library
 test-abi: deps
