@@ -31,15 +31,22 @@ class IntentMapper:
     def __init__(self, intents: list[Intent]):
         self.intents = intents
         
-        dimension = 1536
-        if os.environ.get('AI_MODE') == "airgap":
-            dimension = 768
-        self.vector_store = VectorStore(dimension=dimension)
+        # Auto-detect dimension based on actual embeddings to avoid mismatch
         intents_values = [intent.intent_value for intent in intents]
+        if intents_values:
+            # Get a sample embedding to detect dimension
+            sample_embedding = embeddings(intents_values[0])
+            dimension = len(sample_embedding)
+        else:
+            # Fallback to environment-based detection
+            dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+            
+        self.vector_store = VectorStore(dimension=dimension)
         metadatas = [{"index": index} for index in range(len(intents_values))]
         self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
         
-        if os.getenv("AI_MODE") == "airgap":
+        # Detect if we're using local embeddings (768 dim = airgap mode)
+        if dimension == 768 or os.getenv("AI_MODE") == "airgap":
             from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
             self.model = AirgapChatOpenAI(
                 model="ai/gemma3",
