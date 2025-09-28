@@ -67,6 +67,7 @@ help:
 	@echo "TESTING & QUALITY ASSURANCE:"
 	@echo "  test                     Run all Python tests using pytest"
 	@echo "  test-coverage            Run tests with coverage reporting and badge generation"
+	@echo "  test-ci                  Run basic tests for CI (no external dependencies)"
 	@echo "  test-abi                 Run tests specifically for the abi library"
 	@echo "  test-api                 Run API-specific tests"
 	@echo "  test-api-init            Test API initialization with production secrets"
@@ -329,11 +330,15 @@ test: deps
 # Run tests with coverage reporting
 test-coverage: deps
 	@ uv run python -m pytest tests/ lib/abi/services/cache/ lib/abi/services/secret/ lib/abi/services/triple_store/ --cov=lib --cov-report=html --cov-report=term --cov-report=xml
-	@ coverage-badge -o coverage.svg
+	@ uv run coverage-badge -o coverage.svg
 	@ echo "📊 Coverage report generated:"
 	@ echo "  - HTML: htmlcov/index.html"
 	@ echo "  - XML: coverage.xml" 
 	@ echo "  - Badge: coverage.svg"
+
+# Run basic tests for CI (no external dependencies)
+test-ci: deps
+	@ uv run python -m pytest tests/unit/test_basic.py --cov=lib --cov-report=xml --cov-report=term -v
 
 # Run tests specifically for the abi library
 test-abi: deps
