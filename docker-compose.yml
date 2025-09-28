@@ -1,59 +1,77 @@
+# =============================================================================
+# ABI (Agentic Brain Infrastructure) Docker Compose Configuration
+# =============================================================================
+# This file defines a complete AI agent ecosystem with:
+# - Multi-model AI capabilities (chat, embeddings, reasoning)
+# - Knowledge graph storage (Oxigraph + SPARQL interface)
+# - Agent memory persistence (PostgreSQL)
+# - Workflow orchestration (Dagster)
+# =============================================================================
+
 services:
+  # -----------------------------------------------------------------------------
+  # ABI Main Service - AI Agent Coordinator
+  # -----------------------------------------------------------------------------
+  # The core ABI application that routes between specialized AI agents
+  # and coordinates multi-model conversations
   abi:
     build:
       context: .
       dockerfile: docker/images/Dockerfile
     ports:
-      - 9879:9879
-      - 8501:8501
+      - 9879:9879  # REST API endpoint - http://localhost:9879
+      - 8501:8501  # Streamlit web interface - http://localhost:8501
     volumes:
+      # Development volumes for hot-reload
       - ./scripts:/app/scripts
       - ./uv.lock:/app/uv.lock
       - ./config.yaml:/app/config.yaml
       - ./pyproject.toml:/app/pyproject.toml
       - ./Makefile:/app/Makefile
-      - ./storage:/app/storage
-      - ./src:/app/src
-      - ./lib:/app/lib
+      - ./storage:/app/storage  # Local file storage
+      - ./src:/app/src          # Source code
+      - ./lib:/app/lib          # Libraries
       - ./README.md:/app/README.md
-      - cargo-cache:/root/.cargo
-      - venv_cache:/app/.venv
+      # Cached volumes for performance
+      - cargo-cache:/root/.cargo    # Rust dependencies cache
+      - venv_cache:/app/.venv       # Python virtual environment cache
     environment:
       - PYTHONPATH=/app
       - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
     env_file:
-      - .env
-    command: ["uv", "run"]
+      - .env  # Load environment variables (API keys, AI_MODE, etc.)
+    command: ["uv", "run"]  # Start ABI application
+    # AI Model bindings - Docker will inject environment variables:
+    # GEMMA3_URL, GEMMA3_MODEL, EMBEDDINGGEMMA_URL, EMBEDDINGGEMMA_MODEL, QWEN3_URL, QWEN3_MODEL
     models:
-      llm:
-        endpoint_var: LLM_BASE_URL
-        model_var: LLM_MODEL_NAME
-      embeddings:
-        endpoint_var: EMBEDDINGS_BASE_URL
-        model_var: EMBEDDINGS_MODEL_NAME
-      qwen3:
-        endpoint_var: QWEN3_BASE_URL
-        model_var: QWEN3_MODEL_NAME
+      - gemma3        # Fast conversational AI model
+      - embeddinggemma # Text embedding model for semantic search
+      - qwen3         # Advanced reasoning model
     depends_on:
       oxigraph:
-        condition: service_healthy
+        condition: service_healthy  # Wait for knowledge graph to be ready
       postgres:
-        condition: service_healthy
+        condition: service_healthy  # Wait for database to be ready
     networks:
       - abi-network
     profiles:
-      - container  # Only used when explicitly running in container mode
+      - container  # Only starts when running 'make container-up'
   
+  # -----------------------------------------------------------------------------
+  # PostgreSQL Database - Agent Memory & Conversation Storage
+  # -----------------------------------------------------------------------------
+  # Stores agent conversation history, checkpoints, and persistent memory
+  # Used by LangGraph for agent state management and memory retrieval
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine  # Latest stable PostgreSQL
     environment:
       POSTGRES_USER: abi_user
       POSTGRES_PASSWORD: abi_password
-      POSTGRES_DB: abi_memory
+      POSTGRES_DB: abi_memory  # Database for agent conversations and memory
     ports:
-      - 5432:5432
+      - 5432:5432  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:5432/abi_memory
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data  # Persistent data storage
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U abi_user -d abi_memory"]
       interval: 5s
@@ -62,27 +80,43 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
-      - container
+      - local      # Available in local development
+      - prod       # Available in production
+      - container  # Available when running ABI in container mode
 
+  # -----------------------------------------------------------------------------
+  # Oxigraph - Knowledge Graph Database (RDF/SPARQL)
+  # -----------------------------------------------------------------------------
+  # Stores structured knowledge as RDF triples for semantic reasoning
+  # Supports SPARQL queries for complex knowledge graph operations
   oxigraph:
     image: oxigraph/oxigraph:latest
     expose:
-      - 7878
+      - 7878  # Internal port (accessed via proxy)
     volumes:
-      - oxigraph_data:/data
+      - oxigraph_data:/data  # Persistent RDF triple storage
     command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7878/query || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
+      - local      # Available in local development
+      - prod       # Available in production  
+      - container  # Available when running ABI in container mode
 
+  # -----------------------------------------------------------------------------
+  # Oxigraph Proxy - Web Interface for Knowledge Graph
+  # -----------------------------------------------------------------------------
+  # Nginx proxy that serves the Oxigraph admin interface
+  # Provides web-based access to RDF data and SPARQL endpoint
   oxigraph-proxy:
     image: nginx:alpine
     ports:
-      - 7878:80
+      - 7878:80  # Oxigraph web interface - http://localhost:7878
     volumes:
       - ./src/core/abi/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
       - ./src/core/abi/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
@@ -91,30 +125,40 @@ services:
     networks:
       - abi-network
     profiles:
-      - local
+      - local  # Only in development (production uses direct access)
       - prod
 
+  # -----------------------------------------------------------------------------
+  # YasGUI - SPARQL Query Interface
+  # -----------------------------------------------------------------------------
+  # Web-based SPARQL query editor and visualizer
+  # Allows interactive exploration of the knowledge graph
   yasgui:
     image: erikap/yasgui:latest
-    platform: linux/amd64  # Force x86_64 for compatibility
+    platform: linux/amd64  # Force x86_64 for compatibility with Apple Silicon
     ports:
-      - 3000:80
+      - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:7878/query
+      - DEFAULT_SPARQL_ENDPOINT=http://oxigraph:7878/query  # Points to Oxigraph via Docker network
     depends_on:
       - oxigraph
     networks:
       - abi-network
     profiles:
-      - local
+      - local  # Development tool for knowledge graph exploration
       - prod
 
+  # -----------------------------------------------------------------------------
+  # Dagster - Workflow Orchestration & Data Pipeline Management
+  # -----------------------------------------------------------------------------
+  # Manages data pipelines, asset materialization, and workflow scheduling
+  # Provides web UI for monitoring and managing data operations
   dagster:
     build:
       context: .
       dockerfile: docker/images/Dockerfile
     ports:
-      - 3001:3000  # Changed to 3001 to avoid conflict with yasgui
+      - 3001:3000  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
     volumes:
       - ./scripts:/app/scripts
       - ./uv.lock:/app/uv.lock
@@ -124,47 +168,68 @@ services:
       - ./lib:/app/lib
       - ./README.md:/app/README.md
       - venv_cache:/app/.venv
-      - dagster_home:/app/.dagster
+      - dagster_home:/app/.dagster  # Dagster metadata and run history
     environment:
       - PYTHONPATH=/app
       - DAGSTER_HOME=/app/.dagster
-    command: ["sh", "-c", "uv sync --frozen --all-extras && uv run python scripts/generate_dagster_command.py | xargs uv run"]
+    command: ["uv", "run", "dagster", "dev"]  # Start Dagster development server
     networks:
       - abi-network
     profiles:
-      - local
-      - prod
+      - local      # Available in local development
+      - prod       # Available in production
+      - container  # Available when running ABI in container mode
 
+# =============================================================================
+# PERSISTENT VOLUMES
+# =============================================================================
+# Named volumes for persistent data storage across container restarts
 
 volumes:
-  cargo-cache:
-  venv_cache:
-  oxigraph_data:
-  postgres_data:
-  dagster_home: 
+  cargo-cache:    # Rust/Cargo dependencies cache for faster builds
+  venv_cache:     # Python virtual environment cache for faster startup
+  oxigraph_data:  # RDF triple store data (knowledge graph persistence)
+  postgres_data:  # PostgreSQL database files (agent memory persistence)
+  dagster_home:   # Dagster metadata, run history, and configuration
+
+# =============================================================================
+# AI MODELS CONFIGURATION (Docker AI Specification)
+# =============================================================================
+# Defines AI models available to services with Docker Model Runner
+# Models are automatically pulled and made available via environment variables
 
 models:
-  llm:
-    model: ai/gemma3
-    context_size: 4096
+  # Fast conversational AI model - optimized for quick responses
+  gemma3:
+    model: ai/gemma3           # Google Gemma 3B model
+    context_size: 4096         # Token context window
     runtime_flags:
-      - "--temp"
+      - "--temp"               # Temperature for response creativity
       - "0.7"
-      - "--threads"
+      - "--threads"            # CPU threads for inference
       - "4"
-  embeddings:
-    model: ai/embeddinggemma
-    context_size: 512
+  
+  # Text embedding model - for semantic search and similarity
+  embeddinggemma:
+    model: ai/embeddinggemma   # Google Gemma embedding model
+    context_size: 512          # Smaller context for efficiency
+  
+  # Advanced reasoning model - for complex analysis and problem-solving
   qwen3:
-    model: ai/qwen3
-    context_size: 8192
+    model: ai/qwen3            # Alibaba Qwen 8B model
+    context_size: 8192         # Large context for complex reasoning
     runtime_flags:
-      - "--temp"
+      - "--temp"               # Temperature for response creativity
       - "0.7"
-      - "--threads"
+      - "--threads"            # CPU threads for inference
       - "4"
-      - "--mlock"
+      - "--mlock"              # Lock memory to prevent swapping
+
+# =============================================================================
+# NETWORK CONFIGURATION
+# =============================================================================
+# Custom bridge network for service-to-service communication
 
 networks:
   abi-network:
-    driver: bridge
+    driver: bridge  # Default Docker bridge network for internal communication
