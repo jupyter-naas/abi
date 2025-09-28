@@ -1,7 +1,6 @@
 from .VectorStore import VectorStore
 from .Embeddings import embeddings_batch, embeddings as embeddings
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
 from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
@@ -75,15 +74,11 @@ You: code a project
         results = self.vector_store.similarity_search(embeddings(intent), k=k)
         for result in results:
             result['intent'] = self.intents[result['metadata']['index']]
-    
+        
         return results
     
     def map_prompt(self, prompt: str, k: int = 1) -> Tuple[list[dict], list[dict]]:
-        response = self.model.invoke([
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=prompt)
-        ])
-        
-        assert isinstance(response.content, str)
-        intent : str = response.content.lower().strip()
-        return self.map_intent(intent, k), self.map_intent(prompt, k)
+        # Use direct prompt mapping without LLM intent extraction for speed
+        # Return empty first result and prompt results as second (matches expected format)
+        prompt_results = self.map_intent(prompt, k)
+        return [], prompt_results
