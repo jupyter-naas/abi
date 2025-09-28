@@ -160,16 +160,9 @@ deps: uv git-deps .venv .env
 # Ensure airgap model is running if AI_MODE=airgap
 airgap:
 	@if grep -q "AI_MODE=airgap" .env 2>/dev/null; then \
-		echo "🤖 Checking airgap model status..."; \
-		if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/qwen3" 2>/dev/null; then \
-			echo "🚀 Starting Qwen3 8B model for airgap mode..."; \
-			echo "💡 Optimized for 16GB+ RAM systems"; \
-			docker model run ai/qwen3 --memory 12g --cpus 4 & \
-			sleep 5; \
-			echo "✓ Docker model ai/qwen3 ready for airgap operation"; \
-		else \
-			echo "✓ Docker model ai/qwen3 already running"; \
-		fi \
+		echo "🤖 Starting airgap models via Docker Compose..."; \
+		docker compose --profile local up model-puller -d; \
+		echo "✓ Docker AI models ready for airgap operation"; \
 	fi
 
 # Ensure uv package manager is installed and Python 3.10 is available
@@ -594,29 +587,23 @@ container-down:
 	@docker compose -f docker-compose.yml --profile container down
 	@echo "✓ ABI container stopped"
 
-# Start Docker model for airgap AI
+# Start Docker AI models via Compose
 model-up: check-docker
-	@echo "🤖 Starting Qwen3 8B model for airgap AI..."
-	@echo "💡 Optimized for 16GB+ RAM systems"
-	@if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/qwen3" 2>/dev/null; then \
-		docker model run ai/qwen3 --memory 12g --cpus 4 & \
-		sleep 5; \
-		echo "✓ Docker model ai/qwen3 started and ready"; \
-	else \
-		echo "✓ Docker model ai/qwen3 already running"; \
-	fi
+	@echo "🤖 Starting AI models via Docker Compose..."
+	@docker compose --profile local up model-puller -d
+	@echo "✓ Docker AI models started and ready"
 
-# Stop Docker model
+# Stop Docker AI models
 model-down: check-docker
-	@echo "🛑 Stopping Docker model..."
-	@docker model stop ai/qwen3 || echo "Model not running"
-	@docker model stop ai/gemma3 || echo "Gemma3 not running"
-	@echo "✓ Docker model stopped"
+	@echo "🛑 Stopping Docker AI models..."
+	@docker compose --profile local stop model-puller
+	@echo "✓ Docker AI models stopped"
 
-# Check Docker model status
+# Check Docker AI models status
 model-status: check-docker
-	@echo "🤖 Docker model status:"
-	@docker model ls | grep -E "(qwen3|gemma3)" || echo "No models running"
+	@echo "🤖 Docker AI models status:"
+	@docker compose --profile local ps model-puller
+	@docker model ls
 
 # =============================================================================
 # DAGSTER DATA ORCHESTRATION
