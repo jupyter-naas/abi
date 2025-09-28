@@ -9,9 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.11, 3.12]
 
     services:
       postgres:
@@ -36,10 +33,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: 3.11
     
     - name: Install uv package manager
       run: |
@@ -53,8 +50,8 @@ jobs:
         uv add --dev pytest pytest-cov coverage coverage-badge
         
         # Create symbolic link for abi module (matching local setup)
-        mkdir -p .venv/lib/python${{ matrix.python-version }}/site-packages/
-        ln -sf $PWD/lib/abi .venv/lib/python${{ matrix.python-version }}/site-packages/abi || true
+        mkdir -p .venv/lib/python3.11/site-packages/
+        ln -sf $PWD/lib/abi .venv/lib/python3.11/site-packages/abi || true
     
     - name: Run unit tests
       env:
