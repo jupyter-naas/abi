@@ -577,12 +577,12 @@ dagster-ui:
 # Check status of Dagster assets
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker-compose -f docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
+	@docker-compose -f docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.core.abi.orchestration.definitions
 
 # Materialize all Dagster assets
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker-compose -f docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
+	@docker-compose -f docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.core.abi.orchestration.definitions
 
 # =============================================================================
 # DATA MANAGEMENT & OPERATIONS

@@ -1,0 +1,303 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix dc:    <http://purl.org/dc/elements/1.1/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# BFO and CCO imports
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+
+# ABI and RSS namespaces  
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix rss:   <http://ontology.naas.ai/rss/> .
+
+<http://ontology.naas.ai/rss/> rdf:type owl:Ontology ;
+    dc:title "RSS News BFO-Compliant Ontology" ;
+    dc:description "BFO-compliant ontology for RSS news feed data using the 7 buckets approach" ;
+    dc:creator "ABI Orchestration System" ;
+    dcterms:created "2025-09-18"^^xsd:date ;
+    owl:imports <http://purl.obolibrary.org/obo/bfo.owl> ;
+    owl:imports <https://www.commoncoreontologies.org/cco-modules/CommonCoreOntologies.ttl> .
+
+# ==============================================================================
+# BFO 7 BUCKETS MAPPING FOR RSS NEWS DATA
+# ==============================================================================
+
+# ==============================================================================
+# 1. WHAT/WHO → Material Entities (BFO_0000040)
+# ==============================================================================
+
+rss:NewsArticle rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;  # Material Entity
+    rdfs:label "News Article" ;
+    rdfs:comment "A published news article obtained from RSS feed" .
+
+rss:NewsSource rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;  # Material Entity
+    rdfs:subClassOf cco:Organization ;  # More specific type
+    rdfs:label "News Source" ;
+    rdfs:comment "An organization that publishes news content" .
+
+rss:RSSFeedSensor rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;  # Material Entity
+    rdfs:label "RSS Feed Sensor" ;
+    rdfs:comment "A monitoring system that collects RSS feed data" .
+
+# ==============================================================================
+# 2. HOW-IT-IS → Qualities (BFO_0000019)
+# ==============================================================================
+
+rss:ArticleTitle rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;  # Quality
+    rdfs:label "Article Title Quality" ;
+    rdfs:comment "The title quality of a news article" .
+
+rss:ArticleSummary rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;  # Quality
+    rdfs:label "Article Summary Quality" ;
+    rdfs:comment "The summary quality of a news article" .
+
+rss:ContentType rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;  # Quality
+    rdfs:label "Content Type Quality" ;
+    rdfs:comment "The content type quality (e.g., text/html, text/plain)" .
+
+rss:RelevanceScore rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000019 ;  # Quality
+    rdfs:label "Relevance Score Quality" ;
+    rdfs:comment "The relevance score of an article to a query" .
+
+# ==============================================================================
+# 3. WHY-POTENTIAL → Realizable Entities (BFO_0000017)
+# ==============================================================================
+
+rss:InformationDisseminationCapability rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;  # Realizable Entity
+    rdfs:label "Information Dissemination Capability" ;
+    rdfs:comment "The capability to disseminate information to audiences" .
+
+rss:NewsReportingFunction rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000034 ;  # Function
+    rdfs:label "News Reporting Function" ;
+    rdfs:comment "The function of reporting news and information" .
+
+rss:MonitoringCapability rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000017 ;  # Realizable Entity
+    rdfs:label "Monitoring Capability" ;
+    rdfs:comment "The capability to monitor and collect RSS feed data" .
+
+# ==============================================================================
+# 4. HOW-IT-HAPPENS → Processes (BFO_0000015)
+# ==============================================================================
+
+rss:NewsPublicationProcess rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;  # Process
+    rdfs:label "News Publication Process" ;
+    rdfs:comment "The process of publishing a news article" .
+
+rss:RSSDataCollectionProcess rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;  # Process
+    rdfs:label "RSS Data Collection Process" ;
+    rdfs:comment "The process of collecting RSS feed data" .
+
+rss:InformationExtractionProcess rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;  # Process
+    rdfs:label "Information Extraction Process" ;
+    rdfs:comment "The process of extracting structured information from RSS data" .
+
+# ==============================================================================
+# 5. WHEN → Temporal Regions (BFO_0000008)
+# ==============================================================================
+
+rss:PublicationTime rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;  # Temporal Region
+    rdfs:label "Publication Time" ;
+    rdfs:comment "The temporal region when an article was published" .
+
+rss:CollectionTime rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000008 ;  # Temporal Region
+    rdfs:label "Collection Time" ;
+    rdfs:comment "The temporal region when RSS data was collected" .
+
+rss:MonitoringInterval rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000038 ;  # One Dimensional Temporal Region
+    rdfs:label "Monitoring Interval" ;
+    rdfs:comment "The temporal interval for RSS monitoring" .
+
+# ==============================================================================
+# 6. WHERE → Spatial Regions (BFO_0000006)
+# ==============================================================================
+
+rss:DigitalLocation rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000006 ;  # Spatial Region
+    rdfs:label "Digital Location" ;
+    rdfs:comment "A digital spatial region identified by a URL" .
+
+rss:GeographicScope rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000029 ;  # Three Dimensional Spatial Region
+    rdfs:label "Geographic Scope" ;
+    rdfs:comment "The geographic region covered by news content" .
+
+# ==============================================================================
+# 7. HOW-WE-KNOW → Information Content Entities (BFO_0000031)
+# ==============================================================================
+
+rss:RSSFeedRecord rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;  # Information Content Entity
+    rdfs:label "RSS Feed Record" ;
+    rdfs:comment "An information entity representing RSS feed entry data" .
+
+rss:CollectionMetadata rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;  # Information Content Entity
+    rdfs:label "Collection Metadata" ;
+    rdfs:comment "Metadata about the RSS data collection process" .
+
+rss:QuerySpecification rdf:type owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;  # Information Content Entity
+    rdfs:label "Query Specification" ;
+    rdfs:comment "The search query specification used for RSS monitoring" .
+
+# ==============================================================================
+# OBJECT PROPERTIES
+# ==============================================================================
+
+# Material Entity Relations
+rss:publishedBy rdf:type owl:ObjectProperty ;
+    rdfs:domain rss:NewsArticle ;
+    rdfs:range rss:NewsSource ;
+    rdfs:label "published by" ;
+    rdfs:comment "Relates a news article to its publishing source" .
+
+rss:monitorsQuery rdf:type owl:ObjectProperty ;
+    rdfs:domain rss:RSSFeedSensor ;
+    rdfs:range rss:QuerySpecification ;
+    rdfs:label "monitors query" ;
+    rdfs:comment "Relates a sensor to the query it monitors" .
+
+# Quality Relations
+rss:hasQuality rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000040 ;  # Material Entity
+    rdfs:range bfo:BFO_0000019 ;   # Quality
+    rdfs:label "has quality" ;
+    rdfs:comment "Relates a material entity to its qualities" .
+
+# Realizable Entity Relations
+rss:hasCapability rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000040 ;  # Material Entity
+    rdfs:range bfo:BFO_0000017 ;   # Realizable Entity
+    rdfs:label "has capability" ;
+    rdfs:comment "Relates an entity to its capabilities" .
+
+rss:hasFunction rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000040 ;  # Material Entity
+    rdfs:range bfo:BFO_0000034 ;   # Function
+    rdfs:label "has function" ;
+    rdfs:comment "Relates an entity to its functions" .
+
+# Process Relations
+rss:hasOutput rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ;  # Process
+    rdfs:range bfo:BFO_0000040 ;   # Material Entity
+    rdfs:label "has output" ;
+    rdfs:comment "Relates a process to its output entities" .
+
+rss:collectsFrom rdf:type owl:ObjectProperty ;
+    rdfs:domain rss:RSSDataCollectionProcess ;
+    rdfs:range rss:NewsArticle ;
+    rdfs:label "collects from" ;
+    rdfs:comment "Relates collection process to source articles" .
+
+rss:followsProcess rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ;  # Process
+    rdfs:range bfo:BFO_0000015 ;   # Process
+    rdfs:label "follows process" ;
+    rdfs:comment "Relates processes in temporal sequence" .
+
+# Temporal Relations
+rss:occursAt rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000015 ;  # Process
+    rdfs:range bfo:BFO_0000008 ;   # Temporal Region
+    rdfs:label "occurs at" ;
+    rdfs:comment "Relates a process to its temporal region" .
+
+# Spatial Relations
+rss:locatedAt rdf:type owl:ObjectProperty ;
+    rdfs:domain bfo:BFO_0000040 ;  # Material Entity
+    rdfs:range bfo:BFO_0000006 ;   # Spatial Region
+    rdfs:label "located at" ;
+    rdfs:comment "Relates an entity to its spatial location" .
+
+# Information Relations
+rss:documentsArticle rdf:type owl:ObjectProperty ;
+    rdfs:domain rss:RSSFeedRecord ;
+    rdfs:range rss:NewsArticle ;
+    rdfs:label "documents article" ;
+    rdfs:comment "Relates RSS record to the article it documents" .
+
+# ==============================================================================
+# DATA PROPERTIES
+# ==============================================================================
+
+rss:hasURL rdf:type owl:DatatypeProperty ;
+    rdfs:domain [ rdf:type owl:Class ;
+                  owl:unionOf ( rss:NewsArticle rss:DigitalLocation ) ] ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "has URL" ;
+    rdfs:comment "The URL of a digital resource" .
+
+rss:hasTimestamp rdf:type owl:DatatypeProperty ;
+    rdfs:domain bfo:BFO_0000008 ;  # Temporal Region
+    rdfs:range xsd:dateTime ;
+    rdfs:label "has timestamp" ;
+    rdfs:comment "The timestamp of a temporal region" .
+
+rss:hasValue rdf:type owl:DatatypeProperty ;
+    rdfs:domain bfo:BFO_0000019 ;  # Quality
+    rdfs:range xsd:string ;
+    rdfs:label "has value" ;
+    rdfs:comment "The value of a quality" .
+
+rss:hasCollectionTimestamp rdf:type owl:DatatypeProperty ;
+    rdfs:domain rss:RSSFeedRecord ;
+    rdfs:range xsd:string ;
+    rdfs:label "has collection timestamp" ;
+    rdfs:comment "The timestamp when RSS data was collected" .
+
+rss:hasQueryTerm rdf:type owl:DatatypeProperty ;
+    rdfs:domain rss:RSSFeedRecord ;
+    rdfs:range xsd:string ;
+    rdfs:label "has query term" ;
+    rdfs:comment "The search query term used" .
+
+rss:hasSensorName rdf:type owl:DatatypeProperty ;
+    rdfs:domain rss:RSSFeedRecord ;
+    rdfs:range xsd:string ;
+    rdfs:label "has sensor name" ;
+    rdfs:comment "The name of the RSS sensor" .
+
+rss:hasRawData rdf:type owl:DatatypeProperty ;
+    rdfs:domain rss:CollectionMetadata ;
+    rdfs:range xsd:string ;
+    rdfs:label "has raw data" ;
+    rdfs:comment "The raw JSON data from RSS collection" .
+
+# ==============================================================================
+# VALIDATION CONSTRAINTS
+# ==============================================================================
+
+# Every news article must have at least one quality
+rss:NewsArticle rdfs:subClassOf [ rdf:type owl:Restriction ;
+                                  owl:onProperty rss:hasQuality ;
+                                  owl:minCardinality 1 ] .
+
+# Every RSS feed record must document exactly one article
+rss:RSSFeedRecord rdfs:subClassOf [ rdf:type owl:Restriction ;
+                                    owl:onProperty rss:documentsArticle ;
+                                    owl:cardinality 1 ] .
+
+# Every collection process must occur at a temporal region
+rss:RSSDataCollectionProcess rdfs:subClassOf [ rdf:type owl:Restriction ;
+                                               owl:onProperty rss:occursAt ;
+                                               owl:minCardinality 1 ] .
