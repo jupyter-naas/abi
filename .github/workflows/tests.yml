@@ -67,7 +67,7 @@ jobs:
     
     - name: Generate coverage badge
       run: |
-        uv run coverage-badge -o coverage.svg
+        uv run coverage-badge -f -o coverage.svg
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
