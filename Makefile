@@ -162,8 +162,9 @@ airgap:
 	@if grep -q "AI_MODE=airgap" .env 2>/dev/null; then \
 		echo "🤖 Checking airgap model status..."; \
 		if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
-			echo "🚀 Starting Docker model ai/gemma3 for airgap mode..."; \
-			docker model run ai/gemma3 & \
+			echo "🚀 Starting lightweight Docker model ai/gemma3 for airgap mode..."; \
+			echo "💡 Using Gemma3 (3.88B params) for better performance vs Qwen3 (8.19B params)"; \
+			docker model run ai/gemma3 --memory 4g --cpus 2 & \
 			sleep 5; \
 			echo "✓ Docker model ai/gemma3 ready for airgap operation"; \
 		else \
@@ -595,9 +596,10 @@ container-down:
 
 # Start Docker model for airgap AI
 model-up: check-docker
-	@echo "🤖 Starting Docker model ai/gemma3..."
+	@echo "🤖 Starting lightweight Docker model ai/gemma3..."
+	@echo "💡 Using Gemma3 (3.88B params) - optimized for performance"
 	@if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
-		docker model run ai/gemma3 & \
+		docker model run ai/gemma3 --memory 4g --cpus 2 & \
 		sleep 5; \
 		echo "✓ Docker model ai/gemma3 started and ready"; \
 	else \
