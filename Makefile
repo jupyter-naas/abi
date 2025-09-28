@@ -330,7 +330,7 @@ test: deps
 # Run tests with coverage reporting
 test-coverage: deps
 	@ uv run python -m pytest tests/ lib/abi/services/cache/ lib/abi/services/secret/ lib/abi/services/triple_store/ --cov=lib --cov-report=html --cov-report=term --cov-report=xml
-	@ uv run coverage-badge -o coverage.svg
+	@ uv run coverage-badge -f -o coverage.svg
 	@ echo "📊 Coverage report generated:"
 	@ echo "  - HTML: htmlcov/index.html"
 	@ echo "  - XML: coverage.xml" 
