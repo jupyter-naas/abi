@@ -1,6 +1,8 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
-from typing import Optional
-from langchain_openai import ChatOpenAI
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
 from fastapi import APIRouter
