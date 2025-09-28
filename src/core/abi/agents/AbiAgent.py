@@ -142,7 +142,7 @@ def create_agent(
     # from src.core.abi.models.gemma3 import model as airgap_model
     from langchain_openai import ChatOpenAI
     airgap_model = ChatOpenAI(
-        model="ai/gemma3",  # Lighter model: 3.88B vs 8.19B parameters
+        model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
         temperature=0.7,
         api_key="no needed",  # type: ignore
         base_url="http://localhost:12434/engines/v1",
