@@ -6,10 +6,8 @@ from abi.services.agent.Agent import (
 )
 from fastapi import APIRouter
 from src import secret
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from langchain_openai import ChatOpenAI
+from typing import Optional
+from langchain_openai import ChatOpenAI
 from enum import Enum
 from pydantic import SecretStr
 from abi import logger
