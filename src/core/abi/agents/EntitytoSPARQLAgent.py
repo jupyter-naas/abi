@@ -3,10 +3,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
-from typing import Callable, Optional, Union, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from langchain_openai import ChatOpenAI
+from typing import Callable, Optional, Union, Any
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
