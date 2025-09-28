@@ -7,7 +7,7 @@ from abi.services.agent.Agent import (
 from fastapi import APIRouter
 from src import secret
 from typing import Optional
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI  # noqa: F401
 from enum import Enum
 from pydantic import SecretStr
 from abi import logger
@@ -151,7 +151,6 @@ def create_agent(
     
     if ai_mode == "airgap":
         # Use airgap model (Docker Model Runner)
-        from langchain_openai import ChatOpenAI
         model = ChatOpenAI(
             model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
             temperature=TEMPERATURE,

@@ -4,7 +4,7 @@ from langchain_core.tools import Tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Callable, Optional, Union, Any
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI  # noqa: F401
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
@@ -142,7 +142,6 @@ def create_agent(
     
     if ai_mode == "airgap":
         # Use airgap model (Docker Model Runner)
-        from langchain_openai import ChatOpenAI
         model = ChatOpenAI(
             model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
             temperature=TEMPERATURE,
