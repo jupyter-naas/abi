@@ -13,6 +13,7 @@ from langgraph.types import Command
 from pydantic import SecretStr
 from src import secret
 from datetime import datetime
+from abi import logger
 
 NAME = "Entity_to_SPARQL"
 DESCRIPTION = "A agent that extracts entities from text and transform them into SPARQL INSERT DATA statements."
@@ -135,13 +136,31 @@ INSERT DATA {
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+) -> Optional[Agent]:
+    # Set model based on AI_MODE
+    ai_mode = secret.get("AI_MODE")
+    
+    if ai_mode == "airgap":
+        # Use airgap model (Docker Model Runner)
+        from langchain_openai import ChatOpenAI
+        model = ChatOpenAI(
+            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
+            temperature=TEMPERATURE,
+            api_key="no needed",  # type: ignore
+            base_url="http://localhost:12434/engines/v1",
+        )
+    else:
+        # Use cloud model for cloud/local modes
+        openai_api_key = secret.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("OpenAI API key not available for EntitytoSPARQLAgent")
+            logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
+            return None
+        model = ChatOpenAI(
+            model=MODEL, 
+            temperature=TEMPERATURE, 
+            api_key=SecretStr(openai_api_key)
+        )
 
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)

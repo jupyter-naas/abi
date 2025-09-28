@@ -135,39 +135,35 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     
-    from src.core.abi.models.gpt_4_1 import model as cloud_model
-    from src.core.abi.models.qwen3_8b import model as local_model
-
-    # Gemma does not handle tool calling so we are moving to qwen3
-    # from src.core.abi.models.gemma3 import model as airgap_model
-    from langchain_openai import ChatOpenAI
-    airgap_model = ChatOpenAI(
-        model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
-        temperature=0.7,
-        api_key="no needed",  # type: ignore
-        base_url="http://localhost:12434/engines/v1",
-    )
-
     from src import secret
     
-    # Define model
+    # Define model based on AI_MODE
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
+        from src.core.abi.models.gpt_4_1 import model as cloud_model
         if not cloud_model:
             logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
             return None
         selected_model = cloud_model.model
     elif ai_mode == "local":
+        from src.core.abi.models.qwen3_8b import model as local_model
         if not local_model:
             logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
             return None
         selected_model = local_model.model
     elif ai_mode == "airgap":
+        # Gemma does not handle tool calling so we are moving to qwen3
+        from langchain_openai import ChatOpenAI
+        airgap_model = ChatOpenAI(
+            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
+            temperature=0.7,
+            api_key="no needed",  # type: ignore
+            base_url="http://localhost:12434/engines/v1",
+        )
         if not airgap_model:
             logger.error("Airgapped model (qwen3:8b) not available - Docker Model Runner not active")
-            logger.error("   Start with: docker model run ai/gemma3")
+            logger.error("   Start with: docker model run ai/qwen3")
             return None
-        # selected_model = airgap_model.model
         selected_model = airgap_model
     else:
         logger.error("AI_MODE must be 'cloud', 'local', or 'airgap'")
