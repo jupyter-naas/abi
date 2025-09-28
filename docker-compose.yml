@@ -41,12 +41,9 @@ services:
     env_file:
       - .env  # Load environment variables (API keys, AI_MODE, etc.)
     command: ["uv", "run"]  # Start ABI application
-    # AI Model bindings - Docker will inject environment variables:
-    # GEMMA3_URL, GEMMA3_MODEL, EMBEDDINGGEMMA_URL, EMBEDDINGGEMMA_MODEL, QWEN3_URL, QWEN3_MODEL
-    models:
-      - gemma3        # Fast conversational AI model
-      - embeddinggemma # Text embedding model for semantic search
-      - qwen3         # Advanced reasoning model
+    # AI Models: ABI connects directly to Docker Model Runner on localhost:12434
+    # Available models: ai/gemma3, ai/qwen3, ai/embeddinggemma
+    # No Docker Compose models integration - using direct Docker Model Runner API
     depends_on:
       oxigraph:
         condition: service_healthy  # Wait for knowledge graph to be ready
@@ -193,37 +190,19 @@ volumes:
   dagster_home:   # Dagster metadata, run history, and configuration
 
 # =============================================================================
-# AI MODELS CONFIGURATION (Docker AI Specification)
+# AI MODELS - DOCKER MODEL RUNNER INTEGRATION
 # =============================================================================
-# Defines AI models available to services with Docker Model Runner
-# Models are automatically pulled and made available via environment variables
-
-models:
-  # Fast conversational AI model - optimized for quick responses
-  gemma3:
-    model: ai/gemma3           # Google Gemma 3B model
-    context_size: 4096         # Token context window
-    runtime_flags:
-      - "--temp"               # Temperature for response creativity
-      - "0.7"
-      - "--threads"            # CPU threads for inference
-      - "4"
-  
-  # Text embedding model - for semantic search and similarity
-  embeddinggemma:
-    model: ai/embeddinggemma   # Google Gemma embedding model
-    context_size: 512          # Smaller context for efficiency
-  
-  # Advanced reasoning model - for complex analysis and problem-solving
-  qwen3:
-    model: ai/qwen3            # Alibaba Qwen 8B model
-    context_size: 8192         # Large context for complex reasoning
-    runtime_flags:
-      - "--temp"               # Temperature for response creativity
-      - "0.7"
-      - "--threads"            # CPU threads for inference
-      - "4"
-      - "--mlock"              # Lock memory to prevent swapping
+# ABI uses Docker Model Runner directly via http://localhost:12434/engines/v1
+# Models are managed outside Docker Compose using 'docker model' commands
+# Available models: ai/gemma3, ai/qwen3, ai/embeddinggemma
+# 
+# To manage models:
+#   docker model run ai/qwen3    # Start a model
+#   docker model ls              # List running models  
+#   docker model stop ai/qwen3   # Stop a model
+#
+# Note: We don't use Docker Compose 'models:' section because ABI connects
+# directly to Docker Model Runner API, not via Compose environment variables
 
 # =============================================================================
 # NETWORK CONFIGURATION
