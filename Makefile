@@ -160,9 +160,8 @@ deps: uv git-deps .venv .env
 # Ensure airgap model is running if AI_MODE=airgap
 airgap:
 	@if grep -q "AI_MODE=airgap" .env 2>/dev/null; then \
-		echo "🤖 Starting airgap models via Docker Compose..."; \
-		docker compose --profile local up model-puller -d; \
-		echo "✓ Docker AI models ready for airgap operation"; \
+		echo "🤖 Docker AI models managed by Compose specification"; \
+		echo "✓ Models will auto-start when services are launched"; \
 	fi
 
 # Ensure uv package manager is installed and Python 3.10 is available
@@ -587,22 +586,24 @@ container-down:
 	@docker compose -f docker-compose.yml --profile container down
 	@echo "✓ ABI container stopped"
 
-# Start Docker AI models via Compose
+# Docker AI models are managed by Compose specification
 model-up: check-docker
-	@echo "🤖 Starting AI models via Docker Compose..."
-	@docker compose --profile local up model-puller -d
-	@echo "✓ Docker AI models started and ready"
+	@echo "🤖 Docker AI models are managed by Compose specification"
+	@echo "💡 Models auto-start when services with model dependencies launch"
+	@echo "✓ Use 'make container-up' to start services with AI models"
 
 # Stop Docker AI models
 model-down: check-docker
-	@echo "🛑 Stopping Docker AI models..."
-	@docker compose --profile local stop model-puller
-	@echo "✓ Docker AI models stopped"
+	@echo "🛑 Docker AI models are managed by Compose specification"
+	@echo "💡 Models stop automatically when services are stopped"
+	@echo "✓ Use 'make container-down' to stop services and their models"
 
 # Check Docker AI models status
 model-status: check-docker
 	@echo "🤖 Docker AI models status:"
-	@docker compose --profile local ps model-puller
+	@echo "💡 Models are managed by Compose - check service status:"
+	@docker compose ps abi 2>/dev/null || echo "ABI service not running"
+	@echo "💡 Available models:"
 	@docker model ls
 
 # =============================================================================
