@@ -24,6 +24,16 @@ services:
     env_file:
       - .env
     command: ["uv", "run"]
+    models:
+      llm:
+        endpoint_var: LLM_BASE_URL
+        model_var: LLM_MODEL_NAME
+      embeddings:
+        endpoint_var: EMBEDDINGS_BASE_URL
+        model_var: EMBEDDINGS_MODEL_NAME
+      qwen3:
+        endpoint_var: QWEN3_BASE_URL
+        model_var: QWEN3_MODEL_NAME
     depends_on:
       oxigraph:
         condition: service_healthy
@@ -125,18 +135,6 @@ services:
       - local
       - prod
 
-  model-puller:
-    image: alpine:latest
-    command: ["sleep", "infinity"]
-    models:
-      - llm
-      - embeddings
-      - qwen3
-    networks:
-      - abi-network
-    profiles:
-      - local
-      - prod
 
 volumes:
   cargo-cache:
@@ -148,10 +146,24 @@ volumes:
 models:
   llm:
     model: ai/gemma3
+    context_size: 4096
+    runtime_flags:
+      - "--temp"
+      - "0.7"
+      - "--threads"
+      - "4"
   embeddings:
     model: ai/embeddinggemma
+    context_size: 512
   qwen3:
     model: ai/qwen3
+    context_size: 8192
+    runtime_flags:
+      - "--temp"
+      - "0.7"
+      - "--threads"
+      - "4"
+      - "--mlock"
 
 networks:
   abi-network:
