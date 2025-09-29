@@ -12,7 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
-default: deps airgap
+default: deps local-up airgap
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
@@ -35,15 +35,23 @@ help:
 	@echo "  lock                     Update dependency lock files"
 	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
 	@echo ""
-	@echo "CHAT & AGENT COMMANDS:"
+	@echo "CHAT WITH CORE AGENTS:"
 	@echo "  chat-abi-agent           Start the main ABI agent (default target)"
+	@echo "  chat-chatgpt-agent       Start ChatGPT-based agent"
+	@echo "  chat-claude-agent        Start Claude-based agent"
+	@echo "  chat-deepseek-agent      Start DeepSeek-based agent"
+	@echo "  chat-gemini-agent        Start Gemini-based agent"
+	@echo "  chat-gemma-agent         Start Gemma-based agent"
+	@echo "  chat-grok-agent          Start Grok-based agent"
+	@echo "  chat-llama-agent         Start Llama-based agent"
+	@echo "  chat-mistral-agent       Start Mistral-based agent"
+	@echo "  chat-perplexity-agent    Start Perplexity-based agent"
+	@echo "  chat-qwen-agent          Start Qwen-based agent"
+	@echo ""
+	@echo "CHAT WITH MARKETPLACE AGENTS:"
+	@echo "  pull-request-description Generate pull request descriptions using AI"
 	@echo "  chat-naas-agent          Start the Naas platform integration agent"
 	@echo "  chat-support-agent       Start the customer support specialized agent"
-	@echo ""
-	@echo "LOCAL AI AGENTS (Privacy-focused via Ollama):"
-	@echo "  chat-qwen-agent          Start Qwen3 8B agent (multilingual, coding)"
-	@echo "  chat-deepseek-agent      Start DeepSeek R1 8B agent (reasoning, math)"
-	@echo "  chat-gemma-agent         Start Gemma3 4B agent (lightweight, fast)"
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
 	@echo "  api                      Start API server for local development (port 9879)"
@@ -58,6 +66,8 @@ help:
 	@echo ""
 	@echo "TESTING & QUALITY ASSURANCE:"
 	@echo "  test                     Run all Python tests using pytest"
+	@echo "  test-coverage            Run tests with coverage reporting and badge generation"
+	@echo "  test-ci                  Run basic tests for CI (no external dependencies)"
 	@echo "  test-abi                 Run tests specifically for the abi library"
 	@echo "  test-api                 Run API-specific tests"
 	@echo "  test-api-init            Test API initialization with production secrets"
@@ -123,7 +133,6 @@ help:
 	@echo "  docs-ontology            Generate ontology documentation"
 	@echo "  publish-remote-agents    Publish remote agents to workspace"
 	@echo "  publish-remote-agents-dry-run Preview remote agent publishing (dry-run mode)"
-	@echo "  pull-request-description Generate pull request description using AI agent"
 	@echo ""
 	@echo "CLEANUP & MAINTENANCE:"
 	@echo "  clean                    Clean up build artifacts, caches, and Docker containers"
@@ -153,15 +162,8 @@ deps: uv git-deps .venv .env
 # Ensure airgap model is running if AI_MODE=airgap
 airgap:
 	@if grep -q "AI_MODE=airgap" .env 2>/dev/null; then \
-		echo "🤖 Checking airgap model status..."; \
-		if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
-			echo "🚀 Starting Docker model ai/gemma3 for airgap mode..."; \
-			docker model run ai/gemma3 & \
-			sleep 5; \
-			echo "✓ Docker model ai/gemma3 ready for airgap operation"; \
-		else \
-			echo "✓ Docker model ai/gemma3 already running"; \
-		fi \
+		echo "🤖 Docker AI models managed by Compose specification"; \
+		echo "✓ Models will auto-start when services are launched"; \
 	fi
 
 # Ensure uv package manager is installed and Python 3.10 is available
@@ -207,17 +209,55 @@ local-build: deps
 	@ docker compose build
 
 # =============================================================================
-# CHAT & AGENT COMMANDS
+# CORE AGENTS
 # =============================================================================
 
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
 chat: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+
+chat-chatgpt-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli ChatGPTAgent
+
+chat-claude-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli ClaudeAgent
+
+chat-deepseek-agent: deps 
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
+
+chat-gemini-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli GeminiAgent
+
+chat-gemma-agent: deps
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
+
+chat-grok-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli GrokAgent
+
+chat-llama-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli LlamaAgent
+
+chat-mistral-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli MistralAgent
+
+chat-perplexity-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli PerplexityAgent
+
+chat-qwen-agent: deps
+	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
+
+# =============================================================================
+# CHAT WITH MARKETPLACE AGENTS
+# =============================================================================
+
+# Generate pull request description using AI agent
+pull-request-description: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.cli PullRequestDescriptionAgent
 
 # Naas platform integration agent
 chat-naas-agent: deps
@@ -226,22 +266,6 @@ chat-naas-agent: deps
 # Customer support specialized agent
 chat-support-agent: deps
 	@ LOG_LEVEL=ERROR uv run python -m src.cli SupportAgent
-
-# =============================================================================
-# LOCAL AI AGENTS (Privacy-focused, runs on local hardware via Ollama)
-# =============================================================================
-
-# Qwen3 8B - Multilingual coding assistant (local)
-chat-qwen-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
-
-# DeepSeek R1 8B - Advanced reasoning and mathematics (local)
-chat-deepseek-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
-
-# Gemma3 4B - Lightweight and fast responses (local)
-chat-gemma-agent: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
@@ -302,6 +326,19 @@ oxigraph-explorer:
 path=tests/
 test: deps
 	@ uv run python -m pytest .
+
+# Run tests with coverage reporting
+test-coverage: deps
+	@ uv run python -m pytest tests/ lib/abi/services/cache/ lib/abi/services/secret/ lib/abi/services/triple_store/ --cov=lib --cov-report=html --cov-report=term --cov-report=xml
+	@ uv run coverage-badge -f -o coverage.svg
+	@ echo "📊 Coverage report generated:"
+	@ echo "  - HTML: htmlcov/index.html"
+	@ echo "  - XML: coverage.xml" 
+	@ echo "  - Badge: coverage.svg"
+
+# Run basic tests for CI (no external dependencies)
+test-ci: deps
+	@ uv run python -m pytest tests/unit/test_basic.py --cov=lib --cov-report=xml --cov-report=term -v
 
 # Run tests specifically for the abi library
 test-abi: deps
@@ -454,9 +491,37 @@ build.linux.x86_64: deps
 # Check if Docker is running before executing docker commands
 check-docker:
 	@if ! docker info > /dev/null 2>&1; then \
-		echo "❌ Docker is not running. Please start Docker Desktop first."; \
-		echo "💡 After starting Docker, run: make docker-cleanup && make local-up"; \
-		exit 1; \
+		echo "🐳 Docker not running. Attempting to start..."; \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			echo "🍎 Starting Docker Desktop on macOS..."; \
+			open -a Docker && echo "⏳ Waiting for Docker Desktop to start..." && sleep 10; \
+			for i in 1 2 3 4 5 6; do \
+				if docker info > /dev/null 2>&1; then \
+					echo "✅ Docker Desktop started successfully!"; \
+					break; \
+				fi; \
+				echo "⏳ Still waiting for Docker ($$i/6)..."; \
+				sleep 5; \
+			done; \
+		elif [ "$$(uname)" = "Linux" ]; then \
+			echo "🐧 Starting Docker service on Linux..."; \
+			if command -v systemctl > /dev/null 2>&1; then \
+				sudo systemctl start docker && echo "✅ Docker service started!"; \
+			elif command -v service > /dev/null 2>&1; then \
+				sudo service docker start && echo "✅ Docker service started!"; \
+			else \
+				echo "❌ Cannot auto-start Docker. Please start Docker manually."; \
+				exit 1; \
+			fi; \
+		else \
+			echo "❌ Unsupported OS. Please start Docker manually."; \
+			exit 1; \
+		fi; \
+		if ! docker info > /dev/null 2>&1; then \
+			echo "❌ Docker failed to start. Please start Docker Desktop manually."; \
+			echo "💡 After starting Docker, run: make docker-cleanup && make local-up"; \
+			exit 1; \
+		fi; \
 	fi
 
 # Enhanced cleanup with conflict detection
@@ -536,27 +601,25 @@ container-down:
 	@docker compose -f docker-compose.yml --profile container down
 	@echo "✓ ABI container stopped"
 
-# Start Docker model for airgap AI
+# Docker AI models are managed by Compose specification
 model-up: check-docker
-	@echo "🤖 Starting Docker model ai/gemma3..."
-	@if ! curl -s http://localhost:12434/engines/v1/models | grep -q "ai/gemma3" 2>/dev/null; then \
-		docker model run ai/gemma3 & \
-		sleep 5; \
-		echo "✓ Docker model ai/gemma3 started and ready"; \
-	else \
-		echo "✓ Docker model ai/gemma3 already running"; \
-	fi
+	@echo "🤖 Docker AI models are managed by Compose specification"
+	@echo "💡 Models auto-start when services with model dependencies launch"
+	@echo "✓ Use 'make container-up' to start services with AI models"
 
-# Stop Docker model
+# Stop Docker AI models
 model-down: check-docker
-	@echo "🛑 Stopping Docker model..."
-	@docker model stop ai/gemma3 || echo "Model not running"
-	@echo "✓ Docker model stopped"
+	@echo "🛑 Docker AI models are managed by Compose specification"
+	@echo "💡 Models stop automatically when services are stopped"
+	@echo "✓ Use 'make container-down' to stop services and their models"
 
-# Check Docker model status
+# Check Docker AI models status
 model-status: check-docker
-	@echo "🤖 Docker model status:"
-	@docker model ls | grep gemma3 || echo "No gemma3 model running"
+	@echo "🤖 Docker AI models status:"
+	@echo "💡 Models are managed by Compose - check service status:"
+	@docker compose ps abi 2>/dev/null || echo "ABI service not running"
+	@echo "💡 Available models:"
+	@docker model ls
 
 # =============================================================================
 # DAGSTER DATA ORCHESTRATION
@@ -673,10 +736,6 @@ publish-remote-agents: deps
 publish-remote-agents-dry-run: deps
 	@ echo "Dry-run: Previewing remote agent publishing..."
 	@ uv run python scripts/publish_remote_agents.py --dry-run
-
-# Generate pull request description using AI agent
-pull-request-description: deps
-	@ uv run python -m src.core.abi.apps.terminal_agent.main generic_run_agent PullRequestDescriptionAgent
 
 # =============================================================================
 # CLEANUP & MAINTENANCE

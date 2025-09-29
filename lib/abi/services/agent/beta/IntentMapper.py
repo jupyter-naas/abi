@@ -1,11 +1,14 @@
 from .VectorStore import VectorStore
 from .Embeddings import embeddings_batch, embeddings as embeddings
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
-from typing import Tuple, Any
+from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 import os
+
+class IntentScope(Enum):
+    DIRECT = "direct"
+    ALL = "all"
 
 class IntentType(Enum):
     AGENT = "agent"
@@ -17,6 +20,7 @@ class Intent:
     intent_value: str
     intent_type: IntentType
     intent_target: Any
+    intent_scope: Optional[IntentScope] = IntentScope.ALL
 
 class IntentMapper:
     intents: list[Intent]
@@ -27,14 +31,16 @@ class IntentMapper:
     def __init__(self, intents: list[Intent]):
         self.intents = intents
         
-        dimension = 1536
-        if os.environ.get('AI_MODE') == "airgap":
-            dimension = 768
+        # Use environment-based detection for consistent embedding source
+        dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+            
         self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
-        self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values))
+        metadatas = [{"index": index} for index in range(len(intents_values))]
+        self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
         
-        if os.getenv("AI_MODE") == "airgap":
+        # Detect if we're using local embeddings (768 dim = airgap mode)
+        if dimension == 768 or os.getenv("AI_MODE") == "airgap":
             from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
             self.model = AirgapChatOpenAI(
                 model="ai/gemma3",
@@ -68,16 +74,12 @@ You: code a project
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
         results = self.vector_store.similarity_search(embeddings(intent), k=k)
         for result in results:
-            result['intent'] = self.get_intent_from_value(result['text'])
-    
+            result['intent'] = self.intents[result['metadata']['index']]
+        
         return results
     
     def map_prompt(self, prompt: str, k: int = 1) -> Tuple[list[dict], list[dict]]:
-        response = self.model.invoke([
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=prompt)
-        ])
-        
-        assert isinstance(response.content, str)
-        intent : str = response.content.lower().strip()
-        return self.map_intent(intent, k), self.map_intent(prompt, k)
+        # Use direct prompt mapping without LLM intent extraction for speed
+        # Return empty first result and prompt results as second (matches expected format)
+        prompt_results = self.map_intent(prompt, k)
+        return [], prompt_results

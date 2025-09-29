@@ -2,6 +2,7 @@ from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
     IntentType,
+    IntentScope,
     AgentConfiguration,
     AgentSharedState,
 )
@@ -14,20 +15,10 @@ NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 DESCRIPTION = "Coordinates and manages specialized agents."
 SYSTEM_PROMPT = """# ROLE
-You are Abi, the AI Super Assistant and Supervisor Agent developed by NaasAI. You function as:
-- **Multi-Agent System Orchestrator**: Central coordinator managing specialized AI agents in a hierarchical ecosystem
-- **Elite Strategic Advisor**: High-level consultant with expertise spanning business strategy, technical architecture, and communication excellence  
-- **Conversation Flow Manager**: Intelligent router that preserves active agent conversations while facilitating seamless agent transitions
-- **Knowledge Synthesizer**: Expert at compiling insights from multiple specialized agents into actionable recommendations
-
-Your expertise profile combines IQ-180 strategic thinking, billion-dollar company scaling experience, global-scale software architecture, and bestselling content creation across industries.
+You are Abi, the Supervisor Agent developed by NaasAI. 
 
 # OBJECTIVE
-Orchestrate optimal user experiences through intelligent multi-agent coordination:
-1. **Preserve Conversation Flow**: Maintain active agent contexts and prevent unwanted interruptions in ongoing specialized conversations
-2. **Maximize Task Efficiency**: Route requests to the most appropriate specialized agents based on weighted decision hierarchy
-3. **Deliver Strategic Value**: Provide elite-level advisory insights that drive measurable business outcomes and user satisfaction
-4. **Enable Sovereign AI**: Support NaasAI's mission of empowering individuals and organizations to create their own intelligent, autonomous AI systems
+Your objective is to coordinate specialized AI agents while providing strategic advisory capabilities thanks to your internal knowledge and tool.
 
 # CONTEXT
 You operate within a sophisticated multi-agent conversation environment where:
@@ -43,29 +34,6 @@ Your decisions impact conversation quality, user productivity, and the entire mu
 
 # AGENTS
 [AGENTS_LIST]
-
-# TASKS
-Execute intelligent multi-agent orchestration through this priority sequence:
-
-## Phase 1: Context Preservation (CRITICAL)
-1. **Active Agent Detection**: Check if user is in active conversation with specialized agent
-2. **Conversation Flow Analysis**: Determine if message is continuation vs. explicit routing request
-3. **Context-Aware Routing**: Preserve ongoing conversations unless explicit agent change requested
-
-## Phase 2: Request Classification  
-4. **Memory Consultation**: Leverage conversation history and learned patterns
-5. **Intent Analysis**: Classify request type (identity, strategic, technical, informational, creative)
-6. **Language Adaptation**: Match user's communication style and language preferences
-
-## Phase 3: Intelligent Delegation
-7. **Weighted Agent Selection**: Apply decision hierarchy based on request characteristics
-8. **Multi-Agent Coordination**: Orchestrate agent chaining when complex workflows required
-9. **Quality Assurance**: Validate agent responses for completeness and accuracy
-
-## Phase 4: Response Synthesis
-10. **Information Integration**: Compile insights from multiple sources when applicable
-11. **Strategic Enhancement**: Add high-level strategic guidance when valuable
-12. **User Communication**: Deliver clear, actionable insights adapted to user needs and context
 
 # OPERATING GUIDELINES
 
@@ -126,6 +94,12 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 ### Issue Management (Weight: 0.25)
 - **Route to support_agent**: Bug reports, feature requests, technical issues
 
+## Multi-Agent Coordination
+If user requests to talk to multiples agents at the same time, you MUST coordinate them by:
+- You MUST execute the request one by one
+- You MUST preserve the response of each agent and the context
+- You MUST return the final response with a summary of the responses of each agent that clearly identify similarities and differences
+
 ## Communication Excellence Standards:
 - **Proactive Search**: Always attempt information retrieval before requesting clarification
 - **Language Matching**: Respond in user's preferred language (French/English flexibility)
@@ -134,28 +108,12 @@ Execute intelligent multi-agent orchestration through this priority sequence:
 - **Format Consistency**: Use [Link](URL) and ![Image](URL) formatting standards
 
 # CONSTRAINTS
-
-## ABSOLUTE REQUIREMENTS:
-- **NEVER interrupt active agent conversations** unless explicitly requested by user
-- **ALWAYS identify as Abi, AI Super Assistant developed by NaasAI** - never delegate identity questions
-- **MUST follow weighted agent hierarchy** for optimal task routing
-- **MUST preserve multi-language conversation contexts** and handle code-switching naturally
-- **MUST use memory consultation** before any delegation decisions
-- **MUST provide proactive search** before requesting clarification from users
-
-## OPERATIONAL BOUNDARIES:
-- **CANNOT mention competing AI providers** (OpenAI, Anthropic, Google, etc.) - focus on capabilities
-- **CANNOT bypass established agent delegation sequence** without valid priority override
-- **CANNOT create support tickets** without proper validation and user confirmation
-- **CANNOT delegate strategic advisory questions** that fall within direct expertise domain
-- **CANNOT ignore conversation flow preservation** - this is the highest priority operational rule
-
-## QUALITY STANDARDS:
-- **Format attribution** for delegated responses using specified standards
-- **Validate request completeness** before creating formal issues or tickets  
-- **Maintain NaasAI mission alignment** in all responses and recommendations
-- **Adapt communication style** to match user tone (casual ↔ formal, strategic ↔ conversational)
-- **Optimize for user productivity** and satisfaction in multi-agent conversation flows
+- Never mention competing AI providers by name (OpenAI, Anthropic, Google)
+- Always identify as "Abi, developed by NaasAI" for identity questions
+- Preserve active conversation flows as the top priority
+- Use agent recommendation tools for "best agent" queries
+- Handle service commands directly with appropriate links/instructions
+- NEVER call multiples tools or agents at the same time
 """
 
 SUGGESTIONS: list = [
@@ -178,39 +136,35 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     
-    from src.core.abi.models.gpt_4_1 import model as cloud_model
-    from src.core.abi.models.qwen3_8b import model as local_model
-
-    # Gemma does not handle tool calling so we are moving to qwen3
-    # from src.core.abi.models.gemma3 import model as airgap_model
-    from langchain_openai import ChatOpenAI
-    airgap_model = ChatOpenAI(
-        model="ai/qwen3",
-        temperature=0.7,
-        api_key=SecretStr("ignored"),
-        base_url="http://localhost:12434/engines/v1",
-    )
-
     from src import secret
     
-    # Define model
+    # Define model based on AI_MODE
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
+        from src.core.abi.models.gpt_4_1 import model as cloud_model
         if not cloud_model:
             logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
             return None
         selected_model = cloud_model.model
     elif ai_mode == "local":
+        from src.core.abi.models.qwen3_8b import model as local_model
         if not local_model:
             logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
             return None
         selected_model = local_model.model
     elif ai_mode == "airgap":
+        # Gemma does not handle tool calling so we are moving to qwen3
+        from langchain_openai import ChatOpenAI
+        airgap_model = ChatOpenAI(
+            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
+            temperature=0.7,
+            api_key=SecretStr("no needed"),  # type: ignore
+            base_url="http://localhost:12434/engines/v1",
+        )
         if not airgap_model:
             logger.error("Airgapped model (qwen3:8b) not available - Docker Model Runner not active")
-            logger.error("   Start with: docker model run ai/gemma3")
+            logger.error("   Start with: docker model run ai/qwen3")
             return None
-        # selected_model = airgap_model.model
         selected_model = airgap_model
     else:
         logger.error("AI_MODE must be 'cloud', 'local', or 'airgap'")
@@ -287,7 +241,7 @@ You can browse the data and run queries there."""
         logger.debug(f"Getting agents from module: {module.module_import_path}")
         if hasattr(module, 'agents'):
             for agent in module.agents:
-                if agent is not None and agent.name != "Abi":
+                if agent is not None and agent.name != "Abi" and not agent.name.endswith("Research"): #exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
                     logger.debug(f"Adding agent: {agent.name}")
                     agents.append(agent)
     logger.debug(f"Agents: {agents}")
@@ -366,87 +320,20 @@ You can browse the data and run queries there."""
     
     ]
 
-    # Add intents for all other available agents using a more compact approach
-    agent_intents_map = {
-        "Gemini": [
-            "use gemini", "switch to gemini", "google ai", "google gemini", "gemini 2.0", "gemini flash",
-            "use google ai", "switch to google", "ask gemini", "use google gemini", "multimodal analysis",
-            "analyze image", "image understanding", "video analysis", "audio analysis", "let's use google",
-            "try google ai", "google's model", "google's ai", "use bard", "switch to bard",
-            "generate image", "create image", "generate an image", "create a picture", "make an image",
-            "draw", "illustrate", "picture of", "image of", "visual representation", "generate an image of",
-            "create an image of", "make a picture of", "show me", "visualization"
-        ],
-        "ChatGPT": [
-            "ask openai", "ask chatgpt", "use openai", "use chatgpt", "switch to openai", 
-            "switch to chatgpt", "openai gpt", "gpt-4o", "gpt4"
-        ],
-        "Mistral": [
-            "ask mistral", "use mistral", "switch to mistral", "mistral ai", "mistral large", "french ai"
-        ],
-        "Claude": [
-            "ask claude", "use claude", "switch to claude", "claude 3.5", "anthropic", 
-            "anthropic claude", "claude sonnet"
-        ],
-        "Perplexity": [
-            "ask perplexity", "use perplexity", "switch to perplexity", "perplexity ai",
-            "search web", "web search", "search online", "search internet"
-        ],
-        "Llama": [
-            "ask llama", "use llama", "switch to llama", "llama 3.3", "meta llama", "meta ai"
-        ],
-        "Qwen": [
-            "ask qwen", "use qwen", "switch to qwen", "private ai", "local ai", "offline ai",
-            "qwen code", "private code"
-        ],
-        "DeepSeek": [
-            "ask deepseek", "use deepseek", "switch to deepseek", "complex reasoning", 
-            "mathematical proof", "step by step", "logical analysis", "private reasoning"
-        ],
-        "Gemma": [
-            "ask gemma", "use gemma", "switch to gemma", "quick question", "fast response",
-            "lightweight ai", "local gemini", "private chat"
-        ],
-        "Grok": [
-            "ask grok", "use grok", "switch to grok", "xai", "grok 4", "maximum intelligence",
-            "highest intelligence", "use xai", "switch to xai", "truth seeking", 
-            "contrarian analysis", "scientific reasoning"
-        ]
-    }
-
     # Add intents for each agent (using agent names directly to avoid recursion)
     for agent in agents:
         logger.debug(f"Adding intents for agent: {agent.name}")
-        if agent.name in agent_intents_map:
-            # Add default intents for agent name and description
-            intents.append(Intent(
-                intent_type=IntentType.AGENT,
-                intent_value=agent.name,
-                intent_target=agent.name
-            ))
-            intents.append(Intent(
-                intent_type=IntentType.AGENT,
-                intent_value=agent.description,
-                intent_target=agent.name
-            ))
-            
-            # Add chat intent
-            intents.append(Intent(
-                intent_type=IntentType.AGENT,
-                intent_value=f"Chat with {agent.name}",
-                intent_target=agent.name
-            ))
-
-            # Add mapped intents
-            for intent_value in agent_intents_map[agent.name]:
-                intents.append(Intent(
-                    intent_type=IntentType.AGENT,
-                    intent_value=intent_value,
-                    intent_target=agent.name
-                ))
+        # Add default intents to chat with any agent
+        intents.append(Intent(
+            intent_type=IntentType.AGENT,
+            intent_value=f"Chat with {agent.name} Agent",
+            intent_target=agent.name
+        ))
                 
-        if hasattr(agent, 'intents') and agent.name not in agent_intents_map:
+        if hasattr(agent, 'intents'):
             for intent in agent.intents:
+                if intent.intent_scope is not None and intent.intent_scope == IntentScope.DIRECT:
+                    continue
                 # Create new intent with target set to agent name
                 new_intent = Intent(
                     intent_type=IntentType.AGENT,
@@ -454,7 +341,6 @@ You can browse the data and run queries there."""
                     intent_target=agent.name
                 )
                 intents.append(new_intent)
-
     logger.debug(f"Intents: {intents}")
 
     # Set configuration
@@ -482,7 +368,7 @@ You can browse the data and run queries there."""
         description=DESCRIPTION,
         chat_model=selected_model,
         tools=tools,
-        agents=agents,  # Empty list for now
+        agents=agents,
         intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
