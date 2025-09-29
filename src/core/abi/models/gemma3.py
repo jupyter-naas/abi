@@ -1,10 +1,10 @@
 from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage, BaseMessageChunk
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.outputs.chat_generation import ChatGenerationChunk
-# from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
 from typing import Optional, List, Any, Iterator
 from abi import logger
 import json
@@ -45,8 +45,10 @@ class AirgapChatOpenAI(ChatOpenAI):
                     
         
         # Always ensure we have a valid user message
-        if not user_msg or not user_msg.strip():
+        if not user_msg or (isinstance(user_msg, str) and not user_msg.strip()):
             user_msg = "Hello"
+        elif not isinstance(user_msg, str):
+            user_msg = str(user_msg)
         
         # Build GPT-style prompt with clear instruction formatting
         if system_prompt.strip():
@@ -67,7 +69,6 @@ class AirgapChatOpenAI(ChatOpenAI):
         # Simple tool call handling - just ensure we have proper AIMessage format
         if result.generations:
             content = result.generations[0].message.content
-            from langchain_core.messages import AIMessage
             
             # Always create AIMessage with empty tool_calls to prevent routing issues
             ai_message = AIMessage(
@@ -95,8 +96,10 @@ class AirgapChatOpenAI(ChatOpenAI):
                     user_msg = msg.content
         
         # Always ensure we have a valid user message
-        if not user_msg or not user_msg.strip():
+        if not user_msg or (isinstance(user_msg, str) and not user_msg.strip()):
             user_msg = "Hello"
+        elif not isinstance(user_msg, str):
+            user_msg = str(user_msg)
         
         # Build GPT-style prompt with clear instruction formatting
         if system_prompt.strip():
@@ -139,22 +142,30 @@ class AirgapChatOpenAI(ChatOpenAI):
                                     content = choice['delta']['content']
                                     if content:
                                         yield ChatGenerationChunk(
-                                            message=BaseMessageChunk(content=content),
+                                            message=AIMessageChunk(content=content),
                                             generation_info={"finish_reason": choice.get('finish_reason')}
                                         )
                         except json.JSONDecodeError:
                             continue
             
+        except requests.exceptions.Timeout:
+            logger.error("Docker Model Runner timeout - model may be overloaded")
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="⚠️ Model response timeout. Try a shorter message or switch to cloud mode."),
+                generation_info={"finish_reason": "timeout"}
+            )
+        except requests.exceptions.ConnectionError:
+            logger.error("Docker Model Runner connection failed")
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="❌ Local model unavailable. Use 'make model-up' or switch to cloud mode."),
+                generation_info={"finish_reason": "connection_error"}
+            )
         except Exception as e:
-            logger.error(f"Streaming error: {e}")
-            # Fallback to non-streaming
-            result = self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-            if result.generations:
-                content = result.generations[0].message.content
-                yield ChatGenerationChunk(
-                    message=BaseMessageChunk(content=content),
-                    generation_info={"finish_reason": "stop"}
-                )
+            logger.error(f"Docker Model Runner error: {e}")
+            yield ChatGenerationChunk(
+                message=AIMessageChunk(content="🔄 Model error. Try restarting with 'make model-down && make model-up'"),
+                generation_info={"finish_reason": "error"}
+            )
 
 ID = "ai/gemma3"
 NAME = "gemma3-airgap"
