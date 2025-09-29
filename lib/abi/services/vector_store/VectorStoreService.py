@@ -11,13 +11,13 @@ class VectorStoreService:
         self.adapter = adapter
         self._initialized = False
 
-    async def initialize(self) -> None:
+    def initialize(self) -> None:
         if not self._initialized:
-            await self.adapter.initialize()
+            self.adapter.initialize()
             self._initialized = True
             logger.info("VectorStoreService initialized successfully")
 
-    async def ensure_collection(
+    def ensure_collection(
         self,
         collection_name: str,
         dimension: int,
@@ -25,26 +25,26 @@ class VectorStoreService:
         recreate: bool = False,
         **kwargs
     ) -> None:
-        await self.initialize()
+        self.initialize()
         
-        existing_collections = await self.adapter.list_collections()
+        existing_collections = self.adapter.list_collections()
         
         if collection_name in existing_collections:
             if recreate:
                 logger.info(f"Recreating collection: {collection_name}")
-                await self.adapter.delete_collection(collection_name)
-                await self.adapter.create_collection(
+                self.adapter.delete_collection(collection_name)
+                self.adapter.create_collection(
                     collection_name, dimension, distance_metric, **kwargs
                 )
             else:
                 logger.debug(f"Collection {collection_name} already exists")
         else:
             logger.info(f"Creating new collection: {collection_name}")
-            await self.adapter.create_collection(
+            self.adapter.create_collection(
                 collection_name, dimension, distance_metric, **kwargs
             )
 
-    async def add_documents(
+    def add_documents(
         self,
         collection_name: str,
         ids: List[str],
@@ -52,7 +52,7 @@ class VectorStoreService:
         metadata: Optional[List[Dict[str, Any]]] = None,
         payloads: Optional[List[Dict[str, Any]]] = None
     ) -> None:
-        await self.initialize()
+        self.initialize()
         
         if not ids or not vectors:
             raise ValueError("IDs and vectors cannot be empty")
@@ -76,10 +76,10 @@ class VectorStoreService:
             )
             documents.append(doc)
         
-        await self.adapter.store_vectors(collection_name, documents)
+        self.adapter.store_vectors(collection_name, documents)
         logger.debug(f"Added {len(documents)} documents to collection {collection_name}")
 
-    async def search_similar(
+    def search_similar(
         self,
         collection_name: str,
         query_vector: np.ndarray,
@@ -89,12 +89,12 @@ class VectorStoreService:
         include_vectors: bool = False,
         include_metadata: bool = True
     ) -> List[SearchResult]:
-        await self.initialize()
+        self.initialize()
         
         if k <= 0:
             raise ValueError("k must be a positive integer")
         
-        results = await self.adapter.search(
+        results = self.adapter.search(
             collection_name=collection_name,
             query_vector=query_vector,
             k=k,
@@ -109,18 +109,18 @@ class VectorStoreService:
         logger.debug(f"Found {len(results)} similar vectors in {collection_name}")
         return results
 
-    async def get_document(
+    def get_document(
         self,
         collection_name: str,
         document_id: str,
         include_vector: bool = True
     ) -> Optional[VectorDocument]:
-        await self.initialize()
-        return await self.adapter.get_vector(
+        self.initialize()
+        return self.adapter.get_vector(
             collection_name, document_id, include_vector
         )
 
-    async def update_document(
+    def update_document(
         self,
         collection_name: str,
         document_id: str,
@@ -128,44 +128,44 @@ class VectorStoreService:
         metadata: Optional[Dict[str, Any]] = None,
         payload: Optional[Dict[str, Any]] = None
     ) -> None:
-        await self.initialize()
+        self.initialize()
         
         if vector is None and metadata is None and payload is None:
             raise ValueError("At least one of vector, metadata, or payload must be provided")
         
-        await self.adapter.update_vector(
+        self.adapter.update_vector(
             collection_name, document_id, vector, metadata, payload
         )
         logger.debug(f"Updated document {document_id} in collection {collection_name}")
 
-    async def delete_documents(
+    def delete_documents(
         self,
         collection_name: str,
         document_ids: List[str]
     ) -> None:
-        await self.initialize()
+        self.initialize()
         
         if not document_ids:
             raise ValueError("Document IDs cannot be empty")
         
-        await self.adapter.delete_vectors(collection_name, document_ids)
+        self.adapter.delete_vectors(collection_name, document_ids)
         logger.info(f"Deleted {len(document_ids)} documents from collection {collection_name}")
 
-    async def get_collection_size(self, collection_name: str) -> int:
-        await self.initialize()
-        return await self.adapter.count_vectors(collection_name)
+    def get_collection_size(self, collection_name: str) -> int:
+        self.initialize()
+        return self.adapter.count_vectors(collection_name)
 
-    async def list_collections(self) -> List[str]:
-        await self.initialize()
-        return await self.adapter.list_collections()
+    def list_collections(self) -> List[str]:
+        self.initialize()
+        return self.adapter.list_collections()
 
-    async def delete_collection(self, collection_name: str) -> None:
-        await self.initialize()
-        await self.adapter.delete_collection(collection_name)
+    def delete_collection(self, collection_name: str) -> None:
+        self.initialize()
+        self.adapter.delete_collection(collection_name)
         logger.info(f"Deleted collection: {collection_name}")
 
-    async def close(self) -> None:
+    def close(self) -> None:
         if self._initialized:
-            await self.adapter.close()
+            self.adapter.close()
             self._initialized = False
             logger.info("VectorStoreService closed")

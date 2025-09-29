@@ -38,7 +38,7 @@ We use the pytest library for testing. You can use the `@pytest.fixture` decorat
 
 ```python
 import pytest
-from src.custom.modules.mymodule.calculator import Calculator
+from src.custom.mymodule.calculator import Calculator
 
 @pytest.fixture
 def calculator():
@@ -76,7 +76,7 @@ def test_division(calculator):
 
 ```python
 import pytest
-from src.custom.modules.mymodule.data_processor import DataProcessor
+from src.custom.mymodule.data_processor import DataProcessor
 
 @pytest.fixture
 def sample_data():
@@ -99,7 +99,7 @@ def test_process_data(data_processor, sample_data):
 
 ```python
 import pytest
-from src.custom.modules.mymodule.calculator import Calculator
+from src.custom.mymodule.calculator import Calculator
 
 @pytest.fixture
 def calculator():

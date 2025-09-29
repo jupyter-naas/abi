@@ -40,7 +40,7 @@ The demo shows RSS feed monitoring - a real-world orchestration example:
 
 ```bash
 # View the orchestration code
-cat src/core/modules/__demo__/orchestration/definitions.py
+cat src/core/__demo__/orchestration/definitions.py
 
 # See the generated data
 ls storage/datastore/core/modules/__demo__/rss_feed/
@@ -64,11 +64,11 @@ Following ABI's Code-Data Symmetry principle, create both code and data structur
 
 ```bash
 # Create your module code structure
-mkdir -p src/core/modules/your_module/orchestration
+mkdir -p src/core/your_module/orchestration
 
 # Create the orchestration files
-touch src/core/modules/your_module/orchestration/__init__.py
-touch src/core/modules/your_module/orchestration/definitions.py
+touch src/core/your_module/orchestration/__init__.py
+touch src/core/your_module/orchestration/definitions.py
 
 # Create the mirrored data storage structure
 mkdir -p storage/datastore/core/modules/your_module/orchestration
@@ -297,7 +297,7 @@ ABI follows a **Code-Data Symmetry** principle where every orchestration compone
 
 ```
 Code Structure:                           Data Structure:
-src/core/modules/your_module/             storage/datastore/core/modules/your_module/
+src/core/your_module/             storage/datastore/core/modules/your_module/
 ├── orchestration/                        ├── orchestration/
 │   ├── definitions.py                    │   ├── dagster.yaml          # Instance config
 │   ├── __init__.py                       │   ├── history/              # Run logs
@@ -668,7 +668,7 @@ make dagster-logs
 ### Getting Help
 
 **Learning Resources:**
-- Explore the working demo: `src/core/modules/__demo__/orchestration/`
+- Explore the working demo: `src/core/__demo__/orchestration/`
 - Check generated data: `storage/datastore/core/modules/__demo__/rss_feed/`
 - Web interface: `http://localhost:3000` (when running)
 

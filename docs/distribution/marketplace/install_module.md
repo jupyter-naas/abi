@@ -33,7 +33,7 @@ If you want to customize a marketplace module:
 
 1. **Copy the module to your custom modules directory**:
    ```bash
-   cp -r src/marketplace/modules/module_name.disabled/ src/custom/modules/module_name/
+   cp -r src/marketplace/module_name.disabled/ src/custom/modules/module_name/
    ```
 
 2. **Follow steps 2-4 from Method 1**
@@ -44,5 +44,5 @@ To disable any module temporarily:
 
 ```bash
 # Add .disabled suffix
-mv src/marketplace/modules/module_name src/marketplace/modules/module_name.disabled
+mv src/marketplace/module_name src/marketplace/module_name.disabled
 ```

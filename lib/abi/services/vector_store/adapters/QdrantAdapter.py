@@ -33,7 +33,7 @@ class QdrantAdapter(IVectorStorePort):
         self.timeout = timeout
         self.client: Optional[QdrantClient] = None
 
-    async def initialize(self) -> None:
+    def initialize(self) -> None:
         if self.client is None:
             self.client = QdrantClient(
                 host=self.host,
@@ -52,7 +52,7 @@ class QdrantAdapter(IVectorStorePort):
         }
         return metric_map.get(metric.lower(), Distance.COSINE)
 
-    async def create_collection(
+    def create_collection(
         self,
         collection_name: str,
         dimension: int,
@@ -72,21 +72,21 @@ class QdrantAdapter(IVectorStorePort):
         )
         logger.info(f"Created collection: {collection_name}")
 
-    async def delete_collection(self, collection_name: str) -> None:
+    def delete_collection(self, collection_name: str) -> None:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
         
         self.client.delete_collection(collection_name=collection_name)
         logger.info(f"Deleted collection: {collection_name}")
 
-    async def list_collections(self) -> List[str]:
+    def list_collections(self) -> List[str]:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
         
         collections = self.client.get_collections()
         return [c.name for c in collections.collections]
 
-    async def store_vectors(
+    def store_vectors(
         self,
         collection_name: str,
         documents: List[VectorDocument]
@@ -119,7 +119,7 @@ class QdrantAdapter(IVectorStorePort):
         
         logger.debug(f"Stored {len(documents)} vectors in {collection_name}")
 
-    async def search(
+    def search(
         self,
         collection_name: str,
         query_vector: np.ndarray,
@@ -167,7 +167,7 @@ class QdrantAdapter(IVectorStorePort):
         
         return results
 
-    async def get_vector(
+    def get_vector(
         self,
         collection_name: str,
         vector_id: str,
@@ -197,7 +197,7 @@ class QdrantAdapter(IVectorStorePort):
             payload=payload.get("payload")
         )
 
-    async def update_vector(
+    def update_vector(
         self,
         collection_name: str,
         vector_id: str,
@@ -232,7 +232,7 @@ class QdrantAdapter(IVectorStorePort):
                 points=[vector_id]
             )
 
-    async def delete_vectors(
+    def delete_vectors(
         self,
         collection_name: str,
         vector_ids: List[str]
@@ -246,14 +246,14 @@ class QdrantAdapter(IVectorStorePort):
         )
         logger.debug(f"Deleted {len(vector_ids)} vectors from {collection_name}")
 
-    async def count_vectors(self, collection_name: str) -> int:
+    def count_vectors(self, collection_name: str) -> int:
         if not self.client:
             raise RuntimeError("Adapter not initialized")
         
         collection_info = self.client.get_collection(collection_name=collection_name)
         return collection_info.vectors_count or 0
 
-    async def close(self) -> None:
+    def close(self) -> None:
         if self.client:
             self.client.close()
             self.client = None

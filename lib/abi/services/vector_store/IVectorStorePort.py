@@ -23,11 +23,11 @@ class SearchResult:
 
 class IVectorStorePort(ABC):
     @abstractmethod
-    async def initialize(self) -> None:
+    def initialize(self) -> None:
         pass
 
     @abstractmethod
-    async def create_collection(
+    def create_collection(
         self,
         collection_name: str,
         dimension: int,
@@ -37,15 +37,15 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    async def delete_collection(self, collection_name: str) -> None:
+    def delete_collection(self, collection_name: str) -> None:
         pass
 
     @abstractmethod
-    async def list_collections(self) -> List[str]:
+    def list_collections(self) -> List[str]:
         pass
 
     @abstractmethod
-    async def store_vectors(
+    def store_vectors(
         self,
         collection_name: str,
         documents: List[VectorDocument]
@@ -53,7 +53,7 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    async def search(
+    def search(
         self,
         collection_name: str,
         query_vector: np.ndarray,
@@ -65,7 +65,7 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    async def get_vector(
+    def get_vector(
         self,
         collection_name: str,
         vector_id: str,
@@ -74,7 +74,7 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    async def update_vector(
+    def update_vector(
         self,
         collection_name: str,
         vector_id: str,
@@ -85,7 +85,7 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    async def delete_vectors(
+    def delete_vectors(
         self,
         collection_name: str,
         vector_ids: List[str]
@@ -93,9 +93,9 @@ class IVectorStorePort(ABC):
         pass
 
     @abstractmethod
-    async def count_vectors(self, collection_name: str) -> int:
+    def count_vectors(self, collection_name: str) -> int:
         pass
 
     @abstractmethod
-    async def close(self) -> None:
+    def close(self) -> None:
         pass
