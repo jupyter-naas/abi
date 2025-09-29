@@ -53,7 +53,6 @@ services:
       - ./lib:/app/lib          # Libraries
       - ./README.md:/app/README.md
       # Cached volumes for performance
-      - cargo-cache:/root/.cargo    # Rust dependencies cache
       - venv_cache:/app/.venv       # Python virtual environment cache
     environment:
       - PYTHONPATH=/app
@@ -204,7 +203,6 @@ services:
 # Named volumes for persistent data storage across container restarts
 
 volumes:
-  cargo-cache:    # Rust/Cargo dependencies cache for faster builds
   venv_cache:     # Python virtual environment cache for faster startup
   oxigraph_data:  # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
