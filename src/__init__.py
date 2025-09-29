@@ -23,12 +23,9 @@ import os
 
 
 env = os.getenv("ENV")
-if env == "prod":
+config_path = f"config.{env}.yaml"
+if not os.path.exists(config_path):
     config_path = "config.yaml"
-else:
-    config_path = f"config.{env}.yaml"
-    if not os.path.exists(config_path):
-        config_path = "config.yaml"
 
 
 @atexit.register
