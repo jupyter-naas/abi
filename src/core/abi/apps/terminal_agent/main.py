@@ -404,13 +404,21 @@ def run_agent(agent: Agent):
         if hasattr(agent, '_state') and hasattr(agent._state, 'set_current_active_agent'):
             agent._state.set_current_active_agent(current_active_agent)
         
-        # Get the response while animation runs with error handling
+        # Get the response with real streaming support
         try:
-            agent.invoke(user_input)
-        except Exception as e:
             # Stop the animation first
             loading = False
             loader_thread.join()
+            print("\r" + " " * 15 + "\r", end="", flush=True)
+            
+            # Use the agent system properly
+            agent.invoke(user_input)
+                
+        except Exception as e:
+            # Stop the animation if still running
+            loading = False
+            if 'loader_thread' in locals():
+                loader_thread.join()
             
             # Clear the loading line
             print("\r" + " " * 15 + "\r", end="", flush=True)
@@ -427,14 +435,7 @@ def run_agent(agent: Agent):
             save_to_conversation(traceback_msg)
             save_to_conversation("─" * TERMINAL_WIDTH)
             save_to_conversation("")  # Empty line
-            return  # Continue conversation instead of crashing
-        
-        # Stop the animation
-        loading = False
-        loader_thread.join()
-        
-        # Clear the loading line properly
-        print("\r" + " " * 15 + "\r", end="", flush=True)
+            continue  # Continue conversation instead of crashing
         
         # # Convert list response to string if necessary
         # if isinstance(response, list):
@@ -550,14 +551,20 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
         must be properly registered in a module under src/modules for this to work.
     """
     
-    console_loader = ConsoleLoader()
-    console_loader.start("Loading")
+    # Skip loading indicators in airgap mode for instant startup
+    import os
+    ai_mode = os.getenv("AI_MODE")
+    
+    if ai_mode != "airgap":
+        console_loader = ConsoleLoader()
+        console_loader.start("Loading")
     
     assert agent_class is not None, "Agent class is required"
     
     agent = load_agent(agent_class)
     
-    console_loader.stop()
+    if ai_mode != "airgap":
+        console_loader.stop()
     
     if agent is None:
         print(f"Agent {agent_class} not found")

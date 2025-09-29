@@ -1,10 +1,10 @@
 from .VectorStore import VectorStore
-from .Embeddings import openai_embeddings_batch, openai_embeddings
+from .Embeddings import embeddings_batch, embeddings as embeddings
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
 from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
+import os
 
 class IntentScope(Enum):
     DIRECT = "direct"
@@ -30,12 +30,26 @@ class IntentMapper:
     
     def __init__(self, intents: list[Intent]):
         self.intents = intents
-        self.vector_store = VectorStore()
+        
+        # Use environment-based detection for consistent embedding source
+        dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+            
+        self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
         metadatas = [{"index": index} for index in range(len(intents_values))]
-        self.vector_store.add_texts(intents_values, embeddings=openai_embeddings_batch(intents_values), metadatas=metadatas)
+        self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
         
-        self.model = ChatOpenAI(model="gpt-4o-mini")
+        # Detect if we're using local embeddings (768 dim = airgap mode)
+        if dimension == 768 or os.getenv("AI_MODE") == "airgap":
+            from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
+            self.model = AirgapChatOpenAI(
+                model="ai/gemma3",
+                temperature=0.7,
+                base_url="http://localhost:12434/engines/v1",
+                api_key="ignored",
+            )
+        else:
+            self.model = ChatOpenAI(model="gpt-4o-mini")
         self.system_prompt = """
 You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
 
@@ -58,18 +72,14 @@ You: code a project
     
     
     def map_intent(self, intent: str, k: int = 1) -> list[dict]:
-        results = self.vector_store.similarity_search(openai_embeddings(intent), k=k)
+        results = self.vector_store.similarity_search(embeddings(intent), k=k)
         for result in results:
             result['intent'] = self.intents[result['metadata']['index']]
-    
+        
         return results
     
     def map_prompt(self, prompt: str, k: int = 1) -> Tuple[list[dict], list[dict]]:
-        response = self.model.invoke([
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=prompt)
-        ])
-        
-        assert isinstance(response.content, str)
-        intent : str = response.content.lower().strip()
-        return self.map_intent(intent, k), self.map_intent(prompt, k)
+        # Use direct prompt mapping without LLM intent extraction for speed
+        # Return empty first result and prompt results as second (matches expected format)
+        prompt_results = self.map_intent(prompt, k)
+        return [], prompt_results

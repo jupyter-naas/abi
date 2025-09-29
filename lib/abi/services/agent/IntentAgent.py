@@ -370,23 +370,27 @@ Last user message: "{last_human_message.content}"
         
         filtered_intents: list = []
         
-        assert isinstance(response.tool_calls, list), response.tool_calls
-        assert len(response.tool_calls) > 0, response.tool_calls
-        assert isinstance(response.tool_calls[0]['args'], dict), response.tool_calls
-        assert 'bool_list' in response.tool_calls[0]['args'], response.tool_calls
-        assert isinstance(response.tool_calls[0]['args']['bool_list'], list), response.tool_calls
-        
-        bool_list = response.tool_calls[0]['args']['bool_list']
-        for i in range(len(bool_list)):
-            if bool_list[i]:
-                filtered_intents.append(mapped_intents[i])
+        try:
+            assert isinstance(response.tool_calls, list), response.tool_calls
+            assert len(response.tool_calls) > 0, response.tool_calls
+            assert isinstance(response.tool_calls[0]['args'], dict), response.tool_calls
+            assert 'bool_list' in response.tool_calls[0]['args'], response.tool_calls
+            assert isinstance(response.tool_calls[0]['args']['bool_list'], list), response.tool_calls
+            
+            bool_list = response.tool_calls[0]['args']['bool_list']
+            for i in range(len(bool_list)):
+                if bool_list[i]:
+                    filtered_intents.append(mapped_intents[i])
+        except Exception as e:
+            logger.error(f"Error filtering out intents: {e}")
+            filtered_intents = mapped_intents
 
         logger.debug(f"{len(filtered_intents)} intents filtered: {filtered_intents}")
         state['intent_mapping'] = {"intents": filtered_intents}
         if len(filtered_intents) == 1 and filtered_intents[0]['score'] > self._threshold:
             return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": filtered_intents}})
         return Command(goto="entity_check", update={"intent_mapping": {"intents": filtered_intents}})
-
+    
     def _extract_entities(self, text: str) -> list[str]:
         """Extract named entities from text using spaCy.
         

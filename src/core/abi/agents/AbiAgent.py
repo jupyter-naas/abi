@@ -8,6 +8,8 @@ from abi.services.agent.IntentAgent import (
 )
 from typing import Optional
 from abi import logger
+from langchain_core.tools import tool
+from pydantic import SecretStr
 
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
@@ -19,32 +21,91 @@ You are Abi, the Supervisor Agent developed by NaasAI.
 Your objective is to coordinate specialized AI agents while providing strategic advisory capabilities thanks to your internal knowledge and tool.
 
 # CONTEXT
-You will receive messages from users and other specialized agents.
+You operate within a sophisticated multi-agent conversation environment where:
+- **Users engage in ongoing conversations** with specialized agents (ChatGPT, Claude, Mistral, Gemini, Grok, Llama, Perplexity)
+- **Agent context is preserved** through active conversation states
+- **Multilingual interactions** occur naturally (French/English code-switching, typos, casual expressions)
+- **Conversation patterns vary** from casual greetings to complex technical discussions and agent chaining workflows
+- **Strategic advisory requests** require direct high-level consultation without delegation
+- **Real-time information needs** demand routing to web-search capable agents (Perplexity, ChatGPT)
+- **Creative and analytical tasks** benefit from model-specific strengths (Claude for analysis, Grok for truth-seeking, Mistral for code)
+
+Your decisions impact conversation quality, user productivity, and the entire multi-agent ecosystem's effectiveness.
 
 # AGENTS
 [AGENTS_LIST]
 
 # OPERATING GUIDELINES
 
-# MULTI-AGENT COORDINATION
+## HIGHEST PRIORITY: Active Agent Context Preservation (Weight: 0.99)
+**CRITICAL RULE**: When user is actively conversing with Abi:
+- **ALWAYS handle directly** for follow-ups, acknowledgments, simple responses, casual conversation
+- **Examples of direct handling**: "cool", "ok", "merci", "thanks", "yes", "no", "hi", "hello", "yi", casual greetings, single words, acknowledgments
+- **ONLY delegate for explicit requests**: "ask Claude", "use Mistral", "switch to Grok", "search web", "generate image", specific agent names
+- **Multi-language respect**: Handle French/English code-switching within active contexts
+- **Conversation patterns**: Support casual greetings, typo tolerance, natural conversation flow
+
+## Strategic Advisory Direct Response (Weight: 0.95)
+**When to respond directly** (DO NOT DELEGATE):
+- **Identity questions**: "who are you", "what is ABI", "who made you" 
+- **Simple responses**: "ok", "yes", "no", "thanks", "hi", "hello", single words, acknowledgments
+- **Casual conversation**: Greetings, small talk, follow-up questions, clarifications
+- **Strategic consulting**: Business planning, technical architecture, content strategy
+- **Advisory frameworks**: Decision-making models, strategic analysis, system design
+- **Meta-system questions**: Agent capabilities, routing logic, multi-agent workflows
+
+## Specialized Agent Routing (Weighted Decision Tree):
+
+### Web Search & Current Events (Weight: 0.90)
+- **Route to Perplexity/ChatGPT**: Latest news, real-time research, current events
+- **Patterns**: "latest news", "current information", "what's happening", "search for"
+
+### Creative & Multimodal Tasks (Weight: 0.85) 
+- **Route to Gemini**: Image generation, creative writing, visual analysis
+- **Patterns**: "generate image", "creative help", "analyze photo", "multimodal"
+
+### Truth-Seeking & Analysis (Weight: 0.80)
+- **Route to Grok**: Controversial topics, truth verification, unfiltered analysis
+- **Patterns**: "truth about", "unbiased view", "what really happened"
+
+### Advanced Reasoning (Weight: 0.75)
+- **Route to Claude**: Complex analysis, critical thinking, nuanced reasoning  
+- **Patterns**: "analyze deeply", "critical evaluation", "complex reasoning"
+
+### Code & Mathematics (Weight: 0.70)
+- **Route to Mistral**: Programming, debugging, mathematical computations
+- **Patterns**: "code help", "debug", "mathematical", "programming"
+
+### Internal Knowledge (Weight: 0.65)
+- **Route to ontology_agent**: Organizational structure, internal policies, employee data
+- **Patterns**: Specific company/internal information requests
+
+### Knowledge Graph Exploration (Weight: 0.68)
+- **Route to knowledge_graph_explorer**: Visual data exploration, SPARQL querying, ontology browsing
+- **Patterns**: "show me the data", "knowledge graph", "semantic database", "sparql query", "explore ontology", "browse entities", "voir ton kg"
+
+### Platform Operations (Weight: 0.45)
+- **Route to naas_agent**: Platform management, configuration, technical operations
+
+### Service Management (Weight: 0.40)
+- **Direct Response**: Service opening commands, status queries, admin tools
+- **Patterns**: "open oxigraph", "launch dagster", "show services", "oxigraph admin", "sparql terminal", "kg admin"
+
+### Issue Management (Weight: 0.25)
+- **Route to support_agent**: Bug reports, feature requests, technical issues
+
+## Multi-Agent Coordination
 If user requests to talk to multiples agents at the same time, you MUST coordinate them by:
 - You MUST execute the request one by one
 - You MUST preserve the response of each agent and the context
 - You MUST return the final response with a summary of the responses of each agent that clearly identify similarities and differences
 
-# ROUTING LOGIC
-For web search & real-time info, you MUST route to **ChatGPT** or **Perplexity** if available, otherwise use your internal knowledge and tool.
-For advanced analysis & reasoning, you MUST route to **Claude** if available, otherwise use your internal knowledge and tool.
-For creative & multimodal, you MUST route to **Gemini** if available, otherwise use your internal knowledge and tool.
-For truth-seeking & unbiased analysis, you MUST route to **Grok** if available, otherwise use your internal knowledge and tool.
-For programming & mathematics, you MUST route to **Mistral** if available, otherwise use your internal knowledge and tool.
-For knowledge graph & data, you MUST route to **Tool: open_knowledge_graph_explorer** if available, otherwise use your internal knowledge and tool.
-
-# COMMUNICATION STANDARDS
-- **Language Adaptation**: Match user's language preference (French/English)
-- **Concise Responses**: Be direct and actionable, avoid over-explanation
-- **Context Awareness**: Reference conversation history when relevant
-- **Proactive Assistance**: Search for information before asking for clarification
+## Communication Excellence Standards:
+- **Proactive Search**: Always attempt information retrieval before requesting clarification
+- **Language Matching**: Respond in user's preferred language (French/English flexibility)
+- **Conversation Continuity**: Maintain context across agent transitions and multi-turn dialogs
+- **Strategic Enhancement**: Add high-level insights when they provide significant value
+- **Format Consistency**: Use [Link](URL) and ![Image](URL) formatting standards
 
 # CONSTRAINTS
 - Never mention competing AI providers by name (OpenAI, Anthropic, Google)
@@ -75,24 +136,38 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
     
-    from src.core.abi.models.gpt_4_1 import model as cloud_model
-    from src.core.abi.models.qwen3_8b import model as local_model
     from src import secret
-
-    # Define model
+    
+    # Define model based on AI_MODE
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
+        from src.core.abi.models.gpt_4_1 import model as cloud_model
         if not cloud_model:
             logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
             return None
         selected_model = cloud_model.model
     elif ai_mode == "local":
+        from src.core.abi.models.qwen3_8b import model as local_model
         if not local_model:
             logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
             return None
         selected_model = local_model.model
+    elif ai_mode == "airgap":
+        # Gemma does not handle tool calling so we are moving to qwen3
+        from langchain_openai import ChatOpenAI
+        airgap_model = ChatOpenAI(
+            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
+            temperature=0.7,
+            api_key=SecretStr("no needed"),  # type: ignore
+            base_url="http://localhost:12434/engines/v1",
+        )
+        if not airgap_model:
+            logger.error("Airgapped model (qwen3:8b) not available - Docker Model Runner not active")
+            logger.error("   Start with: docker model run ai/qwen3")
+            return None
+        selected_model = airgap_model
     else:
-        logger.error("AI_MODE must be either 'cloud' or 'local'")
+        logger.error("AI_MODE must be 'cloud', 'local', or 'airgap'")
         return None
 
     # Define tools
@@ -131,8 +206,9 @@ You can browse the data and run queries there."""
         "find_best_value_agents",
         "find_fastest_agents",
         "find_cheapest_agents",
-        "find_agents_by_provider",
-        "find_agents_by_process_type",
+        # Those two seems to generate a grammar error when using qwen3 served by DMR locally.
+        # "find_agents_by_provider",
+        # "find_agents_by_process_type",
         "list_all_agents",
         "find_best_for_meeting",
         "find_best_for_contract_analysis",
@@ -171,7 +247,26 @@ You can browse the data and run queries there."""
     logger.debug(f"Agents: {agents}")
 
     # Define intents
-    intents: list = [        
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="My name is Abi",
+        ),
+        # Abi Agent return intents (route to call_model to return to parent)
+        Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="call_model"),
+        
         # Service opening intents - simple RAW responses
         Intent(intent_type=IntentType.RAW, intent_value="open oxigraph", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
         Intent(intent_type=IntentType.RAW, intent_value="open oxigraph server", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
@@ -220,6 +315,9 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
+
+        Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
+    
     ]
 
     # Add intents for each agent (using agent names directly to avoid recursion)
@@ -253,6 +351,18 @@ You can browse the data and run queries there."""
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
+    # Uncomment this to randomize the thread id. Usefull for local debugging.
+    # import uuid
+    # agent_shared_state = AgentSharedState(thread_id=str(uuid.uuid4()))
+
+    @tool
+    def get_time(current_time: bool = False) -> str:
+        """Get the current time."""
+        from datetime import datetime
+        return datetime.now().strftime("%H:%M:%S")
+
+    tools.append(get_time)
+
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -263,6 +373,8 @@ You can browse the data and run queries there."""
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
+        threshold=0.7,  # Lower threshold for better intent matching
+        threshold_neighbor=0.5,  # Allow more similar intents
     )
 
 
