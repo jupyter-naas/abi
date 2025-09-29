@@ -9,6 +9,10 @@ from abi.services.triple_store.TripleStoreFactory import (
     TripleStoreFactory,
     TripleStoreService,
 )
+from abi.services.vector_store.VectorStoreFactory import (
+    VectorStoreFactory,
+)
+from abi.services.vector_store.VectorStoreService import VectorStoreService
 
 
 class Services:
@@ -16,6 +20,7 @@ class Services:
 
     storage_service: ObjectStorageService
     triple_store_service: TripleStoreService
+    vector_store_service: VectorStoreService
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -55,6 +60,14 @@ class Services:
                 self.triple_store_service = TripleStoreFactory.TripleStoreServiceFilesystem(
                     self.config.triple_store_path
                 )
+        
+        # Initialize vector store service
+        try:
+            logger.debug("Initializing vector store service")
+            self.vector_store_service = VectorStoreFactory.get_service()
+        except Exception as e:
+            logger.error(f"Error initializing vector store service: {e}")
+            self.vector_store_service = None
 
     def __init_prod(self):
         self.storage_service = ObjectStorageFactory.ObjectStorageServiceNaas(
@@ -83,6 +96,14 @@ class Services:
                 workspace_id=self.config.workspace_id,
                 storage_name=self.config.storage_name,
             )
+        
+        # Initialize vector store service
+        try:
+            logger.debug("Initializing vector store service")
+            self.vector_store_service = VectorStoreFactory.get_service()
+        except Exception as e:
+            logger.error(f"Error initializing vector store service: {e}")
+            self.vector_store_service = None
 
 
 services: Services = None

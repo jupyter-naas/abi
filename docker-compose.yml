@@ -57,6 +57,9 @@ services:
     environment:
       - PYTHONPATH=/app
       - POSTGRES_URL=postgresql://abi_user:abi_password@postgres:5432/abi_memory
+      - VECTOR_STORE_ADAPTER=qdrant
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
     env_file:
       - .env  # Load environment variables (API keys, AI_MODE, etc.)
     command: ["uv", "run"]  # Start ABI application
@@ -68,7 +71,9 @@ services:
       oxigraph:
         condition: service_healthy  # Wait for knowledge graph to be ready
       postgres:
-        condition: service_healthy  # Wait for database to be ready
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     networks:
       - abi-network
     profiles:
@@ -89,6 +94,7 @@ services:
       - 5432:5432  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:5432/abi_memory
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U abi_user -d abi_memory"]
       interval: 5s
@@ -184,12 +190,26 @@ services:
       - ./src:/app/src
       - ./lib:/app/lib
       - ./README.md:/app/README.md
+      - ./storage:/app/storage
       - venv_cache:/app/.venv
       - dagster_home:/app/.dagster  # Dagster metadata and run history
+      - ./docker/dagster/dagster.yaml:/app/.dagster/dagster.yaml:ro
     environment:
       - PYTHONPATH=/app
       - DAGSTER_HOME=/app/.dagster
-    command: ["uv", "run", "dagster", "dev"]  # Start Dagster development server
+      - AWS_ACCESS_KEY_ID=dagster
+      - AWS_SECRET_ACCESS_KEY=dagster-secret
+      - DAGSTER_S3_LOG_BUCKET=dagster-logs
+      - MINIO_ENDPOINT_URL=http://minio:9000
+      - MINIO_REGION_NAME=us-east-1
+      - DAGSTER_PG_HOSTNAME=postgres
+      - DAGSTER_PG_USERNAME=abi_user
+      - DAGSTER_PG_PASSWORD=abi_password
+      - DAGSTER_PG_DB=abi_dagster
+    command:
+      - /bin/bash
+      - -c
+      - 'uv sync --all-extras && python scripts/generate_dagster_command.py | bash'  # Start Dagster with custom instance config
     networks:
       - abi-network
     profiles:
@@ -197,16 +217,78 @@ services:
       - prod       # Available in production
       - container  # Available when running ABI in container mode
 
+  # -----------------------------------------------------------------------------
+  # MinIO - S3-compatible Object Storage for Dagster Compute Logs
+  # -----------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: dagster
+      MINIO_ROOT_PASSWORD: dagster-secret
+    ports:
+      - 9000:9000  # S3 API endpoint - http://localhost:9000
+      - 9001:9001  # MinIO console - http://localhost:9001
+    volumes:
+      - minio_data:/data
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+      - container
+
+  # mc container to initialize the bucket on startup
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      - minio
+    entrypoint: >-
+      /bin/sh -c "
+      until /usr/bin/mc alias set dagster http://minio:9000 dagster dagster-secret; do sleep 1; done &&
+      /usr/bin/mc mb -p dagster/dagster-logs || true
+      "
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+      - container
+
 # =============================================================================
 # PERSISTENT VOLUMES
 # =============================================================================
 # Named volumes for persistent data storage across container restarts
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - 6333:6333
+      - 6334:6334
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - abi-network
+    profiles:
+      - local
+      - prod
+      - container
 
 volumes:
   venv_cache:     # Python virtual environment cache for faster startup
   oxigraph_data:  # RDF triple store data (knowledge graph persistence)
   postgres_data:  # PostgreSQL database files (agent memory persistence)
   dagster_home:   # Dagster metadata, run history, and configuration
+  qdrant_storage: # Qdrant vector store data
+  minio_data:     # MinIO object storage data
 
 # =============================================================================
 # NETWORK CONFIGURATION
