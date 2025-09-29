@@ -1,10 +1,10 @@
 from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, BaseMessageChunk
 from langchain_core.outputs import ChatResult
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.outputs.chat_generation import ChatGenerationChunk
-from langchain_core.messages import AIMessage
+# from langchain_core.messages import AIMessage
 from typing import Optional, List, Any, Iterator
 from abi import logger
 import json
@@ -32,7 +32,7 @@ class AirgapChatOpenAI(ChatOpenAI):
     def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, run_manager: Optional[CallbackManagerForLLMRun] = None, **kwargs: Any) -> ChatResult:
         # Extract system prompt and user message with improved formatting
         system_prompt = ""
-        user_msg = None
+        user_msg : str | None = None
         
         for msg in messages:
             if hasattr(msg, 'content') and msg.content:
@@ -40,7 +40,9 @@ class AirgapChatOpenAI(ChatOpenAI):
                     if isinstance(msg.content, str):
                         system_prompt += msg.content + "\n"
                 elif isinstance(msg, HumanMessage):
+                    assert isinstance(msg.content, str)
                     user_msg = msg.content
+                    
         
         # Always ensure we have a valid user message
         if not user_msg or not user_msg.strip():
@@ -81,7 +83,7 @@ class AirgapChatOpenAI(ChatOpenAI):
         """Stream tokens from the Docker Model Runner"""
         # Extract system prompt and user message with improved formatting
         system_prompt = ""
-        user_msg = None
+        user_msg : str | None = None
         
         for msg in messages:
             if hasattr(msg, 'content') and msg.content:
@@ -89,6 +91,7 @@ class AirgapChatOpenAI(ChatOpenAI):
                     if isinstance(msg.content, str):
                         system_prompt += msg.content + "\n"
                 elif isinstance(msg, HumanMessage):
+                    assert isinstance(msg.content, str)
                     user_msg = msg.content
         
         # Always ensure we have a valid user message
@@ -107,7 +110,7 @@ class AirgapChatOpenAI(ChatOpenAI):
         # Make streaming request to Docker Model Runner
         try:
             response = requests.post(
-                f"{self.base_url}/chat/completions",
+                f"{self.openai_api_base}/chat/completions",
                 json={
                     "model": self.model_name,
                     "messages": [{"role": "user", "content": prompt}],
@@ -136,7 +139,7 @@ class AirgapChatOpenAI(ChatOpenAI):
                                     content = choice['delta']['content']
                                     if content:
                                         yield ChatGenerationChunk(
-                                            message=AIMessage(content=content),
+                                            message=BaseMessageChunk(content=content),
                                             generation_info={"finish_reason": choice.get('finish_reason')}
                                         )
                         except json.JSONDecodeError:
@@ -149,7 +152,7 @@ class AirgapChatOpenAI(ChatOpenAI):
             if result.generations:
                 content = result.generations[0].message.content
                 yield ChatGenerationChunk(
-                    message=AIMessage(content=content),
+                    message=BaseMessageChunk(content=content),
                     generation_info={"finish_reason": "stop"}
                 )
 
@@ -172,7 +175,7 @@ try:
             model=ID,
             temperature=0.2,  # Even lower temperature for faster, more focused responses
             max_tokens=512,   # Shorter responses for speed
-            base_url="http://localhost:12434/engines/v1",
+            openai_api_base="http://localhost:12434/engines/v1",
             api_key="ignored",
         ),
         context_window=CONTEXT_WINDOW,

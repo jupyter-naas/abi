@@ -8,6 +8,7 @@ from abi.services.agent.IntentAgent import (
 from typing import Optional
 from abi import logger
 from langchain_core.tools import tool
+from pydantic import SecretStr
 
 NAME = "Abi"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
@@ -186,7 +187,7 @@ def create_agent(
     airgap_model = ChatOpenAI(
         model="ai/qwen3",
         temperature=0.7,
-        api_key="no needed",
+        api_key=SecretStr("ignored"),
         base_url="http://localhost:12434/engines/v1",
     )
 
