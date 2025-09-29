@@ -1,10 +1,11 @@
 import pytest
+from typing import Optional
 
 from abi.services.agent.Agent import Agent
 from src.core.abi.agents.KnowledgeGraphBuilderAgent import create_agent
 
 @pytest.fixture
-def agent() -> Agent:
+def agent() -> Optional[Agent]:
     return create_agent()
 
 def test_add_individual(agent: Agent):

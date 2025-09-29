@@ -115,7 +115,10 @@ logger.debug(
     "Loading secrets into environment variables. Priority: Environment variables > .env > Naas Secrets"
 )
 secrets: dict = {}
-if naas_api_key is not None:
+
+# Skip cloud service initialization in airgap mode
+ai_mode = os.getenv("AI_MODE")
+if naas_api_key is not None and ai_mode != "airgap":
     naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
     base64_adapter = Base64Secret.Base64Secret(
         naas_secret_adapter, os.environ.get("ABI_BASE64_SECRET_NAME", "abi_secrets")
@@ -132,6 +135,8 @@ if naas_api_key is not None:
                 secrets[key] = os.getenv(key)
 
     secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
+elif ai_mode == "airgap":
+    logger.debug("Airgapped mode: Skipping cloud service initialization for complete offline operation")
 
 logger.debug("Loading Secrets from .env file")
 envfile_values = dotenv_values()
@@ -156,10 +161,16 @@ modules_loaded = False
 
 def load_modules():
     global services
-    logger.debug("Loading modules")
+    
+    # Skip verbose logging in airgap mode for faster startup
+    ai_mode = os.getenv("AI_MODE")
+    if ai_mode != "airgap":
+        logger.debug("Loading modules")
+    
     _modules = get_modules(config)
 
-    logger.debug("Loading ontologies")
+    if ai_mode != "airgap":
+        logger.debug("Loading ontologies")
     ontology_filepaths = []
 
     for module in _modules:
@@ -168,7 +179,8 @@ def load_modules():
             
     services.triple_store_service.load_schemas(ontology_filepaths)
 
-    logger.debug("Loading triggers")
+    if ai_mode != "airgap":
+        logger.debug("Loading triggers")
     for module in _modules:
         # Loading triggers
         for trigger in module.triggers:
@@ -186,13 +198,16 @@ def load_modules():
                     topic, event_type, callback, background
                 )
 
-    logger.debug("Loading on_initialized")
+    if ai_mode != "airgap":
+        logger.debug("Loading on_initialized")
     for module in _modules:
         module.on_initialized()
 
-    logger.debug("Loading agents")
+    if ai_mode != "airgap":
+        logger.debug("Loading agents")
     for module in _modules:
-        logger.debug(f"Loading agents for module {module.module_import_path}")
+        if ai_mode != "airgap":
+            logger.debug(f"Loading agents for module {module.module_import_path}")
         module.load_agents()
 
     return _modules
