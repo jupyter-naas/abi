@@ -39,7 +39,7 @@ The deployment process is fully automated through GitHub Actions workflows:
 
 2. **Container Build Process**:
    - When a new release is published, the `build_abi_container.yml` workflow is triggered
-   - This builds a Docker container using `Dockerfile.linux.x86_64`
+   - This builds a Docker container using `docker/images/Dockerfile.linux.x86_64`
    - The container is tagged and pushed to GitHub Container Registry (ghcr.io)
 
 3. **Deployment to NAAS**:
@@ -52,7 +52,7 @@ The deployment process is fully automated through GitHub Actions workflows:
      - Creates or updates a NAAS space with environment variables and resource configurations (CPU, memory)
 
 4. **Access the Deployed API**:
-   - The API will be accessible at: `https://<github_project_repository.name>-api.default.space.naas.ai/`
+   - The API will be accessible at: `https://<github_repository.name>-api.default.space.naas.ai/`
    - The deployment uses the following configuration:
      - Port: 9879
      - CPU: 1 core
@@ -140,7 +140,7 @@ For a more maintainable setup, especially on a server:
        image: abi:latest
        build:
          context: .
-         dockerfile: Dockerfile.linux.x86_64
+         dockerfile: docker/images/Dockerfile.linux.x86_64
        restart: unless-stopped
        ports:
          - "9879:9879"

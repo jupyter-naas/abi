@@ -12,6 +12,7 @@ uv.lock
 
 # Config
 config.yaml
+config.*.yaml
 
 # Python
 __pycache__/
@@ -113,3 +114,8 @@ storage/vectorstore/*
 
 *.pid
 sandbox/
+
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/

@@ -127,7 +127,7 @@ abi:ChatGPTBusinessProposalSession a abi:InferenceSession ;
 │   └── 📄 generation_summary_20250115T143022.json
 └── ...
 
-📁 src/core/modules/
+📁 src/core/
 ├── 📁 claude/ontologies/ClaudeOntology.ttl (deployed current version)
 ├── 📁 chatgpt/ontologies/ChatgptOntology.ttl (deployed current version)
 └── ...

@@ -9,7 +9,6 @@ from abi.services.secret.adaptors.secondary import (
 )
 from abi.services.secret.SecretPorts import ISecretAdapter
 from src.services import init_services
-
 from src.__modules__ import get_modules
 import yaml
 from dataclasses import dataclass
@@ -23,18 +22,20 @@ import atexit
 import os
 
 
+env = os.getenv("ENV")
+if env == "prod":
+    config_path = "config.yaml"
+else:
+    config_path = f"config.{env}.yaml"
+    if not os.path.exists(config_path):
+        config_path = "config.yaml"
+
+
 @atexit.register
 def shutdown_services():
     global services
     if services.is_loaded():
         services.triple_store_service.__del__()
-
-
-@dataclass
-class PipelineConfig:
-    name: str
-    cron: str
-    parameters: List[dict]
 
 
 @dataclass
@@ -47,31 +48,24 @@ class ModuleConfig:
 class Config:
     workspace_id: str
     storage_name: str
-    github_project_repository: str
-    github_support_repository: str
+    github_repository: str
+    github_repository: str
     github_project_id: int
     triple_store_path: str
     api_title: str
     api_description: str
     logo_path: str
     favicon_path: str
-    pipelines: List[PipelineConfig]
     space_name: str
     cors_origins: List[str]
     modules: List[ModuleConfig]
 
     @classmethod
-    def from_yaml(cls, yaml_path: str = "config.yaml") -> "Config":
+    def from_yaml(cls, yaml_path: str = config_path) -> "Config":
         try:
             with open(yaml_path, "r") as file:
                 data = yaml.safe_load(file)
                 config_data = data["config"]
-                pipeline_configs = [
-                    PipelineConfig(
-                        name=p["name"], cron=p["cron"], parameters=p["parameters"]
-                    )
-                    for p in data["pipelines"]
-                ]
                 module_configs = [
                     ModuleConfig(
                         path=m["path"], enabled=m["enabled"]
@@ -81,15 +75,13 @@ class Config:
                 return cls(
                     workspace_id=config_data.get("workspace_id"),
                     storage_name=config_data.get("storage_name"),
-                    github_project_repository=config_data["github_project_repository"],
-                    github_support_repository=config_data["github_support_repository"],
+                    github_repository=config_data["github_repository"],
                     github_project_id=config_data["github_project_id"],
                     triple_store_path=config_data["triple_store_path"],
                     api_title=config_data["api_title"],
                     api_description=config_data["api_description"],
                     logo_path=config_data["logo_path"],
                     favicon_path=config_data["favicon_path"],
-                    pipelines=pipeline_configs,
                     space_name=config_data.get("space_name"),
                     cors_origins=config_data.get("cors_origins"),
                     modules=module_configs,
@@ -98,15 +90,13 @@ class Config:
             return cls(
                 workspace_id="",
                 storage_name="",
-                github_project_repository="",
-                github_support_repository="",
+                github_repository="",
                 github_project_id=0,
                 triple_store_path="",
                 api_title="",
                 api_description="",
                 logo_path="",
                 favicon_path="",
-                pipelines=[],
                 space_name="",
                 cors_origins=[],
                 modules=[],
@@ -125,7 +115,10 @@ logger.debug(
     "Loading secrets into environment variables. Priority: Environment variables > .env > Naas Secrets"
 )
 secrets: dict = {}
-if naas_api_key is not None:
+
+# Skip cloud service initialization in airgap mode
+ai_mode = os.getenv("AI_MODE")
+if naas_api_key is not None and ai_mode != "airgap":
     naas_secret_adapter = NaasSecret.NaasSecret(naas_api_key, naas_api_url)
     base64_adapter = Base64Secret.Base64Secret(
         naas_secret_adapter, os.environ.get("ABI_BASE64_SECRET_NAME", "abi_secrets")
@@ -142,6 +135,8 @@ if naas_api_key is not None:
                 secrets[key] = os.getenv(key)
 
     secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
+elif ai_mode == "airgap":
+    logger.debug("Airgapped mode: Skipping cloud service initialization for complete offline operation")
 
 logger.debug("Loading Secrets from .env file")
 envfile_values = dotenv_values()
@@ -166,10 +161,16 @@ modules_loaded = False
 
 def load_modules():
     global services
-    logger.debug("Loading modules")
+    
+    # Skip verbose logging in airgap mode for faster startup
+    ai_mode = os.getenv("AI_MODE")
+    if ai_mode != "airgap":
+        logger.debug("Loading modules")
+    
     _modules = get_modules(config)
 
-    logger.debug("Loading ontologies")
+    if ai_mode != "airgap":
+        logger.debug("Loading ontologies")
     ontology_filepaths = []
 
     for module in _modules:
@@ -178,7 +179,8 @@ def load_modules():
             
     services.triple_store_service.load_schemas(ontology_filepaths)
 
-    logger.debug("Loading triggers")
+    if ai_mode != "airgap":
+        logger.debug("Loading triggers")
     for module in _modules:
         # Loading triggers
         for trigger in module.triggers:
@@ -196,9 +198,17 @@ def load_modules():
                     topic, event_type, callback, background
                 )
 
-
+    if ai_mode != "airgap":
+        logger.debug("Loading on_initialized")
     for module in _modules:
         module.on_initialized()
+
+    if ai_mode != "airgap":
+        logger.debug("Loading agents")
+    for module in _modules:
+        if ai_mode != "airgap":
+            logger.debug(f"Loading agents for module {module.module_import_path}")
+        module.load_agents()
 
     return _modules
 

@@ -70,7 +70,7 @@ from src.core.modules.intentmapping import get_tools
 tools.extend(get_tools())
 ```
 
-You can find the `Agent` class in `src/core/modules/ontology/agents/OntologyAgent.py`.
+You can find the `Agent` class in `src/core/ontology/agents/OntologyAgent.py`.
 
 ## Technical Implementation Details
 

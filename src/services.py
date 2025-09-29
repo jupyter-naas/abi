@@ -31,7 +31,9 @@ class Services:
         self.config = config
         self.secret = secret
 
-        if os.environ.get("ENV") == "dev":
+        # In airgap mode, force dev initialization to avoid cloud services
+        ai_mode = os.getenv("AI_MODE")
+        if os.environ.get("ENV") == "dev" or ai_mode == "airgap":
             self.__init_dev()
         else:
             self.__init_prod()
@@ -41,7 +43,7 @@ class Services:
             ObjectStorageFactory.ObjectStorageServiceFS__find_storage()
         )
 
-        if self.secret.get("USE_AWS_NEPTUNE", None) == "true":
+        if os.environ.get("AI_MODE") != "airgap" and self.secret.get("USE_AWS_NEPTUNE", None) == "true":
             logger.debug("Using AWS Neptune")
             self.triple_store_service = (
                 TripleStoreFactory.TripleStoreServiceAWSNeptuneSSHTunnel()
