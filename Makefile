@@ -63,6 +63,9 @@ q=''
 ftest: deps
 	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
+frun: deps
+	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
+
 fmt: deps
 	@ uvx ruff format
 
