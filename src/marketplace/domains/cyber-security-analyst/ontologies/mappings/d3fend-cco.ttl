@@ -1,0 +1,146 @@
+@prefix : <http://d3fend.mitre.org/ontologies/d3fend.owl#> .
+@prefix d3f: <http://d3fend.mitre.org/ontologies/d3fend.owl#> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix obo: <http://purl/obolibrary.org/obo/> . # Note that obo is prefix for BFO in MergedAllCoreOntology
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xml: <http://www.w3.org/XML/1998/namespace> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bibo: <http://purl.org/ontology/bibo/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<http://d3fend.mitre.org/ontologies/d3fend-cco.owl#> rdf:type owl:Ontology ;
+     owl:imports <../d3fend-protege.ttl#> ;
+     owl:imports <https://raw.githubusercontent.com/CommonCoreOntology/CommonCoreOntologies/refs/tags/v2.0-2024-11-06/src/cco-merged/CommonCoreOntologiesMerged.ttl> .
+
+
+#
+# Class Mappings
+#
+# Note: The obo: prefix doesn't resolve in the ROBOT merge, so full IRI specified...
+
+d3f:DigitalInformation rdfs:subClassOf <https://www.commoncoreontologies.org/ont00000958> .
+# cco ont0000029 is Information Content Entity
+
+d3f:DigitalInformationBearer rdfs:subClassOf <https://www.commoncoreontologies.org/ont00000798> .
+# cco ont00000798 is Information Bearing Artifact
+
+# Note: The obo: prefix doesn't resolve in the ROBOT merge, so full IRI specified.
+d3f:Artifact rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000002> .
+# Where BFO_0000002 is a continuant
+
+d3f:PhysicalArtifact owl:equivalentClass <https://www.commoncoreontologies.org/ont00000995> .
+# cco ont00000995 is material artifact
+
+d3f:DigitalArtifact rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000002> .
+  # Note: d3f:DigitalArtifact cannot be a subclass of bfo:BFO_0000040
+  # aka "material entity" nor bfo:BFO_00000030 "object" as it is
+  # parent to both d3f:DigitalIinformation a subclass of "information
+  # content entity" (information itself) which is "generically
+  # dependent continuant" in BFO and d3f:DigitalInformationBearer a
+  # subclass of "information bearing artifact" which is "independent
+  # continuant" in BFO.
+
+d3f:System rdfs:subClassOf [ owl:intersectionOf ( <http://purl.obolibrary.org/obo/BFO_0000027>
+                                                            [ rdf:type owl:Restriction ;
+                                                              owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000178> ;
+                                                              owl:someValuesFrom <https://www.commoncoreontologies.org/ont00000995>
+                                                            ]
+                                                          ) ;
+                                       rdf:type owl:Class
+                                     ] .
+
+# BFO 00000027 is object aggregate. BFO 0000178 is "has continuant part"
+# CCO ont00000995 is "material artifact". A d3f:System is an object aggregate of material artifacts.
+
+d3f:Action owl:equivalentClass <https://www.commoncoreontologies.org/ont00000005> .
+# Equivalent to cco ont00000005 aka Act
+
+d3f:Event owl:equivalentClass <http://purl.obolibrary.org/obo/BFO_0000015> .
+# Equivalent to BFO_0000015 aka process.
+
+d3f:DigitalEvent  rdfs:subClassOf [ owl:intersectionOf (  <http://purl.obolibrary.org/obo/BFO_0000015>
+                                                       [ rdf:type owl:Restriction ;
+                                                         owl:onProperty <http://purl.obolibrary.org/obo/BFO_0000057> ;
+                                                         owl:allValuesFrom [ rdf:type owl:Class ;
+                                                                             owl:unionOf ( <https://www.commoncoreontologies.org/ont00000958>
+                                                                                           <https://www.commoncoreontologies.org/ont00000798>
+                                                                                         )
+                                                                           ]
+                                                       ]
+                                                     ) ;
+                                  rdf:type owl:Class
+                                ] .
+
+# A digital event is an event/process (BFO 0000015) which has participant (BFO 0000057) 
+# some Information Content Entity (cco ont000000958 or Information Bearing Artifact (cco 00000798). More precise axioms can be added in the future.
+
+
+d3f:Weakness rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000016> .
+# aka "disposition"
+# what is the difference between d3f:Weakness and d3f:Vulnerability?
+
+d3f:Agent owl:equivalentClass <https://www.commoncoreontologies.org/ont00001017> . # Tentative, see note below.
+#cco ont00001017 is Agent
+
+
+  # Note: The cco:Agent definition states that a cco:Agent is "A
+  # Material Entity that is capable of performing Planned Acts.". That
+  # may overspecify D3FEND sense of d3f:Agent, which might be a
+  # reactive agent (any arbitrary system that can perform an
+  # act/actuate, which may not have the intention suggested by the CCO
+  # definition in cco:AgentOntology.
+
+  # While at present cco:IntentionalAct (aka "Planned Act") only
+  # states the agent is following a Directive Information Content
+  # Entity (DICE).  The instructions within Software components could
+  # be interpreted as DICE, but an algorithm being DICE is not
+  # generally also a type of "Intentional Act"/"Planned Act";
+  # definitely not in Belief-Desire-Intention (BDI) sense highly
+  # associated with agent-based model of thinking.)
+
+d3f:Organization rdfs:subClassOf <https://www.commoncoreontologies.org/ont00001180> .
+# cco ont00001180 is cco Organization
+# d3fend only allows persons to be members of organizations, while CCO also allows 
+# other organizations to be part of an organization. Thus the CCO class is slightly broader.
+
+d3f:AgentGroup owl:equivalentClass <https://www.commoncoreontologies.org/ont00000300> .
+# cco ont00000300 is cco Group of Agents
+
+d3f:Person owl:equivalentClass <https://www.commoncoreontologies.org/ont00001262> .
+#cco ont00001262 is cco Person
+# d3fend seems to only refer to human beings with "person", just as CCO does.
+
+d3f:Plan owl:equivalentClass <https://www.commoncoreontologies.org/ont00000974> .
+# cco org/ont00000974 is cco Plan.
+
+d3f:Goal owl:equivalentClass <https://www.commoncoreontologies.org/ont00000476> .
+# cco ont00000476 is cco Objective
+
+#d3f:Sensor owl:equivalentClass cco:Sensor .
+#waiting to discuss this given discussion on transducers
+
+d3f:PhysicalLocation rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000029> .
+# BFO 0000029 is site
+
+# Appraisal seems to be akin to classifying ad understood in d3f.
+
+d3f:Identifier rdfs:subClassOf <https://www.commoncoreontologies.org/ont00000686> .
+# cco ont00000686 is cco DesignativeInformationContentEntity .
+#The definition of Identifier says it's a name, but Designative ICEs include non-name identifiers.
+# I therefore made identifier a subclass rather than equivalent to Designative ICE.
+#
+# Property Mappings
+#
+
+# General Note: The obo: prefix doesn't resolve in the ROBOT merge, so
+# full IRI specified where BFO concepts referenced.
+
+# Note: The bo:contains property means something different than
+# d3f:contains; it is spatial containment between material and
+# immaterial entities
+
+d3f:contains rdfs:subPropertyOf <http://purl.obolibrary.org/obo/BFO_0000051> .     # obo:BFO_0000051 aka "has part"
+d3f:contained-by rdfs:subPropertyOf <http://purl.obolibrary.org/obo/BFO_0000050> . # obo:BFO_0000050 aka "part of"

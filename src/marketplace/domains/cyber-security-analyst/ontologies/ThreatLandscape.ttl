@@ -1,0 +1,126 @@
+# 🚧 NOT FUNCTIONAL YET - Ontology Template
+# ThreatLandscape Ontology for Cyber Security Analyst Domain
+# Comprehensive threat intelligence and attack vector ontology
+
+@prefix : <http://naas.ai/ontology/cyber-security-analyst/threatlandscape#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology Declaration
+: a owl:Ontology ;
+    rdfs:label "ThreatLandscape Ontology" ;
+    rdfs:comment "🚧 NOT FUNCTIONAL YET - Comprehensive threat intelligence and attack vector ontology" .
+
+# Core Threat Classes
+:ThreatActor a owl:Class ;
+    rdfs:label "Threat Actor" ;
+    rdfs:comment "Entity that poses a threat to cybersecurity" .
+
+:AttackVector a owl:Class ;
+    rdfs:label "Attack Vector" ;
+    rdfs:comment "Method or pathway used to gain unauthorized access" .
+
+:ThreatCampaign a owl:Class ;
+    rdfs:label "Threat Campaign" ;
+    rdfs:comment "Coordinated series of attacks by threat actors" .
+
+:Malware a owl:Class ;
+    rdfs:label "Malware" ;
+    rdfs:comment "Malicious software designed to damage or gain unauthorized access" .
+
+:AttackTechnique a owl:Class ;
+    rdfs:label "Attack Technique" ;
+    rdfs:comment "Specific method used in cyber attacks" .
+
+# Threat Actor Types
+:APT a owl:Class ;
+    rdfs:subClassOf :ThreatActor ;
+    rdfs:label "Advanced Persistent Threat" ;
+    rdfs:comment "Sophisticated, long-term cyber attack" .
+
+:Cybercriminal a owl:Class ;
+    rdfs:subClassOf :ThreatActor ;
+    rdfs:label "Cybercriminal" ;
+    rdfs:comment "Individual or group conducting cyber attacks for financial gain" .
+
+:Hacktivist a owl:Class ;
+    rdfs:subClassOf :ThreatActor ;
+    rdfs:label "Hacktivist" ;
+    rdfs:comment "Individual or group using hacking for political or social causes" .
+
+:InsiderThreat a owl:Class ;
+    rdfs:subClassOf :ThreatActor ;
+    rdfs:label "Insider Threat" ;
+    rdfs:comment "Threat posed by individuals within the organization" .
+
+# Attack Vector Types
+:PhishingAttack a owl:Class ;
+    rdfs:subClassOf :AttackVector ;
+    rdfs:label "Phishing Attack" ;
+    rdfs:comment "Fraudulent attempt to obtain sensitive information" .
+
+:MalwareAttack a owl:Class ;
+    rdfs:subClassOf :AttackVector ;
+    rdfs:label "Malware Attack" ;
+    rdfs:comment "Attack using malicious software" .
+
+:SocialEngineering a owl:Class ;
+    rdfs:subClassOf :AttackVector ;
+    rdfs:label "Social Engineering" ;
+    rdfs:comment "Manipulation of people to divulge confidential information" .
+
+:DenialOfService a owl:Class ;
+    rdfs:subClassOf :AttackVector ;
+    rdfs:label "Denial of Service" ;
+    rdfs:comment "Attack designed to make services unavailable" .
+
+# Properties
+:hasMotivation a owl:ObjectProperty ;
+    rdfs:domain :ThreatActor ;
+    rdfs:range xsd:string ;
+    rdfs:label "has motivation" .
+
+:usesTechnique a owl:ObjectProperty ;
+    rdfs:domain :ThreatActor ;
+    rdfs:range :AttackTechnique ;
+    rdfs:label "uses technique" .
+
+:hasCapability a owl:ObjectProperty ;
+    rdfs:domain :ThreatActor ;
+    rdfs:range xsd:string ;
+    rdfs:label "has capability" .
+
+:hasSeverity a owl:DatatypeProperty ;
+    rdfs:domain :AttackVector ;
+    rdfs:range xsd:string ;
+    rdfs:label "has severity" .
+
+:targetsAsset a owl:ObjectProperty ;
+    rdfs:domain :AttackVector ;
+    rdfs:range xsd:string ;
+    rdfs:label "targets asset" .
+
+:hasIOC a owl:DatatypeProperty ;
+    rdfs:domain :Malware ;
+    rdfs:range xsd:string ;
+    rdfs:label "has indicator of compromise" .
+
+# MITRE ATT&CK Framework Integration
+:MITRETactic a owl:Class ;
+    rdfs:label "MITRE Tactic" ;
+    rdfs:comment "High-level adversary goal from MITRE ATT&CK framework" .
+
+:MITRETechnique a owl:Class ;
+    rdfs:subClassOf :AttackTechnique ;
+    rdfs:label "MITRE Technique" ;
+    rdfs:comment "Specific attack technique from MITRE ATT&CK framework" .
+
+:belongsToTactic a owl:ObjectProperty ;
+    rdfs:domain :MITRETechnique ;
+    rdfs:range :MITRETactic ;
+    rdfs:label "belongs to tactic" .
+
+# Domain-specific threat intelligence instances would be defined here
+# This is a template - actual ontology would have comprehensive threat data
