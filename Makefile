@@ -179,6 +179,9 @@ uv:
 .venv:
 	@ uv sync --all-extras
 
+deps-upgrade:
+	@ uv sync --all-extras --upgrade
+
 # Environment file will be created dynamically by CLI during first boot
 .env:
 	@# .env will be created dynamically by CLI during first boot
@@ -368,6 +371,12 @@ test-api-init-container: build
 q=''
 ftest: deps
 	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+
+dtest: deps
+	@ uv run python -m pytest $(shell find lib src tests -type d | fzf -q $(q)) $(args)
+
+frun: deps
+	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
 
 # Test command for debugging
 hello:
@@ -561,7 +570,6 @@ local-up: check-docker
 		docker compose -f docker-compose.yml --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
 	@echo "✓ Local containers started"
-	@make dagster-up
 	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
@@ -582,9 +590,12 @@ local-stop: check-docker
 
 # Stop and remove all local service containers
 local-down: check-docker
-	@make dagster-down
 	@docker compose -f docker-compose.yml --profile local down --timeout 10 || true
 	@echo "✓ All local services stopped"
+
+local-clean: check-docker
+	@docker compose -f docker-compose.yml --profile local down -v --timeout 10 || true
+	@echo "✓ All local services stopped and volumes removed"
 
 local-reload: check-docker
 	@docker compose --profile local down -v
@@ -749,7 +760,6 @@ clean:
 	find . -name "__pycache__" -delete
 	docker compose down
 	docker compose rm -f
-	rm -rf src/core/modules/common/integrations/siteanalyzer/target
 	rm -f dagster.pid dagster.log
 
 # =============================================================================
