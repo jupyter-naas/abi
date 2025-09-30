@@ -5,7 +5,11 @@ from lib.abi.services.cache.CacheFactory import CacheFactory
 from lib.abi.services.cache.CachePort import DataType
 from tqdm import tqdm
 
-cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapping")
+# Create provider-specific cache paths to prevent dimension conflicts
+if os.environ.get("AI_MODE") == "airgap":
+    cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapping/airgap_768")
+else:
+    cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapping/openai_1536")
 
 def _sha1(text):
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
