@@ -31,11 +31,19 @@ class IntentMapper:
     def __init__(self, intents: list[Intent]):
         self.intents = intents
         
-        # Use environment-based detection for consistent embedding source
-        dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+        # Auto-detect dimension by testing actual embedding output
+        intents_values = [intent.intent_value for intent in intents]
+        if intents_values:
+            # Test with first intent to get actual dimension
+            test_embedding = embeddings(intents_values[0])
+            dimension = len(test_embedding)
+            print(f"🔍 Detected embedding dimension: {dimension}")
+        else:
+            # Fallback if no intents
+            dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+            print(f"🔍 Using fallback dimension: {dimension}")
             
         self.vector_store = VectorStore(dimension=dimension)
-        intents_values = [intent.intent_value for intent in intents]
         metadatas = [{"index": index} for index in range(len(intents_values))]
         self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
         
