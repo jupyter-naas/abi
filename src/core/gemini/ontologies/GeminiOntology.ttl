@@ -12,40 +12,28 @@
     dc:description "BFO-grounded ontology for Gemini AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
+
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
 
 # Material Infrastructure (BFO_0000040)
 abi:GoogleServerInfrastructure a bfo:BFO_0000040 ;
-    rdfs:label "Google Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting Gemini systems for large document processing"@en ;
-    bfo:BFO_0000171 abi:GlobalDataCenterRegion . # located in
-
-abi:MultimodalProcessingHardware a bfo:BFO_0000040 ;
-    rdfs:label "Multimodal Processing Hardware"@en ;
-    rdfs:comment "Specialized hardware for multimodal and large-scale document processing"@en ;
-    bfo:BFO_0000171 abi:GlobalDataCenterRegion . # located in
-
-abi:LargeScaleStorageSystems a bfo:BFO_0000040 ;
-    rdfs:label "Large Scale Storage Systems"@en ;
-    rdfs:comment "Storage infrastructure for handling large documents and multimodal content"@en ;
-    bfo:BFO_0000171 abi:GlobalDataCenterRegion . # located in
+    rdfs:label "Gemini Server Infrastructure"@en ;
+    rdfs:comment "Material infrastructure supporting Gemini systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for Gemini"@en ;
+    bfo:BFO_0000171 abi:GoogleDataCenterRegion . # located in
 
 #################################################################
 #    BFO Bucket 2: Qualities (WHAT-LIKE)
 #################################################################
 
 # Qualities that inhere in material entities (BFO_0000019)
-abi:GeminiDocumentProcessingScale a bfo:BFO_0000019 ;
-    rdfs:label "Gemini Document Processing Scale"@en ;
-    rdfs:comment "Quality representing capacity for large document processing"@en ;
+abi:GeminiMultimodalProcessingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Gemini MultimodalProcessingQuality"@en ;
+    rdfs:comment "Quality representing excellence in multimodal content processing"@en ;
+    skos:example "Gemini processing quality metrics"@en ;
     bfo:BFO_0000197 abi:GoogleServerInfrastructure . # inheres in
-
-abi:GeminiMultimodalAnalysisAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "Gemini Multimodal Analysis Accuracy"@en ;
-    rdfs:comment "Quality representing accuracy of multimodal content analysis"@en ;
-    bfo:BFO_0000197 abi:MultimodalProcessingHardware . # inheres in
 
 #################################################################
 #    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
@@ -53,15 +41,10 @@ abi:GeminiMultimodalAnalysisAccuracy a bfo:BFO_0000019 ;
 
 # Capabilities that inhere in material entities (BFO_0000017)
 abi:GeminiLargeDocumentProcessingCapability a bfo:BFO_0000017 ;
-    rdfs:label "Gemini Large Document Processing Capability"@en ;
-    rdfs:comment "Capability for processing large-scale documents and multimodal content"@en ;
-    bfo:BFO_0000197 abi:GoogleServerInfrastructure ; # inheres in
-    bfo:BFO_0000218 abi:LargeScaleStorageSystems . # has material basis
-
-abi:GeminiMultimodalAnalysisCapability a bfo:BFO_0000017 ;
-    rdfs:label "Gemini Multimodal Analysis Capability"@en ;
-    rdfs:comment "Capability for multimodal content analysis and interpretation"@en ;
-    bfo:BFO_0000197 abi:MultimodalProcessingHardware . # inheres in
+    rdfs:label "Gemini LargeDocumentProcessingCapability"@en ;
+    rdfs:comment "Capability for processing large documents and multimodal content"@en ;
+    skos:example "Gemini core capability"@en ;
+    bfo:BFO_0000197 abi:GoogleServerInfrastructure . # inheres in
 
 #################################################################
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
@@ -70,9 +53,9 @@ abi:GeminiMultimodalAnalysisCapability a bfo:BFO_0000017 ;
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:Gemini20FlashModel a bfo:BFO_0000031 ;
     rdfs:label "gemini-2.0-flash"@en ;
-    rdfs:comment "Google's most advanced, multimodal flagship model with enhanced reasoning capabilities"@en ;
-    skos:example "Gemini-2.0-Flash neural network, 1M token context, multimodal processing"@en ;
-    abi:hasModelId "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"@en ;
+    rdfs:comment "Google's most advanced, multimodal flagship model with enhanced reasoning capabilities, cheaper and faster than GPT-4 Turbo."@en ;
+    skos:example "gemini-2.0-flash neural network"@en ;
+    abi:hasModelId "gemini-2.0-flash"@en ;
     abi:hasContextWindow "1000000"^^xsd:integer ;
     abi:hasOwner "google"@en ;
     abi:hasDescription "Google's most advanced, multimodal flagship model with enhanced reasoning capabilities, cheaper and faster than GPT-4 Turbo."@en ;
@@ -81,27 +64,27 @@ abi:Gemini20FlashModel a bfo:BFO_0000031 ;
 # System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:GeminiSystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "Gemini System Prompt"@en ;
-    rdfs:comment "System prompt defining Gemini's role in large document processing"@en ;
-    skos:example "Role: document processor, Tasks: large document analysis, Guidelines: multimodal understanding"@en ;
-    abi:hasRole "You are Gemini, Google's multimodal AI assistant specialized in processing large documents and complex content."@en ;
-    abi:hasObjective "Process and analyze large documents with multimodal understanding"@en ;
-    abi:hasTasks "Large document analysis; PDF processing; Multimodal content understanding; Complex reasoning"@en ;
+    rdfs:comment "System prompt defining Gemini's role, objectives, and operating guidelines"@en ;
+    skos:example "Gemini behavioral configuration"@en ;
+    abi:hasRole "You are Gemini, Google's AI assistant specialized in processing large documents and multimodal content."@en ;
+    abi:hasObjective "Analyze and process large documents with multimodal understanding"@en ;
+    abi:hasTasks "Large document processing; Multimodal analysis; Image and text processing; Complex content synthesis"@en ;
     bfo:BFO_0000084 abi:GoogleServerInfrastructure . # generically depends on
 
 # Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:GeminiIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "Gemini Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for Gemini agent"@en ;
-    skos:example "process large document → gemini_process_pdf, analyze multimodal → gemini_analyze_content"@en ;
-    abi:hasIntentCount "15"^^xsd:integer ;
+    skos:example "Gemini intent routing configuration"@en ;
+    abi:hasIntentCount "20"^^xsd:integer ;
     bfo:BFO_0000084 abi:GoogleServerInfrastructure . # generically depends on
 
 # AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:GeminiAgent a abi:AIAgent ;
     rdfs:label "Gemini"@en ;
     rdfs:comment "Google's Gemini AI agent specialized in large document processing and multimodal analysis"@en ;
-    skos:example "Gemini service using Gemini-2.0-Flash for large document processing"@en ;
-    abi:hasSpecializedRole "Large document processing and multimodal analysis"@en ;
+    skos:example "Complete Gemini service: model + system prompt + intent mappings"@en ;
+    abi:hasSpecializedRole "Large document and multimodal content processing"@en ;
     abi:usesModel abi:Gemini20FlashModel ;
     abi:usesSystemPrompt abi:GeminiSystemPrompt ;
     abi:usesIntentMappings abi:GeminiIntentMappings ;
@@ -112,13 +95,10 @@ abi:GeminiAgent a abi:AIAgent ;
 #################################################################
 
 # Spatial regions (BFO_0000141)
-abi:GlobalDataCenterRegion a bfo:BFO_0000141 ;
-    rdfs:label "Global Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing global data center locations"@en .
-
-abi:VirtualProcessingSpace a bfo:BFO_0000141 ;
-    rdfs:label "Virtual Processing Space"@en ;
-    rdfs:comment "Immaterial space for document content processing"@en .
+abi:GoogleDataCenterRegion a bfo:BFO_0000141 ;
+    rdfs:label "Gemini Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing Gemini data center locations"@en ;
+    skos:example "Geographic region where Gemini infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
@@ -126,59 +106,19 @@ abi:VirtualProcessingSpace a bfo:BFO_0000141 ;
 
 # Temporal regions (BFO_0000008)
 abi:GeminiDocumentProcessingSession a bfo:BFO_0000008 ;
-    rdfs:label "Gemini Document Processing Session"@en ;
-    rdfs:comment "Temporal region during which document processing occurs"@en .
-
-abi:GeminiLargeFileOperationPeriod a bfo:BFO_0000008 ;
-    rdfs:label "Gemini Large File Operation Period"@en ;
-    rdfs:comment "Extended temporal region for large file processing operations"@en .
+    rdfs:label "Gemini DocumentProcessingSession"@en ;
+    rdfs:comment "Temporal region during which Gemini processing occurs"@en ;
+    skos:example "Gemini processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
-abi:GeminiMultimodalProcessingProcess a bfo:BFO_0000015 ;
-    rdfs:label "Gemini Multimodal Processing Process"@en ;
-    rdfs:comment "Process of multimodal content analysis and interpretation"@en ;
-    bfo:BFO_0000057 abi:MultimodalProcessingHardware ; # has participant
-    bfo:BFO_0000055 abi:GeminiMultimodalAnalysisCapability ; # realizes
-    bfo:BFO_0000108 abi:GeminiLargeFileOperationPeriod . # exists at
-
-# Note: Additional processes can be defined as needed, following the same BFO pattern
-
-# Note: This ontology now contains only the essential BFO-compliant structure.
-# Additional temporal regions, model instances, qualities, and specifications
-# can be added as needed following the established BFO patterns above.
-
-# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
-abi:GeminiSystemPrompt a bfo:BFO_0000031 ;
-    rdfs:label "Gemini System Prompt"@en ;
-    rdfs:comment "System prompt defining Gemini's role in large document processing"@en ;
-    abi:hasRole "You are Gemini, Google's multimodal AI assistant specialized in processing large documents and complex content."@en ;
-    abi:hasObjective "Process and analyze large documents with multimodal understanding"@en ;
-    abi:hasTasks "Large document analysis; PDF processing; Multimodal content understanding; Complex reasoning"@en ;
-    bfo:BFO_0000084 abi:GoogleServerInfrastructure .
-
-# Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
-abi:GeminiIntentMappings a bfo:BFO_0000031 ;
-    rdfs:label "Gemini Intent Mappings"@en ;
-    rdfs:comment "Intent-to-tool routing patterns for Gemini agent"@en ;
-    abi:hasIntentCount "15"^^xsd:integer ;
-    bfo:BFO_0000084 abi:GoogleServerInfrastructure .
-
-# Update existing Gemini20FlashModel
-# abi:Gemini20FlashModel 
-#     rdfs:label "gemini-2.0-flash"@en ;
-#     abi:hasModelId "113f2201-9f0e-4bf1-a25f-3ea8ba88e41d"@en ;
-#     abi:hasContextWindow "1000000"^^xsd:integer ;
-#     abi:hasOwner "google"@en ;
-#     abi:hasDescription "Google's most advanced, multimodal flagship model with enhanced reasoning capabilities, cheaper and faster than GPT-4 Turbo."@en .
-
-# Update existing GeminiAgent
-# abi:GeminiAgent 
-#     rdfs:label "Gemini"@en ;
-#     rdfs:comment "Google's Gemini AI agent specialized in large document processing and multimodal analysis"@en ;
-#     abi:usesSystemPrompt abi:GeminiSystemPrompt ;
-#     abi:usesIntentMappings abi:GeminiIntentMappings .
+abi:GeminiLargeDocumentProcessingProcess a abi:LargeDocumentProcessingProcess ;
+    rdfs:label "Gemini LargeDocumentProcessingProcess"@en ;
+    rdfs:comment "Process of analyzing and processing large documents and multimodal content"@en ;
+    skos:example "Gemini executing its core process"@en ;
+    bfo:BFO_0000057 abi:GoogleServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:GeminiLargeDocumentProcessingCapability ; # realizes
+    bfo:BFO_0000108 abi:GeminiDocumentProcessingSession . # exists at

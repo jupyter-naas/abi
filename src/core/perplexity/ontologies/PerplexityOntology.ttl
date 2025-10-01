@@ -6,11 +6,12 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-<http://ontology.naas.ai/abi/<http://ontology.naas.ai/abi/PerplexityOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/PerplexityOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "Perplexity AI Agent Ontology"@en ;
     dc:description "BFO-grounded ontology for Perplexity AI models and processes"@en ;
     dc:created "20250812T101446"@en .
+
 
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
@@ -19,12 +20,8 @@
 # Material Infrastructure (BFO_0000040)
 abi:PerplexityServerInfrastructure a bfo:BFO_0000040 ;
     rdfs:label "Perplexity Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting Perplexity systems for research discovery"@en ;
-    bfo:BFO_0000171 abi:PerplexityDataCenterRegion . # located in
-
-abi:AcademicDatabaseAccessHardware a bfo:BFO_0000040 ;
-    rdfs:label "Academic Database Access Hardware"@en ;
-    rdfs:comment "Specialized hardware for accessing academic databases and research repositories"@en ;
+    rdfs:comment "Material infrastructure supporting Perplexity systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for Perplexity"@en ;
     bfo:BFO_0000171 abi:PerplexityDataCenterRegion . # located in
 
 #################################################################
@@ -32,15 +29,11 @@ abi:AcademicDatabaseAccessHardware a bfo:BFO_0000040 ;
 #################################################################
 
 # Qualities that inhere in material entities (BFO_0000019)
-abi:PerplexityResearchDiscoveryAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "Perplexity Research Discovery Accuracy"@en ;
-    rdfs:comment "Quality representing accuracy of research discovery"@en ;
+abi:PerplexityResearchAccuracy a bfo:BFO_0000019 ;
+    rdfs:label "Perplexity ResearchAccuracy"@en ;
+    rdfs:comment "Quality representing accuracy in research and article discovery"@en ;
+    skos:example "Perplexity processing quality metrics"@en ;
     bfo:BFO_0000197 abi:PerplexityServerInfrastructure . # inheres in
-
-abi:PerplexityAcademicSourceCredibility a bfo:BFO_0000019 ;
-    rdfs:label "Perplexity Academic Source Credibility"@en ;
-    rdfs:comment "Quality representing credibility of academic sources"@en ;
-    bfo:BFO_0000197 abi:AcademicDatabaseAccessHardware . # inheres in
 
 #################################################################
 #    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
@@ -48,10 +41,10 @@ abi:PerplexityAcademicSourceCredibility a bfo:BFO_0000019 ;
 
 # Capabilities that inhere in material entities (BFO_0000017)
 abi:PerplexityResearchDiscoveryCapability a bfo:BFO_0000017 ;
-    rdfs:label "Perplexity Research Discovery Capability"@en ;
-    rdfs:comment "Capability for research article discovery and academic search"@en ;
-    bfo:BFO_0000197 abi:PerplexityServerInfrastructure ; # inheres in
-    bfo:BFO_0000218 abi:AcademicDatabaseAccessHardware . # has material basis
+    rdfs:label "Perplexity ResearchDiscoveryCapability"@en ;
+    rdfs:comment "Capability for discovering and retrieving research articles"@en ;
+    skos:example "Perplexity core capability"@en ;
+    bfo:BFO_0000197 abi:PerplexityServerInfrastructure . # inheres in
 
 #################################################################
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
@@ -60,38 +53,38 @@ abi:PerplexityResearchDiscoveryCapability a bfo:BFO_0000017 ;
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:SonarProModel a bfo:BFO_0000031 ;
     rdfs:label "Sonar Pro"@en ;
-    rdfs:comment "Perplexity's research-optimized model with academic database access and citation capabilities"@en ;
-    skos:example "Sonar Pro neural network, 100K token context, academic search optimization"@en ;
+    rdfs:comment "Perplexity's research-optimized model with academic database access and citation capabilities."@en ;
+    skos:example "Sonar Pro neural network"@en ;
     abi:hasModelId "sonar-pro"@en ;
     abi:hasContextWindow "100000"^^xsd:integer ;
     abi:hasOwner "perplexity"@en ;
-    abi:hasDescription "Perplexity's research-optimized model with academic database access and citation capabilities"@en ;
+    abi:hasDescription "Perplexity's research-optimized model with academic database access and citation capabilities."@en ;
     bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
 
 # System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:PerplexitySystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "Perplexity System Prompt"@en ;
-    rdfs:comment "System prompt defining Perplexity's role in research discovery"@en ;
-    skos:example "Role: research discoverer, Tasks: article finding, Guidelines: academic search"@en ;
-    abi:hasRole "You are Perplexity, an AI assistant specialized in research discovery and finding academic articles."@en ;
-    abi:hasObjective "Discover and retrieve relevant research articles and academic content"@en ;
-    abi:hasTasks "Research discovery; Article finding; Academic search; Citation retrieval"@en ;
+    rdfs:comment "System prompt defining Perplexity's role, objectives, and operating guidelines"@en ;
+    skos:example "Perplexity behavioral configuration"@en ;
+    abi:hasRole "You are Perplexity, a research-focused AI assistant specialized in discovering and analyzing academic content."@en ;
+    abi:hasObjective "Provide accurate research discovery and article retrieval"@en ;
+    abi:hasTasks "Research article discovery; Academic search; Citation analysis; Content retrieval"@en ;
     bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
 
 # Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:PerplexityIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "Perplexity Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for Perplexity agent"@en ;
-    skos:example "find research → perplexity_search, discover articles → perplexity_discover"@en ;
-    abi:hasIntentCount "16"^^xsd:integer ;
+    skos:example "Perplexity intent routing configuration"@en ;
+    abi:hasIntentCount "10"^^xsd:integer ;
     bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
 
 # AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:PerplexityAgent a abi:AIAgent ;
     rdfs:label "Perplexity"@en ;
-    rdfs:comment "Perplexity AI agent specialized in research discovery and academic article finding"@en ;
-    skos:example "Perplexity service using Sonar Pro for research discovery"@en ;
-    abi:hasSpecializedRole "Article discovery and research"@en ;
+    rdfs:comment "Perplexity agent specialized in research discovery and academic content analysis"@en ;
+    skos:example "Complete Perplexity service: model + system prompt + intent mappings"@en ;
+    abi:hasSpecializedRole "Research discovery and academic article retrieval"@en ;
     abi:usesModel abi:SonarProModel ;
     abi:usesSystemPrompt abi:PerplexitySystemPrompt ;
     abi:usesIntentMappings abi:PerplexityIntentMappings ;
@@ -104,11 +97,8 @@ abi:PerplexityAgent a abi:AIAgent ;
 # Spatial regions (BFO_0000141)
 abi:PerplexityDataCenterRegion a bfo:BFO_0000141 ;
     rdfs:label "Perplexity Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing Perplexity data center locations"@en .
-
-abi:AcademicRepositoryBoundary a bfo:BFO_0000141 ;
-    rdfs:label "Academic Repository Boundary"@en ;
-    rdfs:comment "Immaterial boundary defining academic and institutional repositories"@en .
+    rdfs:comment "Spatial region encompassing Perplexity data center locations"@en ;
+    skos:example "Geographic region where Perplexity infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
@@ -116,17 +106,19 @@ abi:AcademicRepositoryBoundary a bfo:BFO_0000141 ;
 
 # Temporal regions (BFO_0000008)
 abi:PerplexityResearchSession a bfo:BFO_0000008 ;
-    rdfs:label "Perplexity Research Session"@en ;
-    rdfs:comment "Temporal region during which research discovery occurs"@en .
+    rdfs:label "Perplexity ResearchSession"@en ;
+    rdfs:comment "Temporal region during which Perplexity processing occurs"@en ;
+    skos:example "Perplexity processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
-# Note: Additional processes can be defined as needed, following the same BFO pattern
-
-# Note: This ontology now contains only the essential BFO-compliant structure.
-# Additional temporal regions, model instances, qualities, and specifications
-# can be added as needed following the established BFO patterns above.
+abi:PerplexityResearchDiscoveryProcess a abi:ResearchDiscoveryProcess ;
+    rdfs:label "Perplexity ResearchDiscoveryProcess"@en ;
+    rdfs:comment "Process of discovering and retrieving research articles and academic content"@en ;
+    skos:example "Perplexity executing its core process"@en ;
+    bfo:BFO_0000057 abi:PerplexityServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:PerplexityResearchDiscoveryCapability ; # realizes
+    bfo:BFO_0000108 abi:PerplexityResearchSession . # exists at

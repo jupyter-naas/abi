@@ -6,11 +6,12 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-<http://ontology.naas.ai/abi/<http://ontology.naas.ai/abi/ClaudeOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/ClaudeOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "Claude AI Agent Ontology"@en ;
     dc:description "BFO-grounded ontology for Claude AI models and processes"@en ;
     dc:created "20250812T101446"@en .
+
 
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
@@ -18,9 +19,9 @@
 
 # Material Infrastructure (BFO_0000040)
 abi:AnthropicServerInfrastructure a bfo:BFO_0000040 ;
-    rdfs:label "Anthropic Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting Claude systems for professional writing and constitutional AI"@en ;
-    skos:example "Anthropic's GPU clusters, constitutional AI training servers, professional writing processing hardware"@en ;
+    rdfs:label "Claude Server Infrastructure"@en ;
+    rdfs:comment "Material infrastructure supporting Claude systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for Claude"@en ;
     bfo:BFO_0000171 abi:AnthropicDataCenterRegion . # located in
 
 #################################################################
@@ -28,22 +29,21 @@ abi:AnthropicServerInfrastructure a bfo:BFO_0000040 ;
 #################################################################
 
 # Qualities that inhere in material entities (BFO_0000019)
-abi:ClaudeWritingQuality a bfo:BFO_0000019 ;
-    rdfs:label "Claude Writing Quality"@en ;
-    rdfs:comment "Quality representing professional writing standards and accuracy"@en ;
-    skos:example "95% grammar accuracy, professional business tone, formal document structure compliance"@en ;
+abi:ClaudeProfessionalWritingQuality a bfo:BFO_0000019 ;
+    rdfs:label "Claude ProfessionalWritingQuality"@en ;
+    rdfs:comment "Quality representing excellence in professional writing"@en ;
+    skos:example "Claude processing quality metrics"@en ;
     bfo:BFO_0000197 abi:AnthropicServerInfrastructure . # inheres in
 
-abi:ClaudeProfessionalToneAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "Claude Professional Tone Accuracy"@en ;
-    rdfs:comment "Quality representing accuracy of professional tone and style"@en ;
-    skos:example "Formal business language, appropriate executive communication style, diplomatic phrasing"@en ;
-    bfo:BFO_0000197 abi:AnthropicServerInfrastructure . # inheres in
+#################################################################
+#    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
+#################################################################
 
-abi:ClaudeConstitutionalAISafety a bfo:BFO_0000019 ;
-    rdfs:label "Claude Constitutional AI Safety"@en ;
-    rdfs:comment "Quality representing constitutional AI safety and ethical compliance"@en ;
-    skos:example "Refuses harmful requests, maintains ethical boundaries, follows constitutional AI principles"@en ;
+# Capabilities that inhere in material entities (BFO_0000017)
+abi:ClaudeProfessionalWritingCapability a bfo:BFO_0000017 ;
+    rdfs:label "Claude ProfessionalWritingCapability"@en ;
+    rdfs:comment "Capability for professional writing and business communication"@en ;
+    skos:example "Claude core capability"@en ;
     bfo:BFO_0000197 abi:AnthropicServerInfrastructure . # inheres in
 
 #################################################################
@@ -53,19 +53,19 @@ abi:ClaudeConstitutionalAISafety a bfo:BFO_0000019 ;
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:Claude35SonnetModel a bfo:BFO_0000031 ;
     rdfs:label "claude-3-5-sonnet"@en ;
-    rdfs:comment "Anthropic's most intelligent model with best-in-class performance for complex reasoning"@en ;
-    skos:example "Claude-3.5-Sonnet neural network weights, 200K token context, constitutional AI training"@en ;
+    rdfs:comment "Anthropic's most intelligent model, with best-in-class performance for most tasks including complex reasoning and analysis."@en ;
+    skos:example "claude-3-5-sonnet neural network"@en ;
     abi:hasModelId "claude-3-5-sonnet-20241022"@en ;
     abi:hasContextWindow "200000"^^xsd:integer ;
     abi:hasOwner "anthropic"@en ;
     abi:hasDescription "Anthropic's most intelligent model, with best-in-class performance for most tasks including complex reasoning and analysis."@en ;
     bfo:BFO_0000084 abi:AnthropicServerInfrastructure . # generically depends on
 
-# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE  
+# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:ClaudeSystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "Claude System Prompt"@en ;
-    rdfs:comment "System prompt defining Claude's role in professional writing and constitutional AI"@en ;
-    skos:example "Role: professional writer, Tasks: business writing/proposals, Guidelines: constitutional AI"@en ;
+    rdfs:comment "System prompt defining Claude's role, objectives, and operating guidelines"@en ;
+    skos:example "Claude behavioral configuration"@en ;
     abi:hasRole "You are Claude, Anthropic's AI assistant specialized in professional writing and business communication."@en ;
     abi:hasObjective "Create high-quality professional documents with constitutional AI safety"@en ;
     abi:hasTasks "Professional writing; Business proposals; Document creation; Constitutional AI compliance"@en ;
@@ -75,7 +75,7 @@ abi:ClaudeSystemPrompt a bfo:BFO_0000031 ;
 abi:ClaudeIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "Claude Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for Claude agent"@en ;
-    skos:example "write professional → claude_write_document, create proposal → claude_create_proposal"@en ;
+    skos:example "Claude intent routing configuration"@en ;
     abi:hasIntentCount "18"^^xsd:integer ;
     bfo:BFO_0000084 abi:AnthropicServerInfrastructure . # generically depends on
 
@@ -83,37 +83,11 @@ abi:ClaudeIntentMappings a bfo:BFO_0000031 ;
 abi:ClaudeAgent a abi:AIAgent ;
     rdfs:label "Claude"@en ;
     rdfs:comment "Anthropic's Claude AI agent specialized in professional writing and constitutional AI"@en ;
-    skos:example "Claude service layer using Claude-3.5-Sonnet model for professional document creation"@en ;
+    skos:example "Complete Claude service: model + system prompt + intent mappings"@en ;
     abi:hasSpecializedRole "Professional writing and constitutional AI"@en ;
     abi:usesModel abi:Claude35SonnetModel ;
     abi:usesSystemPrompt abi:ClaudeSystemPrompt ;
     abi:usesIntentMappings abi:ClaudeIntentMappings ;
-    bfo:BFO_0000084 abi:AnthropicServerInfrastructure . # generically depends on
-
-#################################################################
-#    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
-#################################################################
-
-# Capabilities that inhere in material entities (BFO_0000017)
-abi:ClaudeProfessionalWritingCapability a bfo:BFO_0000017 ;
-    rdfs:label "Claude Professional Writing Capability"@en ;
-    rdfs:comment "Capability for professional content creation and business communication"@en ;
-    bfo:BFO_0000197 abi:AnthropicServerInfrastructure . # inheres in
-
-abi:ClaudeConstitutionalAICapability a bfo:BFO_0000017 ;
-    rdfs:label "Claude Constitutional AI Capability"@en ;
-    rdfs:comment "Capability for constitutional AI safety and ethical content generation"@en ;
-    bfo:BFO_0000197 abi:AnthropicServerInfrastructure . # inheres in
-
-#################################################################
-#    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
-#################################################################
-
-# AI Agent as software pattern (BFO_0000031)
-abi:ClaudeAgent a abi:AIAgent ;
-    rdfs:label "Claude AI Agent"@en ;
-    rdfs:comment "AI Agent software specialized in professional writing and constitutional AI"@en ;
-    abi:hasSpecializedRole "Professional writing and constitutional AI"@en ;
     bfo:BFO_0000084 abi:AnthropicServerInfrastructure . # generically depends on
 
 #################################################################
@@ -122,12 +96,9 @@ abi:ClaudeAgent a abi:AIAgent ;
 
 # Spatial regions (BFO_0000141)
 abi:AnthropicDataCenterRegion a bfo:BFO_0000141 ;
-    rdfs:label "Anthropic Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing Anthropic data center locations"@en .
-
-abi:ProfessionalStandardsBoundary a bfo:BFO_0000141 ;
-    rdfs:label "Professional Standards Boundary"@en ;
-    rdfs:comment "Immaterial boundary defining professional writing and regulatory compliance standards"@en .
+    rdfs:label "Claude Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing Claude data center locations"@en ;
+    skos:example "Geographic region where Claude infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
@@ -135,29 +106,19 @@ abi:ProfessionalStandardsBoundary a bfo:BFO_0000141 ;
 
 # Temporal regions (BFO_0000008)
 abi:ClaudeWritingSession a bfo:BFO_0000008 ;
-    rdfs:label "Claude Writing Session"@en ;
-    rdfs:comment "Temporal region during which professional writing occurs"@en .
-
-abi:ClaudeProfessionalReviewCycle a bfo:BFO_0000008 ;
-    rdfs:label "Claude Professional Review Cycle"@en ;
-    rdfs:comment "Temporal region for professional content review and editing"@en .
+    rdfs:label "Claude WritingSession"@en ;
+    rdfs:comment "Temporal region during which Claude processing occurs"@en ;
+    skos:example "Claude processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
-abi:ClaudeConstitutionalAISafetyProcess a bfo:BFO_0000015 ;
-    rdfs:label "Claude Constitutional AI Safety Process"@en ;
-    rdfs:comment "Process of constitutional AI safety validation and ethical content generation"@en ;
-    bfo:BFO_0000057 abi:AnthropicServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:ClaudeConstitutionalAICapability ; # realizes
-    bfo:BFO_0000108 abi:ClaudeProfessionalReviewCycle . # exists at
-
-abi:ClaudeBusinessDocumentCreationProcess a bfo:BFO_0000015 ;
-    rdfs:label "Claude Business Document Creation Process"@en ;
-    rdfs:comment "Process of creating business documents and professional communications"@en ;
+abi:ClaudeProfessionalWritingProcess a abi:ProfessionalWritingProcess ;
+    rdfs:label "Claude ProfessionalWritingProcess"@en ;
+    rdfs:comment "Process of creating professional documents and business communications"@en ;
+    skos:example "Claude executing its core process"@en ;
     bfo:BFO_0000057 abi:AnthropicServerInfrastructure ; # has participant
     bfo:BFO_0000055 abi:ClaudeProfessionalWritingCapability ; # realizes
     bfo:BFO_0000108 abi:ClaudeWritingSession . # exists at
