@@ -12,7 +12,6 @@
     dc:description "BFO-grounded ontology for Gemini AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
-
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -139,12 +138,6 @@ abi:GeminiLargeFileOperationPeriod a bfo:BFO_0000008 ;
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-abi:GeminiLargeDocumentProcessingProcess a abi:LargeDocumentProcessingProcess ;
-    rdfs:label "Gemini Large Document Processing Process"@en ;
-    rdfs:comment "Process of analyzing and processing large-scale documents using Gemini"@en ;
-    bfo:BFO_0000057 abi:GoogleServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:GeminiLargeDocumentProcessingCapability ; # realizes
-    bfo:BFO_0000108 abi:GeminiDocumentProcessingSession . # exists at
 
 abi:GeminiMultimodalProcessingProcess a bfo:BFO_0000015 ;
     rdfs:label "Gemini Multimodal Processing Process"@en ;

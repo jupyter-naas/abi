@@ -12,7 +12,6 @@
     dc:description "BFO-grounded ontology for Grok AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
-
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -125,12 +124,6 @@ abi:GrokTrendMonitoringSession a bfo:BFO_0000008 ;
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-abi:GrokTrendMonitoringProcess a abi:TrendMonitoringProcess ;
-    rdfs:label "Grok Trend Monitoring Process"@en ;
-    rdfs:comment "Process of monitoring global trends and analyzing social sentiment using Grok"@en ;
-    bfo:BFO_0000057 abi:xAIServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:GrokTrendMonitoringCapability ; # realizes
-    bfo:BFO_0000108 abi:GrokTrendMonitoringSession . # exists at
 
 # Note: Additional processes can be defined as needed, following the same BFO pattern
 
