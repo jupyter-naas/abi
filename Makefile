@@ -260,7 +260,7 @@ chat-qwen-agent: deps
 
 # Generate pull request description using AI agent
 pull-request-description: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli PullRequestDescriptionAgent
+	@ echo "generate the pull request description please." | LOG_LEVEL=ERROR uv run python -m src.cli PullRequestDescriptionAgent
 
 # Naas platform integration agent
 chat-naas-agent: deps
