@@ -177,6 +177,66 @@ bfo:BFO_0000108 a owl:ObjectProperty ;
     skos:example "A process exists at a temporal interval."@en .
 
 #################################################################
+#    Abstract Process Classes (for agent specialization)
+#################################################################
+
+###  http://ontology.naas.ai/abi/DocumentationRetrievalProcess
+abi:DocumentationRetrievalProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Documentation Retrieval Process"@en ;
+    skos:definition "A process for retrieving and accessing documentation resources."@en ;
+    skos:example "ABI retrieving docs from docs.naas.ai"@en .
+
+###  http://ontology.naas.ai/abi/WebSearchProcess  
+abi:WebSearchProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Web Search Process"@en ;
+    skos:definition "A process for searching and retrieving information from the web."@en ;
+    skos:example "ChatGPT performing web search queries"@en .
+
+###  http://ontology.naas.ai/abi/ProfessionalWritingProcess
+abi:ProfessionalWritingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Professional Writing Process"@en ;
+    skos:definition "A process for creating professional business documents."@en ;
+    skos:example "Claude writing business proposals"@en .
+
+###  http://ontology.naas.ai/abi/LargeDocumentProcessingProcess
+abi:LargeDocumentProcessingProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Large Document Processing Process"@en ;
+    skos:definition "A process for analyzing and processing large documents."@en ;
+    skos:example "Gemini processing multi-page PDFs"@en .
+
+###  http://ontology.naas.ai/abi/TrendMonitoringProcess
+abi:TrendMonitoringProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Trend Monitoring Process"@en ;
+    skos:definition "A process for monitoring and analyzing social trends."@en ;
+    skos:example "Grok tracking social media trends"@en .
+
+###  http://ontology.naas.ai/abi/MathematicalReasoningProcess
+abi:MathematicalReasoningProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Mathematical Reasoning Process"@en ;
+    skos:definition "A process for performing mathematical calculations and reasoning."@en ;
+    skos:example "Mistral solving mathematical problems"@en .
+
+###  http://ontology.naas.ai/abi/RegionalContextAnalysisProcess
+abi:RegionalContextAnalysisProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Regional Context Analysis Process"@en ;
+    skos:definition "A process for analyzing regional and cultural context."@en ;
+    skos:example "DeepSeek analyzing Eastern regional context, ChatGPT analyzing Western context"@en .
+
+###  http://ontology.naas.ai/abi/ResearchDiscoveryProcess
+abi:ResearchDiscoveryProcess a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000015 ;
+    rdfs:label "Research Discovery Process"@en ;
+    skos:definition "A process for discovering and retrieving research articles."@en ;
+    skos:example "Perplexity finding academic papers"@en .
+
+#################################################################
 #    Data Properties
 #################################################################
 
