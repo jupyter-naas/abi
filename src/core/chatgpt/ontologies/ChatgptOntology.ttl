@@ -6,7 +6,6 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-
 <http://ontology.naas.ai/abi/ChatgptOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "Chatgpt AI Agent Ontology"@en ;
