@@ -305,6 +305,23 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
 
         Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
+        
+        # AI Agent Ontology Query Intents
+        Intent(intent_type=IntentType.TOOL, intent_value="what model does", intent_target="get_agent_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="which model does", intent_target="get_agent_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="what is the context window", intent_target="get_agent_context_window"),
+        Intent(intent_type=IntentType.TOOL, intent_value="context window of", intent_target="get_agent_context_window"),
+        Intent(intent_type=IntentType.TOOL, intent_value="what is the objective", intent_target="get_agent_objective"),
+        Intent(intent_type=IntentType.TOOL, intent_value="what tasks can", intent_target="get_agent_tasks"),
+        Intent(intent_type=IntentType.TOOL, intent_value="list all agents", intent_target="get_all_agents"),
+        Intent(intent_type=IntentType.TOOL, intent_value="show all agents", intent_target="get_all_agents"),
+        Intent(intent_type=IntentType.TOOL, intent_value="compare agents", intent_target="compare_agent_models"),
+        Intent(intent_type=IntentType.TOOL, intent_value="compare all agents", intent_target="compare_all_agents_by_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="compare models", intent_target="compare_all_agents_by_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="find agents for", intent_target="recommend_best_agent_for_task"),
+        Intent(intent_type=IntentType.TOOL, intent_value="which agent should I use", intent_target="recommend_best_agent_for_task"),
+        Intent(intent_type=IntentType.TOOL, intent_value="largest context window", intent_target="find_agents_largest_context"),
+        Intent(intent_type=IntentType.TOOL, intent_value="agents from", intent_target="find_agents_by_provider"),
     
     ]
 
