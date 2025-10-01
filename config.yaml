@@ -24,9 +24,9 @@ modules:
   - path: src/core/claude
     enabled: true
   - path: src/core/deepseek
-    enabled: false
+    enabled: true
   - path: src/core/gemini
-    enabled: false
+    enabled: true
   - path: src/core/gemma
     enabled: true
   - path: src/core/grok
@@ -34,7 +34,7 @@ modules:
   - path: src/core/llama
     enabled: true
   - path: src/core/mistral
-    enabled: false
+    enabled: true
   - path: src/core/perplexity
     enabled: true
   - path: src/core/qwen
