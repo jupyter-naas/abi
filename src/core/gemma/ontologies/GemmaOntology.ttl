@@ -47,11 +47,44 @@ abi:GemmaGeneralProcessingCapability a bfo:BFO_0000017 ;
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
 #################################################################
 
-# AI Agent as software pattern (BFO_0000031)
+# AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:Gemma34BModel a bfo:BFO_0000031 ;
+    rdfs:label "gemma-3-4b"@en ;
+    rdfs:comment "Gemma 3 4B - Google's lightweight open model for fast, local AI processing"@en ;
+    skos:example "Gemma 3 neural network with 4B parameters, optimized for speed and local deployment"@en ;
+    abi:hasModelId "gemma-3-4b"@en ;
+    abi:hasContextWindow "8192"^^xsd:integer ;
+    abi:hasOwner "google"@en ;
+    abi:hasDescription "Gemma 3 4B is Google's lightweight open model designed for fast inference and local deployment with strong performance."@en ;
+    bfo:BFO_0000084 abi:GemmaServerInfrastructure . # generically depends on
+
+# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
+abi:GemmaSystemPrompt a bfo:BFO_0000031 ;
+    rdfs:label "Gemma System Prompt"@en ;
+    rdfs:comment "System prompt defining Gemma's role, objectives, and operating guidelines"@en ;
+    skos:example "Role: general-purpose AI agent, Tasks: text processing/analysis, Guidelines: lightweight local processing"@en ;
+    abi:hasRole "You are Gemma, a lightweight AI agent designed for fast, efficient processing of general AI tasks with strong local deployment capabilities."@en ;
+    abi:hasObjective "Provide fast, accurate responses optimized for local and edge deployment scenarios"@en ;
+    abi:hasTasks "Text generation; General conversation; Local AI processing; Fast inference"@en ;
+    bfo:BFO_0000084 abi:GemmaServerInfrastructure . # generically depends on
+
+# Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:GemmaIntentMappings a bfo:BFO_0000031 ;
+    rdfs:label "Gemma Intent Mappings"@en ;
+    rdfs:comment "Intent-to-tool routing patterns for Gemma agent"@en ;
+    skos:example "general queries → gemma_process, lightweight tasks → gemma_local"@en ;
+    abi:hasIntentCount "0"^^xsd:integer ;
+    bfo:BFO_0000084 abi:GemmaServerInfrastructure . # generically depends on
+
+# AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:GemmaAgent a abi:AIAgent ;
-    rdfs:label "Gemma AI Agent"@en ;
-    rdfs:comment "AI Agent software specialized in general AI processing"@en ;
-    abi:hasSpecializedRole "General AI processing"@en ;
+    rdfs:label "Gemma"@en ;
+    rdfs:comment "Lightweight AI Agent optimized for fast, local AI processing with strong general-purpose capabilities."@en ;
+    skos:example "Complete Gemma service: Gemma-3-4B model + system prompt + intent mappings + local processing optimization"@en ;
+    abi:hasSpecializedRole "Fast local AI processing and edge deployment"@en ;
+    abi:usesModel abi:Gemma34BModel ;
+    abi:usesSystemPrompt abi:GemmaSystemPrompt ;
+    abi:usesIntentMappings abi:GemmaIntentMappings ;
     bfo:BFO_0000084 abi:GemmaServerInfrastructure . # generically depends on
 
 #################################################################

@@ -47,11 +47,44 @@ abi:LlamaGeneralProcessingCapability a bfo:BFO_0000017 ;
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
 #################################################################
 
-# AI Agent as software pattern (BFO_0000031)
+# AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:Llama370BModel a bfo:BFO_0000031 ;
+    rdfs:label "llama-3-70b"@en ;
+    rdfs:comment "Meta's Llama 3 70B - Large open-source model for general conversation and instruction following"@en ;
+    skos:example "Llama 3 neural network with 70B parameters, strong conversational capabilities"@en ;
+    abi:hasModelId "llama-3-70b"@en ;
+    abi:hasContextWindow "8192"^^xsd:integer ;
+    abi:hasOwner "meta"@en ;
+    abi:hasDescription "Llama 3 70B is Meta's large open-source model with strong general-purpose capabilities for conversation and instruction following."@en ;
+    bfo:BFO_0000084 abi:LlamaServerInfrastructure . # generically depends on
+
+# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
+abi:LlamaSystemPrompt a bfo:BFO_0000031 ;
+    rdfs:label "Llama System Prompt"@en ;
+    rdfs:comment "System prompt defining Llama's role, objectives, and operating guidelines"@en ;
+    skos:example "Role: conversational agent, Tasks: general conversation/instruction following, Guidelines: open-source processing"@en ;
+    abi:hasRole "You are Llama, a conversational AI agent designed for general-purpose tasks with strong instruction-following capabilities."@en ;
+    abi:hasObjective "Provide helpful, accurate responses for a wide range of general tasks"@en ;
+    abi:hasTasks "General conversation; Instruction following; Text generation; Q&A"@en ;
+    bfo:BFO_0000084 abi:LlamaServerInfrastructure . # generically depends on
+
+# Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:LlamaIntentMappings a bfo:BFO_0000031 ;
+    rdfs:label "Llama Intent Mappings"@en ;
+    rdfs:comment "Intent-to-tool routing patterns for Llama agent"@en ;
+    skos:example "general queries → llama_process, instruction tasks → llama_execute"@en ;
+    abi:hasIntentCount "0"^^xsd:integer ;
+    bfo:BFO_0000084 abi:LlamaServerInfrastructure . # generically depends on
+
+# AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:LlamaAgent a abi:AIAgent ;
-    rdfs:label "Llama AI Agent"@en ;
-    rdfs:comment "AI Agent software specialized in general AI processing"@en ;
-    abi:hasSpecializedRole "General AI processing"@en ;
+    rdfs:label "Llama"@en ;
+    rdfs:comment "Open-source AI Agent with strong conversational and instruction-following capabilities."@en ;
+    skos:example "Complete Llama service: Llama-3-70B model + system prompt + intent mappings + conversational processing"@en ;
+    abi:hasSpecializedRole "Open-source general conversation and instruction following"@en ;
+    abi:usesModel abi:Llama370BModel ;
+    abi:usesSystemPrompt abi:LlamaSystemPrompt ;
+    abi:usesIntentMappings abi:LlamaIntentMappings ;
     bfo:BFO_0000084 abi:LlamaServerInfrastructure . # generically depends on
 
 #################################################################
