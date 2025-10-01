@@ -6,7 +6,7 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-<http://ontology.naas.ai/abi/ClaudeOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/<http://ontology.naas.ai/abi/ClaudeOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "Claude AI Agent Ontology"@en ;
     dc:description "BFO-grounded ontology for Claude AI models and processes"@en ;
