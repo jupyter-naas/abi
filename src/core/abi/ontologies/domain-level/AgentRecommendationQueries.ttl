@@ -1,0 +1,191 @@
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+
+<http://ontology.naas.ai/abi/AgentRecommendationQueries> a owl:Ontology ;
+    rdfs:label "AI Agent Recommendation Queries"@en ;
+    rdfs:comment "BFO-compliant SPARQL queries for recommending AI agents based on user requirements"@en .
+
+#################################################################
+#    Query: Recommend Best Agent for Task
+#################################################################
+
+intentMapping:recommendBestAgentForTask a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "recommend_best_agent_for_task"@en ;
+    intentMapping:intentDescription "Recommend the best AI agent for a specific task based on agent description and objective matching"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bfo: <http://purl.obolibrary.org/obo/>
+
+SELECT ?agent_name ?agent_description ?model_name ?context_window ?objective
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           rdfs:comment ?agent_description ;
+           abi:usesModel ?model ;
+           abi:usesSystemPrompt ?prompt .
+    
+    ?model rdfs:label ?model_name ;
+           abi:hasContextWindow ?context_window .
+    
+    ?prompt abi:hasObjective ?objective .
+    
+    # Filter by task description (case-insensitive substring match)
+    FILTER(CONTAINS(LCASE(?agent_description), LCASE("{{ task_description }}")) || 
+           CONTAINS(LCASE(?objective), LCASE("{{ task_description }}")))
+}
+ORDER BY DESC(?context_window)
+LIMIT 5
+"""@en ;
+    intentMapping:hasArgument intentMapping:taskDescriptionArgument ;
+    skos:example "Task: 'code review' → Returns agents with 'code' in description, ordered by context window"@en .
+
+#################################################################
+#    Query: Find Agents with Largest Context Window
+#################################################################
+
+intentMapping:findAgentsLargestContext a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_largest_context"@en ;
+    intentMapping:intentDescription "Find AI agents with the largest context windows for processing large documents"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bfo: <http://purl.obolibrary.org/obo/>
+
+SELECT ?agent_name ?model_name ?context_window ?owner
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesModel ?model .
+    
+    ?model rdfs:label ?model_name ;
+           abi:hasContextWindow ?context_window ;
+           abi:hasOwner ?owner .
+    
+    FILTER(?context_window > 0)
+}
+ORDER BY DESC(?context_window)
+LIMIT 5
+"""@en ;
+    skos:example "Returns: Gemini (1M tokens), ChatGPT (1M tokens), Claude (200K tokens)"@en .
+
+#################################################################
+#    Query: Compare All Agents by Model
+#################################################################
+
+intentMapping:compareAllAgentsByModel a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "compare_all_agents_by_model"@en ;
+    intentMapping:intentDescription "Get a comparison table of all agents with their models, context windows, and owners"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bfo: <http://purl.obolibrary.org/obo/>
+
+SELECT ?agent_name ?model_name ?model_id ?context_window ?owner ?agent_description
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           rdfs:comment ?agent_description ;
+           abi:usesModel ?model .
+    
+    ?model rdfs:label ?model_name ;
+           abi:hasModelId ?model_id ;
+           abi:hasContextWindow ?context_window ;
+           abi:hasOwner ?owner .
+}
+ORDER BY ?agent_name
+"""@en ;
+    skos:example "Returns: All agents with full model details in a comparable format"@en .
+
+#################################################################
+#    Query: Find Agents by Provider
+#################################################################
+
+intentMapping:findAgentsByProvider a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_by_provider"@en ;
+    intentMapping:intentDescription "Find all AI agents that use models from a specific provider (e.g., 'openai', 'anthropic', 'google')"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bfo: <http://purl.obolibrary.org/obo/>
+
+SELECT ?agent_name ?model_name ?model_id ?context_window
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesModel ?model .
+    
+    ?model rdfs:label ?model_name ;
+           abi:hasModelId ?model_id ;
+           abi:hasContextWindow ?context_window ;
+           abi:hasOwner ?owner .
+    
+    FILTER(CONTAINS(LCASE(?owner), LCASE("{{ provider_name }}")))
+}
+ORDER BY ?agent_name
+"""@en ;
+    intentMapping:hasArgument intentMapping:providerNameArgument ;
+    skos:example "Provider: 'openai' → Returns ChatGPT; 'anthropic' → Returns Claude"@en .
+
+#################################################################
+#    Query: Find Agents for Specific Task Type
+#################################################################
+
+intentMapping:findAgentsForTaskType a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_agents_for_task_type"@en ;
+    intentMapping:intentDescription "Find agents optimized for specific task types by matching against their system prompt tasks"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX bfo: <http://purl.obolibrary.org/obo/>
+
+SELECT ?agent_name ?tasks ?model_name ?context_window
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesModel ?model ;
+           abi:usesSystemPrompt ?prompt .
+    
+    ?model rdfs:label ?model_name ;
+           abi:hasContextWindow ?context_window .
+    
+    ?prompt abi:hasTasks ?tasks .
+    
+    FILTER(CONTAINS(LCASE(?tasks), LCASE("{{ task_type }}")))
+}
+ORDER BY DESC(?context_window)
+LIMIT 5
+"""@en ;
+    intentMapping:hasArgument intentMapping:taskTypeArgument ;
+    skos:example "Task type: 'writing' → Returns Claude, ChatGPT; 'code' → Returns ChatGPT"@en .
+
+#################################################################
+#    Arguments Definition
+#################################################################
+
+intentMapping:taskDescriptionArgument a intentMapping:TemplatableSparqlQueryArgument ;
+    rdfs:label "task_description"@en ;
+    intentMapping:argName "task_description"@en ;
+    intentMapping:argDescription "Natural language description of the task you want to perform"@en ;
+    intentMapping:validationPattern ".*"@en ;
+    intentMapping:validationFormat "Any text describing a task (e.g., 'code review', 'write proposal', 'math problem')"@en .
+
+intentMapping:providerNameArgument a intentMapping:TemplatableSparqlQueryArgument ;
+    rdfs:label "provider_name"@en ;
+    intentMapping:argName "provider_name"@en ;
+    intentMapping:argDescription "Name of the AI model provider (e.g., 'openai', 'anthropic', 'google', 'meta')"@en ;
+    intentMapping:validationPattern "^[a-zA-Z0-9_-]+$"@en ;
+    intentMapping:validationFormat "Provider name in lowercase (e.g., 'openai', 'anthropic')"@en .
+
+intentMapping:taskTypeArgument a intentMapping:TemplatableSparqlQueryArgument ;
+    rdfs:label "task_type"@en ;
+    intentMapping:argName "task_type"@en ;
+    intentMapping:argDescription "Type of task to perform (e.g., 'writing', 'coding', 'analysis', 'math')"@en ;
+    intentMapping:validationPattern ".*"@en ;
+    intentMapping:validationFormat "Single word or short phrase describing task type"@en .
+
