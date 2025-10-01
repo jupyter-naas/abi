@@ -6,11 +6,12 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-<http://ontology.naas.ai/abi/ChatgptOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/ChatGPTOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
-    dc:title "Chatgpt AI Agent Ontology"@en ;
-    dc:description "BFO-grounded ontology for Chatgpt AI models and processes"@en ;
+    dc:title "ChatGPT AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for ChatGPT AI models and processes"@en ;
     dc:created "20250812T101446"@en .
+
 
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
@@ -18,28 +19,20 @@
 
 # Material Infrastructure (BFO_0000040)
 abi:OpenAIServerInfrastructure a bfo:BFO_0000040 ;
-    rdfs:label "OpenAI Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting ChatGPT systems for web search and Western context analysis"@en ;
-    skos:example "Physical servers in OpenAI data centers, GPU clusters, network hardware"@en ;
+    rdfs:label "ChatGPT Server Infrastructure"@en ;
+    rdfs:comment "Material infrastructure supporting ChatGPT systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for ChatGPT"@en ;
     bfo:BFO_0000171 abi:WesternDataCenterRegion . # located in
-
-# Note: Specialized hardware assumptions removed for simplicity
 
 #################################################################
 #    BFO Bucket 2: Qualities (WHAT-LIKE)
 #################################################################
 
 # Qualities that inhere in material entities (BFO_0000019)
-abi:ChatgptWebSearchAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "ChatGPT Web Search Accuracy"@en ;
+abi:ChatGPTWebSearchAccuracy a bfo:BFO_0000019 ;
+    rdfs:label "ChatGPT WebSearchAccuracy"@en ;
     rdfs:comment "Quality representing accuracy of web search results"@en ;
-    skos:example "85% accuracy in finding relevant web articles, 92% precision in search result ranking"@en ;
-    bfo:BFO_0000197 abi:OpenAIServerInfrastructure . # inheres in
-
-abi:ChatgptWesternContextRelevance a bfo:BFO_0000019 ;
-    rdfs:label "ChatGPT Western Context Relevance"@en ;
-    rdfs:comment "Quality representing relevance of Western cultural context analysis"@en ;
-    skos:example "Understanding US political context, European business practices, Western cultural references"@en ;
+    skos:example "ChatGPT processing quality metrics"@en ;
     bfo:BFO_0000197 abi:OpenAIServerInfrastructure . # inheres in
 
 #################################################################
@@ -47,16 +40,10 @@ abi:ChatgptWesternContextRelevance a bfo:BFO_0000019 ;
 #################################################################
 
 # Capabilities that inhere in material entities (BFO_0000017)
-abi:ChatgptWebSearchCapability a bfo:BFO_0000017 ;
-    rdfs:label "ChatGPT Web Search Capability"@en ;
+abi:ChatGPTWebSearchCapability a bfo:BFO_0000017 ;
+    rdfs:label "ChatGPT WebSearchCapability"@en ;
     rdfs:comment "Capability for web searching and content analysis"@en ;
-    skos:example "Ability to search Bing, crawl websites, analyze web content for current information"@en ;
-    bfo:BFO_0000197 abi:OpenAIServerInfrastructure . # inheres in
-
-abi:ChatgptWesternContextCapability a bfo:BFO_0000017 ;
-    rdfs:label "ChatGPT Western Context Capability"@en ;
-    rdfs:comment "Capability for Western cultural knowledge and context analysis"@en ;
-    skos:example "Ability to understand US elections, European regulations, Western business customs"@en ;
+    skos:example "ChatGPT core capability"@en ;
     bfo:BFO_0000197 abi:OpenAIServerInfrastructure . # inheres in
 
 #################################################################
@@ -66,8 +53,8 @@ abi:ChatgptWesternContextCapability a bfo:BFO_0000017 ;
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:GPT41Model a bfo:BFO_0000031 ;
     rdfs:label "gpt-4.1"@en ;
-    rdfs:comment "GPT-4.1 neural network model with 1M token context window"@en ;
-    skos:example "GPT-4.1 neural network weights, instruction-following parameters, 1M token context processing"@en ;
+    rdfs:comment "GPT-4.1 excels at instruction following and tool calling, with broad knowledge across domains. It features a 1M token context window, and low latency without a reasoning step."@en ;
+    skos:example "gpt-4.1 neural network"@en ;
     abi:hasModelId "gpt-4.1"@en ;
     abi:hasContextWindow "1047576"^^xsd:integer ;
     abi:hasOwner "openai"@en ;
@@ -75,32 +62,32 @@ abi:GPT41Model a bfo:BFO_0000031 ;
     bfo:BFO_0000084 abi:OpenAIServerInfrastructure . # generically depends on
 
 # System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
-abi:ChatgptSystemPrompt a bfo:BFO_0000031 ;
+abi:ChatGPTSystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "ChatGPT System Prompt"@en ;
     rdfs:comment "System prompt defining ChatGPT's role, objectives, and operating guidelines"@en ;
-    skos:example "Role: conversational agent, Tasks: web search/image analysis, Guidelines: tool selection rules"@en ;
+    skos:example "ChatGPT behavioral configuration"@en ;
     abi:hasRole "You are ChatGPT, a conversational agent designed to assist users by providing information, answering questions, generating text, and supporting a wide range of tasks."@en ;
     abi:hasObjective "Provide accurate, relevant, and helpful responses to user queries"@en ;
     abi:hasTasks "Answers questions; Generates text; Provides real-time answers; Analyzes images; Analyzes PDFs"@en ;
     bfo:BFO_0000084 abi:OpenAIServerInfrastructure . # generically depends on
 
 # Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
-abi:ChatgptIntentMappings a bfo:BFO_0000031 ;
+abi:ChatGPTIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "ChatGPT Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for ChatGPT agent"@en ;
-    skos:example "search news about → chatgpt_search_web, analyze image → chatgpt_analyze_image, analyze PDF → chatgpt_analyze_pdf"@en ;
+    skos:example "ChatGPT intent routing configuration"@en ;
     abi:hasIntentCount "24"^^xsd:integer ;
     bfo:BFO_0000084 abi:OpenAIServerInfrastructure . # generically depends on
 
 # AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
-abi:ChatgptAgent a abi:AIAgent ;
+abi:ChatGPTAgent a abi:AIAgent ;
     rdfs:label "ChatGPT"@en ;
     rdfs:comment "ChatGPT Agent that answers questions, generates text, provides real-time answers, analyzes images and PDFs."@en ;
-    skos:example "Complete ChatGPT service: GPT-4.1 model + system prompt + intent mappings + web search tools"@en ;
+    skos:example "Complete ChatGPT service: model + system prompt + intent mappings"@en ;
     abi:hasSpecializedRole "Web search and Western context analysis"@en ;
     abi:usesModel abi:GPT41Model ;
-    abi:usesSystemPrompt abi:ChatgptSystemPrompt ;
-    abi:usesIntentMappings abi:ChatgptIntentMappings ;
+    abi:usesSystemPrompt abi:ChatGPTSystemPrompt ;
+    abi:usesIntentMappings abi:ChatGPTIntentMappings ;
     bfo:BFO_0000084 abi:OpenAIServerInfrastructure . # generically depends on
 
 #################################################################
@@ -109,33 +96,29 @@ abi:ChatgptAgent a abi:AIAgent ;
 
 # Spatial regions (BFO_0000141)
 abi:WesternDataCenterRegion a bfo:BFO_0000141 ;
-    rdfs:label "Western Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing Western data center locations"@en ;
-    skos:example "US West Coast data centers, European server facilities, North American cloud regions"@en .
-
-abi:InternetSpatialBoundary a bfo:BFO_0000141 ;
-    rdfs:label "Internet Spatial Boundary"@en ;
-    rdfs:comment "Immaterial boundary defining web content accessibility"@en ;
-    skos:example "Publicly accessible web pages, search engine indexed content, open internet domains"@en .
+    rdfs:label "ChatGPT Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing ChatGPT data center locations"@en ;
+    skos:example "Geographic region where ChatGPT infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
 #################################################################
 
 # Temporal regions (BFO_0000008)
-abi:ChatgptWebSearchSession a bfo:BFO_0000008 ;
-    rdfs:label "ChatGPT Web Search Session"@en ;
-    rdfs:comment "Temporal region during which web search occurs"@en ;
-    skos:example "5-minute web search session, 30-second query processing time, real-time content crawling"@en .
-
-abi:ChatgptWesternContextSession a bfo:BFO_0000008 ;
-    rdfs:label "ChatGPT Western Context Session"@en ;
-    rdfs:comment "Temporal region during which Western context analysis occurs"@en ;
-    skos:example "US election analysis session, European business context processing, Western cultural reference lookup"@en .
+abi:ChatGPTWebSearchSession a bfo:BFO_0000008 ;
+    rdfs:label "ChatGPT WebSearchSession"@en ;
+    rdfs:comment "Temporal region during which ChatGPT processing occurs"@en ;
+    skos:example "ChatGPT processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
+abi:ChatGPTWebSearchProcess a abi:WebSearchProcess ;
+    rdfs:label "ChatGPT WebSearchProcess"@en ;
+    rdfs:comment "Process of web searching and Western context analysis using ChatGPT"@en ;
+    skos:example "ChatGPT executing its core process"@en ;
+    bfo:BFO_0000057 abi:OpenAIServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:ChatGPTWebSearchCapability ; # realizes
+    bfo:BFO_0000108 abi:ChatGPTWebSearchSession . # exists at

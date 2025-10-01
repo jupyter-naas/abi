@@ -12,6 +12,7 @@
     dc:description "BFO-grounded ontology for Mistral AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
+
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -19,28 +20,20 @@
 # Material Infrastructure (BFO_0000040)
 abi:MistralServerInfrastructure a bfo:BFO_0000040 ;
     rdfs:label "Mistral Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting Mistral systems for mathematics and logical reasoning"@en ;
-    bfo:BFO_0000171 abi:EuropeanDataCenterRegion . # located in
-
-abi:MathematicalProcessingHardware a bfo:BFO_0000040 ;
-    rdfs:label "Mathematical Processing Hardware"@en ;
-    rdfs:comment "Specialized hardware for mathematical computations and logical reasoning"@en ;
-    bfo:BFO_0000171 abi:EuropeanDataCenterRegion . # located in
+    rdfs:comment "Material infrastructure supporting Mistral systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for Mistral"@en ;
+    bfo:BFO_0000171 abi:MistralDataCenterRegion . # located in
 
 #################################################################
 #    BFO Bucket 2: Qualities (WHAT-LIKE)
 #################################################################
 
 # Qualities that inhere in material entities (BFO_0000019)
-abi:MistralMathematicalAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "Mistral Mathematical Accuracy"@en ;
-    rdfs:comment "Quality representing accuracy of mathematical computations"@en ;
+abi:MistralMathematicalPrecision a bfo:BFO_0000019 ;
+    rdfs:label "Mistral MathematicalPrecision"@en ;
+    rdfs:comment "Quality representing precision in mathematical calculations"@en ;
+    skos:example "Mistral processing quality metrics"@en ;
     bfo:BFO_0000197 abi:MistralServerInfrastructure . # inheres in
-
-abi:MistralLogicalConsistency a bfo:BFO_0000019 ;
-    rdfs:label "Mistral Logical Consistency"@en ;
-    rdfs:comment "Quality representing consistency of logical reasoning"@en ;
-    bfo:BFO_0000197 abi:MathematicalProcessingHardware . # inheres in
 
 #################################################################
 #    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
@@ -48,10 +41,10 @@ abi:MistralLogicalConsistency a bfo:BFO_0000019 ;
 
 # Capabilities that inhere in material entities (BFO_0000017)
 abi:MistralMathematicalReasoningCapability a bfo:BFO_0000017 ;
-    rdfs:label "Mistral Mathematical Reasoning Capability"@en ;
-    rdfs:comment "Capability for mathematical computation and logical analysis"@en ;
-    bfo:BFO_0000197 abi:MistralServerInfrastructure ; # inheres in
-    bfo:BFO_0000218 abi:MathematicalProcessingHardware . # has material basis
+    rdfs:label "Mistral MathematicalReasoningCapability"@en ;
+    rdfs:comment "Capability for mathematical reasoning and problem solving"@en ;
+    skos:example "Mistral core capability"@en ;
+    bfo:BFO_0000197 abi:MistralServerInfrastructure . # inheres in
 
 #################################################################
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
@@ -60,37 +53,37 @@ abi:MistralMathematicalReasoningCapability a bfo:BFO_0000017 ;
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:MistralLarge2Model a bfo:BFO_0000031 ;
     rdfs:label "mistral-large-2"@en ;
-    rdfs:comment "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities"@en ;
-    skos:example "Mistral-Large-2 neural network, 128K token context, enhanced math capabilities"@en ;
+    rdfs:comment "Mistral's large model optimized for mathematics, coding, and logical reasoning tasks."@en ;
+    skos:example "mistral-large-2 neural network"@en ;
     abi:hasModelId "mistral-large-2407"@en ;
-    abi:hasContextWindow "128000"^^xsd:integer ;
+    abi:hasContextWindow "131072"^^xsd:integer ;
     abi:hasOwner "mistral"@en ;
-    abi:hasDescription "Mistral's flagship model with enhanced code generation, mathematics, and reasoning capabilities."@en ;
+    abi:hasDescription "Mistral's large model optimized for mathematics, coding, and logical reasoning tasks."@en ;
     bfo:BFO_0000084 abi:MistralServerInfrastructure . # generically depends on
 
 # System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:MistralSystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "Mistral System Prompt"@en ;
-    rdfs:comment "System prompt defining Mistral's role in mathematical reasoning"@en ;
-    skos:example "Role: mathematical reasoner, Tasks: math/logic problems, Guidelines: precise computation"@en ;
-    abi:hasRole "You are Mistral, an AI assistant specialized in mathematical reasoning and logical problem-solving."@en ;
-    abi:hasObjective "Solve complex mathematical and logical problems with precision"@en ;
-    abi:hasTasks "Mathematical calculations; Logical reasoning; Code generation; Problem solving"@en ;
+    rdfs:comment "System prompt defining Mistral's role, objectives, and operating guidelines"@en ;
+    skos:example "Mistral behavioral configuration"@en ;
+    abi:hasRole "You are Mistral, a technical AI assistant specialized in mathematics and logical reasoning."@en ;
+    abi:hasObjective "Provide precise solutions to mathematical and logical problems"@en ;
+    abi:hasTasks "Mathematical calculations; Logical reasoning; Problem solving; Technical analysis"@en ;
     bfo:BFO_0000084 abi:MistralServerInfrastructure . # generically depends on
 
 # Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:MistralIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "Mistral Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for Mistral agent"@en ;
-    skos:example "solve math → mistral_calculate, generate code → mistral_code"@en ;
-    abi:hasIntentCount "12"^^xsd:integer ;
+    skos:example "Mistral intent routing configuration"@en ;
+    abi:hasIntentCount "15"^^xsd:integer ;
     bfo:BFO_0000084 abi:MistralServerInfrastructure . # generically depends on
 
 # AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:MistralAgent a abi:AIAgent ;
     rdfs:label "Mistral"@en ;
-    rdfs:comment "Mistral AI agent specialized in mathematical reasoning and logical problem-solving"@en ;
-    skos:example "Mistral service using Mistral-Large-2 for math and logic"@en ;
+    rdfs:comment "Mistral agent specialized in mathematical reasoning and logical problem solving"@en ;
+    skos:example "Complete Mistral service: model + system prompt + intent mappings"@en ;
     abi:hasSpecializedRole "Mathematics and logical reasoning"@en ;
     abi:usesModel abi:MistralLarge2Model ;
     abi:usesSystemPrompt abi:MistralSystemPrompt ;
@@ -102,27 +95,30 @@ abi:MistralAgent a abi:AIAgent ;
 #################################################################
 
 # Spatial regions (BFO_0000141)
-abi:EuropeanDataCenterRegion a bfo:BFO_0000141 ;
-    rdfs:label "European Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing European data center locations"@en .
+abi:MistralDataCenterRegion a bfo:BFO_0000141 ;
+    rdfs:label "Mistral Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing Mistral data center locations"@en ;
+    skos:example "Geographic region where Mistral infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
 #################################################################
 
 # Temporal regions (BFO_0000008)
-abi:MistralMathematicalReasoningSession a bfo:BFO_0000008 ;
-    rdfs:label "Mistral Mathematical Reasoning Session"@en ;
-    rdfs:comment "Temporal region during which mathematical reasoning occurs"@en .
+abi:MistralMathematicalSession a bfo:BFO_0000008 ;
+    rdfs:label "Mistral MathematicalSession"@en ;
+    rdfs:comment "Temporal region during which Mistral processing occurs"@en ;
+    skos:example "Mistral processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
-# Note: Additional processes can be defined as needed, following the same BFO pattern
-
-# Note: This ontology now contains only the essential BFO-compliant structure.
-# Additional temporal regions, model instances, qualities, and specifications
-# can be added as needed following the established BFO patterns above.
+abi:MistralMathematicalReasoningProcess a abi:MathematicalReasoningProcess ;
+    rdfs:label "Mistral MathematicalReasoningProcess"@en ;
+    rdfs:comment "Process of performing mathematical calculations and logical reasoning"@en ;
+    skos:example "Mistral executing its core process"@en ;
+    bfo:BFO_0000057 abi:MistralServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:MistralMathematicalReasoningCapability ; # realizes
+    bfo:BFO_0000108 abi:MistralMathematicalSession . # exists at

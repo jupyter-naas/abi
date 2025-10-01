@@ -6,11 +6,12 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-<http://ontology.naas.ai/abi/DeepseekOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/DeepSeekOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "DeepSeek AI Agent Ontology"@en ;
     dc:description "BFO-grounded ontology for DeepSeek AI models and processes"@en ;
     dc:created "20250812T101446"@en .
+
 
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
@@ -19,12 +20,8 @@
 # Material Infrastructure (BFO_0000040)
 abi:DeepSeekServerInfrastructure a bfo:BFO_0000040 ;
     rdfs:label "DeepSeek Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting DeepSeek systems for Eastern context analysis"@en ;
-    bfo:BFO_0000171 abi:EasternDataCenterRegion . # located in
-
-abi:EasternCulturalKnowledgeSystems a bfo:BFO_0000040 ;
-    rdfs:label "Eastern Cultural Knowledge Systems"@en ;
-    rdfs:comment "Specialized systems for Eastern cultural and regional knowledge processing"@en ;
+    rdfs:comment "Material infrastructure supporting DeepSeek systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for DeepSeek"@en ;
     bfo:BFO_0000171 abi:EasternDataCenterRegion . # located in
 
 #################################################################
@@ -32,69 +29,65 @@ abi:EasternCulturalKnowledgeSystems a bfo:BFO_0000040 ;
 #################################################################
 
 # Qualities that inhere in material entities (BFO_0000019)
-abi:DeepSeekEasternContextAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "DeepSeek Eastern Context Accuracy"@en ;
-    rdfs:comment "Quality representing accuracy of Eastern context analysis"@en ;
+abi:DeepSeekRegionalContextAccuracy a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek RegionalContextAccuracy"@en ;
+    rdfs:comment "Quality representing accuracy in Eastern regional context analysis"@en ;
+    skos:example "DeepSeek processing quality metrics"@en ;
     bfo:BFO_0000197 abi:DeepSeekServerInfrastructure . # inheres in
-
-abi:DeepSeekRegionalRelevance a bfo:BFO_0000019 ;
-    rdfs:label "DeepSeek Regional Relevance"@en ;
-    rdfs:comment "Quality representing relevance of regional analysis"@en ;
-    bfo:BFO_0000197 abi:EasternCulturalKnowledgeSystems . # inheres in
 
 #################################################################
 #    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
 #################################################################
 
 # Capabilities that inhere in material entities (BFO_0000017)
-abi:DeepSeekEasternContextCapability a bfo:BFO_0000017 ;
-    rdfs:label "DeepSeek Eastern Context Capability"@en ;
-    rdfs:comment "Capability for Eastern cultural knowledge and context analysis"@en ;
-    bfo:BFO_0000197 abi:DeepSeekServerInfrastructure ; # inheres in
-    bfo:BFO_0000218 abi:EasternCulturalKnowledgeSystems . # has material basis
+abi:DeepSeekRegionalContextAnalysisCapability a bfo:BFO_0000017 ;
+    rdfs:label "DeepSeek RegionalContextAnalysisCapability"@en ;
+    rdfs:comment "Capability for analyzing Eastern regional and cultural context"@en ;
+    skos:example "DeepSeek core capability"@en ;
+    bfo:BFO_0000197 abi:DeepSeekServerInfrastructure . # inheres in
 
 #################################################################
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
 #################################################################
 
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
-abi:DeepseekR18BModel a bfo:BFO_0000031 ;
-    rdfs:label "DeepSeek R1 8B"@en ;
-    rdfs:comment "Advanced reasoning model with strong performance in mathematics and problem-solving, optimized for Eastern context"@en ;
-    skos:example "DeepSeek-R1-8B neural network, 32K token context, Eastern regional optimization"@en ;
-    abi:hasModelId "deepseek-r1:8b"@en ;
-    abi:hasContextWindow "32768"^^xsd:integer ;
-    abi:hasOwner "ollama"@en ;
-    abi:hasDescription "Advanced reasoning model with strong performance in mathematics and problem-solving, optimized for Eastern context"@en ;
+abi:DeepSeekV3Model a bfo:BFO_0000031 ;
+    rdfs:label "deepseek-v3"@en ;
+    rdfs:comment "DeepSeek's advanced model specialized in Eastern regional context and analytical reasoning."@en ;
+    skos:example "deepseek-v3 neural network"@en ;
+    abi:hasModelId "deepseek-chat"@en ;
+    abi:hasContextWindow "65536"^^xsd:integer ;
+    abi:hasOwner "deepseek"@en ;
+    abi:hasDescription "DeepSeek's advanced model specialized in Eastern regional context and analytical reasoning."@en ;
     bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
 
 # System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
-abi:DeepseekSystemPrompt a bfo:BFO_0000031 ;
+abi:DeepSeekSystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "DeepSeek System Prompt"@en ;
-    rdfs:comment "System prompt defining DeepSeek's role in Eastern regional context analysis"@en ;
-    skos:example "Role: regional analyst, Tasks: Eastern context analysis, Guidelines: cultural understanding"@en ;
+    rdfs:comment "System prompt defining DeepSeek's role, objectives, and operating guidelines"@en ;
+    skos:example "DeepSeek behavioral configuration"@en ;
     abi:hasRole "You are DeepSeek, an AI assistant specialized in Eastern regional context analysis and advanced reasoning."@en ;
     abi:hasObjective "Provide Eastern regional context and advanced analytical reasoning"@en ;
-    abi:hasTasks "Eastern context analysis; Regional research; Advanced reasoning; Cultural understanding"@en ;
+    abi:hasTasks "Eastern context analysis; Regional research; Cultural analysis; Advanced reasoning"@en ;
     bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
 
 # Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
-abi:DeepseekIntentMappings a bfo:BFO_0000031 ;
+abi:DeepSeekIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "DeepSeek Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for DeepSeek agent"@en ;
-    skos:example "analyze Eastern context → deepseek_analyze, research region → deepseek_research"@en ;
-    abi:hasIntentCount "10"^^xsd:integer ;
+    skos:example "DeepSeek intent routing configuration"@en ;
+    abi:hasIntentCount "14"^^xsd:integer ;
     bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
 
 # AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:DeepSeekAgent a abi:AIAgent ;
     rdfs:label "DeepSeek"@en ;
-    rdfs:comment "DeepSeek AI agent specialized in Eastern regional context and advanced reasoning"@en ;
-    skos:example "DeepSeek service using DeepSeek-R1-8B for Eastern context analysis"@en ;
-    abi:hasSpecializedRole "Eastern context and regional analysis"@en ;
-    abi:usesModel abi:DeepseekR18BModel ;
-    abi:usesSystemPrompt abi:DeepseekSystemPrompt ;
-    abi:usesIntentMappings abi:DeepseekIntentMappings ;
+    rdfs:comment "DeepSeek agent specialized in Eastern regional context analysis and advanced reasoning"@en ;
+    skos:example "Complete DeepSeek service: model + system prompt + intent mappings"@en ;
+    abi:hasSpecializedRole "Eastern regional context and analytical reasoning"@en ;
+    abi:usesModel abi:DeepSeekV3Model ;
+    abi:usesSystemPrompt abi:DeepSeekSystemPrompt ;
+    abi:usesIntentMappings abi:DeepSeekIntentMappings ;
     bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
 
 #################################################################
@@ -103,12 +96,9 @@ abi:DeepSeekAgent a abi:AIAgent ;
 
 # Spatial regions (BFO_0000141)
 abi:EasternDataCenterRegion a bfo:BFO_0000141 ;
-    rdfs:label "Eastern Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing Eastern data center locations"@en .
-
-abi:AsianGeographicalBoundary a bfo:BFO_0000141 ;
-    rdfs:label "Asian Geographical Boundary"@en ;
-    rdfs:comment "Immaterial boundary defining Asian cultural and geographical regions"@en .
+    rdfs:label "DeepSeek Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing DeepSeek data center locations"@en ;
+    skos:example "Geographic region where DeepSeek infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
@@ -116,17 +106,19 @@ abi:AsianGeographicalBoundary a bfo:BFO_0000141 ;
 
 # Temporal regions (BFO_0000008)
 abi:DeepSeekRegionalAnalysisSession a bfo:BFO_0000008 ;
-    rdfs:label "DeepSeek Regional Analysis Session"@en ;
-    rdfs:comment "Temporal region during which regional analysis occurs"@en .
+    rdfs:label "DeepSeek RegionalAnalysisSession"@en ;
+    rdfs:comment "Temporal region during which DeepSeek processing occurs"@en ;
+    skos:example "DeepSeek processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
-# Note: Additional processes can be defined as needed, following the same BFO pattern
-
-# Note: This ontology now contains only the essential BFO-compliant structure.
-# Additional temporal regions, model instances, qualities, and specifications
-# can be added as needed following the established BFO patterns above.
+abi:DeepSeekRegionalContextAnalysisProcess a abi:RegionalContextAnalysisProcess ;
+    rdfs:label "DeepSeek RegionalContextAnalysisProcess"@en ;
+    rdfs:comment "Process of analyzing Eastern regional and cultural contexts"@en ;
+    skos:example "DeepSeek executing its core process"@en ;
+    bfo:BFO_0000057 abi:DeepSeekServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:DeepSeekRegionalContextAnalysisCapability ; # realizes
+    bfo:BFO_0000108 abi:DeepSeekRegionalAnalysisSession . # exists at

@@ -6,26 +6,23 @@
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
-<http://ontology.naas.ai/abi/<http://ontology.naas.ai/abi/GrokOntology> a owl:Ontology ;
+<http://ontology.naas.ai/abi/GrokOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "Grok AI Agent Ontology"@en ;
     dc:description "BFO-grounded ontology for Grok AI models and processes"@en ;
     dc:created "20250812T101446"@en .
+
 
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
 
 # Material Infrastructure (BFO_0000040)
-abi:xAIServerInfrastructure a bfo:BFO_0000040 ;
-    rdfs:label "xAI Server Infrastructure"@en ;
-    rdfs:comment "Material infrastructure supporting Grok systems for trend monitoring and social sentiment analysis"@en ;
-    bfo:BFO_0000171 abi:xAIDataCenterRegion . # located in
-
-abi:RealTimeDataStreamingHardware a bfo:BFO_0000040 ;
-    rdfs:label "Real-Time Data Streaming Hardware"@en ;
-    rdfs:comment "Specialized hardware for real-time data streaming and trend analysis"@en ;
-    bfo:BFO_0000171 abi:xAIDataCenterRegion . # located in
+abi:XAIServerInfrastructure a bfo:BFO_0000040 ;
+    rdfs:label "Grok Server Infrastructure"@en ;
+    rdfs:comment "Material infrastructure supporting Grok systems"@en ;
+    skos:example "Physical servers, GPU clusters, network hardware for Grok"@en ;
+    bfo:BFO_0000171 abi:XAIDataCenterRegion . # located in
 
 #################################################################
 #    BFO Bucket 2: Qualities (WHAT-LIKE)
@@ -33,14 +30,10 @@ abi:RealTimeDataStreamingHardware a bfo:BFO_0000040 ;
 
 # Qualities that inhere in material entities (BFO_0000019)
 abi:GrokTrendDetectionAccuracy a bfo:BFO_0000019 ;
-    rdfs:label "Grok Trend Detection Accuracy"@en ;
-    rdfs:comment "Quality representing accuracy of trend detection"@en ;
-    bfo:BFO_0000197 abi:xAIServerInfrastructure . # inheres in
-
-abi:GrokRealTimeProcessingSpeed a bfo:BFO_0000019 ;
-    rdfs:label "Grok Real-Time Processing Speed"@en ;
-    rdfs:comment "Quality representing speed of real-time processing"@en ;
-    bfo:BFO_0000197 abi:RealTimeDataStreamingHardware . # inheres in
+    rdfs:label "Grok TrendDetectionAccuracy"@en ;
+    rdfs:comment "Quality representing accuracy in detecting social trends"@en ;
+    skos:example "Grok processing quality metrics"@en ;
+    bfo:BFO_0000197 abi:XAIServerInfrastructure . # inheres in
 
 #################################################################
 #    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
@@ -48,67 +41,64 @@ abi:GrokRealTimeProcessingSpeed a bfo:BFO_0000019 ;
 
 # Capabilities that inhere in material entities (BFO_0000017)
 abi:GrokTrendMonitoringCapability a bfo:BFO_0000017 ;
-    rdfs:label "Grok Trend Monitoring Capability"@en ;
-    rdfs:comment "Capability for monitoring trends and social sentiment analysis"@en ;
-    bfo:BFO_0000197 abi:xAIServerInfrastructure ; # inheres in
-    bfo:BFO_0000218 abi:RealTimeDataStreamingHardware . # has material basis
+    rdfs:label "Grok TrendMonitoringCapability"@en ;
+    rdfs:comment "Capability for monitoring global trends and social sentiment"@en ;
+    skos:example "Grok core capability"@en ;
+    bfo:BFO_0000197 abi:XAIServerInfrastructure . # inheres in
 
 #################################################################
 #    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
 #################################################################
 
 # AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
-abi:Grok4Model a bfo:BFO_0000031 ;
-    rdfs:label "grok-4-latest"@en ;
-    rdfs:comment "xAI's model with real-time information access and social media understanding capabilities"@en ;
-    skos:example "Grok-4 neural network, 200K token context, real-time social data access"@en ;
-    abi:hasModelId "grok-4-latest"@en ;
-    abi:hasContextWindow "200000"^^xsd:integer ;
+abi:Grok2Model a bfo:BFO_0000031 ;
+    rdfs:label "grok-2"@en ;
+    rdfs:comment "xAI's Grok-2 model specialized in real-time trend analysis and social sentiment monitoring."@en ;
+    skos:example "grok-2 neural network"@en ;
+    abi:hasModelId "grok-2"@en ;
+    abi:hasContextWindow "32768"^^xsd:integer ;
     abi:hasOwner "xai"@en ;
-    abi:hasDescription "xAI's model with real-time information access and social media understanding capabilities"@en ;
-    bfo:BFO_0000084 abi:xAIServerInfrastructure . # generically depends on
+    abi:hasDescription "xAI's Grok-2 model specialized in real-time trend analysis and social sentiment monitoring."@en ;
+    bfo:BFO_0000084 abi:XAIServerInfrastructure . # generically depends on
 
 # System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:GrokSystemPrompt a bfo:BFO_0000031 ;
     rdfs:label "Grok System Prompt"@en ;
-    rdfs:comment "System prompt defining Grok's role in trend monitoring and social sentiment analysis"@en ;
-    skos:example "Role: trend monitor, Tasks: social sentiment analysis, Guidelines: real-time data"@en ;
-    abi:hasRole "You are Grok, xAI's assistant specialized in monitoring global trends and analyzing social sentiment."@en ;
-    abi:hasObjective "Monitor and analyze global trends and social conversations"@en ;
-    abi:hasTasks "Trend monitoring; Social sentiment analysis; Real-time information; Cultural trends"@en ;
-    bfo:BFO_0000084 abi:xAIServerInfrastructure . # generically depends on
+    rdfs:comment "System prompt defining Grok's role, objectives, and operating guidelines"@en ;
+    skos:example "Grok behavioral configuration"@en ;
+    abi:hasRole "You are Grok, xAI's AI assistant specialized in monitoring global trends and analyzing social sentiment."@en ;
+    abi:hasObjective "Provide real-time insights on global trends and social media sentiment"@en ;
+    abi:hasTasks "Trend monitoring; Social sentiment analysis; Real-time data processing; Global event tracking"@en ;
+    bfo:BFO_0000084 abi:XAIServerInfrastructure . # generically depends on
 
 # Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
 abi:GrokIntentMappings a bfo:BFO_0000031 ;
     rdfs:label "Grok Intent Mappings"@en ;
     rdfs:comment "Intent-to-tool routing patterns for Grok agent"@en ;
-    skos:example "monitor trends → grok_monitor, analyze sentiment → grok_sentiment"@en ;
-    abi:hasIntentCount "14"^^xsd:integer ;
-    bfo:BFO_0000084 abi:xAIServerInfrastructure . # generically depends on
+    skos:example "Grok intent routing configuration"@en ;
+    abi:hasIntentCount "12"^^xsd:integer ;
+    bfo:BFO_0000084 abi:XAIServerInfrastructure . # generically depends on
 
 # AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
 abi:GrokAgent a abi:AIAgent ;
     rdfs:label "Grok"@en ;
-    rdfs:comment "xAI's Grok agent specialized in trend monitoring and social sentiment analysis"@en ;
-    skos:example "Grok service using Grok-4 for global trend analysis"@en ;
-    abi:hasSpecializedRole "Global trends and social sentiment analysis"@en ;
-    abi:usesModel abi:Grok4Model ;
+    rdfs:comment "xAI's Grok agent specialized in real-time trend monitoring and social sentiment analysis"@en ;
+    skos:example "Complete Grok service: model + system prompt + intent mappings"@en ;
+    abi:hasSpecializedRole "Global trends and social sentiment monitoring"@en ;
+    abi:usesModel abi:Grok2Model ;
     abi:usesSystemPrompt abi:GrokSystemPrompt ;
     abi:usesIntentMappings abi:GrokIntentMappings ;
-    bfo:BFO_0000084 abi:xAIServerInfrastructure . # generically depends on
+    bfo:BFO_0000084 abi:XAIServerInfrastructure . # generically depends on
 
 #################################################################
 #    BFO Bucket 5: Immaterial Entities (WHERE)
 #################################################################
 
 # Spatial regions (BFO_0000141)
-abi:xAIDataCenterRegion a bfo:BFO_0000141 ;
-    rdfs:label "xAI Data Center Region"@en ;
-    rdfs:comment "Spatial region encompassing xAI data center locations"@en .
-
-abi:GlobalNetworkBoundary a bfo:BFO_0000141 ;
-    rdfs:label "Global Network Boundary"@en ;
-    rdfs:comment "Immaterial boundary defining global social media and communication networks"@en .
+abi:XAIDataCenterRegion a bfo:BFO_0000141 ;
+    rdfs:label "Grok Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing Grok data center locations"@en ;
+    skos:example "Geographic region where Grok infrastructure is located"@en .
 
 #################################################################
 #    BFO Bucket 6: Temporal Regions (WHEN)
@@ -116,17 +106,19 @@ abi:GlobalNetworkBoundary a bfo:BFO_0000141 ;
 
 # Temporal regions (BFO_0000008)
 abi:GrokTrendMonitoringSession a bfo:BFO_0000008 ;
-    rdfs:label "Grok Trend Monitoring Session"@en ;
-    rdfs:comment "Temporal region during which trend monitoring occurs"@en .
+    rdfs:label "Grok TrendMonitoringSession"@en ;
+    rdfs:comment "Temporal region during which Grok processing occurs"@en ;
+    skos:example "Grok processing time interval"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-
-# Note: Additional processes can be defined as needed, following the same BFO pattern
-
-# Note: This ontology now contains only the essential BFO-compliant structure.
-# Additional temporal regions, model instances, qualities, and specifications
-# can be added as needed following the established BFO patterns above.
+abi:GrokTrendMonitoringProcess a abi:TrendMonitoringProcess ;
+    rdfs:label "Grok TrendMonitoringProcess"@en ;
+    rdfs:comment "Process of monitoring and analyzing social trends and global sentiment"@en ;
+    skos:example "Grok executing its core process"@en ;
+    bfo:BFO_0000057 abi:XAIServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:GrokTrendMonitoringCapability ; # realizes
+    bfo:BFO_0000108 abi:GrokTrendMonitoringSession . # exists at
