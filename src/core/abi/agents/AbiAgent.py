@@ -378,8 +378,8 @@ You can browse the data and run queries there."""
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
-        threshold=0.85,  # Higher threshold: only strong intent matches trigger routing
-        threshold_neighbor=0.75,  # Stricter neighbor threshold to prevent false positives
+        threshold=0.75,  # Balanced threshold: allows natural language while avoiding false positives
+        threshold_neighbor=0.65,  # Allows similar phrasings to trigger tools
     )
 
 
