@@ -12,7 +12,6 @@
     dc:description "BFO-grounded ontology for DeepSeek AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
-
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -125,12 +124,6 @@ abi:DeepSeekRegionalAnalysisSession a bfo:BFO_0000008 ;
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-abi:DeepSeekEasternContextAnalysisProcess a abi:RegionalContextAnalysisProcess ;
-    rdfs:label "DeepSeek Eastern Context Analysis Process"@en ;
-    rdfs:comment "Process of analyzing Eastern cultural and regional contexts using DeepSeek"@en ;
-    bfo:BFO_0000057 abi:DeepSeekServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:DeepSeekEasternContextCapability ; # realizes
-    bfo:BFO_0000108 abi:DeepSeekRegionalAnalysisSession . # exists at
 
 # Note: Additional processes can be defined as needed, following the same BFO pattern
 

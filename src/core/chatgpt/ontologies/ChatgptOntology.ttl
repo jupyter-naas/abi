@@ -12,7 +12,6 @@
     dc:description "BFO-grounded ontology for Chatgpt AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
-
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -134,24 +133,9 @@ abi:ChatgptWesternContextSession a bfo:BFO_0000008 ;
     rdfs:comment "Temporal region during which Western context analysis occurs"@en ;
     skos:example "US election analysis session, European business context processing, Western cultural reference lookup"@en .
 
-
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-abi:ChatgptWebSearchProcess a abi:WebSearchProcess ;
-    rdfs:label "ChatGPT Web Search Process"@en ;
-    rdfs:comment "Process of web searching and Western context analysis using ChatGPT"@en ;
-    skos:example "User asks 'latest Tesla news' → ChatGPT searches Bing → returns recent articles with summaries"@en ;
-    bfo:BFO_0000057 abi:OpenAIServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:ChatgptWebSearchCapability ; # realizes
-    bfo:BFO_0000108 abi:ChatgptWebSearchSession . # exists at
 
-abi:ChatgptWesternContextAnalysisProcess a abi:RegionalContextAnalysisProcess ;
-    rdfs:label "ChatGPT Western Context Analysis Process"@en ;
-    rdfs:comment "Process of analyzing Western cultural and regional contexts"@en ;
-    skos:example "User asks about US midterm elections → ChatGPT provides Western political context and analysis"@en ;
-    bfo:BFO_0000057 abi:OpenAIServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:ChatgptWesternContextCapability ; # realizes
-    bfo:BFO_0000108 abi:ChatgptWesternContextSession . # exists at

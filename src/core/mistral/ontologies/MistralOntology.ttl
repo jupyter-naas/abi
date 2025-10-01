@@ -12,7 +12,6 @@
     dc:description "BFO-grounded ontology for Mistral AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
-
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -121,12 +120,6 @@ abi:MistralMathematicalReasoningSession a bfo:BFO_0000008 ;
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-abi:MistralMathematicalReasoningProcess a abi:MathematicalReasoningProcess ;
-    rdfs:label "Mistral Mathematical Reasoning Process"@en ;
-    rdfs:comment "Process of mathematical computation and logical analysis using Mistral"@en ;
-    bfo:BFO_0000057 abi:MistralServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:MistralMathematicalReasoningCapability ; # realizes
-    bfo:BFO_0000108 abi:MistralMathematicalReasoningSession . # exists at
 
 # Note: Additional processes can be defined as needed, following the same BFO pattern
 

@@ -12,7 +12,6 @@
     dc:description "BFO-grounded ontology for Perplexity AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
-
 #################################################################
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
@@ -125,12 +124,6 @@ abi:PerplexityResearchSession a bfo:BFO_0000008 ;
 #################################################################
 
 # Specialized processes that realize capabilities (BFO_0000015)
-abi:PerplexityResearchDiscoveryProcess a abi:ResearchDiscoveryProcess ;
-    rdfs:label "Perplexity Research Discovery Process"@en ;
-    rdfs:comment "Process of discovering and retrieving research articles using Perplexity"@en ;
-    bfo:BFO_0000057 abi:PerplexityServerInfrastructure ; # has participant
-    bfo:BFO_0000055 abi:PerplexityResearchDiscoveryCapability ; # realizes
-    bfo:BFO_0000108 abi:PerplexityResearchSession . # exists at
 
 # Note: Additional processes can be defined as needed, following the same BFO pattern
 
