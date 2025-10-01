@@ -8,8 +8,8 @@
 
 <http://naas.ai/ontology/abi/DeepseekOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
-    dc:title "Deepseek AI Agent Ontology"@en ;
-    dc:description "BFO-grounded ontology for Deepseek AI models and processes"@en ;
+    dc:title "DeepSeek AI Agent Ontology"@en ;
+    dc:description "BFO-grounded ontology for DeepSeek AI models and processes"@en ;
     dc:created "20250812T101446"@en .
 
 
@@ -17,593 +17,123 @@
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
 
-abi:DeepseekAgent a abi:AIAgent ;
-    rdfs:label "Deepseek AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Deepseek models"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
+# Material Infrastructure (BFO_0000040)
+abi:DeepSeekServerInfrastructure a bfo:BFO_0000040 ;
+    rdfs:label "DeepSeek Server Infrastructure"@en ;
+    rdfs:comment "Material infrastructure supporting DeepSeek systems for Eastern context analysis"@en ;
+    bfo:BFO_0000171 abi:EasternDataCenterRegion . # located in
 
+abi:EasternCulturalKnowledgeSystems a bfo:BFO_0000040 ;
+    rdfs:label "Eastern Cultural Knowledge Systems"@en ;
+    rdfs:comment "Specialized systems for Eastern cultural and regional knowledge processing"@en ;
+    bfo:BFO_0000171 abi:EasternDataCenterRegion . # located in
+
+#################################################################
+#    BFO Bucket 2: Qualities (WHAT-LIKE)
+#################################################################
+
+# Qualities that inhere in material entities (BFO_0000019)
+abi:DeepSeekEasternContextAccuracy a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek Eastern Context Accuracy"@en ;
+    rdfs:comment "Quality representing accuracy of Eastern context analysis"@en ;
+    bfo:BFO_0000197 abi:DeepSeekServerInfrastructure . # inheres in
+
+abi:DeepSeekRegionalRelevance a bfo:BFO_0000019 ;
+    rdfs:label "DeepSeek Regional Relevance"@en ;
+    rdfs:comment "Quality representing relevance of regional analysis"@en ;
+    bfo:BFO_0000197 abi:EasternCulturalKnowledgeSystems . # inheres in
+
+#################################################################
+#    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
+#################################################################
+
+# Capabilities that inhere in material entities (BFO_0000017)
+abi:DeepSeekEasternContextCapability a bfo:BFO_0000017 ;
+    rdfs:label "DeepSeek Eastern Context Capability"@en ;
+    rdfs:comment "Capability for Eastern cultural knowledge and context analysis"@en ;
+    bfo:BFO_0000197 abi:DeepSeekServerInfrastructure ; # inheres in
+    bfo:BFO_0000218 abi:EasternCulturalKnowledgeSystems . # has material basis
+
+#################################################################
+#    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
+#################################################################
+
+# AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:DeepseekR18BModel a bfo:BFO_0000031 ;
+    rdfs:label "DeepSeek R1 8B"@en ;
+    rdfs:comment "Advanced reasoning model with strong performance in mathematics and problem-solving, optimized for Eastern context"@en ;
+    skos:example "DeepSeek-R1-8B neural network, 32K token context, Eastern regional optimization"@en ;
+    abi:hasModelId "deepseek-r1:8b"@en ;
+    abi:hasContextWindow "32768"^^xsd:integer ;
+    abi:hasOwner "ollama"@en ;
+    abi:hasDescription "Advanced reasoning model with strong performance in mathematics and problem-solving, optimized for Eastern context"@en ;
+    bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
+
+# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
+abi:DeepseekSystemPrompt a bfo:BFO_0000031 ;
+    rdfs:label "DeepSeek System Prompt"@en ;
+    rdfs:comment "System prompt defining DeepSeek's role in Eastern regional context analysis"@en ;
+    skos:example "Role: regional analyst, Tasks: Eastern context analysis, Guidelines: cultural understanding"@en ;
+    abi:hasRole "You are DeepSeek, an AI assistant specialized in Eastern regional context analysis and advanced reasoning."@en ;
+    abi:hasObjective "Provide Eastern regional context and advanced analytical reasoning"@en ;
+    abi:hasTasks "Eastern context analysis; Regional research; Advanced reasoning; Cultural understanding"@en ;
+    bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
+
+# Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:DeepseekIntentMappings a bfo:BFO_0000031 ;
+    rdfs:label "DeepSeek Intent Mappings"@en ;
+    rdfs:comment "Intent-to-tool routing patterns for DeepSeek agent"@en ;
+    skos:example "analyze Eastern context → deepseek_analyze, research region → deepseek_research"@en ;
+    abi:hasIntentCount "10"^^xsd:integer ;
+    bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
+
+# AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
+abi:DeepSeekAgent a abi:AIAgent ;
+    rdfs:label "DeepSeek"@en ;
+    rdfs:comment "DeepSeek AI agent specialized in Eastern regional context and advanced reasoning"@en ;
+    skos:example "DeepSeek service using DeepSeek-R1-8B for Eastern context analysis"@en ;
+    abi:hasSpecializedRole "Eastern context and regional analysis"@en ;
+    abi:usesModel abi:DeepseekR18BModel ;
+    abi:usesSystemPrompt abi:DeepseekSystemPrompt ;
+    abi:usesIntentMappings abi:DeepseekIntentMappings ;
+    bfo:BFO_0000084 abi:DeepSeekServerInfrastructure . # generically depends on
+
+#################################################################
+#    BFO Bucket 5: Immaterial Entities (WHERE)
+#################################################################
+
+# Spatial regions (BFO_0000141)
+abi:EasternDataCenterRegion a bfo:BFO_0000141 ;
+    rdfs:label "Eastern Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing Eastern data center locations"@en .
+
+abi:AsianGeographicalBoundary a bfo:BFO_0000141 ;
+    rdfs:label "Asian Geographical Boundary"@en ;
+    rdfs:comment "Immaterial boundary defining Asian cultural and geographical regions"@en .
+
+#################################################################
+#    BFO Bucket 6: Temporal Regions (WHEN)
+#################################################################
+
+# Temporal regions (BFO_0000008)
+abi:DeepSeekRegionalAnalysisSession a bfo:BFO_0000008 ;
+    rdfs:label "DeepSeek Regional Analysis Session"@en ;
+    rdfs:comment "Temporal region during which regional analysis occurs"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
-abi:DeepseekBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
-    rdfs:label "Deepseek Business Proposal Process"@en ;
-    abi:hasParticipant abi:DeepseekAgent ;
-    abi:realizesCapability capability:TextGenerationCapability ;
-    abi:hasTemporalRegion abi:DeepseekBusinessProposalSession ;
-    abi:hasQuality abi:DeepseekBusinessProposalQuality .
-
-abi:DeepseekCreativeWritingProcess a abi:CreativeWritingProcess ;
-    rdfs:label "Deepseek Creative Writing Process"@en ;
-    abi:hasParticipant abi:DeepseekAgent ;
-    abi:realizesCapability capability:TextGenerationCapability ;
-    abi:hasTemporalRegion abi:DeepseekCreativeWritingSession ;
-    abi:hasQuality abi:DeepseekCreativeWritingQuality .
-
-abi:DeepseekCodeGenerationProcess a abi:CodeGenerationProcess ;
-    rdfs:label "Deepseek Code Generation Process"@en ;
-    abi:hasParticipant abi:DeepseekAgent ;
-    abi:realizesCapability capability:CodeGenerationCapability ;
-    abi:hasTemporalRegion abi:DeepseekCodeGenerationSession ;
-    abi:hasQuality abi:DeepseekCodeGenerationQuality .
-
-#################################################################
-#    BFO Bucket 5: Temporal Regions (WHEN)
-#################################################################
-
-abi:DeepseekBusinessProposalSession a abi:InferenceSession ;
-    rdfs:label "Deepseek Business Proposal Session"@en .
-
-abi:DeepseekCreativeWritingSession a abi:InferenceSession ;
-    rdfs:label "Deepseek Creative Writing Session"@en .
-
-abi:DeepseekCodeGenerationSession a abi:InferenceSession ;
-    rdfs:label "Deepseek Code Generation Session"@en .
-
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek R1 0528 Qwen3 8B
-#################################################################
-
-abi:DeepSeek_R1_0528_Qwen3_8B a abi:AIModelInstance ;
-    rdfs:label "DeepSeek R1 0528 Qwen3 8B"@en ;
-    abi:modelSlug "deepseek-r1-qwen3-8b"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_R1_0528_Qwen3_8B abi:inputTokenCost 0.055 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.095 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.065 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 93.003 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0.676 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 22.181 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 41.5 ;
-    abi:codingIndex 35.9 ;
-    abi:mathIndex 79.1 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_0528_Qwen3_8B .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_R1_0528_Qwen3_8B .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_R1_0528_Qwen3_8B .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_R1_0528_Qwen3_8B .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek R1 0528 (May '25)
-#################################################################
-
-abi:DeepSeek_R1_0528_May_25 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek R1 0528 (May '25)"@en ;
-    abi:modelSlug "deepseek-r1"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_R1_0528_May_25 abi:inputTokenCost 0.55 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 2.19 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.96 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 21.393 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 3.424 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 96.911 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 58.7 ;
-    abi:codingIndex 58.7 ;
-    abi:mathIndex 93.8 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_0528_May_25 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_R1_0528_May_25 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_R1_0528_May_25 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_R1_0528_May_25 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek R1 Distill Qwen 32B
-#################################################################
-
-abi:DeepSeek_R1_Distill_Qwen_32B a abi:AIModelInstance ;
-    rdfs:label "DeepSeek R1 Distill Qwen 32B"@en ;
-    abi:modelSlug "deepseek-r1-distill-qwen-32b"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_R1_Distill_Qwen_32B abi:inputTokenCost 0.3 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.3 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.3 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 32.546 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0.639 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 62.09 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 41.2 ;
-    abi:codingIndex 32.3 ;
-    abi:mathIndex 81.4 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Qwen_32B .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_32B .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_32B .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_32B .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek V3 (Dec '24)
-#################################################################
-
-abi:DeepSeek_V3_Dec_24 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek V3 (Dec '24)"@en ;
-    abi:modelSlug "deepseek-v3"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_V3_Dec_24 abi:inputTokenCost 0.27 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 1.1 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.477 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 34.6 ;
-    abi:codingIndex 35.6 ;
-    abi:mathIndex 57 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V3_Dec_24 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_V3_Dec_24 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_V3_Dec_24 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_V3_Dec_24 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek R1 Distill Qwen 14B
-#################################################################
-
-abi:DeepSeek_R1_Distill_Qwen_14B a abi:AIModelInstance ;
-    rdfs:label "DeepSeek R1 Distill Qwen 14B"@en ;
-    abi:modelSlug "deepseek-r1-distill-qwen-14b"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_R1_Distill_Qwen_14B abi:inputTokenCost 0.2 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.2 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.2 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 84.922 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0.898 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 24.449 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 38.2 ;
-    abi:codingIndex 30.7 ;
-    abi:mathIndex 80.8 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Qwen_14B .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_14B .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_14B .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_14B .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek-V2.5 (Dec '24)
-#################################################################
-
-abi:DeepSeek_V2_5_Dec_24 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek-V2.5 (Dec '24)"@en ;
-    abi:modelSlug "deepseek-v2-5"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_V2_5_Dec_24 abi:inputTokenCost 0.14 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.28 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.175 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 23.9 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V2_5_Dec_24 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_V2_5_Dec_24 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_V2_5_Dec_24 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_V2_5_Dec_24 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek-Coder-V2
-#################################################################
-
-abi:DeepSeek_Coder_V2 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek-Coder-V2"@en ;
-    abi:modelSlug "deepseek-coder-v2"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_Coder_V2 abi:inputTokenCost 0.14 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.28 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.175 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 17.3 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_Coder_V2 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_Coder_V2 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_Coder_V2 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_Coder_V2 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek LLM 67B Chat (V1)
-#################################################################
-
-abi:DeepSeek_LLM_67B_Chat_V1 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek LLM 67B Chat (V1)"@en ;
-    abi:modelSlug "deepseek-llm-67b-chat"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_LLM_67B_Chat_V1 abi:inputTokenCost 0 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 7.9 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_LLM_67B_Chat_V1 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_LLM_67B_Chat_V1 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_LLM_67B_Chat_V1 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_LLM_67B_Chat_V1 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek R1 Distill Qwen 1.5B
-#################################################################
-
-abi:DeepSeek_R1_Distill_Qwen_1_5B a abi:AIModelInstance ;
-    rdfs:label "DeepSeek R1 Distill Qwen 1.5B"@en ;
-    abi:modelSlug "deepseek-r1-distill-qwen-1-5b"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_R1_Distill_Qwen_1_5B abi:inputTokenCost 0 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 7.1 ;
-    abi:codingIndex 6.8 ;
-    abi:mathIndex 43.2 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Distill_Qwen_1_5B .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_1_5B .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_1_5B .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_R1_Distill_Qwen_1_5B .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek R1 (Jan '25)
-#################################################################
-
-abi:DeepSeek_R1_Jan_25 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek R1 (Jan '25)"@en ;
-    abi:modelSlug "deepseek-r1-0120"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_R1_Jan_25 abi:inputTokenCost 1.35 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 3 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 2 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 49.9 ;
-    abi:codingIndex 48.7 ;
-    abi:mathIndex 82.5 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_R1_Jan_25 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_R1_Jan_25 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_R1_Jan_25 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_R1_Jan_25 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek V3 0324 (Mar '25)
-#################################################################
-
-abi:DeepSeek_V3_0324_Mar_25 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek V3 0324 (Mar '25)"@en ;
-    abi:modelSlug "deepseek-v3-0324"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_V3_0324_Mar_25 abi:inputTokenCost 0.27 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 1.1 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.477 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 22.624 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 3.3 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 3.3 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 44 ;
-    abi:codingIndex 38.1 ;
-    abi:mathIndex 73.1 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V3_0324_Mar_25 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_V3_0324_Mar_25 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_V3_0324_Mar_25 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_V3_0324_Mar_25 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek-V2.5
-#################################################################
-
-abi:DeepSeek_V2_5 a abi:AIModelInstance ;
-    rdfs:label "DeepSeek-V2.5"@en ;
-    abi:modelSlug "deepseek-v2-5-sep-2024"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_V2_5 abi:inputTokenCost 0.14 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.28 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.175 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 23.3 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V2_5 .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_V2_5 .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_V2_5 .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_V2_5 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek Coder V2 Lite Instruct
-#################################################################
-
-abi:DeepSeek_Coder_V2_Lite_Instruct a abi:AIModelInstance ;
-    rdfs:label "DeepSeek Coder V2 Lite Instruct"@en ;
-    abi:modelSlug "deepseek-coder-v2-lite"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_Coder_V2_Lite_Instruct abi:inputTokenCost 0 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 8.4 ;
-    abi:codingIndex 14.8 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_Coder_V2_Lite_Instruct .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_Coder_V2_Lite_Instruct .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_Coder_V2_Lite_Instruct .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_Coder_V2_Lite_Instruct .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - DeepSeek-V2-Chat
-#################################################################
-
-abi:DeepSeek_V2_Chat a abi:AIModelInstance ;
-    rdfs:label "DeepSeek-V2-Chat"@en ;
-    abi:modelSlug "deepseek-v2"@en ;
-    abi:provider "DeepSeek"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:DeepSeek_V2_Chat abi:inputTokenCost 0.14 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0.28 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0.175 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 11.1 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:DeepseekAgent abi:canUtilizeModel abi:DeepSeek_V2_Chat .
-abi:DeepseekBusinessProposalProcess abi:utilizesModel abi:DeepSeek_V2_Chat .
-abi:DeepseekCreativeWritingProcess abi:utilizesModel abi:DeepSeek_V2_Chat .
-abi:DeepseekCodeGenerationProcess abi:utilizesModel abi:DeepSeek_V2_Chat .
+# Specialized processes that realize capabilities (BFO_0000015)
+abi:DeepSeekEasternContextAnalysisProcess a abi:RegionalContextAnalysisProcess ;
+    rdfs:label "DeepSeek Eastern Context Analysis Process"@en ;
+    rdfs:comment "Process of analyzing Eastern cultural and regional contexts using DeepSeek"@en ;
+    bfo:BFO_0000057 abi:DeepSeekServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:DeepSeekEasternContextCapability ; # realizes
+    bfo:BFO_0000108 abi:DeepSeekRegionalAnalysisSession . # exists at
+
+# Note: Additional processes can be defined as needed, following the same BFO pattern
+
+# Note: This ontology now contains only the essential BFO-compliant structure.
+# Additional temporal regions, model instances, qualities, and specifications
+# can be added as needed following the established BFO patterns above.

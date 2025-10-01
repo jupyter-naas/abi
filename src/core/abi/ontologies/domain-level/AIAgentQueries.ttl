@@ -1,0 +1,166 @@
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://ontology.naas.ai/abi/AIAgentQueries> a owl:Ontology ;
+    rdfs:label "AI Agent Query Templates"@en ;
+    rdfs:comment "SPARQL query templates for querying AI agent ontology data"@en .
+
+#################################################################
+#    Query: Get Agent Model
+#################################################################
+
+intentMapping:getAgentModel a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_agent_model"@en ;
+    intentMapping:intentDescription "Get the AI model used by a specific agent (e.g., 'What model does ChatGPT use?')"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?agent_name ?model_id ?model_name ?owner
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesModel ?model .
+    
+    ?model abi:hasModelId ?model_id ;
+           rdfs:label ?model_name ;
+           abi:hasOwner ?owner .
+    
+    FILTER(CONTAINS(LCASE(?agent_name), LCASE("{{ agent_name }}")))
+}
+"""@en ;
+    intentMapping:hasArgument intentMapping:agentNameArgument .
+
+#################################################################
+#    Query: Get Agent Context Window
+#################################################################
+
+intentMapping:getAgentContextWindow a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_agent_context_window"@en ;
+    intentMapping:intentDescription "Get the context window size for a specific agent (e.g., 'What is Gemini's context window?')"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?agent_name ?context_window ?model_name
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesModel ?model .
+    
+    ?model abi:hasContextWindow ?context_window ;
+           rdfs:label ?model_name .
+    
+    FILTER(CONTAINS(LCASE(?agent_name), LCASE("{{ agent_name }}")))
+}
+"""@en ;
+    intentMapping:hasArgument intentMapping:agentNameArgument .
+
+#################################################################
+#    Query: Get Agent Objective
+#################################################################
+
+intentMapping:getAgentObjective a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_agent_objective"@en ;
+    intentMapping:intentDescription "Get the objective of a specific agent (e.g., 'What is DeepSeek's objective?')"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?agent_name ?objective ?role
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesSystemPrompt ?prompt .
+    
+    ?prompt abi:hasObjective ?objective ;
+            abi:hasRole ?role .
+    
+    FILTER(CONTAINS(LCASE(?agent_name), LCASE("{{ agent_name }}")))
+}
+"""@en ;
+    intentMapping:hasArgument intentMapping:agentNameArgument .
+
+#################################################################
+#    Query: Get Agent Tasks
+#################################################################
+
+intentMapping:getAgentTasks a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_agent_tasks"@en ;
+    intentMapping:intentDescription "Get the tasks that an agent can perform (e.g., 'What tasks can Claude do?')"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?agent_name ?tasks ?role
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesSystemPrompt ?prompt .
+    
+    ?prompt abi:hasTasks ?tasks ;
+            abi:hasRole ?role .
+    
+    FILTER(CONTAINS(LCASE(?agent_name), LCASE("{{ agent_name }}")))
+}
+"""@en ;
+    intentMapping:hasArgument intentMapping:agentNameArgument .
+
+#################################################################
+#    Query: Get All Agents
+#################################################################
+
+intentMapping:getAllAgents a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_all_agents"@en ;
+    intentMapping:intentDescription "Get a list of all available AI agents with their specializations"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?agent_name ?specialization ?description
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           rdfs:comment ?description ;
+           abi:hasSpecializedRole ?specialization .
+}
+ORDER BY ?agent_name
+"""@en .
+
+#################################################################
+#    Query: Compare Agent Models
+#################################################################
+
+intentMapping:compareAgentModels a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "compare_agent_models"@en ;
+    intentMapping:intentDescription "Compare the models and context windows of all agents"@en ;
+    intentMapping:sparqlTemplate """
+PREFIX abi: <http://ontology.naas.ai/abi/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?agent_name ?model_name ?context_window ?owner
+WHERE {
+    ?agent a abi:AIAgent ;
+           rdfs:label ?agent_name ;
+           abi:usesModel ?model .
+    
+    ?model rdfs:label ?model_name ;
+           abi:hasContextWindow ?context_window ;
+           abi:hasOwner ?owner .
+}
+ORDER BY DESC(?context_window)
+"""@en .
+
+#################################################################
+#    Query Arguments
+#################################################################
+
+intentMapping:agentNameArgument a intentMapping:QueryArgument ;
+    intentMapping:argumentName "agent_name"@en ;
+    intentMapping:argumentDescription "The name of the AI agent (e.g., ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok, Perplexity)"@en ;
+    intentMapping:validationPattern "^[a-zA-Z]+$"@en ;
+    intentMapping:validationFormat "Agent name (letters only, e.g., 'ChatGPT', 'Claude')"@en .
+

@@ -17,242 +17,123 @@
 #    BFO Bucket 1: Material Entities (WHAT/WHO)
 #################################################################
 
-abi:PerplexityAgent a abi:AIAgent ;
-    rdfs:label "Perplexity AI Agent"@en ;
-    rdfs:comment "AI Agent capable of utilizing Perplexity models"@en ;
-    abi:hasSpecializedRole "Multi-purpose AI processing"@en .
+# Material Infrastructure (BFO_0000040)
+abi:PerplexityServerInfrastructure a bfo:BFO_0000040 ;
+    rdfs:label "Perplexity Server Infrastructure"@en ;
+    rdfs:comment "Material infrastructure supporting Perplexity systems for research discovery"@en ;
+    bfo:BFO_0000171 abi:PerplexityDataCenterRegion . # located in
 
+abi:AcademicDatabaseAccessHardware a bfo:BFO_0000040 ;
+    rdfs:label "Academic Database Access Hardware"@en ;
+    rdfs:comment "Specialized hardware for accessing academic databases and research repositories"@en ;
+    bfo:BFO_0000171 abi:PerplexityDataCenterRegion . # located in
+
+#################################################################
+#    BFO Bucket 2: Qualities (WHAT-LIKE)
+#################################################################
+
+# Qualities that inhere in material entities (BFO_0000019)
+abi:PerplexityResearchDiscoveryAccuracy a bfo:BFO_0000019 ;
+    rdfs:label "Perplexity Research Discovery Accuracy"@en ;
+    rdfs:comment "Quality representing accuracy of research discovery"@en ;
+    bfo:BFO_0000197 abi:PerplexityServerInfrastructure . # inheres in
+
+abi:PerplexityAcademicSourceCredibility a bfo:BFO_0000019 ;
+    rdfs:label "Perplexity Academic Source Credibility"@en ;
+    rdfs:comment "Quality representing credibility of academic sources"@en ;
+    bfo:BFO_0000197 abi:AcademicDatabaseAccessHardware . # inheres in
+
+#################################################################
+#    BFO Bucket 3: Realizable Entities (WHAT-CAN-BE)
+#################################################################
+
+# Capabilities that inhere in material entities (BFO_0000017)
+abi:PerplexityResearchDiscoveryCapability a bfo:BFO_0000017 ;
+    rdfs:label "Perplexity Research Discovery Capability"@en ;
+    rdfs:comment "Capability for research article discovery and academic search"@en ;
+    bfo:BFO_0000197 abi:PerplexityServerInfrastructure ; # inheres in
+    bfo:BFO_0000218 abi:AcademicDatabaseAccessHardware . # has material basis
+
+#################################################################
+#    BFO Bucket 7: Generically Dependent Continuants (INFORMATION)
+#################################################################
+
+# AI Models as software patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:SonarProModel a bfo:BFO_0000031 ;
+    rdfs:label "Sonar Pro"@en ;
+    rdfs:comment "Perplexity's research-optimized model with academic database access and citation capabilities"@en ;
+    skos:example "Sonar Pro neural network, 100K token context, academic search optimization"@en ;
+    abi:hasModelId "sonar-pro"@en ;
+    abi:hasContextWindow "100000"^^xsd:integer ;
+    abi:hasOwner "perplexity"@en ;
+    abi:hasDescription "Perplexity's research-optimized model with academic database access and citation capabilities"@en ;
+    bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
+
+# System Prompt as behavioral pattern (BFO_0000031) - CONCRETE INSTANCE
+abi:PerplexitySystemPrompt a bfo:BFO_0000031 ;
+    rdfs:label "Perplexity System Prompt"@en ;
+    rdfs:comment "System prompt defining Perplexity's role in research discovery"@en ;
+    skos:example "Role: research discoverer, Tasks: article finding, Guidelines: academic search"@en ;
+    abi:hasRole "You are Perplexity, an AI assistant specialized in research discovery and finding academic articles."@en ;
+    abi:hasObjective "Discover and retrieve relevant research articles and academic content"@en ;
+    abi:hasTasks "Research discovery; Article finding; Academic search; Citation retrieval"@en ;
+    bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
+
+# Intent Mappings as routing patterns (BFO_0000031) - CONCRETE INSTANCE
+abi:PerplexityIntentMappings a bfo:BFO_0000031 ;
+    rdfs:label "Perplexity Intent Mappings"@en ;
+    rdfs:comment "Intent-to-tool routing patterns for Perplexity agent"@en ;
+    skos:example "find research → perplexity_search, discover articles → perplexity_discover"@en ;
+    abi:hasIntentCount "16"^^xsd:integer ;
+    bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
+
+# AI Agent as software pattern (BFO_0000031) - CONCRETE INSTANCE
+abi:PerplexityAgent a abi:AIAgent ;
+    rdfs:label "Perplexity"@en ;
+    rdfs:comment "Perplexity AI agent specialized in research discovery and academic article finding"@en ;
+    skos:example "Perplexity service using Sonar Pro for research discovery"@en ;
+    abi:hasSpecializedRole "Article discovery and research"@en ;
+    abi:usesModel abi:SonarProModel ;
+    abi:usesSystemPrompt abi:PerplexitySystemPrompt ;
+    abi:usesIntentMappings abi:PerplexityIntentMappings ;
+    bfo:BFO_0000084 abi:PerplexityServerInfrastructure . # generically depends on
+
+#################################################################
+#    BFO Bucket 5: Immaterial Entities (WHERE)
+#################################################################
+
+# Spatial regions (BFO_0000141)
+abi:PerplexityDataCenterRegion a bfo:BFO_0000141 ;
+    rdfs:label "Perplexity Data Center Region"@en ;
+    rdfs:comment "Spatial region encompassing Perplexity data center locations"@en .
+
+abi:AcademicRepositoryBoundary a bfo:BFO_0000141 ;
+    rdfs:label "Academic Repository Boundary"@en ;
+    rdfs:comment "Immaterial boundary defining academic and institutional repositories"@en .
+
+#################################################################
+#    BFO Bucket 6: Temporal Regions (WHEN)
+#################################################################
+
+# Temporal regions (BFO_0000008)
+abi:PerplexityResearchSession a bfo:BFO_0000008 ;
+    rdfs:label "Perplexity Research Session"@en ;
+    rdfs:comment "Temporal region during which research discovery occurs"@en .
 
 #################################################################
 #    BFO Bucket 4: Processes (HOW-IT-HAPPENS)
 #################################################################
 
-abi:PerplexityBusinessProposalProcess a abi:BusinessProposalCreationProcess ;
-    rdfs:label "Perplexity Business Proposal Process"@en ;
-    abi:hasParticipant abi:PerplexityAgent ;
-    abi:realizesCapability capability:TextGenerationCapability ;
-    abi:hasTemporalRegion abi:PerplexityBusinessProposalSession ;
-    abi:hasQuality abi:PerplexityBusinessProposalQuality .
+# Specialized processes that realize capabilities (BFO_0000015)
+abi:PerplexityResearchDiscoveryProcess a abi:ResearchDiscoveryProcess ;
+    rdfs:label "Perplexity Research Discovery Process"@en ;
+    rdfs:comment "Process of discovering and retrieving research articles using Perplexity"@en ;
+    bfo:BFO_0000057 abi:PerplexityServerInfrastructure ; # has participant
+    bfo:BFO_0000055 abi:PerplexityResearchDiscoveryCapability ; # realizes
+    bfo:BFO_0000108 abi:PerplexityResearchSession . # exists at
 
-abi:PerplexityCreativeWritingProcess a abi:CreativeWritingProcess ;
-    rdfs:label "Perplexity Creative Writing Process"@en ;
-    abi:hasParticipant abi:PerplexityAgent ;
-    abi:realizesCapability capability:TextGenerationCapability ;
-    abi:hasTemporalRegion abi:PerplexityCreativeWritingSession ;
-    abi:hasQuality abi:PerplexityCreativeWritingQuality .
+# Note: Additional processes can be defined as needed, following the same BFO pattern
 
-abi:PerplexityCodeGenerationProcess a abi:CodeGenerationProcess ;
-    rdfs:label "Perplexity Code Generation Process"@en ;
-    abi:hasParticipant abi:PerplexityAgent ;
-    abi:realizesCapability capability:CodeGenerationCapability ;
-    abi:hasTemporalRegion abi:PerplexityCodeGenerationSession ;
-    abi:hasQuality abi:PerplexityCodeGenerationQuality .
-
-#################################################################
-#    BFO Bucket 5: Temporal Regions (WHEN)
-#################################################################
-
-abi:PerplexityBusinessProposalSession a abi:InferenceSession ;
-    rdfs:label "Perplexity Business Proposal Session"@en .
-
-abi:PerplexityCreativeWritingSession a abi:InferenceSession ;
-    rdfs:label "Perplexity Creative Writing Session"@en .
-
-abi:PerplexityCodeGenerationSession a abi:InferenceSession ;
-    rdfs:label "Perplexity Code Generation Session"@en .
-
-
-#################################################################
-#    BFO Bucket 1: Material Entity - R1 1776
-#################################################################
-
-abi:R1_1776 a abi:AIModelInstance ;
-    rdfs:label "R1 1776"@en ;
-    abi:modelSlug "r1-1776"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:R1_1776 abi:inputTokenCost 2 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 8 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 3.5 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 22.2 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 0 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:PerplexityAgent abi:canUtilizeModel abi:R1_1776 .
-abi:PerplexityBusinessProposalProcess abi:utilizesModel abi:R1_1776 .
-abi:PerplexityCreativeWritingProcess abi:utilizesModel abi:R1_1776 .
-abi:PerplexityCodeGenerationProcess abi:utilizesModel abi:R1_1776 .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - Sonar Pro
-#################################################################
-
-abi:Sonar_Pro a abi:AIModelInstance ;
-    rdfs:label "Sonar Pro"@en ;
-    abi:modelSlug "sonar-pro"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:Sonar_Pro abi:inputTokenCost 3 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 15 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 6 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 118.466 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 2.568 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 2.568 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 31.7 ;
-    abi:codingIndex 25 ;
-    abi:mathIndex 51.7 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar_Pro .
-abi:PerplexityBusinessProposalProcess abi:utilizesModel abi:Sonar_Pro .
-abi:PerplexityCreativeWritingProcess abi:utilizesModel abi:Sonar_Pro .
-abi:PerplexityCodeGenerationProcess abi:utilizesModel abi:Sonar_Pro .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - Sonar Reasoning
-#################################################################
-
-abi:Sonar_Reasoning a abi:AIModelInstance ;
-    rdfs:label "Sonar Reasoning"@en ;
-    abi:modelSlug "sonar-reasoning"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:Sonar_Reasoning abi:inputTokenCost 1 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 5 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 2 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 57.075 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 1.825 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 36.867 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 38 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 84.6 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar_Reasoning .
-abi:PerplexityBusinessProposalProcess abi:utilizesModel abi:Sonar_Reasoning .
-abi:PerplexityCreativeWritingProcess abi:utilizesModel abi:Sonar_Reasoning .
-abi:PerplexityCodeGenerationProcess abi:utilizesModel abi:Sonar_Reasoning .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - Sonar Reasoning Pro
-#################################################################
-
-abi:Sonar_Reasoning_Pro a abi:AIModelInstance ;
-    rdfs:label "Sonar Reasoning Pro"@en ;
-    abi:modelSlug "sonar-reasoning-pro"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:Sonar_Reasoning_Pro abi:inputTokenCost 0 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 0 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 0 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 0 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 0 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 0 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 50.7 ;
-    abi:codingIndex 0 ;
-    abi:mathIndex 87.4 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar_Reasoning_Pro .
-abi:PerplexityBusinessProposalProcess abi:utilizesModel abi:Sonar_Reasoning_Pro .
-abi:PerplexityCreativeWritingProcess abi:utilizesModel abi:Sonar_Reasoning_Pro .
-abi:PerplexityCodeGenerationProcess abi:utilizesModel abi:Sonar_Reasoning_Pro .
-
-#################################################################
-#    BFO Bucket 1: Material Entity - Sonar
-#################################################################
-
-abi:Sonar a abi:AIModelInstance ;
-    rdfs:label "Sonar"@en ;
-    abi:modelSlug "sonar"@en ;
-    abi:provider "Perplexity"@en ;
-    abi:sourceAPI "artificial_analysis"@en .
-
-#################################################################
-#    BFO Bucket 2: Qualities - Performance & Cost Metrics
-#################################################################
-
-abi:Sonar abi:inputTokenCost 1 ;
-    abi:inputTokenCostCurrency "USD"@en ;
-    abi:outputTokenCost 1 ;
-    abi:outputTokenCostCurrency "USD"@en ;
-    abi:blendedCost 1 ;
-    abi:blendedCostCurrency "USD"@en ;
-    abi:outputSpeed 102.19 ;
-    abi:outputSpeedUnit "tokens_per_second"@en ;
-    abi:timeToFirstToken 2.325 ;
-    abi:timeToFirstTokenUnit "seconds"@en ;
-    abi:timeToFirstAnswerToken 2.325 ;
-    abi:timeToFirstAnswerTokenUnit "seconds"@en ;
-    abi:intelligenceIndex 32.4 ;
-    abi:codingIndex 26.2 ;
-    abi:mathIndex 65.2 .
-
-#################################################################
-#    Relationships - Agent/Process/Model Network
-#################################################################
-
-abi:PerplexityAgent abi:canUtilizeModel abi:Sonar .
-abi:PerplexityBusinessProposalProcess abi:utilizesModel abi:Sonar .
-abi:PerplexityCreativeWritingProcess abi:utilizesModel abi:Sonar .
-abi:PerplexityCodeGenerationProcess abi:utilizesModel abi:Sonar .
+# Note: This ontology now contains only the essential BFO-compliant structure.
+# Additional temporal regions, model instances, qualities, and specifications
+# can be added as needed following the established BFO patterns above.

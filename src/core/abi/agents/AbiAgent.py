@@ -232,6 +232,17 @@ You can browse the data and run queries there."""
         "find_best_for_documentation"
     ]
     tools.extend(get_tools(agent_recommendation_tools))
+    
+    # Add AI agent ontology query tools
+    ai_agent_query_tools = [
+        "get_agent_model",
+        "get_agent_context_window",
+        "get_agent_objective",
+        "get_agent_tasks",
+        "get_all_agents",
+        "compare_agent_models"
+    ]
+    tools.extend(get_tools(ai_agent_query_tools))
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
@@ -373,8 +384,8 @@ You can browse the data and run queries there."""
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
-        threshold=0.7,  # Lower threshold for better intent matching
-        threshold_neighbor=0.5,  # Allow more similar intents
+        threshold=0.85,  # Higher threshold: only strong intent matches trigger routing
+        threshold_neighbor=0.75,  # Stricter neighbor threshold to prevent false positives
     )
 
 
