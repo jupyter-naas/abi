@@ -1,12 +1,12 @@
-@prefix abi: <http://naas.ai/ontology/abi#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix bfo: <http://purl.obolibrary.org/obo/> .
 @prefix capability: <http://ontology.naas.ai/abi/capability/> .
 @prefix dc: <http://purl.org/dc/terms/> .
-
-<http://naas.ai/ontology/abi/QwenOntology> a owl:Ontology ;
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+<http://ontology.naas.ai/abi/QwenOntology> a owl:Ontology ;
     owl:imports <http://ontology.naas.ai/abi/AIAgentOntology> ;
     dc:title "Qwen AI Agent Ontology"@en ;
     dc:description "BFO-grounded ontology for Qwen AI models and processes"@en ;

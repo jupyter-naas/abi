@@ -197,7 +197,7 @@ You can browse the data and run queries there."""
     tools.append(knowledge_graph_tool)
     
 
-    # Get tools from ontology queries (auto-loaded from TTL files)
+    # Get tools 
     from src.core.templatablesparqlquery import get_tools
     
     # AI agent introspection queries
