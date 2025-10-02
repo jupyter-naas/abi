@@ -282,7 +282,8 @@ def run_agent(agent: Agent):
     # Just start chatting naturally - like the screenshot
     while True:
         # Set Abi as active agent after greeting
-        current_active_agent = agent.name
+        # current_active_agent = agent.name
+        current_active_agent = agent._state.current_active_agent
         if hasattr(agent.chat_model, 'model_name'):
             model_info = agent.chat_model.model_name
         elif hasattr(agent.chat_model, 'model'):
@@ -312,27 +313,27 @@ def run_agent(agent: Agent):
         if not user_input.strip():
             continue
         
-        # Check for agent switching with @agent syntax
-        agent_mention_match = re.search(r'@(\w+)', user_input.lower())
-        if agent_mention_match:
-            mentioned_agent = agent_mention_match.group(1)
-            # Map agent mentions to full names (use the updated agent names)
-            agent_mapping = agent_name_mapping
+        # # Check for agent switching with @agent syntax
+        # agent_mention_match = re.search(r'@(\w+)', user_input.lower())
+        # if agent_mention_match:
+        #     mentioned_agent = agent_mention_match.group(1)
+        #     # Map agent mentions to full names (use the updated agent names)
+        #     agent_mapping = agent_name_mapping
             
-            if mentioned_agent in agent_mapping:
-                current_active_agent = agent_mapping[mentioned_agent]
-                # Remove the @mention from the input and route to agent
-                user_input_clean = re.sub(r'@\w+\s*', '', user_input).strip()
-                if user_input_clean:
-                    # There's additional content, send it to the mentioned agent
-                    user_input = f"ask {mentioned_agent} {user_input_clean}"
-                else:
-                    # Just the mention, initiate conversation with agent
-                    user_input = f"I want to talk to {mentioned_agent}"
-            else:
-                console.print(f"Unknown agent: @{mentioned_agent}", style="red")
-                console.print(f"Available agents: {', '.join(['@' + name for name in available_agents])}", style="dim")
-                continue
+        #     if mentioned_agent in agent_mapping:
+        #         current_active_agent = agent_mapping[mentioned_agent]
+        #         # Remove the @mention from the input and route to agent
+        #         user_input_clean = re.sub(r'@\w+\s*', '', user_input).strip()
+        #         if user_input_clean:
+        #             # There's additional content, send it to the mentioned agent
+        #             user_input = f"ask {mentioned_agent} {user_input_clean}"
+        #         else:
+        #             # Just the mention, initiate conversation with agent
+        #             user_input = f"I want to talk to {mentioned_agent}"
+        #     else:
+        #         console.print(f"Unknown agent: @{mentioned_agent}", style="red")
+        #         console.print(f"Available agents: {', '.join(['@' + name for name in available_agents])}", style="dim")
+        #         continue
             
         # Display user message with color coding and separator (except for commands)
         if (not clean_input.startswith('/') and 

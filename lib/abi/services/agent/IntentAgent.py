@@ -176,7 +176,7 @@ class IntentAgent(Agent):
             
         Returns:
             Command: Command to goto the current active agent
-        """        
+        """
         # Log the current active agent
         logger.debug(f"🤖 Current active agent: '{self.name}', {self.state.current_active_agent}")
 #         logger.debug(f"💬 Current system prompt: '{self._system_prompt}'")
@@ -215,7 +215,7 @@ class IntentAgent(Agent):
         last_human_message = self.get_last_human_message(state)
 
         # Handle agent routing via @mention
-        if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
+        if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@") and last_human_message.content.split(" ")[0].split("@")[1] != self.name:
             at_mention = last_human_message.content.split(" ")[0].split("@")[1]
             
             logger.debug(f"🔀 Handle agent routing via @mention to '{at_mention}'")
@@ -223,32 +223,41 @@ class IntentAgent(Agent):
             # Check if we have an agent with this name.
             agent = pd.find(self._agents, lambda a: a.name == at_mention)
             
+            #Remove mention from the last human message with re.sub
+            import re
+            last_human_message.content = re.sub(r"^@[^ ]* ", "", last_human_message.content)
+            
             if agent is not None:
                 # agent.configuration.system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
-                return Command(goto=agent.name)
+                return Command(goto=agent.name, update={"messages": state["messages"]})
             else:
                 logger.debug(f"❌ Agent '{at_mention}' not found")
 
-        # Handle agent routing via AIMessage additional kwargs
-        if (
-            last_ai_message is not None and 
-            hasattr(last_ai_message, "additional_kwargs") and 
-            last_ai_message.additional_kwargs is not None and 
-            "agent" in last_ai_message.additional_kwargs and
-            last_ai_message.additional_kwargs["agent"] != self.name
-        ):
-            agent_name = last_ai_message.additional_kwargs["agent"]
-            logger.debug(f"🔀 Handle agent routing via AIMessage additional kwargs to '{agent_name}'")
+        if self._state.current_active_agent is not None and self._state.current_active_agent != self.name:
+            return Command(goto=self._state.current_active_agent)
 
-            # Check if we have an agent with this name.
-            agent = pd.find(self._agents, lambda a: a.name == agent_name)
+        # # Handle agent routing via AIMessage additional kwargs
+        # if (
+        #     last_ai_message is not None and 
+        #     hasattr(last_ai_message, "additional_kwargs") and 
+        #     last_ai_message.additional_kwargs is not None and 
+        #     "agent" in last_ai_message.additional_kwargs and
+        #     last_ai_message.additional_kwargs["agent"] != self.name
+        # ):
+        #     agent_name = last_ai_message.additional_kwargs["agent"]
+        #     logger.debug(f"🔀 Handle agent routing via AIMessage additional kwargs to '{agent_name}'")
+
+        #     # Check if we have an agent with this name.
+        #     agent = pd.find(self._agents, lambda a: a.name == agent_name)
             
-            if agent is not None:
-                # agent._system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
-                return Command(goto=agent.name)
-            else:
-                logger.debug(f"❌ Agent '{agent_name}' not found")
-            
+        #     if agent is not None:
+        #         # agent._system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
+        #         return Command(goto=agent.name)
+        #     else:
+        #         logger.debug(f"❌ Agent '{agent_name}' not found")
+        
+        self._state.set_current_active_agent(self.name)
+        
         logger.debug(f"💬 Starting using agent '{self.name}'")
         return Command(goto="map_intents")
 
