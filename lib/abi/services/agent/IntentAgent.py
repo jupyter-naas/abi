@@ -149,116 +149,62 @@ class IntentAgent(Agent):
             event_queue=event_queue,
         )
 
+    @property
+    def intents(self) -> list[Intent]:
+        return self._intents
+    
 
-    def get_last_human_message(self, state: IntentState) -> Any | None:
-        """Get the appropriate human message based on AI message context.
+    def build_graph(self, patcher: Optional[Callable] = None):
+        """Build the conversation flow graph for the IntentAgent.
+        
+        Constructs a StateGraph that defines the conversation flow with intent
+        mapping capabilities. The graph includes nodes for intent mapping,
+        filtering, entity checking, routing, and integration with sub-agents.
         
         Args:
-            state (IntentState): Current conversation state
-            
+            patcher (Optional[Callable], optional): Optional function to modify
+                the graph before compilation. Defaults to None.
+                
         Returns:
-            Any | None: The relevant human message
+            None: Sets the compiled graph on the agent instance
         """
-        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
-        if last_ai_message is not None and last_ai_message.additional_kwargs.get("owner") == self.name:
-            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
-        elif last_ai_message is not None and hasattr(last_ai_message, "additional_kwargs") and last_ai_message.additional_kwargs is not None and "owner" in last_ai_message.additional_kwargs:
-            return pd.filter_(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))[1]
-        else:
-            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        graph = StateGraph(IntentState)
 
-
-    def current_active_agent(self, state: IntentState) -> Command:
-        """Goto the current active agent.
+        graph.add_node(self.current_active_agent)
+        graph.add_edge(START, "current_active_agent")
         
-        Args:
-            state (IntentState): Current conversation state
-            
-        Returns:
-            Command: Command to goto the current active agent
-        """
-        # Log the current active agent
-        logger.debug(f"🤖 Current active agent: '{self.name}', {self.state.current_active_agent}")
-#         logger.debug(f"💬 Current system prompt: '{self._system_prompt}'")
-#         sub_agent_context = f"""
-
-# # SUB-AGENT CONTEXT:
-# You are operating as a sub-agent within a larger multi-agent system. 
-# You have been called by a supervisor agent '{self.name}' to handle specific tasks or requests.
-
-# ## Core Responsibilities:
-# - Focus on your core competencies and domain expertise
-# - Provide specialized assistance within your designated scope
-# - Acknowledge you are part of a collaborative multi-agent system
-# - Do NOT use your internal knowledge to answer questions outside your scope
-
-# ## Important Guidelines:
-# 1. If you cannot confidently answer a question or handle a request:
-#     - Acknowledge your limitations
-#     - Explain why you cannot help
-#     - Explicitly hand off to supervisor agent '{self.name}'
-#     Example: "I apologize, but I don't have sufficient expertise to answer this. Let me hand this back to {self.name} who can better assist you."
-
-# 2. If you have no relevant data or information:
-#     - Do NOT attempt to answer
-#     - Clearly state you don't have the information
-#     - Refer back to supervisor agent '{self.name}'
-#     Example: "I currently don't have access to that information. I'll hand this back to {self.name} to help find what you need."
-
-# Remember: It's better to acknowledge limitations and hand off than to provide incomplete or incorrect information.
-
-# ----
-# """
-
-        # Get the last messages
-        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
-        last_human_message = self.get_last_human_message(state)
-
-        # Handle agent routing via @mention
-        if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@") and last_human_message.content.split(" ")[0].split("@")[1] != self.name:
-            at_mention = last_human_message.content.split(" ")[0].split("@")[1]
-            
-            logger.debug(f"🔀 Handle agent routing via @mention to '{at_mention}'")
-
-            # Check if we have an agent with this name.
-            agent = pd.find(self._agents, lambda a: a.name == at_mention)
-            
-            #Remove mention from the last human message with re.sub
-            import re
-            last_human_message.content = re.sub(r"^@[^ ]* ", "", last_human_message.content)
-            
-            if agent is not None:
-                # agent.configuration.system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
-                return Command(goto=agent.name, update={"messages": state["messages"]})
-            else:
-                logger.debug(f"❌ Agent '{at_mention}' not found")
-
-        if self._state.current_active_agent is not None and self._state.current_active_agent != self.name:
-            return Command(goto=self._state.current_active_agent)
-
-        # # Handle agent routing via AIMessage additional kwargs
-        # if (
-        #     last_ai_message is not None and 
-        #     hasattr(last_ai_message, "additional_kwargs") and 
-        #     last_ai_message.additional_kwargs is not None and 
-        #     "agent" in last_ai_message.additional_kwargs and
-        #     last_ai_message.additional_kwargs["agent"] != self.name
-        # ):
-        #     agent_name = last_ai_message.additional_kwargs["agent"]
-        #     logger.debug(f"🔀 Handle agent routing via AIMessage additional kwargs to '{agent_name}'")
-
-        #     # Check if we have an agent with this name.
-        #     agent = pd.find(self._agents, lambda a: a.name == agent_name)
-            
-        #     if agent is not None:
-        #         # agent._system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
-        #         return Command(goto=agent.name)
-        #     else:
-        #         logger.debug(f"❌ Agent '{agent_name}' not found")
+        graph.add_node(self.continue_conversation)
         
-        self._state.set_current_active_agent(self.name)
+        graph.add_node(self.map_intents)
         
-        logger.debug(f"💬 Starting using agent '{self.name}'")
+        graph.add_node(self.filter_out_intents)
+        
+        graph.add_node(self.entity_check)
+        
+        graph.add_node(self.intent_mapping_router)
+        graph.add_edge("entity_check", "intent_mapping_router")
+        
+        graph.add_node(self.request_human_validation)
+        graph.add_edge("request_human_validation", END)
+        
+        graph.add_node(self.inject_intents_in_system_prompt)
+        graph.add_edge("inject_intents_in_system_prompt", "call_model")
+        
+        graph.add_node(self.call_model)
+        graph.add_edge("call_model", END)
+
+        graph.add_node(self.call_tools)
+
+        for agent in self._agents:
+            graph.add_node(agent.name, agent.graph)
+
+        if patcher is not None:
+            graph = patcher(graph)
+        
+        self.graph = graph.compile(checkpointer=self._checkpointer)  
+    
+
+    def continue_conversation(self, state: IntentState) -> Command:
         return Command(goto="map_intents")
 
 
@@ -473,7 +419,8 @@ Last user message: "{last_human_message.content}"
         if len(filtered_intents) == 1 and filtered_intents[0]['score'] > self._threshold:
             return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": filtered_intents}})
         return Command(goto="entity_check", update={"intent_mapping": {"intents": filtered_intents}})
-    
+
+
     def _extract_entities(self, text: str) -> list[str]:
         """Extract named entities from text using spaCy.
         
@@ -574,21 +521,17 @@ Last user message: "{last_human_message.content}"
 """)]
             
             for message in state["messages"]:
-                # if not isinstance(message, SystemMessage):
                 if isinstance(message, HumanMessage):
                     messages.append(message)
             
             response = self._chat_model.invoke(messages)
-            
-            # rich.print(messages)
-            # rich.print(response.content)
-            # rich.print(response.content == "true")
             if response.content == "true":
                 filtered_intents.append(intent)
 
         logger.debug(f"{len(filtered_intents)} intents filtered after entity check: {filtered_intents}")
         
         return Command(update={"intent_mapping": {"intents": filtered_intents}})
+
 
     def request_human_validation(self, state: IntentState) -> Command:
         """Request human validation when multiple agents are above threshold.
@@ -747,59 +690,38 @@ If you endup with a single intent which is of type RAW, you must output the inte
 
             updated_system_prompt += "\n\nEND INTENT RULES"
             self._system_prompt = updated_system_prompt
-    
 
-    def build_graph(self, patcher: Optional[Callable] = None):
-        """Build the conversation flow graph for the IntentAgent.
-        
-        Constructs a StateGraph that defines the conversation flow with intent
-        mapping capabilities. The graph includes nodes for intent mapping,
-        filtering, entity checking, routing, and integration with sub-agents.
-        
-        Args:
-            patcher (Optional[Callable], optional): Optional function to modify
-                the graph before compilation. Defaults to None.
-                
+
+    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
+        """Create a new instance of the agent with the same configuration.
+
+        This method creates a deep copy of the agent with the same configuration
+        but with its own independent state. This is useful when you need to run
+        multiple instances of the same agent concurrently.
+
         Returns:
-            None: Sets the compiled graph on the agent instance
+            Agent: A new Agent instance with the same configuration
         """
-        graph = StateGraph(IntentState)
+        shared_state = agent_shared_state or AgentSharedState()
+        
+        if queue is None:
+            queue = Queue()
 
-        graph.add_node(self.current_active_agent)
-        graph.add_edge(START, "current_active_agent")
-        
-        graph.add_node(self.map_intents)
-        # graph.add_edge("current_active_agent", "map_intents")
-        
-        graph.add_node(self.filter_out_intents)
-        
-        graph.add_node(self.entity_check)
-        # graph.add_edge("filter_out_intents", "entity_check")
-        
-        graph.add_node(self.intent_mapping_router)
-        graph.add_edge("entity_check", "intent_mapping_router")
-        
-        graph.add_node(self.request_human_validation)
-        graph.add_edge("request_human_validation", END)
-        
-        graph.add_node(self.inject_intents_in_system_prompt)
-        graph.add_edge("inject_intents_in_system_prompt", "call_model")
-        
-        graph.add_node(self.call_model)
-        graph.add_node(self.call_tools)
-        
-        graph.add_edge("call_model", END)
-               
-        for agent in self._agents:
-            graph.add_node(agent.name, agent.graph)
+        # We duplicated each agent and add them as tools.
+        # This will be recursively done for each sub agents.
+        agents: list[IntentAgent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
-        if patcher is not None:
-            graph = patcher(graph)
-        
-        self.graph = graph.compile(checkpointer=self._checkpointer)     
+        new_agent = IntentAgent(
+            name=self._name,
+            description=self._description,
+            chat_model=self._chat_model,
+            tools=self._original_tools,
+            agents=agents,
+            intents=self._intents,
+            memory=self._checkpointer,
+            state=shared_state,  # Create new state instance
+            configuration=self._configuration,
+            event_queue=queue,
+        )
 
-    @property
-    def intents(self) -> list[Intent]:
-        return self._intents
-        
-        
+        return new_agent   
