@@ -386,7 +386,10 @@ class Agent(Expose):
         self._description = description
         self._system_prompt = configuration.system_prompt
 
-        # We inject defailt tools.
+        self._original_tools = tools
+        self._original_agents = agents
+
+        # # We inject defailt tools.
         tools += self.default_tools()
 
         # We store the original list of provided tools. This will be usefull for duplication.
@@ -661,6 +664,7 @@ class Agent(Expose):
         self._state.set_current_active_agent(self.name)
         
         logger.info(f"call_model on: {self.name}")
+        logger.info(f"tools: {self._structured_tools}")
         messages = state["messages"]
         if self._system_prompt:
             messages = [
@@ -786,6 +790,7 @@ class Agent(Expose):
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
 
         if self._state.requesting_help is True:
+            self._state.set_requesting_help(False)
             results.append(Command(goto="current_active_agent", graph=Command.PARENT if self._state.supervisor_agent != self.name else None))
             # last_human_message = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
             
@@ -987,22 +992,25 @@ class Agent(Expose):
         """
         shared_state = agent_shared_state or AgentSharedState()
         
+        print(f"Shared state: {shared_state.supervisor_agent}")
+        
         # Initialize the tools list with the original list of tools.
         # tools = [tool for tool in self._structured_tools]
-        tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
+        # tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
 
         if queue is None:
             queue = Queue()
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._agents]
+        agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
         new_agent = Agent(
             name=self._name,
             description=self._description,
             chat_model=self._chat_model,
-            tools=tools + agents,
+            tools=self._original_tools,
+            agents=agents,
             memory=self._checkpointer,
             state=shared_state,  # Create new state instance
             configuration=self._configuration,
