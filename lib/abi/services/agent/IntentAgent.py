@@ -168,6 +168,91 @@ class IntentAgent(Agent):
             return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
 
 
+    def current_active_agent(self, state: IntentState) -> Command:
+        """Goto the current active agent.
+        
+        Args:
+            state (IntentState): Current conversation state
+            
+        Returns:
+            Command: Command to goto the current active agent
+        """        
+        # Log the current active agent
+        logger.debug(f"🤖 Current active agent: '{self.name}', {self.state.current_active_agent}")
+#         logger.debug(f"💬 Current system prompt: '{self._system_prompt}'")
+#         sub_agent_context = f"""
+
+# # SUB-AGENT CONTEXT:
+# You are operating as a sub-agent within a larger multi-agent system. 
+# You have been called by a supervisor agent '{self.name}' to handle specific tasks or requests.
+
+# ## Core Responsibilities:
+# - Focus on your core competencies and domain expertise
+# - Provide specialized assistance within your designated scope
+# - Acknowledge you are part of a collaborative multi-agent system
+# - Do NOT use your internal knowledge to answer questions outside your scope
+
+# ## Important Guidelines:
+# 1. If you cannot confidently answer a question or handle a request:
+#     - Acknowledge your limitations
+#     - Explain why you cannot help
+#     - Explicitly hand off to supervisor agent '{self.name}'
+#     Example: "I apologize, but I don't have sufficient expertise to answer this. Let me hand this back to {self.name} who can better assist you."
+
+# 2. If you have no relevant data or information:
+#     - Do NOT attempt to answer
+#     - Clearly state you don't have the information
+#     - Refer back to supervisor agent '{self.name}'
+#     Example: "I currently don't have access to that information. I'll hand this back to {self.name} to help find what you need."
+
+# Remember: It's better to acknowledge limitations and hand off than to provide incomplete or incorrect information.
+
+# ----
+# """
+
+        # Get the last messages
+        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
+        last_human_message = self.get_last_human_message(state)
+
+        # Handle agent routing via @mention
+        if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
+            at_mention = last_human_message.content.split(" ")[0].split("@")[1]
+            
+            logger.debug(f"🔀 Handle agent routing via @mention to '{at_mention}'")
+
+            # Check if we have an agent with this name.
+            agent = pd.find(self._agents, lambda a: a.name == at_mention)
+            
+            if agent is not None:
+                # agent.configuration.system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
+                return Command(goto=agent.name)
+            else:
+                logger.debug(f"❌ Agent '{at_mention}' not found")
+
+        # Handle agent routing via AIMessage additional kwargs
+        if (
+            last_ai_message is not None and 
+            hasattr(last_ai_message, "additional_kwargs") and 
+            last_ai_message.additional_kwargs is not None and 
+            "agent" in last_ai_message.additional_kwargs and
+            last_ai_message.additional_kwargs["agent"] != self.name
+        ):
+            agent_name = last_ai_message.additional_kwargs["agent"]
+            logger.debug(f"🔀 Handle agent routing via AIMessage additional kwargs to '{agent_name}'")
+
+            # Check if we have an agent with this name.
+            agent = pd.find(self._agents, lambda a: a.name == agent_name)
+            
+            if agent is not None:
+                # agent._system_prompt = f"{sub_agent_context}{agent.configuration.system_prompt}"
+                return Command(goto=agent.name)
+            else:
+                logger.debug(f"❌ Agent '{agent_name}' not found")
+            
+        logger.debug(f"💬 Starting using agent '{self.name}'")
+        return Command(goto="map_intents")
+
+
     def map_intents(self, state: IntentState) -> Command:
         """Map user messages to available intents.
         
@@ -187,9 +272,9 @@ class IntentAgent(Agent):
             AssertionError: If no human message is found in the conversation state
         """
         # Reset intents rules in system prompt
-        self._system_prompt = self._configuration.system_prompt
+        # self._system_prompt = self._configuration.system_prompt
 
-        # Get the last AI message
+        # Get the last messages
         last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
         last_human_message = self.get_last_human_message(state)
 
@@ -198,23 +283,8 @@ class IntentAgent(Agent):
         assert isinstance(last_human_message, HumanMessage)
         assert isinstance(last_human_message.content, str)
 
-        logger.debug(f"💬 Starting conversation with agent '{self.name}'")
         logger.debug("🔍 Map intents")
         logger.debug(f"==> Last human message: {last_human_message.content if last_human_message is not None else None}")
-        # logger.debug(state)
-
-        # Handle agent routing via @mention
-        if isinstance(last_human_message.content, str) and last_human_message.content.startswith("@"):
-            at_mention = last_human_message.content.split(" ")[0].split("@")[1]
-            
-            logger.debug("🤖 Handle agent routing via @mention")
-
-            # Check if we have an agent with this name.
-            agent = pd.find(self._agents, lambda a: a.name == at_mention)
-            
-            if agent is not None:
-                # We found an agent with this name.
-                return Command(goto=agent.name)
         
         # Handle multiples intents routing via numeric response to a validation request (e.g., "1", "2", etc.)
         if isinstance(last_human_message.content, str) and last_human_message.content.strip().isdigit() and last_ai_message is not None and MULTIPLES_INTENTS_MESSAGE in last_ai_message.content and last_ai_message.additional_kwargs.get("owner") == self.name:
@@ -240,7 +310,7 @@ class IntentAgent(Agent):
                         logger.debug(f"✅ Calling agent: {intent_name}")
                         return Command(goto=intent_name, update=command_update)
                     else:
-                        logger.debug("✅ Calling model (Agent not found)")
+                        logger.debug("❌ Agent not found, going to call_model")
                         return Command(goto="call_model", update=command_update) 
 
         # Map intents using vector similarity search
@@ -259,6 +329,10 @@ class IntentAgent(Agent):
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]['score']
+        if max_score >= 0.99:
+            logger.debug(f"🎯 Intent mapping score above 99% ({round(max_score*100, 2)}%), routing to intent_mapping_router")
+            return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": [intents[0]]}})
+        
         close_intents = pd.filter_(intents, lambda intent: max_score - intent['score'] < self._threshold_neighbor)
         
         assert isinstance(close_intents, list)
@@ -585,16 +659,6 @@ Last user message: "{last_human_message.content}"
             # If there are no intents, we check if there's an active agent for context preservation
             if len(intent_mapping["intents"]) == 0:
                 logger.debug("❌ No intents found, calling model for active agent")
-                # Check if there's an active agent for context preservation
-                if (hasattr(self, '_state') and 
-                    hasattr(self._state, 'current_active_agent') and 
-                    self._state.current_active_agent):
-                    active_agent_name = self._state.current_active_agent
-                    # Find the active agent in our agents list
-                    active_agent = pd.find(self._agents, lambda a: a.name == active_agent_name)
-                    if active_agent is not None:
-                        # Route to the active agent for conversation continuation
-                        return Command(goto=active_agent_name)
                 return Command(goto="call_model")
             
             # If there's a single intent is mapped, we check the intent type to return the appropriate Command
@@ -655,17 +719,17 @@ Last user message: "{last_human_message.content}"
         if "intent_mapping" in state and len(state["intent_mapping"]["intents"]) > 0:
             intents = state["intent_mapping"]["intents"]
             updated_system_prompt = f"""{self._configuration.system_prompt}
-            
-            ---
-            INTENT RULES:
-            Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
-            The following is the list of mapped intents. This list will change over time as new messages comes in.
-            You must analyze if the user message and the mapped intents are related to each other. If it's the case, you must take them into account, otherwise you must ignore the ones that are not related.
-            If you endup with a single intent which is of type RAW, you must output the intent_target and nothing else as there will be tests asserting the correctness of the output.
-            
-            
 
-            """
+---
+INTENT RULES:
+Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
+The following is the list of mapped intents. This list will change over time as new messages comes in.
+You must analyze if the user message and the mapped intents are related to each other. If it's the case, you must take them into account, otherwise you must ignore the ones that are not related.
+If you endup with a single intent which is of type RAW, you must output the intent_target and nothing else as there will be tests asserting the correctness of the output.
+
+
+
+"""
             
             for intent in intents:
                 updated_system_prompt += f"""
@@ -675,7 +739,7 @@ Last user message: "{last_human_message.content}"
             updated_system_prompt += "\n\nEND INTENT RULES"
             self._system_prompt = updated_system_prompt
     
- 
+
     def build_graph(self, patcher: Optional[Callable] = None):
         """Build the conversation flow graph for the IntentAgent.
         
@@ -691,9 +755,12 @@ Last user message: "{last_human_message.content}"
             None: Sets the compiled graph on the agent instance
         """
         graph = StateGraph(IntentState)
+
+        graph.add_node(self.current_active_agent)
+        graph.add_edge(START, "current_active_agent")
         
         graph.add_node(self.map_intents)
-        graph.add_edge(START, "map_intents")
+        # graph.add_edge("current_active_agent", "map_intents")
         
         graph.add_node(self.filter_out_intents)
         

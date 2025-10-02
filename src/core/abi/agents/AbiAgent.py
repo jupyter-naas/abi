@@ -349,11 +349,7 @@ You can browse the data and run queries there."""
             system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
         )
     if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
-    # Uncomment this to randomize the thread id. Usefull for local debugging.
-    # import uuid
-    # agent_shared_state = AgentSharedState(thread_id=str(uuid.uuid4()))
+        agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
 
     @tool
     def get_time(current_time: bool = False) -> str:
