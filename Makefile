@@ -13,7 +13,7 @@
 
 # Default target with help display
 default: deps local-up airgap
-	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
 help:
@@ -217,39 +217,40 @@ local-build: deps
 
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
+LOG_LEVEL=ERROR
 chat: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli $(agent)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
 
 chat-chatgpt-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli ChatGPTAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ChatGPTAgent
 
 chat-claude-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli ClaudeAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ClaudeAgent
 
 chat-deepseek-agent: deps 
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
 
 chat-gemini-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli GeminiAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli GeminiAgent
 
 chat-gemma-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
 
 chat-grok-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli GrokAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli GrokAgent
 
 chat-llama-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli LlamaAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli LlamaAgent
 
 chat-mistral-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli MistralAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli MistralAgent
 
 chat-perplexity-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli PerplexityAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli PerplexityAgent
 
 chat-qwen-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
@@ -260,15 +261,15 @@ chat-qwen-agent: deps
 
 # Generate pull request description using AI agent
 pull-request-description: deps
-	@ echo "generate the pull request description please." | LOG_LEVEL=ERROR uv run python -m src.cli PullRequestDescriptionAgent
+	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
 
 # Naas platform integration agent
 chat-naas-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli NaasAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli NaasAgent
 
 # Customer support specialized agent
 chat-support-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli SupportAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS

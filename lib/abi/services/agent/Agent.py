@@ -109,12 +109,15 @@ class AgentSharedState:
     _thread_id: str
     _current_active_agent: Optional[str]
     _supervisor_agent: Optional[str]
+    _requesting_help: bool
 
-    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None):
+    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None, supervisor_agent: Optional[str] = None):
         assert isinstance(thread_id, str)
         
         self._thread_id = thread_id
         self._current_active_agent = current_active_agent
+        self._supervisor_agent = supervisor_agent
+        self._requesting_help = False
 
     @property
     def thread_id(self) -> str:
@@ -136,6 +139,13 @@ class AgentSharedState:
 
     def set_supervisor_agent(self, agent_name: Optional[str]):
         self._supervisor_agent = agent_name
+        
+    @property
+    def requesting_help(self) -> bool:
+        return self._requesting_help
+    
+    def set_requesting_help(self, requesting_help: bool):
+        self._requesting_help = requesting_help
 
 @dataclass
 class Event:
@@ -376,6 +386,9 @@ class Agent(Expose):
         self._description = description
         self._system_prompt = configuration.system_prompt
 
+        # We inject defailt tools.
+        tools += self.default_tools()
+
         # We store the original list of provided tools. This will be usefull for duplication.
         self._tools = tools
         self._native_tools = native_tools
@@ -446,18 +459,47 @@ class Agent(Expose):
 
         self.build_graph()
 
+    def default_tools(self) -> list[Tool | BaseTool]:
+        @tool(return_direct=True)
+        def request_help(
+            reason: str
+        ):
+            """
+            Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
+
+            Use this tool if:
+            - You are unsure how to proceed.
+            - You lack the necessary knowledge or ability to complete the task.
+            - The user's request is outside your capabilities or unclear.
+
+            Args:
+                reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
+
+            The supervisor agent will review your reason and provide assistance or take over the conversation.
+            """
+            logger.debug(f"{self.name} is requesting help from the supervisor agent: {self._state.supervisor_agent}")
+            
+            # tool_message = ToolMessage(
+            #     content=f"Requesting help from the supervisor agent: {self._state.supervisor_agent}",
+            #     name="request_help_from_supervisor",
+            #     tool_call_id=tool_call["id"],
+            # )
+            
+            # last_human_message = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+            
+            # return Command(goto="__end__", update={"messages": state["messages"] + [tool_message]})
+            self._state.set_requesting_help(True)
+            self._state.set_current_active_agent(self._state.supervisor_agent)
+            return f"Requesting help from the supervisor agent: {self._state.supervisor_agent}"
+    
+        return [request_help]
+
     @property
     def system_prompt(self) -> str:
         return self._system_prompt
     
     def set_system_prompt(self, system_prompt: str):
         self._system_prompt = system_prompt
-
-    @tool
-    def request_help(
-        reason: str,
-    ):
-        return Command(goto="request_help", update={"reason": reason})
 
     @property
     def structured_tools(self) -> list[Tool | BaseTool]:
@@ -616,6 +658,8 @@ class Agent(Expose):
         self,
         state: MessagesState,
     ) -> Command[Literal["call_tools", "__end__"]]:
+        self._state.set_current_active_agent(self.name)
+        
         logger.info(f"call_model on: {self.name}")
         messages = state["messages"]
         if self._system_prompt:
@@ -679,16 +723,26 @@ class Agent(Expose):
             # according to LangChain's requirements
             args: dict[str, Any] | ToolCall = tool_call
 
+
+
             # Check if tool needs state injection or is a handoff tool
             if "state" in tool_input_fields:
                 # inject state
                 args = {**tool_call, "state": state}
+                # args["args"]["state"] = state
+
+            # if "tool_call" in tool_input_fields:
+            #     args["args"]["tool_call"] = tool_call
 
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
                 
             try:
+                            
+                logger.debug(f"tool_call: {tool_call}")
+                logger.debug(f"tool_input_fields: {tool_input_fields}")
+                logger.debug(f"args: {args}")
                 tool_response = tool_.invoke(args)
                 called_tools.append(tool_)
 
@@ -730,6 +784,21 @@ class Agent(Expose):
                 logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
                 last_message = pd.get(results[-1], 'update.messages[-1]', None)
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
+
+        if self._state.requesting_help is True:
+            results.append(Command(goto="current_active_agent", graph=Command.PARENT if self._state.supervisor_agent != self.name else None))
+            # last_human_message = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+            
+            # # If the last human message starts with '@...', strip '@.* ' from the beginning (like sed)
+            # if isinstance(last_human_message, str):
+            #     content = last_human_message
+            # else:
+            #     content = getattr(last_human_message, "content", "")
+            # import re
+            # content = re.sub(r"^@[^ ]* ", "", content)
+            # last_human_message = content
+            
+            # results.append(Command(goto=START, update={"messages": [HumanMessage(content=last_human_message)]}))
 
         # print(pd.get(results[-1], 'update.messages[-1]', None))
         # print(f'is_handoff: {is_handoff}')
@@ -906,7 +975,7 @@ class Agent(Expose):
 
         return response
 
-    def duplicate(self, queue: Queue | None = None) -> "Agent":
+    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -916,6 +985,8 @@ class Agent(Expose):
         Returns:
             Agent: A new Agent instance with the same configuration
         """
+        shared_state = agent_shared_state or AgentSharedState()
+        
         # Initialize the tools list with the original list of tools.
         # tools = [tool for tool in self._structured_tools]
         tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
@@ -925,7 +996,7 @@ class Agent(Expose):
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[Agent] = [agent.duplicate(queue) for agent in self._agents]
+        agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._agents]
 
         new_agent = Agent(
             name=self._name,
@@ -933,8 +1004,7 @@ class Agent(Expose):
             chat_model=self._chat_model,
             tools=tools + agents,
             memory=self._checkpointer,
-            # TODO: Make sure that this is the behaviour we want.
-            state=AgentSharedState(),  # Create new state instance
+            state=shared_state,  # Create new state instance
             configuration=self._configuration,
             event_queue=queue,
         )

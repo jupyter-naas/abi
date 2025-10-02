@@ -233,6 +233,12 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
+
+    from queue import Queue
+    agent_queue = Queue()
+
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
     from src.__modules__ import get_modules
@@ -243,7 +249,7 @@ You can browse the data and run queries there."""
             for agent in module.agents:
                 if agent is not None and agent.name != "Abi" and not agent.name.endswith("Research"): #exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
                     logger.debug(f"Adding agent: {agent.name}")
-                    agents.append(agent)
+                    agents.append(agent.duplicate(agent_queue, agent_shared_state=agent_shared_state))
     logger.debug(f"Agents: {agents}")
 
     # Define intents
@@ -319,6 +325,12 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
     
     ]
+    
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
+        )
 
     # Add intents for each agent (using agent names directly to avoid recursion)
     for agent in agents:
@@ -342,14 +354,6 @@ You can browse the data and run queries there."""
                 )
                 intents.append(new_intent)
     logger.debug(f"Intents: {intents}")
-
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
 
     @tool
     def get_time(current_time: bool = False) -> str:
