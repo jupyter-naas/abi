@@ -108,6 +108,7 @@ def create_checkpointer() -> BaseCheckpointSaver:
 class AgentSharedState:
     _thread_id: str
     _current_active_agent: Optional[str]
+    _supervisor_agent: Optional[str]
 
     def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None):
         assert isinstance(thread_id, str)
@@ -129,6 +130,12 @@ class AgentSharedState:
     def set_current_active_agent(self, agent_name: Optional[str]):
         self._current_active_agent = agent_name
 
+    @property
+    def supervisor_agent(self) -> Optional[str]:
+        return self._supervisor_agent
+
+    def set_supervisor_agent(self, agent_name: Optional[str]):
+        self._supervisor_agent = agent_name
 
 @dataclass
 class Event:
@@ -417,10 +424,11 @@ class Agent(Expose):
             self._checkpointer = memory
             
         self._state = state
+        self._state.set_current_active_agent(name)
         
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
-        #import uuid
-        #self._state.set_thread_id(str(uuid.uuid4()))
+        import uuid
+        self._state.set_thread_id(str(uuid.uuid4()))
 
         self._configuration = configuration
 
@@ -438,6 +446,23 @@ class Agent(Expose):
 
         self.build_graph()
 
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt
+    
+    def set_system_prompt(self, system_prompt: str):
+        self._system_prompt = system_prompt
+
+    @tool
+    def request_help(
+        reason: str,
+    ):
+        return Command(goto="request_help", update={"reason": reason})
+
+    @property
+    def structured_tools(self) -> list[Tool | BaseTool]:
+        return self._structured_tools
+    
     def validate_tool_name(self, tool: BaseTool) -> BaseTool:
         if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
             # Replace invalid characters with '_'
@@ -512,6 +537,7 @@ class Agent(Expose):
         for agent in self._agents:
             # logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
+            
             # This makes sure that after calling an agent in a graph, we call the main model of the graph.
             #graph.add_edge(agent.name, "call_model")
 
@@ -596,12 +622,14 @@ class Agent(Expose):
             messages = [
                 SystemMessage(content=self._system_prompt),
             ] + messages
-
+        # logger.info(f"system prompt: {self._system_prompt}")
         # logger.info(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         # logger.info(f"response: {response}")
         # logger.info(f"response type: {type(response)}")
+        if isinstance(response, AIMessage):
+            response.additional_kwargs["agent"] = self.name
         if (
             isinstance(response, AIMessage)
             and hasattr(response, "tool_calls")
@@ -702,6 +730,9 @@ class Agent(Expose):
                 logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
                 last_message = pd.get(results[-1], 'update.messages[-1]', None)
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
+
+        # print(pd.get(results[-1], 'update.messages[-1]', None))
+        # print(f'is_handoff: {is_handoff}')
 
         return results
 
@@ -910,6 +941,26 @@ class Agent(Expose):
 
         return new_agent
 
+    def light_duplicate(self, queue: Queue | None = None) -> "Agent":
+        if queue is None:
+            queue = Queue()
+            
+        
+        agents: list[Agent] = [agent.light_duplicate(queue) for agent in self._agents]
+        
+        tools = self._tools + agents
+        
+        return Agent(
+            name=self._name,
+            description=self._description,
+            chat_model=self._chat_model,
+            tools=tools,
+            memory=self._checkpointer,
+            # TODO: Make sure that this is the behaviour we want.
+            state=AgentSharedState(),  # Create new state instance
+            configuration=self._configuration,
+            event_queue=queue,
+        )
     def as_api(
         self,
         router: APIRouter,
@@ -948,10 +999,13 @@ class Agent(Expose):
             tags=tags,
         )
         def completion(query: CompletionQuery):
+            # new_agent = self.duplicate()
+            # new_agent = self
+            # new_agent = self.light_duplicate()
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
 
-            new_agent = self.duplicate()
+            new_agent = self.light_duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return new_agent.invoke(query.prompt)
 
@@ -962,10 +1016,13 @@ class Agent(Expose):
             tags=tags,
         )
         async def stream_completion(query: CompletionQuery):
+            # new_agent = self.duplicate()
+            # new_agent = self
+            # new_agent = self.light_duplicate()
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
 
-            new_agent = self.duplicate()
+            new_agent = self.light_duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
                 new_agent.stream_invoke(query.prompt),
@@ -1004,7 +1061,7 @@ class Agent(Expose):
                 elif isinstance(message, ToolResponseEvent):
                     yield {
                         "event": "tool_response",
-                        "data": str(message.payload.content),
+                        "data": str(pd.get(message, "payload.content", "NULL")),
                     }
                 elif isinstance(message, AIMessageEvent):
                     yield {
@@ -1118,7 +1175,7 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
         tool_message = ToolMessage(
             content=f"Conversation transferred to {agent_label}",
             name=tool_name,
-            tool_call_id=tool_call["id"],   
+            tool_call_id=tool_call["id"],
         )
 
         return Command(
