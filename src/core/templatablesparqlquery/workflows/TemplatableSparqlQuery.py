@@ -23,27 +23,32 @@ def templatable_queries():
     results = services.triple_store_service.query("""
         PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT ?query ?label ?description ?sparqlTemplate ?hasArgument
+        SELECT ?query ?label ?description ?sparqlTemplate (GROUP_CONCAT(?arg; separator=",") AS ?hasArgument)
         WHERE {
             ?query a intentMapping:TemplatableSparqlQuery ;
                 intentMapping:intentDescription ?description ;
                 intentMapping:sparqlTemplate ?sparqlTemplate ;
-                intentMapping:hasArgument ?hasArgument ;
                 rdfs:label ?label .
+            OPTIONAL { ?query intentMapping:hasArgument ?arg . }
         }
+        GROUP BY ?query ?label ?description ?sparqlTemplate
     """)
 
     queries = {}
 
     for result in results:
         query, label, description, sparqlTemplate, hasArgument = result
+        # Parse comma-separated arguments or empty string
+        # Filter out empty strings, 'None' strings, and actual None values
+        if hasArgument and str(hasArgument).strip() and str(hasArgument).strip().lower() != 'none':
+            args = [arg.strip() for arg in str(hasArgument).split(",") if arg.strip() and arg.strip().lower() != 'none']
+        else:
+            args = []
         queries[query] = {
             "label": label,
             "description": description,
             "sparqlTemplate": sparqlTemplate,
-            "hasArgument": [hasArgument]
-            if (query not in queries or queries[query].get("hasArgument") is None)
-            else queries[query].get("hasArgument") + [hasArgument],
+            "hasArgument": args,
         }
 
     arguments = {}
@@ -163,22 +168,26 @@ def load_workflows():
         query = queries[_query]
 
         # Arguments Model with validation patterns
-        arguments_model = create_model(
-            f"{str(query['label']).capitalize()}Arguments",
-            **{
-                str(arguments[argument]["name"]): (
-                    str,
-                    Field(
-                        ...,
-                        description=str(arguments[argument]["description"]),
-                        pattern=str(arguments[argument]["validationPattern"]),
-                        # You could also add additional metadata from validationFormat if needed
-                        example=str(arguments[argument]["validationFormat"]),
-                    ),
-                )
-                for argument in query.get("hasArgument")
-            },
-        )
+        if query.get("hasArgument") and len(query.get("hasArgument")) > 0:
+            arguments_model = create_model(
+                f"{str(query['label']).capitalize()}Arguments",
+                **{
+                    str(arguments[argument]["name"]): (
+                        str,
+                        Field(
+                            ...,
+                            description=str(arguments[argument]["description"]),
+                            pattern=str(arguments[argument]["validationPattern"]),
+                            # You could also add additional metadata from validationFormat if needed
+                            example=str(arguments[argument]["validationFormat"]),
+                        ),
+                    )
+                    for argument in query.get("hasArgument")
+                },
+            )
+        else:
+            # Create empty model for queries with no arguments
+            arguments_model = create_model(f"{str(query['label']).capitalize()}Arguments")
 
         p = GenericWorkflow[arguments_model](
             str(query["label"]),

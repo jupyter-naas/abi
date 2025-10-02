@@ -197,39 +197,27 @@ You can browse the data and run queries there."""
     tools.append(knowledge_graph_tool)
     
 
-    # Get tools
+    # Get tools 
     from src.core.templatablesparqlquery import get_tools
+    
+    # AI agent introspection queries
+    ai_agent_query_tools = [
+        "get_agent_model",
+        "get_agent_context_window",
+        "get_agent_objective",
+        "get_agent_tasks",
+        "get_all_agents",
+        "compare_agent_models"
+    ]
+    tools.extend(get_tools(ai_agent_query_tools))
+    
+    # Agent recommendation queries
     agent_recommendation_tools = [
-        "find_business_proposal_agents",
-        "find_coding_agents", 
-        "find_math_agents",
-        "find_best_value_agents",
-        "find_fastest_agents",
-        "find_cheapest_agents",
-        # Those two seems to generate a grammar error when using qwen3 served by DMR locally.
-        # "find_agents_by_provider",
-        # "find_agents_by_process_type",
-        "list_all_agents",
-        "find_best_for_meeting",
-        "find_best_for_contract_analysis",
-        "find_best_for_customer_service",
-        "find_best_for_marketing",
-        "find_best_for_technical_writing",
-        "find_best_for_emails",
-        "find_best_for_presentations",
-        "find_best_for_reports",
-        "find_best_for_brainstorming",
-        "find_best_for_proposal_writing",
-        "find_best_for_code_review",
-        "find_best_for_debugging",
-        "find_best_for_architecture",
-        "find_best_for_testing",
-        "find_best_for_refactoring",
-        "find_best_for_database",
-        "find_best_for_api_design",
-        "find_best_for_performance",
-        "find_best_for_security",
-        "find_best_for_documentation"
+        "recommend_best_agent_for_task",
+        "find_agents_largest_context",
+        "compare_all_agents_by_model",
+        "find_agents_by_provider",
+        "find_agents_for_task_type"
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
@@ -317,6 +305,23 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
 
         Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
+        
+        # AI Agent Ontology Query Intents
+        Intent(intent_type=IntentType.TOOL, intent_value="what model does", intent_target="get_agent_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="which model does", intent_target="get_agent_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="what is the context window", intent_target="get_agent_context_window"),
+        Intent(intent_type=IntentType.TOOL, intent_value="context window of", intent_target="get_agent_context_window"),
+        Intent(intent_type=IntentType.TOOL, intent_value="what is the objective", intent_target="get_agent_objective"),
+        Intent(intent_type=IntentType.TOOL, intent_value="what tasks can", intent_target="get_agent_tasks"),
+        Intent(intent_type=IntentType.TOOL, intent_value="list all agents", intent_target="get_all_agents"),
+        Intent(intent_type=IntentType.TOOL, intent_value="show all agents", intent_target="get_all_agents"),
+        Intent(intent_type=IntentType.TOOL, intent_value="compare agents", intent_target="compare_agent_models"),
+        Intent(intent_type=IntentType.TOOL, intent_value="compare all agents", intent_target="compare_all_agents_by_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="compare models", intent_target="compare_all_agents_by_model"),
+        Intent(intent_type=IntentType.TOOL, intent_value="find agents for", intent_target="recommend_best_agent_for_task"),
+        Intent(intent_type=IntentType.TOOL, intent_value="which agent should I use", intent_target="recommend_best_agent_for_task"),
+        Intent(intent_type=IntentType.TOOL, intent_value="largest context window", intent_target="find_agents_largest_context"),
+        Intent(intent_type=IntentType.TOOL, intent_value="agents from", intent_target="find_agents_by_provider"),
     
     ]
 
@@ -373,8 +378,8 @@ You can browse the data and run queries there."""
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
-        threshold=0.7,  # Lower threshold for better intent matching
-        threshold_neighbor=0.5,  # Allow more similar intents
+        threshold=0.75,  # Balanced threshold: allows natural language while avoiding false positives
+        threshold_neighbor=0.65,  # Allows similar phrasings to trigger tools
     )
 
 
