@@ -188,8 +188,11 @@ deps-upgrade:
 
 # Set up git hooks for code quality checks before commits
 .git/hooks/pre-commit:
-	@mkdir -p .git/hooks
-	@echo 'cd "$(git rev-parse --show-toplevel)" || exit 1;make check' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+	@if [ -d .git ]; then \
+		mkdir -p .git/hooks \
+		&& echo 'cd "$(git rev-parse --show-toplevel)" || exit 1;make check' > .git/hooks/pre-commit \
+		&& chmod +x .git/hooks/pre-commit \
+	; fi
 
 # Install git hooks as dependency
 git-deps: .git/hooks/pre-commit
