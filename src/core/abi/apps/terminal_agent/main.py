@@ -552,19 +552,19 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
     """
     
     # Skip loading indicators in airgap mode for instant startup
-    import os
-    ai_mode = os.getenv("AI_MODE")
+    # import os
+    # ai_mode = os.getenv("AI_MODE")
     
-    if ai_mode != "airgap":
-        console_loader = ConsoleLoader()
-        console_loader.start("Loading")
+    # if ai_mode != "airgap":
+    #     console_loader = ConsoleLoader()
+    #     console_loader.start("Loading")
     
     assert agent_class is not None, "Agent class is required"
     
     agent = load_agent(agent_class)
     
-    if ai_mode != "airgap":
-        console_loader.stop()
+    # if ai_mode != "airgap":
+    #     console_loader.stop()
     
     if agent is None:
         print(f"Agent {agent_class} not found")

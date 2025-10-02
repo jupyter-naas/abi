@@ -13,6 +13,16 @@ OWNER = "openai"
 
 model: Optional[ChatModel] = None
 openai_api_key = secret.get("OPENAI_API_KEY")
+
+if openai_api_key is None:
+    # Ask the user to enter the OpenAI API key
+    openai_api_key = None
+    while openai_api_key in ["", None]:
+        openai_api_key = input("Enter your OpenAI API key: ")
+    
+    secret.set("OPENAI_API_KEY", openai_api_key)
+    
+
 model = ChatModel(
     model_id=ID,
     name=NAME,

@@ -1,5 +1,5 @@
 from abi.services.secret.SecretPorts import ISecretAdapter
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 import os
 from typing import Any, Dict
 
@@ -13,6 +13,7 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
 
     def set(self, key: str, value: str):
         os.environ[key] = value
+        set_key(".env", key, value)
 
     def remove(self, key: str):
         os.environ.pop(key, None)
