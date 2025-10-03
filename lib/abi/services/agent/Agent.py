@@ -17,7 +17,7 @@ from langchain_core.runnables import Runnable
 # LangGraph imports for workflow and state management
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import START, StateGraph
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import MessagesState
 from langgraph.graph.state import CompiledStateGraph
 
@@ -334,7 +334,7 @@ class Agent(Expose):
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
         import uuid
         import os
-        if not os.getenv("ENV") == "dev":
+        if os.getenv("ENV") == "dev":
             self._state.set_thread_id(str(uuid.uuid4()))
 
         # We set the configuration.
@@ -553,17 +553,36 @@ class Agent(Expose):
         if self.state.supervisor_agent != self.name:
             # This agent is a subagent with a supervisor
             subagent_prompt = f"""
-            
-# SUBAGENT WITH SUPERVISOR:
-You are a specialized agent working under the supervision of {self.state.supervisor_agent}.
-If you are uncertain about how to proceed or need assistance:
-1. Use the request_help tool to ask your supervisor for guidance
-2. Clearly explain why you need help
-3. Wait for the supervisor to provide direction
+SUPERVISOR SYSTEM PROMPT:
 
-Your supervisor will help ensure you stay on track and can assist with complex tasks.
-""" 
+You are a specialized agent working under the supervision of {self.state.supervisor_agent}.
+
+# OPERATING GUIDELINES:
+1. Stay focused on your specialized role and core capabilities
+2. Follow your system prompt instructions precisely
+3. For EVERY user message, first evaluate if you can handle it within your core capabilities
+4. If you encounter ANY of these situations:
+   - You are uncertain about how to proceed
+   - The task seems outside your core capabilities 
+   - You need clarification about requirements
+   - You want to confirm a critical action
+   - You are not 100% confident in your ability to handle the task
+   Then you MUST the `request_help` tool to ask your supervisor for help.
+5. Do not attempt tasks beyond your defined role
+6. Always maintain consistency with your system prompt rules
+7. When in doubt, ALWAYS request help rather than risk mistakes
+
+Your supervisor will help ensure you operate effectively within your role while providing guidance for complex scenarios.
+
+--------------------------------
+
+SUBAGENT SYSTEM PROMPT:
+
+{self._system_prompt}
+
+"""
             self.set_system_prompt(self._system_prompt + subagent_prompt)
+        logger.debug(f"System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:
@@ -752,10 +771,18 @@ Your supervisor will help ensure you stay on track and can assist with complex t
                 last_message = pd.get(results[-1], 'update.messages[-1]', None)
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
 
-        if self._state.requesting_help is True:
-            self._state.set_requesting_help(False)
-            results.append(Command(goto="current_active_agent", graph=Command.PARENT if self._state.supervisor_agent != self.name else None))
-
+        if (
+            tool_response is not None and 
+            hasattr(tool_response, "name") and 
+            tool_response.name.startswith("request_help") and 
+            self._state.supervisor_agent != self.name
+        ):
+            # self._state.set_requesting_help(True)
+            self._state.set_current_active_agent(self._state.supervisor_agent)
+            print(self._state.current_active_agent)
+            print(self._state.requesting_help)
+            results.append(Command(goto="current_active_agent", graph=Command.PARENT))
+        print(results)
         return results
 
     @property
