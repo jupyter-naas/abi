@@ -316,8 +316,6 @@ You can browse the data and run queries there."""
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
-        threshold=0.7,  # Lower threshold for better intent matching
-        threshold_neighbor=0.5,  # Allow more similar intents
     )
 
 
