@@ -92,6 +92,7 @@ class IntentAgent(Agent):
         event_queue: Queue | None = None,
         threshold: float = 0.85,
         threshold_neighbor: float = 0.05,
+        direct_intent_score: float = 0.95,
     ):
         """Initialize the IntentAgent.
         
@@ -132,6 +133,7 @@ class IntentAgent(Agent):
         self._intent_mapper = IntentMapper(self._intents)
         self._threshold = threshold
         self._threshold_neighbor = threshold_neighbor
+        self._direct_intent_score = direct_intent_score
 
         # Handle memory configuration (same pattern as base Agent class)
         if memory is None:
@@ -263,6 +265,7 @@ class IntentAgent(Agent):
                     agent = pd.find(self._agents, lambda a: a.name == intent_name)
                     if agent is not None:
                         logger.debug(f"✅ Calling agent: {intent_name}")
+                        self.state.set_current_active_agent(intent_name)
                         return Command(goto=intent_name, update=command_update)
                     else:
                         logger.debug("❌ Agent not found, going to call_model")
@@ -284,8 +287,8 @@ class IntentAgent(Agent):
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]['score']
-        if max_score >= 0.99:
-            logger.debug(f"🎯 Intent mapping score above 99% ({round(max_score*100, 2)}%), routing to intent_mapping_router")
+        if max_score >= self._direct_intent_score:
+            logger.debug(f"🎯 Intent mapping score above {self._direct_intent_score*100}% ({round(max_score*100, 2)}%), routing to intent_mapping_router")
             return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": [intents[0]]}})
         
         close_intents = pd.filter_(intents, lambda intent: max_score - intent['score'] < self._threshold_neighbor)
@@ -312,7 +315,6 @@ class IntentAgent(Agent):
         Checks if the intent mapping should be filtered based on the threshold
         and neighbor values.
         """
-        
         if len(intents) == 1 and intents[0]['score'] > self._threshold:
             return "intent_mapping_router"
         if len(intents) == 0:
@@ -628,6 +630,8 @@ Last user message: "{last_human_message.content}"
                     })
                 elif intent.intent_type == IntentType.AGENT:
                     logger.debug(f"🤖 Agent intent found, routing to {intent.intent_target}")
+                    if intent.intent_target != "call_model":
+                        self.state.set_current_active_agent(intent.intent_target)
                     return Command(goto=intent.intent_target)
                 else:
                     logger.debug("🔧 Tool intent found, routing to inject intents in system prompt")
