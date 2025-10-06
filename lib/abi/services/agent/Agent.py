@@ -17,7 +17,7 @@ from langchain_core.runnables import Runnable
 # LangGraph imports for workflow and state management
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.graph.state import CompiledStateGraph
 
@@ -226,6 +226,7 @@ class Agent(Expose):
         BaseMessage,
     ]
     _tools: list[Union[Tool, BaseTool, "Agent"]]
+    _original_tools: list[Union[Tool, BaseTool, "Agent"]]
     _tools_by_name: dict[str, Union[Tool, BaseTool]]
     _native_tools: list[dict]
 

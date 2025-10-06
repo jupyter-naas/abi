@@ -174,24 +174,18 @@ IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.
 CONTEXT_WINDOW = 8192
 OWNER = "google"
 
-model: Optional[ChatModel] = None
-try:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=AirgapChatOpenAI(
-            model=ID,
-            temperature=0.2,  # Even lower temperature for faster, more focused responses
-            max_tokens=512,   # Shorter responses for speed
-            openai_api_base="http://localhost:12434/engines/v1",
-            api_key="ignored",
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ Abi Agent: Gemma3 model loaded successfully in airgap mode with tool support")
-except Exception as e:
-    logger.error(f"Abi Agent: Gemma3 airgap model not available - {e}")
-    logger.error("   Make sure Docker Model Runner is active: docker model run ai/gemma3")
+model: ChatModel = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=AirgapChatOpenAI(
+        model=ID,
+        temperature=0.2,  # Even lower temperature for faster, more focused responses
+        max_tokens=512,   # Shorter responses for speed
+        openai_api_base="http://localhost:12434/engines/v1",
+        api_key="ignored",
+    ),
+    context_window=CONTEXT_WINDOW,
+)
