@@ -613,7 +613,7 @@ You are a specialized agent working under the supervision of {self.state.supervi
    - You need clarification about requirements
    - You want to confirm a critical action
    - You are not 100% confident in your ability to handle the task
-   Then you MUST the `request_help` tool to ask your supervisor for help.
+   Then you MUST use the `request_help` tool to ask your supervisor for help.
 5. Do not attempt tasks beyond your defined role
 6. Always maintain consistency with your system prompt rules
 7. When in doubt, ALWAYS request help rather than risk mistakes
@@ -1275,6 +1275,8 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
             name=tool_name,
             tool_call_id=tool_call["id"],
         )
+
+        agent.state.set_current_active_agent(agent.name)
 
         return Command(
             # navigate to another agent node in the PARENT graph
