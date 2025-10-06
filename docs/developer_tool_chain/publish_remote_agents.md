@@ -279,7 +279,7 @@ When running the script successfully, you should see output similar to:
     - Default: True
     - Remote URL: https://abi-api.default.space.naas.ai/agents/abi/stream-completion?token=dummy_abi_api_key
     - Avatar: https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png
-    - Description: I'm Abi, your Artificial Business Intelligence assistant...
+    - Description: I'm Abi, your Agentic Brain Infrastructure assistant...
     - Suggestions: 4 items
 🧪 [DRY RUN] Would check if plugin 'abi' already exists
 🧪 [DRY RUN] Would create/update plugin in workspace 'your_workspace_id'

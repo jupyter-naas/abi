@@ -3,13 +3,13 @@ TAGS_METADATA = [
         "name": "Overview",
         "description": """
 ### Project Overview
-The **ABI** (Artificial Business Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Organizational AI System. 
-This system empowers businesses to integrate, manage, and scale AI-driven operations with a focus on ontology, assistant-driven workflows, and analytics.\n
-Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
+The **ABI** (Agentic Brain Infrastructure) project is a Python-based framework designed to serve as the core infrastructure for building intelligent agent systems. 
+This system provides a flexible foundation for creating, managing, and orchestrating AI agents with capabilities including ontology management, knowledge graphs, and multi-agent workflows.\n
+Designed for extensibility and scalability, ABI enables organizations to build sophisticated AI systems tailored to their specific needs.
 
 ### API Overview
-The ABI API allows users and applications to interact with ABI's capabilities for business process automation and intelligence.\n
-This document describes the current version of the ABI API, which provides access to agents, pipelines, workflows, integrations, ontology management and analytics features.
+The ABI API provides programmatic access to the agent ecosystem and its capabilities.\n
+This document describes the current version of the ABI API, which provides access to agents, pipelines, workflows, ontology management, and knowledge graph features.
         """,
     },
     {
