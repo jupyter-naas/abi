@@ -636,8 +636,8 @@ local-up: check-docker
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
-	@echo "  - API: http://localhost:9879"
-	@echo "  - MCP Server: http://localhost:8000"
+	@echo "  - API: http://localhost:9879 (docs at /docs)"
+	@echo "  - MCP Server: localhost:8000 (SSE protocol for Claude Desktop)"
 
 # View logs from all local services
 local-logs: check-docker
