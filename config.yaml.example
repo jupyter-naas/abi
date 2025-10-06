@@ -8,7 +8,7 @@ config:
   space_name: "abi" # Name of the space
   triple_store_path: "storage/triplestore" # Path to the ontology store
   api_title: "ABI API" # API title
-  api_description: "API for ABI, your Artifical Business Intelligence" # API description
+  api_description: "API for ABI, your Agentic Brain Infrastructure" # API description
   logo_path: "assets/logo.png" # Path to the logo
   favicon_path: "assets/favicon.ico" # Path to the favicon
   auto_publish:

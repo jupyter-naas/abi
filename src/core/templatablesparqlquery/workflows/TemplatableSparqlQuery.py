@@ -162,22 +162,30 @@ def load_workflows():
     for _query in queries:
         query = queries[_query]
 
+        # Skip queries with arguments if arguments dict is empty (argument loading is currently disabled)
+        if query.get("hasArgument") and not arguments:
+            continue
+
         # Arguments Model with validation patterns
+        # Only include arguments that exist in the arguments dict
+        valid_arguments = {
+            str(arguments[argument]["name"]): (
+                str,
+                Field(
+                    ...,
+                    description=str(arguments[argument]["description"]),
+                    pattern=str(arguments[argument]["validationPattern"]),
+                    # You could also add additional metadata from validationFormat if needed
+                    example=str(arguments[argument]["validationFormat"]),
+                ),
+            )
+            for argument in query.get("hasArgument", [])
+            if argument in arguments
+        }
+        
         arguments_model = create_model(
             f"{str(query['label']).capitalize()}Arguments",
-            **{
-                str(arguments[argument]["name"]): (
-                    str,
-                    Field(
-                        ...,
-                        description=str(arguments[argument]["description"]),
-                        pattern=str(arguments[argument]["validationPattern"]),
-                        # You could also add additional metadata from validationFormat if needed
-                        example=str(arguments[argument]["validationFormat"]),
-                    ),
-                )
-                for argument in query.get("hasArgument")
-            },
+            **valid_arguments,
         )
 
         p = GenericWorkflow[arguments_model](
