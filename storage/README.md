@@ -23,23 +23,7 @@ The storage directory contains various types of files and data used by the ABI s
 - Contains RDF data in Turtle format
 - Other semantic web formats (*.rdf, *.owl, etc.)
 
-## Data Organization Pattern
-
-For developers building modules that generate data, ABI recommends the **Code-Data Symmetry** pattern:
-
-```
-src/core/your_module/orchestration/    →    storage/datastore/core/modules/your_module/orchestration/
-src/core/your_module/pipelines/        →    storage/datastore/core/modules/your_module/pipelines/
-```
-
-This pattern ensures:
-- No hunting for data - predictable locations
-- No root pollution - clean directory structure
-- Clean scaling - organized growth
-
-**For full details**, see: [Code-Data Symmetry Guideline](../docs/developer_tool_chain/code_data_symmetry.md)
-
-**Reference implementation**: `src/marketplace/__demo__/orchestration/` shows this pattern in action.
+> **For developers**: See [Code-Data Symmetry](../docs/developer_tool_chain/code_data_symmetry.md) for recommended data organization patterns.
 
 ## How to Use
 
