@@ -319,12 +319,20 @@ class Agent(Expose):
         self._chat_model = chat_model
         if hasattr(chat_model, "output_version"):
             self._chat_model_output_version = chat_model.output_version
+            
         self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
-            self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
+            
+            # Test if the chat model can bind tools by trying with a default tool first
+            if self._can_bind_tools(chat_model):
+                self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
+            else:
+                logger.warning(f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
+                # Keep the original model without tools
+                self._chat_model_with_tools = chat_model
         
         # Use provided memory or create based on environment
         if memory is None:
@@ -352,6 +360,36 @@ class Agent(Expose):
 
         # We build the graph.
         self.build_graph()
+
+    def _can_bind_tools(self, chat_model: BaseChatModel) -> bool:
+        """Test if the chat model can bind tools by attempting to bind the get_time_date default tool.
+        
+        Args:
+            chat_model (BaseChatModel): The chat model to test
+            
+        Returns:
+            bool: True if the model can bind tools, False otherwise
+        """
+        try:
+            # Create the get_time_date tool that's used in default_tools()
+            @tool(return_direct=True)
+            def get_time_date(timezone: str = 'Europe/Paris') -> str:
+                """Get the current time and date."""
+                from datetime import datetime
+                import pytz
+                return datetime.now(pytz.timezone(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+            
+            # Try to bind this single tool to test if the model supports tool binding
+            chat_model.bind_tools([get_time_date])
+            
+            # If we get here without an exception, the model supports tool binding
+            # logger.debug(f"Chat model {type(chat_model).__name__} supports tool calling.")
+            return True
+            
+        except Exception as e:
+            # If binding tools raises an exception, the model doesn't support tools
+            logger.debug(f"Chat model {type(chat_model).__name__} does not support tool calling: {e}")
+            return False
 
     def default_tools(self) -> list[Tool | BaseTool]:
         @tool(return_direct=True)
