@@ -135,7 +135,7 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
-    
+    from langchain_openai import ChatOpenAI
     from src import secret
     
     # Define model based on AI_MODE
@@ -143,12 +143,11 @@ def create_agent(
     if ai_mode == "cloud":
         from src.core.abi.models.gpt_4_1 import model as cloud_model
         selected_model = cloud_model.model
-    elif ai_mode == "local":
+    if ai_mode == "local":
         from src.core.abi.models.qwen3_8b import model as local_model
         selected_model = local_model.model
     elif ai_mode == "airgap":
         # Gemma does not handle tool calling so we are moving to qwen3
-        from langchain_openai import ChatOpenAI
         airgap_model = ChatOpenAI(
             model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
             temperature=0.7,
@@ -157,7 +156,7 @@ def create_agent(
         )
         selected_model = airgap_model
     else:
-        selected_model = ChatOpenAI(model="gpt-4.1-mini", temperature=0, api_key=SecretStr(secret.get("OPENAI_API_KEY")))
+        selected_model = cloud_model.model
 
     # Define tools
     tools: list = []
@@ -198,7 +197,7 @@ You can browse the data and run queries there."""
         agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
 
     from queue import Queue
-    agent_queue = Queue()
+    agent_queue: Queue = Queue()
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
