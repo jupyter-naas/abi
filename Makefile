@@ -574,6 +574,11 @@ local-up: check-docker
 	fi
 	@echo "✓ Local containers started"
 	@echo ""
+	@echo "🚀 Starting API and MCP servers in background..."
+	@nohup make api > /tmp/abi-api.log 2>&1 & echo $$! > /tmp/abi-api.pid
+	@nohup make mcp-http > /tmp/abi-mcp.log 2>&1 & echo $$! > /tmp/abi-mcp.pid
+	@sleep 3
+	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
 	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
@@ -581,6 +586,8 @@ local-up: check-docker
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
+	@echo "  - API: http://localhost:9879"
+	@echo "  - MCP Server: http://localhost:8000/sse"
 
 # View logs from all local services
 local-logs: check-docker
@@ -589,15 +596,24 @@ local-logs: check-docker
 # Stop all local services without removing containers
 local-stop: check-docker
 	@docker compose -f docker-compose.yml --profile local stop
+	@pkill -f "src/api.py" 2>/dev/null || true
+	@pkill -f "mcp-server" 2>/dev/null || true
+	@rm -f /tmp/abi-api.pid /tmp/abi-mcp.pid
 	@echo "✓ All local services stopped"
 
 # Stop and remove all local service containers
 local-down: check-docker
 	@docker compose -f docker-compose.yml --profile local down --timeout 10 || true
+	@pkill -f "src/api.py" 2>/dev/null || true
+	@pkill -f "mcp-server" 2>/dev/null || true
+	@rm -f /tmp/abi-api.pid /tmp/abi-mcp.pid
 	@echo "✓ All local services stopped"
 
 local-clean: check-docker
 	@docker compose -f docker-compose.yml --profile local down -v --timeout 10 || true
+	@pkill -f "src/api.py" 2>/dev/null || true
+	@pkill -f "mcp-server" 2>/dev/null || true
+	@rm -f /tmp/abi-api.pid /tmp/abi-mcp.pid /tmp/abi-api.log /tmp/abi-mcp.log
 	@echo "✓ All local services stopped and volumes removed"
 
 local-reload: check-docker
