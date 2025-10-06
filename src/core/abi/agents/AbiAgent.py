@@ -193,8 +193,7 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0", supervisor_agent=NAME)
+    shared_state = agent_shared_state or AgentSharedState(thread_id="0", supervisor_agent=NAME)
 
     from queue import Queue
     agent_queue: Queue = Queue()
@@ -209,7 +208,7 @@ You can browse the data and run queries there."""
             for agent in module.agents:
                 if agent is not None and agent.name != "Abi" and not agent.name.endswith("Research"): #exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
                     logger.debug(f"Adding agent: {agent.name}")
-                    agents.append(agent.duplicate(agent_queue, agent_shared_state=agent_shared_state))
+                    agents.append(agent.duplicate(agent_queue, agent_shared_state=shared_state))
                     # agents.append(agent)
     logger.debug(f"Agents: {agents}")
 
@@ -293,7 +292,6 @@ You can browse the data and run queries there."""
                 intents.append(new_intent)
     logger.debug(f"Intents: {intents}")
 
-
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -301,7 +299,7 @@ You can browse the data and run queries there."""
         tools=tools,
         agents=agents,
         intents=intents,
-        state=agent_shared_state,
+        state=shared_state,
         configuration=agent_configuration,
         memory=None,
     )

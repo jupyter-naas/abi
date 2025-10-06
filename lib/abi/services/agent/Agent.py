@@ -275,7 +275,7 @@ class Agent(Expose):
         self._name = name
         self._description = description
         self._system_prompt = configuration.system_prompt
-            
+
         self._state = state
         self._state.set_current_active_agent(name)
 
@@ -409,20 +409,8 @@ class Agent(Expose):
 
             The supervisor agent will review your reason and provide assistance or take over the conversation.
             """
-            logger.debug(f" {self.name} is requesting help from the supervisor agent: {self._state.supervisor_agent}")
-            
-            # tool_message = ToolMessage(
-            #     content=f"Requesting help from the supervisor agent: {self._state.supervisor_agent}",
-            #     name="request_help_from_supervisor",
-            #     tool_call_id=tool_call["id"],
-            # )
-            
-            # last_human_message = pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
-            
-            # return Command(goto="__end__", update={"messages": state["messages"] + [tool_message]})
-            self._state.set_requesting_help(True)
-            self._state.set_current_active_agent(self._state.supervisor_agent)
-            return f"Requesting help from the supervisor agent: {self._state.supervisor_agent}"
+            logger.debug(f" {self.name} is requesting help from the supervisor agent: {self.state.supervisor_agent}")
+            return "Requesting help from the supervisor agent."
         
         @tool(return_direct=True)
         def get_time_date(timezone: str = 'Europe/Paris') -> str:
@@ -431,7 +419,7 @@ class Agent(Expose):
             import pytz
             return datetime.now(pytz.timezone(timezone)).strftime("%H:%M:%S %Y-%m-%d")
         
-        return [request_help, get_time_date]
+        return [get_time_date, request_help]
 
     @property
     def system_prompt(self) -> str:
@@ -825,6 +813,7 @@ SUBAGENT SYSTEM PROMPT:
         ):
             # self._state.set_requesting_help(True)
             self._state.set_current_active_agent(self._state.supervisor_agent)
+            self._state.set_requesting_help(True)
             print(self._state.current_active_agent)
             print(self._state.requesting_help)
             results.append(Command(goto="current_active_agent", graph=Command.PARENT))
@@ -1010,8 +999,10 @@ SUBAGENT SYSTEM PROMPT:
 
         Returns:
             Agent: A new Agent instance with the same configuration
-        """
+        """        
         shared_state = agent_shared_state or AgentSharedState()
+        
+        logger.debug(f"agent_shared_state: {agent_shared_state}")
         
         # Initialize the tools list with the original list of tools.
         # tools = [tool for tool in self._structured_tools]
