@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command
 from langgraph.graph.message import MessagesState
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
-from langchain_core.tools import tool
+from langchain_core.tools import tool, BaseTool
 from abi import logger
 import pydash as pd
 import spacy
@@ -83,7 +83,7 @@ class IntentAgent(Agent):
         name: str,
         description: str,
         chat_model: BaseChatModel,
-        tools: list[Union[Tool, "Agent"]] = [],
+        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         intents: list[Intent] = [],
         memory: BaseCheckpointSaver | None = None,
@@ -206,7 +206,7 @@ class IntentAgent(Agent):
         self.graph = graph.compile(checkpointer=self._checkpointer)  
     
 
-    def continue_conversation(self, state: IntentState) -> Command:
+    def continue_conversation(self, state: MessagesState) -> Command:
         return Command(goto="map_intents")
 
 
@@ -696,7 +696,7 @@ If you endup with a single intent which is of type RAW, you must output the inte
             self._system_prompt = updated_system_prompt
 
 
-    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
+    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "IntentAgent":
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -704,7 +704,7 @@ If you endup with a single intent which is of type RAW, you must output the inte
         multiple instances of the same agent concurrently.
 
         Returns:
-            Agent: A new Agent instance with the same configuration
+            IntentAgent: A new IntentAgent instance with the same configuration
         """
         shared_state = agent_shared_state or AgentSharedState()
         
@@ -713,7 +713,7 @@ If you endup with a single intent which is of type RAW, you must output the inte
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[IntentAgent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
+        agents: list[Union["IntentAgent", "Agent"]] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
         new_agent = IntentAgent(
             name=self._name,
