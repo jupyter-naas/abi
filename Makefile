@@ -637,7 +637,7 @@ local-up: check-docker
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
 	@echo "  - API: http://localhost:9879 (docs at /docs)"
-	@echo "  - MCP Server: localhost:8000 (SSE protocol for Claude Desktop)"
+	@echo "  - MCP Server: http://localhost:8000/sse"
 
 # View logs from all local services
 local-logs: check-docker
