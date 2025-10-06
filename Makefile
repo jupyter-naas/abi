@@ -12,6 +12,7 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
+log_level=ERROR
 default: deps local-up airgap
 	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
 
@@ -220,7 +221,6 @@ local-build: deps
 
 # Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
-LOG_LEVEL=ERROR
 chat: deps
 	@ LOG_LEVEL=$(log_level) uv run python -m src.cli $(agent)
 
