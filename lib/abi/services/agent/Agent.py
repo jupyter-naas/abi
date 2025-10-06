@@ -385,8 +385,15 @@ class Agent(Expose):
             self._state.set_requesting_help(True)
             self._state.set_current_active_agent(self._state.supervisor_agent)
             return f"Requesting help from the supervisor agent: {self._state.supervisor_agent}"
-    
-        return [request_help]
+        
+        @tool(return_direct=True)
+        def get_time_date(timezone: str = 'Europe/Paris') -> str:
+            """Get the current time and date."""
+            from datetime import datetime
+            import pytz
+            return datetime.now(pytz.timezone(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+        
+        return [request_help, get_time_date]
 
     @property
     def system_prompt(self) -> str:
@@ -583,7 +590,7 @@ SUBAGENT SYSTEM PROMPT:
 
 """
             self.set_system_prompt(self._system_prompt + subagent_prompt)
-        logger.debug(f"System prompt: {self._system_prompt}")
+        # logger.debug(f"System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:
