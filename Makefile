@@ -55,11 +55,17 @@ help:
 	@echo ""
 	@echo "DEVELOPMENT SERVERS & TOOLS:"
 	@echo "  api                      Start API server for local development (port 9879)"
+	@echo "  api-up                   Start API server in background mode"
+	@echo "  api-down                 Stop API server running in background"
 	@echo "  api-prod                 Build and run production API server in Docker"
 	@echo "  api-local                Start local API server in Docker with volume mounting"
 	@echo "  mcp                      Start MCP server (STDIO mode for Claude Desktop)"
 	@echo "  mcp-http                 Start MCP server (HTTP mode on port 8000)"
+	@echo "  mcp-up                   Start MCP server in background mode (SSE/HTTP)"
+	@echo "  mcp-down                 Stop MCP server running in background"
 	@echo "  mcp-test                 Run MCP server validation tests"
+	@echo "  services-status          Check status of API and MCP servers"
+	@echo "  services-down            Stop all background services (API and MCP)"
 	@echo "  sparql-terminal          Open interactive SPARQL terminal for knowledge graph"
 	@echo "  oxigraph-admin           Open Oxigraph administrative interface"
 	@echo "  oxigraph-explorer        Open Knowledge Graph Explorer web interface"
@@ -277,9 +283,31 @@ chat-support-agent: deps
 # DEVELOPMENT SERVERS & TOOLS
 # =============================================================================
 
+# Helper function to start a service in background
+define start_service
+	@lsof -Pi :$(2) -sTCP:LISTEN -t >/dev/null 2>&1 && echo "✓ $(1) already running on http://localhost:$(2)" || ( \
+		echo "🚀 Starting $(1) in background..."; \
+		nohup $(3) > /tmp/abi-$(4).log 2>&1 & echo $$! > /tmp/abi-$(4).pid; sleep 2; \
+		lsof -Pi :$(2) -sTCP:LISTEN -t >/dev/null 2>&1 && \
+		echo "✓ $(1) started on http://localhost:$(2) (PID: $$(cat /tmp/abi-$(4).pid))" || \
+		(echo "❌ $(1) failed to start. Logs: tail -f /tmp/abi-$(4).log"; exit 1) \
+	)
+endef
+
+define stop_service
+	@[ -f /tmp/abi-$(2).pid ] && (kill $$(cat /tmp/abi-$(2).pid) 2>/dev/null || true; rm -f /tmp/abi-$(2).pid; echo "✓ $(1) stopped") || \
+	(PID=$$(lsof -ti :$(3) 2>/dev/null); [ -n "$$PID" ] && (kill $$PID 2>/dev/null || true; echo "✓ Stopped $(1)") || echo "✓ $(1) not running")
+endef
+
 # Start the main API server for local development
 api: deps
 	uv run src/api.py
+
+api-up: deps
+	$(call start_service,API,9879,uv run src/api.py,api)
+
+api-down:
+	$(call stop_service,API,api,9879)
 
 # Start production API server in Docker container
 api-prod: deps
@@ -301,10 +329,30 @@ mcp-http: deps
 	@echo "🌐 Starting MCP Server (SSE mode on port 8000)..."
 	MCP_TRANSPORT=sse uv run mcp-server
 
+mcp-up: deps
+	$(call start_service,MCP Server,8000,env MCP_TRANSPORT=sse uv run mcp-server,mcp)
+
+mcp-down:
+	$(call stop_service,MCP Server,mcp,8000)
+
 # Run MCP server validation tests
 mcp-test: deps
 	@echo "🔍 Running MCP Server validation tests..."
 	uv run python -m src.mcp_server_test
+
+# Check status of API and MCP servers
+services-status:
+	@for svc in "API:9879" "MCP Server:8000"; do \
+		name=$${svc%%:*}; port=$${svc##*:}; \
+		printf "\n$$name (port $$port):\n"; \
+		lsof -Pi :$$port -sTCP:LISTEN -t >/dev/null 2>&1 && \
+		printf "  ✓ Running (PID: $$(lsof -ti :$$port))\n  URL: http://localhost:$$port\n" || \
+		printf "  ✗ Not running\n"; \
+	done; echo
+
+# Stop all background services (API and MCP)
+services-down: api-down mcp-down
+	@echo "✓ All background services stopped"
 
 # Interactive SPARQL terminal for querying the knowledge graph
 sparql-terminal: deps
@@ -574,6 +622,9 @@ local-up: check-docker
 	fi
 	@echo "✓ Local containers started"
 	@echo ""
+	@$(MAKE) -s api-up
+	@$(MAKE) -s mcp-up
+	@echo ""
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
 	@echo "  - Oxigraph (Knowledge Graph): http://localhost:7878"
@@ -581,22 +632,24 @@ local-up: check-docker
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - Dagster (Orchestration): http://localhost:3001"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"
+	@echo "  - API: http://localhost:9879"
+	@echo "  - MCP Server: http://localhost:8000"
 
 # View logs from all local services
 local-logs: check-docker
 	@docker compose -f docker-compose.yml --profile local logs -f
 
 # Stop all local services without removing containers
-local-stop: check-docker
+local-stop: check-docker api-down mcp-down
 	@docker compose -f docker-compose.yml --profile local stop
 	@echo "✓ All local services stopped"
 
 # Stop and remove all local service containers
-local-down: check-docker
+local-down: check-docker api-down mcp-down
 	@docker compose -f docker-compose.yml --profile local down --timeout 10 || true
 	@echo "✓ All local services stopped"
 
-local-clean: check-docker
+local-clean: check-docker api-down mcp-down
 	@docker compose -f docker-compose.yml --profile local down -v --timeout 10 || true
 	@echo "✓ All local services stopped and volumes removed"
 
@@ -756,7 +809,7 @@ publish-remote-agents-dry-run: deps
 # =============================================================================
 
 # Clean up build artifacts, caches, and Docker containers
-clean:
+clean: api-down mcp-down
 	@echo "Cleaning up build artifacts..."
 	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
 	find . -name "*.pyc" -delete
@@ -764,10 +817,11 @@ clean:
 	docker compose down
 	docker compose rm -f
 	rm -f dagster.pid dagster.log
+	rm -f /tmp/abi-api.log /tmp/abi-mcp.log
 
 # =============================================================================
 # PHONY TARGETS
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api api-up api-down mcp mcp-up mcp-down sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
