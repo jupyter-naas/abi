@@ -287,10 +287,14 @@ chat-support-agent: deps
 define start_service
 	@lsof -Pi :$(2) -sTCP:LISTEN -t >/dev/null 2>&1 && echo "✓ $(1) already running on http://localhost:$(2)" || ( \
 		echo "🚀 Starting $(1) in background..."; \
-		nohup $(3) > /tmp/abi-$(4).log 2>&1 & echo $$! > /tmp/abi-$(4).pid; sleep 2; \
+		nohup $(3) > /tmp/abi-$(4).log 2>&1 & echo $$! > /tmp/abi-$(4).pid; \
+		for i in 1 2 3 4 5 6 7 8 9 10; do \
+			sleep 1; \
+			lsof -Pi :$(2) -sTCP:LISTEN -t >/dev/null 2>&1 && break; \
+		done; \
 		lsof -Pi :$(2) -sTCP:LISTEN -t >/dev/null 2>&1 && \
 		echo "✓ $(1) started on http://localhost:$(2) (PID: $$(cat /tmp/abi-$(4).pid))" || \
-		(echo "❌ $(1) failed to start. Logs: tail -f /tmp/abi-$(4).log"; exit 1) \
+		(echo "❌ $(1) failed to start. Check logs: tail -f /tmp/abi-$(4).log"; rm -f /tmp/abi-$(4).pid; exit 1) \
 	)
 endef
 
