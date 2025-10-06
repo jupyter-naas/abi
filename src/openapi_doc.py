@@ -3,7 +3,7 @@ TAGS_METADATA = [
         "name": "Overview",
         "description": """
 ### Project Overview
-The **ABI** (Artificial Business Intelligence) project is a Python-based backend framework designed to serve as the core infrastructure for building an Organizational AI System. 
+The **ABI** (Agentic Brain Infrastructure) project is a Python-based backend framework designed to serve as the core infrastructure for building an Organizational AI System. 
 This system empowers businesses to integrate, manage, and scale AI-driven operations with a focus on ontology, assistant-driven workflows, and analytics.\n
 Designed for flexibility and scalability, ABI provides a customizable framework suitable for organizations aiming to create intelligent, automated systems tailored to their needs.
 
