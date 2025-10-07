@@ -5,7 +5,6 @@ Competency-question-driven cyber security analyst using D3FEND-CCO ontology.
 Answers 22 specific competency questions about cyber events from the knowledge graph.
 """
 
-from pathlib import Path
 from typing import Optional
 
 from abi.services.agent.Agent import AgentConfiguration, AgentSharedState
@@ -98,9 +97,8 @@ def create_agent(
         agent_shared_state = AgentSharedState()
     
     # Load all 22 competency question tools from CyberSecurityQueries.ttl
+    # The TTL is auto-loaded from /ontologies directory into triplestore
     from src.core.templatablesparqlquery import get_tools
-    
-    ontology_file = Path(__file__).parent.parent / "ontologies" / "CyberSecurityQueries.ttl"
     
     # All 22 competency questions as tools
     cq_tools = [
@@ -128,7 +126,8 @@ def create_agent(
         "cq22_cross_domain",
     ]
     
-    tools = get_tools(cq_tools, ontology_file_path=str(ontology_file))
+    # get_tools() loads from all TemplatableSparqlQuery in triplestore
+    tools = get_tools(cq_tools)
     logger.info(f"Loaded {len(tools)} competency question tools")
     
     # Create intents - map all CQ tools to TOOL intent type
