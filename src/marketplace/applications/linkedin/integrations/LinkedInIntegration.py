@@ -718,12 +718,12 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
 
     integration = LinkedInIntegration(configuration)
 
-    class GetOrganizationInfoSchema(BaseModel):
-        linkedin_url: str = Field(
-            ..., 
-            description="LinkedIn organization URL", 
-            pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
-        )
+    # class GetOrganizationInfoSchema(BaseModel):
+    #     linkedin_url: str = Field(
+    #         ..., 
+    #         description="LinkedIn organization URL", 
+    #         pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
+    #     )
 
     class GetProfileSchema(BaseModel):
         linkedin_url: str = Field(
@@ -732,22 +732,22 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+"
         )
 
-    class GetProfilePostsFeedSchema(BaseModel):
-        profile_id: str = Field(
-            ..., 
-            description="LinkedIn profile URL", 
-            pattern=r"^ACoAA.+"
-        )
-        count: int = Field(
-            1,
-            description="Number of posts to fetch", 
-        )
+    # class GetProfilePostsFeedSchema(BaseModel):
+    #     profile_id: str = Field(
+    #         ..., 
+    #         description="LinkedIn profile URL", 
+    #         pattern=r"^ACoAA.+"
+    #     )
+    #     count: int = Field(
+    #         1,
+    #         description="Number of posts to fetch", 
+    #     )
 
-    class GetActivitySchema(BaseModel):
-        linkedin_url: str = Field(
-            ..., 
-            description="LinkedIn activity ID extracted from the URL", 
-        )
+    # class GetActivitySchema(BaseModel):
+    #     linkedin_url: str = Field(
+    #         ..., 
+    #         description="LinkedIn activity ID extracted from the URL", 
+    #     )
 
     class GetMutualConnectionsSchema(BaseModel):
         profile_id: Annotated[str, Field(
@@ -767,18 +767,18 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         )]
 
     return [
-        StructuredTool(
-            name="linkedin_get_organization_id",
-            description="Get LinkedIn organization ID for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.get_organization_id(linkedin_url),
-            args_schema=GetOrganizationInfoSchema
-        ),
-        StructuredTool(
-            name="linkedin_get_organization_info",
-            description="Get organization information for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.get_organization_info(linkedin_url, return_cleaned_json=True),
-            args_schema=GetOrganizationInfoSchema
-        ),
+        # StructuredTool(
+        #     name="linkedin_get_organization_id",
+        #     description="Get LinkedIn organization ID for a LinkedIn organization.",
+        #     func=lambda linkedin_url: integration.get_organization_id(linkedin_url),
+        #     args_schema=GetOrganizationInfoSchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_organization_info",
+        #     description="Get organization information for a LinkedIn organization.",
+        #     func=lambda linkedin_url: integration.get_organization_info(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetOrganizationInfoSchema
+        # ),
         StructuredTool(
             name="linkedin_get_profile_id",
             description="Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA.",
@@ -786,47 +786,53 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             args_schema=GetProfileSchema
         ),
         StructuredTool(
-            name="linkedin_get_profile_view",
-            description="Get profile view for a LinkedIn organization.",
-            func=lambda linkedin_url: integration.get_profile_view(linkedin_url, return_cleaned_json=True),
+            name="linkedin_get_profile_top_card",
+            description="Get profile top card for a LinkedIn profile, meaning the quick overview information of the profile.",
+            func=lambda linkedin_url: integration.get_profile_top_card(linkedin_url, return_cleaned_json=True),
             args_schema=GetProfileSchema
         ),
-        StructuredTool(
-            name="linkedin_get_profile_skills",
-            description="Get profile skills for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.get_profile_skills(linkedin_url, return_cleaned_json=True),
-            args_schema=GetProfileSchema
-        ),
-        StructuredTool(
-            name="linkedin_get_profile_network_info",
-            description="Get network information for a LinkedIn profile.",
-            func=lambda linkedin_url: integration.get_profile_network_info(linkedin_url, return_cleaned_json=True),
-            args_schema=GetProfileSchema
-        ),
-        StructuredTool(
-            name="linkedin_get_profile_posts_feed",
-            description="Get posts feed for a LinkedIn profile.",
-            func=lambda profile_id, count: integration.get_profile_posts_feed(profile_id, count, return_cleaned_json=True),
-            args_schema=GetProfilePostsFeedSchema
-        ),
-        StructuredTool(
-            name="linkedin_get_post_stats",
-            description="Get post stats for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.get_post_stats(linkedin_url, return_cleaned_json=True),
-            args_schema=GetActivitySchema
-        ),
-        StructuredTool(
-            name="linkedin_get_post_comments",
-            description="Get comments for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.get_post_comments(linkedin_url, return_cleaned_json=True),
-            args_schema=GetActivitySchema
-        ),
-        StructuredTool(
-            name="linkedin_get_post_reactions",
-            description="Get reactions for a LinkedIn activity.",
-            func=lambda linkedin_url: integration.get_post_reactions(linkedin_url, return_cleaned_json=True),
-            args_schema=GetActivitySchema
-        ),
+        # StructuredTool(
+        #     name="linkedin_get_profile_view",
+        #     description="Get profile view for a LinkedIn organization.",
+        #     func=lambda linkedin_url: integration.get_profile_view(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetProfileSchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_profile_skills",
+        #     description="Get profile skills for a LinkedIn profile.",
+        #     func=lambda linkedin_url: integration.get_profile_skills(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetProfileSchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_profile_network_info",
+        #     description="Get network information for a LinkedIn profile.",
+        #     func=lambda linkedin_url: integration.get_profile_network_info(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetProfileSchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_profile_posts_feed",
+        #     description="Get posts feed for a LinkedIn profile.",
+        #     func=lambda profile_id, count: integration.get_profile_posts_feed(profile_id, count, return_cleaned_json=True),
+        #     args_schema=GetProfilePostsFeedSchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_post_stats",
+        #     description="Get post stats for a LinkedIn activity.",
+        #     func=lambda linkedin_url: integration.get_post_stats(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetActivitySchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_post_comments",
+        #     description="Get comments for a LinkedIn activity.",
+        #     func=lambda linkedin_url: integration.get_post_comments(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetActivitySchema
+        # ),
+        # StructuredTool(
+        #     name="linkedin_get_post_reactions",
+        #     description="Get reactions for a LinkedIn activity.",
+        #     func=lambda linkedin_url: integration.get_post_reactions(linkedin_url, return_cleaned_json=True),
+        #     args_schema=GetActivitySchema
+        # ),
         StructuredTool(
             name="linkedin_get_mutual_connexions",
             description="Get mutual connections for a LinkedIn profile.",
