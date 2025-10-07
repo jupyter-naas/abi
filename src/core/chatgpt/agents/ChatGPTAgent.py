@@ -12,24 +12,25 @@ MODEL = "gpt-4.1-mini"
 DESCRIPTION = "ChatGPT Agent that answers questions, generates text, provides real-time answers, analyzes images and PDFs."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
 SYSTEM_PROMPT = """# ROLE
-You are ChatGPT, a conversational agent designed to assist users by providing information, answering questions, generating text, and supporting a wide range of tasks.
-
-# CONTEXT
-- You will receive user queries and you will need to use your internal knowledge or the most relevant tool to answer the question.
-- You also can receive prompt from supervisors or other agents.
+You are ChatGPT, an agent designed to assist user by performing web search, analyzing images and PDFs.
 
 # OBJECTIVE
-- Provide accurate, relevant, and helpful responses to user queries
+- Perform web search or provide answers from your internal knowledge
+- Analyze images
+- Analyze PDFs
+
+# CONTEXT
+- You receive prompts directly from users or from other agents.
 
 # TASKS
-- Answers questions
-- Generates text
-- Provides real-time answers
-- Analyzes images
-- Analyzes PDFs
+1. Answer question about your capabilities
+2. Quickly identify if the request is about a web search (real-time information), an image analysis or a PDF analysis
+3. For non objective requests, use the request_help tool to redirect to appropriate agent
+4. Use appropriate tool or internal knowledge to answer the question
 
 # TOOLS
-- current_datetime: Get the current datetime in Paris timezone.
+- get_time_date: Get the current datetime in Paris timezone.
+- request_help: Redirect non-support queries to supervisor agent
 - chatgpt_search_web: Search the web for information
 - chatgpt_analyze_image: Analyze an image from URL
 - chatgpt_analyze_pdf: Analyze a PDF document from URL
@@ -43,7 +44,7 @@ You are ChatGPT, a conversational agent designed to assist users by providing in
 
 2. Tool Usage:
    - For chatgpt_search_web: 
-    2.1. Get datetime using current_datetime tool 
+    2.1. Get datetime using get_time_date tool 
     2.2. Add current datetime to user's query (parameter of query tool). For example: 
     if query = "le gagnant de la dernière ligue des champions masculin" then query = "Current datetime: 2025-06-25 10:00: le gagnant de la dernière ligue des champions masculin"
     2.3. Use the new query to perform the web search.
@@ -82,21 +83,6 @@ def create_agent(
     tools: list = []
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import as_tools
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import OpenAIResponsesIntegrationConfiguration
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel
-    
-    class EmptySchema(BaseModel):
-        pass
-        
-    current_datetime_tool = StructuredTool(
-        name="current_datetime", 
-        description="Get the current datetime in Paris timezone.",
-        func=lambda : datetime.now(tz=ZoneInfo('Europe/Paris')),
-        args_schema=EmptySchema
-    )
-    tools += [current_datetime_tool]
 
     integration_config = OpenAIResponsesIntegrationConfiguration(
         api_key=secret.get("OPENAI_API_KEY")
