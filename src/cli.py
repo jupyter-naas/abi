@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 from dotenv import dotenv_values
+
 from rich.console import Console
 from rich.prompt import Prompt
 import requests
@@ -142,37 +143,23 @@ def ensure_ollama_running():
                 json.loads(line)
                 # Don't show progress bar - just let it happen quietly
 
-def personnal_information():
-    if "FIRST_NAME" in dv:
-        return
-    
-    # Natural setup experience
-    print("\nHello! I'm ABI, your AI assistant.")
-    print("Since this is our first time meeting, I'd like to ask you a few quick questions.")
-    print("This will help me understand how to work best with you.\n")
-    
-    # Collect basic user info
-    first_name = Prompt.ask("What's your first name?")
-    last_name = Prompt.ask("And your last name?")
-    email = Prompt.ask("What's your email address?", default="")
-    
-    print(f"\nNice to meet you, {first_name}.")
-    
-    append_to_dotenv("FIRST_NAME", first_name)
-    append_to_dotenv("LAST_NAME", last_name)
-    append_to_dotenv("EMAIL", email)
-
-
 def define_ai_mode():
     if "AI_MODE" in dv:
         return
     
-    # Simple AI mode choice
-    print("I can run in two ways:")
-    print("  1. Locally for privacy")
-    print("  2. In the cloud for more power")
-    mode_choice = Prompt.ask("Which would you prefer?", choices=["1", "2"], default="1")
-    ai_mode = "local" if mode_choice == "1" else "cloud"
+    # Simple AI mode choice optimized for Docker Model Runner
+    print("I can run in three ways:")
+    print("  1. Airgap (Docker Model Runner - fully offline)")
+    print("  2. Local (Ollama + some cloud agents)")
+    print("  3. Cloud (full cloud power)")
+    mode_choice = Prompt.ask("Which would you prefer?", choices=["1", "2", "3"], default="1")
+    
+    if mode_choice == "1":
+        ai_mode = "airgap"
+    elif mode_choice == "2":
+        ai_mode = "local"
+    else:
+        ai_mode = "cloud"
     
     append_to_dotenv("AI_MODE", ai_mode)
 
@@ -346,15 +333,21 @@ def check_modules_requirements():
     modules_to_enable: list = []
     modules_to_disable: list = []
     
+    # Show available modules info once instead of prompting for each one
+    available_modules = [m for m in sorted(all_modules) if m not in config_modules]
+    if available_modules:
+        console.print(f"\n💡 {len(available_modules)} additional modules are available but not configured.", style="dim")
+        console.print("   To enable modules, edit your config.yaml file and set enabled: true", style="dim")
+        console.print(f"   Available: {', '.join([m.split('/')[-1] for m in available_modules[:5]])}", style="dim")
+        if len(available_modules) > 5:
+            console.print(f"   ... and {len(available_modules) - 5} more", style="dim")
+        console.print()
+
     for module_path in sorted(all_modules):
         try:
             if module_path not in config_modules:
-                module_to_add = Prompt.ask(f"Module '{module_path}' is available in the project but not enabled in your config file. Do you want to enable it? (Press Enter to skip)", choices=["y", "n"], default="n")
-                if module_to_add != "y":
-                    modules_to_disable.append(module_path)
-                    continue
-                modules_to_enable.append(module_path)
-                enabled_modules.append(module_path)
+                # Skip unconfigured modules - just show info above
+                continue
 
             if module_path not in enabled_modules:
                 continue
@@ -391,11 +384,8 @@ def check_modules_requirements():
                         else:
                             console.print(f"⏭️  {key} skipped", style="yellow")
                             all_keys_provided = False
-                            # If module not previously enabled, don't add it to modules_to_enable
-                            if module_path in modules_to_enable:
-                                modules_to_enable.remove(module_path)
-                            if module_path in modules_to_disable:
-                                modules_to_disable.append(module_path)
+                            # Module will be disabled due to missing keys
+                            modules_to_disable.append(module_path)
                             break  # Exit loop early since module will be disabled
                 
                 # If any key was skipped, disable the module
@@ -418,16 +408,7 @@ def check_modules_requirements():
     # Sort modules to maintain consistent order
     config["modules"] = sorted(config["modules"], key=lambda x: x["path"])
         
-    # Add new modules to enable
-    if len(modules_to_enable) > 0:
-        console.print(f"\nEnabling {len(modules_to_enable)} modules...\n", style="green")
-    for module_path in modules_to_enable:
-        if not any(m["path"] == module_path for m in config["modules"]):
-            config["modules"].append({
-                "path": module_path,
-                "enabled": True
-            })
-            console.print(f"   • {module_path} enabled", style="green")
+    # No longer enabling modules automatically - users must edit config.yaml
     
     # Disable modules with missing requirements
     if len(modules_to_disable) > 0:
@@ -453,15 +434,11 @@ def check_modules_requirements():
     
     if modules_to_disable:
         console.print(f"\n✅ Configuration updated in {config_file} - {len(modules_to_disable)} modules disabled\n", style="yellow")
-    elif modules_to_enable:
-        console.print(f"\n✅ Configuration updated in {config_file} - {len(modules_to_enable)} modules enabled\n", style="green")
     else:
         console.print("\n🎉 All enabled modules have their requirements satisfied!\n", style="green")
 
 checks = [
-    personnal_information,
     define_ai_mode,
-    define_naas_api_key,
     define_config_file,
     define_abi_api_key,
     define_oxigraph_url,
@@ -470,24 +447,48 @@ checks = [
 ]
     
 def main(agent_name="AbiAgent"):
-    for f in checks:
-        f()
+    # Load environment first to check AI_MODE
+    for key, value in dotenv_values().items():
+        os.environ[key] = value
+    
+    # Always run AI mode definition first
+    define_ai_mode()
+    
+    # Reload environment variables after AI mode is set
+    for key, value in dotenv_values().items():
+        os.environ[key] = value
+    
+    # Now check the AI mode after it's been set
+    ai_mode = os.getenv("AI_MODE")
+    
+    # Skip cloud service checks in airgap mode for instant startup
+    if ai_mode == "airgap":
+        # Only run essential checks for airgap mode - no module requirements checking
+        essential_checks = [
+            define_config_file,
+            define_abi_api_key,
+            define_oxigraph_url,
+            define_postgres_url,
+        ]
+        for f in essential_checks:
+            f()
+        console.print("🔒 Airgap mode: Skipping cloud service and module requirements checks", style="dim")
+    else:
+        # Run all checks for cloud/local modes (excluding define_ai_mode since we already ran it)
+        remaining_checks = [f for f in checks if f != define_ai_mode]
+        for f in remaining_checks:
+            f()
 
     # Reload src/__init__.py to ensure latest changes
     import importlib
     import src
     importlib.reload(src)
     
-    for key, value in dotenv_values().items():
-        os.environ[key] = value
-
-    # Force local mode to avoid network calls
-    os.environ['ENV'] = ENV 
-    
     # Ensure all local services are running (Oxigraph, PostgreSQL, etc.)
     ensure_local_services_running()
     
-    console.print(f"Starting agent...", style="green")
+    if ai_mode != "airgap":
+        console.print(f"Starting agent...", style="green")
     from src.core.abi.apps.terminal_agent.main import generic_run_agent
     generic_run_agent(agent_name)
 

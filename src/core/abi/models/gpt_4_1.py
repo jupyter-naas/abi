@@ -2,7 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
-from abi import logger
 from typing import Optional
 
 ID = "gpt-4.1"
@@ -14,20 +13,26 @@ OWNER = "openai"
 
 model: Optional[ChatModel] = None
 openai_api_key = secret.get("OPENAI_API_KEY")
-if openai_api_key:
-    model = ChatModel(
-        model_id=ID,
-        name=NAME,
-        description=DESCRIPTION,
-        image=IMAGE,
-        owner=OWNER,
-        model=ChatOpenAI(
-            model=ID,
-            temperature=0,
-            api_key=SecretStr(openai_api_key),
-        ),
-        context_window=CONTEXT_WINDOW,
-    )
-    logger.debug("✅ Abi Agent: GPT-4.1 model loaded successfully via OpenAI")
-else:
-    logger.error("Abi Agent: GPT-4.1 model not available - missing OpenAI API key")
+
+if openai_api_key is None:
+    # Ask the user to enter the OpenAI API key
+    openai_api_key = None
+    while openai_api_key in ["", None]:
+        openai_api_key = input("Enter your OpenAI API key: ")
+    
+    secret.set("OPENAI_API_KEY", openai_api_key)
+    
+
+model = ChatModel(
+    model_id=ID,
+    name=NAME,
+    description=DESCRIPTION,
+    image=IMAGE,
+    owner=OWNER,
+    model=ChatOpenAI(
+        model=ID,
+        temperature=0,
+        api_key=SecretStr(openai_api_key),
+    ),
+    context_window=CONTEXT_WINDOW,
+)

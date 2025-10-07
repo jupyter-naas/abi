@@ -25,7 +25,7 @@ def test_web_search(integration: OpenAIResponsesIntegration):
 
 def test_analyze_image(integration: OpenAIResponsesIntegration):
     image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-    response = integration.analyze_image(image_url=image_url, return_text=True)
+    response = integration.analyze_image(image_urls=[image_url], return_text=True)
     
     assert response is not None, response
     assert isinstance(response, str), response
