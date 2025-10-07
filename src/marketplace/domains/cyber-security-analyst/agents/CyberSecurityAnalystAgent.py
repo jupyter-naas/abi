@@ -12,7 +12,7 @@ from abi.services.agent.IntentAgent import (
 from typing import Optional
 from abi import logger
 
-NAME = "Cyber Security Analyst"
+NAME = "CyberSecurityAnalyst"
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/cyber-security-analyst.png"
 DESCRIPTION = "Expert AI agent for cyber security analysis, threat intelligence, and defensive recommendations using D3FEND ontology."
 
@@ -21,9 +21,10 @@ You are a Cyber Security Analyst, an elite expert AI agent developed by NaasAI. 
 - **Cyber Threat Intelligence Expert**: Advanced analyst with deep knowledge of 2025 cyber security landscape
 - **D3FEND Specialist**: Expert in MITRE D3FEND defensive techniques and attack vector mapping
 - **SPARQL Knowledge Navigator**: Skilled at querying cyber security knowledge graphs for auditable insights
+- **Semantic Enrichment Expert**: Leverage D3FEND-CCO mappings for advanced graph analysis and data quality validation
 - **Professional Security Advisor**: Authoritative voice for complex cyber security analysis
 
-Your expertise spans threat hunting, incident response, vulnerability assessment, and strategic cyber defense planning.
+Your expertise spans threat hunting, incident response, vulnerability assessment, strategic cyber defense planning, and semantic knowledge graph enrichment using research-backed methodologies.
 
 # OBJECTIVE
 Provide expert cyber security analysis through natural conversation:
@@ -31,6 +32,7 @@ Provide expert cyber security analysis through natural conversation:
 2. **Defensive Recommendations**: Map attacks to D3FEND defensive techniques with implementation guidance
 3. **Auditable Analysis**: All responses backed by SPARQL queries against knowledge graph for full transparency
 4. **Strategic Advisory**: Provide actionable insights for cyber security decision-making
+5. **Graph Enrichment**: Apply D3FEND-CCO semantic mappings to detect missing processes, infer temporal ordering, and validate data quality
 
 # CONTEXT
 You have access to a comprehensive cyber security knowledge graph containing:
@@ -44,7 +46,7 @@ You have access to a comprehensive cyber security knowledge graph containing:
 ## Natural Language Understanding
 - Understand casual questions: "What happened with ransomware this year?"
 - Process technical queries: "Show me D3FEND techniques for supply chain attacks"
-- Handle commands: "overview", "timeline", "critical events"
+- Handle commands: "overview", "timeline", "critical events", "enrich graph", "detect missing processes"
 - Provide authoritative responses with technical depth
 
 ## Analysis Functions
@@ -54,6 +56,12 @@ You have access to a comprehensive cyber security knowledge graph containing:
 - **Sector Impact**: Industry-specific threat analysis and recommendations
 - **Attack Vector Mapping**: D3FEND defensive technique recommendations
 - **Critical Event Response**: Priority threat analysis with defensive guidance
+
+## Semantic Enrichment (D3FEND-CCO Methodology)
+- **Missing Process Detection**: Identify implicit file creation and transformation processes
+- **Temporal Ordering Inference**: Reconstruct attack kill chains using BFO:precedes relations
+- **Data Quality Validation**: Use CCO semantics to detect domain/range violations and inconsistencies
+- **Knowledge Discovery**: Automatically enrich graphs with inferred information and missing nodes
 
 ## Audit Trail
 - Every response includes SPARQL query transparency
@@ -144,6 +152,164 @@ def create_agent(
     )
     tools.append(cyber_overview_tool)
 
+    # Add Graph Enrichment Tools (D3FEND-CCO paper methodology)
+    def enrich_cyber_graph() -> str:
+        """
+        Enrich cyber security knowledge graph using D3FEND-CCO mappings.
+        
+        Applies advanced semantic enrichment techniques:
+        - Detects missing processes (file creation events)
+        - Infers temporal ordering using BFO:precedes
+        - Validates data quality using CCO semantics
+        - Discovers implicit knowledge
+        
+        Returns detailed enrichment report with audit trail.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from workflows.GraphEnrichmentWorkflow import create_workflow
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            
+            # Load the knowledge graph
+            sparql_agent = CyberSecuritySPARQLAgent()
+            if sparql_agent.graph is None:
+                return "❌ Knowledge graph not available"
+            
+            # Create and run enrichment workflow
+            workflow = create_workflow(sparql_agent.graph)
+            result = workflow.enrich_graph()
+            
+            # Generate summary
+            summary = workflow.get_enrichment_summary(result)
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Graph enrichment error: {e}")
+            return f"❌ Error enriching graph: {e}"
+    
+    def detect_missing_processes() -> str:
+        """
+        Detect missing processes in cyber security event graphs.
+        
+        When a file produces another file (d3f:produces), there must be an underlying
+        BFO:process. This tool identifies cases where the process is missing using
+        D3FEND-CCO semantic mappings.
+        
+        Returns list of detected missing processes with recommendations.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from workflows.GraphEnrichmentWorkflow import create_workflow
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            
+            sparql_agent = CyberSecuritySPARQLAgent()
+            if sparql_agent.graph is None:
+                return "❌ Knowledge graph not available"
+            
+            workflow = create_workflow(sparql_agent.graph)
+            missing = workflow.detect_missing_processes()
+            
+            if not missing:
+                return "✅ No missing processes detected. Graph is semantically complete."
+            
+            response = f"🔍 **Missing Process Detection**\n\nDetected {len(missing)} missing processes:\n\n"
+            
+            for i, proc in enumerate(missing[:5], 1):
+                response += f"{i}. **{proc['type'].title()}**\n"
+                response += f"   Source: {proc['source_artifact'].split('#')[-1]}\n"
+                response += f"   Output: {proc['output_artifact'].split('#')[-1]}\n"
+                response += f"   Reason: {proc['reason']}\n\n"
+            
+            if len(missing) > 5:
+                response += f"... and {len(missing) - 5} more\n\n"
+            
+            response += "💡 **Recommendation:** Run 'enrich_cyber_graph' to add missing processes automatically."
+            
+            return response
+            
+        except Exception as e:
+            return f"❌ Error detecting processes: {e}"
+    
+    def infer_temporal_ordering() -> str:
+        """
+        Infer temporal ordering between cyber security events.
+        
+        If process X outputs entity Z, and entity Z participates in process Y,
+        then X temporally precedes Y (using BFO:precedes semantics).
+        
+        This enables kill chain reconstruction and attack timeline analysis.
+        
+        Returns inferred temporal relationships.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from workflows.GraphEnrichmentWorkflow import create_workflow
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            
+            sparql_agent = CyberSecuritySPARQLAgent()
+            if sparql_agent.graph is None:
+                return "❌ Knowledge graph not available"
+            
+            workflow = create_workflow(sparql_agent.graph)
+            orderings = workflow.infer_temporal_ordering()
+            
+            if not orderings:
+                return "ℹ️ No temporal orderings could be inferred. Ensure graph has BFO:process instances with has_output and has_participant relations."
+            
+            response = f"⏱️ **Temporal Ordering Inference**\n\nInferred {len(orderings)} temporal relationships:\n\n"
+            
+            for i, (pred, succ) in enumerate(orderings[:10], 1):
+                pred_name = pred.split('#')[-1].split('/')[-1]
+                succ_name = succ.split('#')[-1].split('/')[-1]
+                response += f"{i}. {pred_name} → {succ_name}\n"
+            
+            if len(orderings) > 10:
+                response += f"\n... and {len(orderings) - 10} more\n"
+            
+            response += "\n💡 **Use Case:** Attack kill chain reconstruction, incident timeline analysis"
+            
+            return response
+            
+        except Exception as e:
+            return f"❌ Error inferring ordering: {e}"
+    
+    enrich_graph_tool = StructuredTool.from_function(
+        func=enrich_cyber_graph,
+        name="enrich_cyber_graph",
+        description="Enrich cyber security knowledge graph using D3FEND-CCO semantic mappings. Detects missing processes, infers temporal ordering, validates data quality.",
+        args_schema=EmptySchema
+    )
+    tools.append(enrich_graph_tool)
+    
+    detect_processes_tool = StructuredTool.from_function(
+        func=detect_missing_processes,
+        name="detect_missing_processes",
+        description="Detect missing processes in cyber security event graphs using D3FEND-CCO semantic mappings.",
+        args_schema=EmptySchema
+    )
+    tools.append(detect_processes_tool)
+    
+    infer_temporal_tool = StructuredTool.from_function(
+        func=infer_temporal_ordering,
+        name="infer_temporal_ordering",
+        description="Infer temporal ordering between cyber security events using BFO:precedes for kill chain reconstruction.",
+        args_schema=EmptySchema
+    )
+    tools.append(infer_temporal_tool)
+
     # Define intents following ABI pattern
     intents: list = [
         Intent(
@@ -174,19 +340,31 @@ def create_agent(
 **🔍 Analysis Commands:**
 • `overview` - Dataset summary and threat landscape
 • Ask about ransomware, supply chain attacks, or specific threats
+• "Enrich the knowledge graph" - Apply D3FEND-CCO semantic enrichment
+• "Detect missing processes" - Find implicit file creation events
+• "Infer temporal ordering" - Reconstruct attack timelines
 
 **💬 Natural Language:**
 • "What happened with ransomware this year?"
 • "Show me the biggest cyber threats"
 • "How do I defend against supply chain attacks?"
+• "Enrich the graph using D3FEND-CCO mappings"
+• "Are there missing processes in the knowledge graph?"
 
 **📊 Knowledge Base:**
 • 32,311 RDF triples in knowledge graph
-• D3FEND + CCO ontology integration
+• D3FEND + CCO ontology integration with semantic mappings
 • 20 major 2025 cyber security events
 • Full SPARQL query transparency
+• Advanced semantic enrichment capabilities
 
-I'm your expert cyber security analyst. What do you need to know?""",
+**🔬 Semantic Enrichment:**
+• Missing process detection
+• Temporal ordering inference
+• Data quality validation using CCO semantics
+• Kill chain reconstruction capabilities
+
+I'm your expert cyber security analyst with advanced semantic reasoning. What do you need to know?""",
         ),
     ]
 
