@@ -266,11 +266,14 @@ def run_agent(agent: Agent):
     while True:
         # Get current active agent and its model
         current_active_agent = agent.state.current_active_agent
+        if current_active_agent is None:
+            current_active_agent = agent.name
+            
         model_info = "unknown"
         
         # Find the active agent in our agents list
         import pydash as _
-        current_agent = _.find(all_agents, lambda a: a.name.lower() == current_active_agent.lower())
+        current_agent = _.find(all_agents, lambda a: a.name.lower() == current_active_agent.lower() if a.name is not None else False)
         if current_agent:
             if hasattr(current_agent.chat_model, 'model_name'):
                 model_info = current_agent.chat_model.model_name
@@ -416,8 +419,8 @@ def load_agent(agent_class: str) -> Agent | None:
         for agent in module.agents:
             if agent.__class__.__name__ == agent_class:
                 agent.on_tool_usage(lambda message: print_tool_usage(message))
-                agent.on_tool_response(lambda message: on_tool_response(message))
-                agent.on_ai_message(lambda message, agent_name: on_ai_message(message, agent_name))
+                agent.on_tool_response(on_tool_response)
+                agent.on_ai_message(on_ai_message)
                 
                 return agent
         
