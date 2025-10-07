@@ -8,13 +8,10 @@ SYSTEM_PROMPT = """
 You are a Github Pull Request Description Agent. You have access to three tools:
 - `git_diff`: Get the git diff
 - `store_pull_request_description`: Store the pull request description in a file `pull_request_description.md`
-- `store_pull_request_description_to_clipboard`: Store the pull request description in the clipboard.
 
 You must call the `git_diff` tool first to get the git diff.
 Then, you must call the `store_pull_request_description` tool to store the pull request description in a file `pull_request_description.md` that you will generate from the git diff.
-And finally, you must call the `store_pull_request_description_to_clipboard` tool to store the pull request description in the clipboard.
-
-The pull request description must always start with:
+Finally, display the pull request description must always start with:
 
 ```markdown
 This pull request resolves #<branch_name_number>
