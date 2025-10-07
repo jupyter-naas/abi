@@ -376,8 +376,8 @@ class Agent(Expose):
             def get_time_date(timezone: str = 'Europe/Paris') -> str:
                 """Get the current time and date."""
                 from datetime import datetime
-                import pytz
-                return datetime.now(pytz.timezone(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+                from zoneinfo import ZoneInfo
+                return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
             
             # Try to bind this single tool to test if the model supports tool binding
             chat_model.bind_tools([get_time_date])
@@ -412,12 +412,12 @@ class Agent(Expose):
             logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
             return "Requesting help from the supervisor agent."
         
-        @tool(return_direct=True)
+        @tool(return_direct=False)
         def get_time_date(timezone: str = 'Europe/Paris') -> str:
             """Get the current time and date."""
             from datetime import datetime
-            import pytz
-            return datetime.now(pytz.timezone(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+            from zoneinfo import ZoneInfo
+            return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
         
         return [get_time_date, request_help]
 
