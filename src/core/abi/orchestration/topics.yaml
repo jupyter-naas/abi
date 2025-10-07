@@ -1,0 +1,86 @@
+monitoring_topics:
+  # Research institutions and laboratories
+  research_institutions:
+    - "DeepMind"
+    - "OpenAI"
+    - "Anthropic"
+    - "Allen+Institute+for+AI"
+    - "MILA+Montreal"
+
+  # Technology companies with AI research divisions
+  technology_companies:
+    - "Google+AI+Research"
+    - "Microsoft+Research"
+    - "Meta+AI+Research"
+    - "IBM+Research+AI"
+    - "Nvidia+Research"
+    - "Apple+Machine+Learning"
+    - "Tesla+AI"
+    - "Intel+AI+Lab"
+    - "Samsung+AI+Research"
+    - "Baidu+Research"
+
+  # Emerging AI-focused organizations
+  emerging_entities:
+    - "Cohere"
+    - "Scale+AI"
+    - "Inflection+AI"
+    - "Claude+AI"
+    - "Adept+AI"
+    - "Character+AI"
+    - "Together+AI"
+    - "Stability+AI"
+    - "Builder+AI"
+    - "Contextual+AI"
+    - "Weights+Biases"
+    - "SingularityNET"
+    - "Hugging+Face"
+
+  # AI/ML focused startups and scale-ups
+  ai_startups:
+    - "Databricks"
+    - "Anyscale"
+    - "Jasper+AI"
+    - "Runway+ML"
+    - "Synthesia"
+    - "Mistral+AI"
+    - "Perplexity+AI"
+
+  # Knowledge domains and research areas
+  knowledge_domains:
+    - "Machine+Learning"
+    - "Large+Language+Models"
+    - "Generative+AI"
+    - "Computer+Vision"
+    - "Natural+Language+Processing"
+    - "Reinforcement+Learning"
+    - "AI+Safety"
+    - "AGI"
+
+  # Quantitative financial data (prices, metrics, trading)
+  quantitative_data:
+    - "Bitcoin+price+USD"
+    - "BTC+price+today"
+    - "Bitcoin+market+cap"
+    - "Bitcoin+trading+volume"
+    - "Cryptocurrency+prices"
+    - "BTC+technical+analysis"
+    - "Bitcoin+price+chart"
+    - "Crypto+market+data"
+
+  # Qualitative financial data (news, analysis, opinions)
+  qualitative_data:
+    - "Bitcoin+news+today"
+    - "Bitcoin+analysis"
+    - "Cryptocurrency+news"
+    - "Bitcoin+market+sentiment"
+    - "BTC+expert+opinion"
+    - "Bitcoin+regulation+news"
+    - "Cryptocurrency+adoption"
+    - "Bitcoin+institutional+investment"
+
+# Configuration settings
+settings:
+  polling_interval_seconds: 3600  # 1 hour for production
+  base_url: "https://www.bing.com/news/search?format=RSS&q="
+  output_directory: "raw_rss_xml"
