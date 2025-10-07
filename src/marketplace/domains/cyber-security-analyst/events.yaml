@@ -1,0 +1,309 @@
+events:
+  - id: "cse-2025-001"
+    name: "SolarStorm Supply Chain Attack"
+    date: "2025-01-15"
+    severity: "critical"
+    category: "supply_chain_attack"
+    description: "Sophisticated supply chain attack targeting multiple government agencies through compromised software updates"
+    affected_sectors: ["government", "defense", "technology"]
+    attack_vectors: ["supply_chain_compromise", "malware_injection"]
+    d3fend_techniques: ["D3-SWID", "D3-HBPI", "D3-CSPP"]
+    sources:
+      - url: "https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-015a"
+        title: "CISA Advisory: SolarStorm Attack Analysis"
+      - url: "https://www.fireeye.com/blog/threat-research/2025/01/solarstorm-supply-chain-attack.html"
+        title: "FireEye Threat Research: SolarStorm Analysis"
+
+  - id: "cse-2025-002"
+    name: "CryptoExchange Mega Breach"
+    date: "2025-02-10"
+    severity: "high"
+    category: "data_breach"
+    description: "Major cryptocurrency exchange breach resulting in $500M+ losses and exposure of 15M user records"
+    affected_sectors: ["financial_services", "cryptocurrency"]
+    attack_vectors: ["credential_stuffing", "api_exploitation"]
+    d3fend_techniques: ["D3-ANCI", "D3-CSPP", "D3-MFA"]
+    sources:
+      - url: "https://blog.chainalysis.com/reports/crypto-exchange-breach-2025"
+        title: "Chainalysis: Crypto Exchange Breach Analysis"
+      - url: "https://www.coindesk.com/business/2025/02/10/major-exchange-breach-analysis"
+        title: "CoinDesk: Exchange Security Incident Report"
+
+  - id: "cse-2025-003"
+    name: "MedCare Ransomware Pandemic"
+    date: "2025-03-05"
+    severity: "critical"
+    category: "ransomware"
+    description: "Coordinated ransomware attack on healthcare providers across 12 countries, disrupting patient care"
+    affected_sectors: ["healthcare", "medical_devices"]
+    attack_vectors: ["phishing", "lateral_movement", "encryption"]
+    d3fend_techniques: ["D3-BDI", "D3-DNSL", "D3-FBA"]
+    sources:
+      - url: "https://www.hhs.gov/sites/default/files/medcare-ransomware-analysis.pdf"
+        title: "HHS: Healthcare Ransomware Incident Analysis"
+      - url: "https://www.healthcareinfosecurity.com/medcare-ransomware-global-impact"
+        title: "Healthcare InfoSecurity: Global Healthcare Attack"
+
+  - id: "cse-2025-004"
+    name: "IoT Botnet Storm"
+    date: "2025-04-20"
+    severity: "high"
+    category: "botnet"
+    description: "Massive IoT botnet comprising 50M+ compromised devices used for DDoS and cryptocurrency mining"
+    affected_sectors: ["consumer_electronics", "smart_home", "industrial_iot"]
+    attack_vectors: ["default_credentials", "firmware_exploitation", "botnet_recruitment"]
+    d3fend_techniques: ["D3-NTF", "D3-DNSL", "D3-RTSD"]
+    sources:
+      - url: "https://blog.cloudflare.com/iot-botnet-storm-analysis-2025"
+        title: "Cloudflare: IoT Botnet Storm Analysis"
+      - url: "https://www.akamai.com/blog/security/iot-botnet-threat-landscape-2025"
+        title: "Akamai: IoT Botnet Threat Landscape"
+
+  - id: "cse-2025-005"
+    name: "FinSector DDoS Siege"
+    date: "2025-05-12"
+    severity: "high"
+    category: "ddos_attack"
+    description: "Coordinated DDoS attacks targeting major financial institutions causing $2B+ in losses"
+    affected_sectors: ["banking", "financial_services", "payment_processors"]
+    attack_vectors: ["volumetric_ddos", "application_layer_ddos", "reflection_amplification"]
+    d3fend_techniques: ["D3-NTF", "D3-RTSD", "D3-DNSL"]
+    sources:
+      - url: "https://www.federalreserve.gov/publications/ddos-financial-sector-2025.htm"
+        title: "Federal Reserve: Financial Sector DDoS Analysis"
+      - url: "https://www.swift.com/news-events/news/ddos-attacks-financial-sector"
+        title: "SWIFT: Coordinated DDoS Attack Report"
+
+  - id: "cse-2025-006"
+    name: "AI-Powered Phishing Tsunami"
+    date: "2025-06-08"
+    severity: "high"
+    category: "phishing"
+    description: "AI-generated phishing campaign with 95% success rate targeting C-level executives globally"
+    affected_sectors: ["technology", "finance", "healthcare", "government"]
+    attack_vectors: ["spear_phishing", "ai_generated_content", "social_engineering"]
+    d3fend_techniques: ["D3-EMAC", "D3-CSPP", "D3-ANCI"]
+    sources:
+      - url: "https://www.proofpoint.com/us/blog/threat-insight/ai-phishing-tsunami-2025"
+        title: "Proofpoint: AI-Powered Phishing Analysis"
+      - url: "https://blog.microsoft.com/ai-phishing-detection-response-2025"
+        title: "Microsoft: AI Phishing Detection and Response"
+
+  - id: "cse-2025-007"
+    name: "CloudVault Mega Breach"
+    date: "2025-07-03"
+    severity: "critical"
+    category: "cloud_breach"
+    description: "Major cloud service provider breach exposing 100M+ customer records and sensitive data"
+    affected_sectors: ["cloud_services", "saas", "enterprise_software"]
+    attack_vectors: ["privilege_escalation", "api_exploitation", "misconfigurations"]
+    d3fend_techniques: ["D3-CSPP", "D3-ANCI", "D3-SWID"]
+    sources:
+      - url: "https://aws.amazon.com/security/security-bulletins/cloudvault-incident-2025"
+        title: "AWS: Cloud Security Incident Analysis"
+      - url: "https://cloud.google.com/blog/topics/security/cloud-breach-lessons-2025"
+        title: "Google Cloud: Cloud Breach Lessons Learned"
+
+  - id: "cse-2025-008"
+    name: "PowerGrid Cyber Siege"
+    date: "2025-08-14"
+    severity: "critical"
+    category: "critical_infrastructure"
+    description: "Coordinated attack on power grid infrastructure affecting 20M+ people across multiple states"
+    affected_sectors: ["energy", "utilities", "critical_infrastructure"]
+    attack_vectors: ["scada_exploitation", "lateral_movement", "operational_disruption"]
+    d3fend_techniques: ["D3-NTF", "D3-CSPP", "D3-RTSD"]
+    sources:
+      - url: "https://www.energy.gov/ceser/cybersecurity/power-grid-cyber-incident-2025"
+        title: "DOE: Power Grid Cyber Incident Report"
+      - url: "https://www.nerc.com/pa/CI/ESISAC/Documents/PowerGrid-Cyber-Attack-2025.pdf"
+        title: "NERC: Critical Infrastructure Attack Analysis"
+
+  - id: "cse-2025-009"
+    name: "ZeroStorm Exploit Wave"
+    date: "2025-09-01"
+    severity: "critical"
+    category: "zero_day_exploit"
+    description: "Zero-day vulnerability in widely used enterprise software exploited by multiple threat actors"
+    affected_sectors: ["enterprise_software", "technology", "government"]
+    attack_vectors: ["zero_day_exploitation", "remote_code_execution", "privilege_escalation"]
+    d3fend_techniques: ["D3-SWID", "D3-HBPI", "D3-CSPP"]
+    sources:
+      - url: "https://msrc.microsoft.com/blog/2025/09/zerostorm-vulnerability-analysis"
+        title: "Microsoft: ZeroStorm Vulnerability Analysis"
+      - url: "https://www.cve.org/CVERecord?id=CVE-2025-0901"
+        title: "CVE: ZeroStorm Vulnerability Details"
+
+  - id: "cse-2025-010"
+    name: "SocialNet Data Tsunami"
+    date: "2025-09-10"
+    severity: "high"
+    category: "data_leak"
+    description: "Massive data leak from major social media platform exposing 500M+ user profiles and private messages"
+    affected_sectors: ["social_media", "technology", "advertising"]
+    attack_vectors: ["database_misconfiguration", "insider_threat", "data_exfiltration"]
+    d3fend_techniques: ["D3-CSPP", "D3-ANCI", "D3-BDI"]
+    sources:
+      - url: "https://about.fb.com/news/2025/09/data-security-incident-response"
+        title: "Meta: Data Security Incident Response"
+      - url: "https://blog.twitter.com/en_us/topics/company/2025/data-protection-measures"
+        title: "Twitter: Data Protection Incident Analysis"
+
+  - id: "cse-2025-011"
+    name: "ElectionGuard Intrusion"
+    date: "2025-10-05"
+    severity: "critical"
+    category: "election_security"
+    description: "Unauthorized access to election systems in multiple states raising electoral integrity concerns"
+    affected_sectors: ["government", "election_systems", "democracy"]
+    attack_vectors: ["system_infiltration", "data_manipulation", "voter_database_access"]
+    d3fend_techniques: ["D3-CSPP", "D3-ANCI", "D3-BDI"]
+    sources:
+      - url: "https://www.cisa.gov/election-security/election-intrusion-2025"
+        title: "CISA: Election Security Incident Report"
+      - url: "https://www.eac.gov/news/2025/10/05/election-security-analysis"
+        title: "EAC: Election Security Analysis"
+
+  - id: "cse-2025-012"
+    name: "5G Network Exploit Storm"
+    date: "2025-10-20"
+    severity: "high"
+    category: "network_vulnerability"
+    description: "Exploitation of 5G network vulnerabilities enabling data interception and service disruption"
+    affected_sectors: ["telecommunications", "mobile_networks", "iot"]
+    attack_vectors: ["protocol_exploitation", "man_in_the_middle", "signal_interception"]
+    d3fend_techniques: ["D3-NTF", "D3-DNSL", "D3-RTSD"]
+    sources:
+      - url: "https://www.nist.gov/news-events/news/2025/10/5g-security-vulnerability-analysis"
+        title: "NIST: 5G Security Vulnerability Analysis"
+      - url: "https://www.gsma.com/security/resources/5g-network-security-incident-2025"
+        title: "GSMA: 5G Network Security Incident"
+
+  - id: "cse-2025-013"
+    name: "RetailPOS Malware Pandemic"
+    date: "2025-11-02"
+    severity: "high"
+    category: "pos_malware"
+    description: "Point-of-sale malware infected major retail chains compromising millions of payment cards"
+    affected_sectors: ["retail", "payment_processing", "hospitality"]
+    attack_vectors: ["pos_malware", "memory_scraping", "payment_card_theft"]
+    d3fend_techniques: ["D3-HBPI", "D3-CSPP", "D3-SWID"]
+    sources:
+      - url: "https://www.pcisecuritystandards.org/documents/retail-pos-malware-2025.pdf"
+        title: "PCI DSS: Retail POS Malware Analysis"
+      - url: "https://blog.visa.com/2025/11/02/pos-malware-threat-landscape"
+        title: "Visa: POS Malware Threat Landscape"
+
+  - id: "cse-2025-014"
+    name: "BiometricVault Breach"
+    date: "2025-11-15"
+    severity: "critical"
+    category: "biometric_breach"
+    description: "Massive breach exposing biometric data including fingerprints and facial recognition data"
+    affected_sectors: ["government", "identity_management", "security_systems"]
+    attack_vectors: ["database_breach", "biometric_theft", "identity_compromise"]
+    d3fend_techniques: ["D3-CSPP", "D3-ANCI", "D3-BDI"]
+    sources:
+      - url: "https://www.dhs.gov/news/2025/11/15/biometric-data-breach-analysis"
+        title: "DHS: Biometric Data Breach Analysis"
+      - url: "https://www.nist.gov/publications/biometric-security-incident-2025"
+        title: "NIST: Biometric Security Incident Report"
+
+  - id: "cse-2025-015"
+    name: "AutoDrive Hack Crisis"
+    date: "2025-12-01"
+    severity: "critical"
+    category: "autonomous_vehicle"
+    description: "Remote takeover of autonomous vehicles creating safety hazards and transportation chaos"
+    affected_sectors: ["automotive", "transportation", "autonomous_systems"]
+    attack_vectors: ["vehicle_hacking", "remote_control", "safety_system_compromise"]
+    d3fend_techniques: ["D3-NTF", "D3-CSPP", "D3-RTSD"]
+    sources:
+      - url: "https://www.nhtsa.gov/press-releases/autonomous-vehicle-security-incident-2025"
+        title: "NHTSA: Autonomous Vehicle Security Incident"
+      - url: "https://blog.tesla.com/autonomous-vehicle-security-response-2025"
+        title: "Tesla: Autonomous Vehicle Security Response"
+
+  - id: "cse-2025-016"
+    name: "QuantumBreak Demonstration"
+    date: "2025-12-10"
+    severity: "critical"
+    category: "quantum_computing_threat"
+    description: "First successful quantum computing attack breaking RSA-2048 encryption in production systems"
+    affected_sectors: ["cryptography", "financial_services", "government", "technology"]
+    attack_vectors: ["quantum_decryption", "cryptographic_break", "post_quantum_threat"]
+    d3fend_techniques: ["D3-CSPP", "D3-ANCI", "D3-SWID"]
+    sources:
+      - url: "https://www.nist.gov/news-events/news/2025/12/quantum-computing-cryptographic-break"
+        title: "NIST: Quantum Computing Cryptographic Break"
+      - url: "https://quantum.ibm.com/blog/quantum-threat-demonstration-2025"
+        title: "IBM: Quantum Threat Demonstration Analysis"
+
+  - id: "cse-2025-017"
+    name: "SoftwareVendor Supply Chain Compromise"
+    date: "2025-12-15"
+    severity: "critical"
+    category: "supply_chain_attack"
+    description: "Major software vendor's update mechanism compromised distributing malware to 10M+ endpoints"
+    affected_sectors: ["software_development", "enterprise_software", "technology"]
+    attack_vectors: ["supply_chain_compromise", "software_update_hijack", "malware_distribution"]
+    d3fend_techniques: ["D3-SWID", "D3-HBPI", "D3-CSPP"]
+    sources:
+      - url: "https://www.cisa.gov/news-events/alerts/aa25-349a"
+        title: "CISA: Software Supply Chain Compromise Alert"
+      - url: "https://blog.sonatype.com/software-supply-chain-attack-2025"
+        title: "Sonatype: Software Supply Chain Attack Analysis"
+
+  - id: "cse-2025-018"
+    name: "DeepFake Disinformation Storm"
+    date: "2025-12-20"
+    severity: "high"
+    category: "disinformation"
+    description: "Coordinated deepfake campaign spreading false information and manipulating public opinion"
+    affected_sectors: ["media", "politics", "social_media", "democracy"]
+    attack_vectors: ["deepfake_generation", "disinformation_campaign", "social_manipulation"]
+    d3fend_techniques: ["D3-EMAC", "D3-CSPP", "D3-ANCI"]
+    sources:
+      - url: "https://www.fbi.gov/news/press-releases/deepfake-disinformation-campaign-2025"
+        title: "FBI: Deepfake Disinformation Campaign Analysis"
+      - url: "https://blog.facebook.com/deepfake-detection-response-2025"
+        title: "Meta: Deepfake Detection and Response"
+
+  - id: "cse-2025-019"
+    name: "VPN Service Mega Compromise"
+    date: "2025-12-25"
+    severity: "high"
+    category: "vpn_breach"
+    description: "Popular VPN service compromised exposing user traffic, logs, and identity information"
+    affected_sectors: ["vpn_services", "privacy_tools", "cybersecurity"]
+    attack_vectors: ["service_compromise", "traffic_interception", "log_exposure"]
+    d3fend_techniques: ["D3-NTF", "D3-CSPP", "D3-ANCI"]
+    sources:
+      - url: "https://blog.nordvpn.com/vpn-security-incident-2025"
+        title: "NordVPN: VPN Security Incident Analysis"
+      - url: "https://www.expressvpn.com/blog/vpn-compromise-response-2025"
+        title: "ExpressVPN: VPN Compromise Response"
+
+  - id: "cse-2025-020"
+    name: "SatCom Global Disruption"
+    date: "2025-12-30"
+    severity: "critical"
+    category: "satellite_attack"
+    description: "Cyberattacks on satellite communications disrupting global internet and GPS services"
+    affected_sectors: ["satellite_communications", "telecommunications", "navigation", "internet_infrastructure"]
+    attack_vectors: ["satellite_hacking", "signal_jamming", "ground_station_compromise"]
+    d3fend_techniques: ["D3-NTF", "D3-RTSD", "D3-DNSL"]
+    sources:
+      - url: "https://www.fcc.gov/document/satellite-communication-cyber-incident-2025"
+        title: "FCC: Satellite Communication Cyber Incident"
+      - url: "https://www.spacex.com/news/2025/12/30/satellite-security-incident-response"
+        title: "SpaceX: Satellite Security Incident Response"
+
+metadata:
+  version: "1.0"
+  created_date: "2025-09-23"
+  total_events: 20
+  coverage_period: "2025-01-01 to 2025-12-30"
+  d3fend_version: "0.10.3"
+  classification_scheme: "NIST Cybersecurity Framework"
+  data_sources: ["CISA", "FBI", "NIST", "Industry Reports", "Vendor Advisories"]

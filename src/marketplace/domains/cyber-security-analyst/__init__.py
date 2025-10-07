@@ -15,8 +15,6 @@ from .agents.CyberSecurityAnalystAgent import (
     CyberSecurityAnalystAgent,
     create_agent,
     NAME,
-    TYPE,
-    SLUG,
     DESCRIPTION,
     AVATAR_URL
 )
@@ -24,9 +22,7 @@ from .agents.CyberSecurityAnalystAgent import (
 __all__ = [
     "CyberSecurityAnalystAgent",
     "create_agent",
-    "NAME", 
-    "TYPE",
-    "SLUG",
+    "NAME",
     "DESCRIPTION",
     "AVATAR_URL"
 ]

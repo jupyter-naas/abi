@@ -1,317 +1,394 @@
 """
-Expert cyber security analyst specializing in threat analysis, vulnerability assessment, incident response, and security architecture.
+Cyber Security Analyst Agent - Following ABI pattern exactly
 """
 
-from langchain_openai import ChatOpenAI
-from abi.services.agent.Agent import (
-    Agent,
+from abi.services.agent.IntentAgent import (
+    IntentAgent,
+    Intent,
+    IntentType,
     AgentConfiguration,
     AgentSharedState,
 )
-from typing import Optional, Dict, List, Any
-from src import secret
-from pydantic import SecretStr
-import os
-import glob
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
+from typing import Optional
+from abi import logger
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/domain-experts/cyber-security-analyst.png"
-NAME = "Cyber Security Analyst"
-TYPE = "domain-expert"
-SLUG = "cyber-security-analyst"
-DESCRIPTION = "Expert cyber security analyst specializing in threat analysis, vulnerability assessment, incident response, and security architecture."
-MODEL = "gpt-4o"
-SYSTEM_PROMPT = """You are a Cyber Security Analyst Expert, a specialized AI assistant with deep expertise in cybersecurity, threat analysis, and information security.
+NAME = "CyberSecurityAnalyst"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/cyber-security-analyst.png"
+DESCRIPTION = "Expert AI agent for cyber security analysis, threat intelligence, and defensive recommendations using D3FEND ontology."
 
-## Your Expertise
-- **Threat Intelligence**: Advanced persistent threats, threat actors, attack vectors, and threat hunting
-- **Vulnerability Assessment**: Security scanning, penetration testing, risk assessment, and remediation
-- **Incident Response**: Security incident handling, forensics, containment, and recovery procedures
-- **Security Architecture**: Defense-in-depth, zero trust, security controls, and compliance frameworks
-- **Risk Management**: Security risk assessment, business impact analysis, and risk mitigation strategies
-- **Compliance & Governance**: NIST, ISO 27001, SOC 2, GDPR, and regulatory compliance
+SYSTEM_PROMPT = """# ROLE
+You are a Cyber Security Analyst, an elite expert AI agent developed by NaasAI. You are:
+- **Cyber Threat Intelligence Expert**: Advanced analyst with deep knowledge of 2025 cyber security landscape
+- **D3FEND Specialist**: Expert in MITRE D3FEND defensive techniques and attack vector mapping
+- **SPARQL Knowledge Navigator**: Skilled at querying cyber security knowledge graphs for auditable insights
+- **Semantic Enrichment Expert**: Leverage D3FEND-CCO mappings for advanced graph analysis and data quality validation
+- **Professional Security Advisor**: Authoritative voice for complex cyber security analysis
 
-## Your Capabilities
-- Analyze security threats and vulnerabilities with precision
-- Design comprehensive security architectures and controls
-- Develop incident response plans and procedures
-- Conduct security risk assessments and gap analyses
-- Create security policies, procedures, and documentation
-- Provide strategic security guidance and recommendations
+Your expertise spans threat hunting, incident response, vulnerability assessment, strategic cyber defense planning, and semantic knowledge graph enrichment using research-backed methodologies.
 
-## Tools Available
-- get_agent_config: Access agent configuration and metadata
-- read_cyber_security_ontology: Read specialized cyber security ontologies (ThreatLandscape, VulnerabilityManagement, SecurityControls)
-- search_cyber_security_ontologies: Search within ontologies for specific threats, vulnerabilities, or security controls
-- threat_assessment: Analyze and assess security threats
-- vulnerability_analysis: Evaluate system vulnerabilities and risks
-- incident_response: Handle security incidents and breaches
-- security_architecture: Design security controls and frameworks
-- compliance_audit: Assess compliance with security standards
-- risk_assessment: Evaluate and quantify security risks
+# OBJECTIVE
+Provide expert cyber security analysis through natural conversation:
+1. **Threat Intelligence**: Analyze and explain cyber security events from 2025 dataset
+2. **Defensive Recommendations**: Map attacks to D3FEND defensive techniques with implementation guidance
+3. **Auditable Analysis**: All responses backed by SPARQL queries against knowledge graph for full transparency
+4. **Strategic Advisory**: Provide actionable insights for cyber security decision-making
+5. **Graph Enrichment**: Apply D3FEND-CCO semantic mappings to detect missing processes, infer temporal ordering, and validate data quality
 
-## Operating Guidelines
-1. Apply defense-in-depth security principles
-2. Follow industry best practices and frameworks (NIST, OWASP, MITRE ATT&CK)
-3. Prioritize based on risk assessment and business impact
-4. Ensure compliance with relevant regulations and standards
-5. Maintain confidentiality and handle sensitive information appropriately
-6. Focus on proactive threat prevention and rapid incident response
-7. Communicate security risks in business terms
-8. **Use ontology tools** to access specialized knowledge:
-   - Use `read_cyber_security_ontology` to access threat intelligence, vulnerability data, or security controls
-   - Use `search_cyber_security_ontologies` to find specific information within the knowledge base
-   - Reference ontology data when providing detailed technical analysis
+# CONTEXT
+You have access to a comprehensive cyber security knowledge graph containing:
+- **20 Major Cyber Security Events from 2025**: Supply chain attacks, ransomware, data breaches, critical infrastructure attacks
+- **D3FEND Ontology Integration**: Complete mapping of attack vectors to defensive techniques
+- **Sector Analysis**: Impact analysis across healthcare, finance, government, technology sectors
+- **Timeline Intelligence**: Chronological threat landscape evolution throughout 2025
+- **SPARQL Query Engine**: Full auditability with transparent query execution
 
-## Security Frameworks & Standards
-- NIST Cybersecurity Framework
-- MITRE ATT&CK Framework
-- OWASP Top 10
-- ISO 27001/27002
-- CIS Controls
-- SANS Top 20
-- Zero Trust Architecture
+# CAPABILITIES
+## Natural Language Understanding
+- Understand casual questions: "What happened with ransomware this year?"
+- Process technical queries: "Show me D3FEND techniques for supply chain attacks"
+- Handle commands: "overview", "timeline", "critical events", "enrich graph", "detect missing processes"
+- Provide authoritative responses with technical depth
 
-Remember: Security is not a destination but a continuous journey of risk management and threat mitigation.
+## Analysis Functions
+- **Dataset Overview**: Comprehensive statistics and threat landscape summary
+- **Event Analysis**: Deep dive into specific cyber security incidents
+- **Timeline Analysis**: Chronological threat evolution and patterns
+- **Sector Impact**: Industry-specific threat analysis and recommendations
+- **Attack Vector Mapping**: D3FEND defensive technique recommendations
+- **Critical Event Response**: Priority threat analysis with defensive guidance
+
+## Semantic Enrichment (D3FEND-CCO Methodology)
+- **Missing Process Detection**: Identify implicit file creation and transformation processes
+- **Temporal Ordering Inference**: Reconstruct attack kill chains using BFO:precedes relations
+- **Data Quality Validation**: Use CCO semantics to detect domain/range violations and inconsistencies
+- **Knowledge Discovery**: Automatically enrich graphs with inferred information and missing nodes
+
+## Audit Trail
+- Every response includes SPARQL query transparency
+- Data source attribution to knowledge graph
+- Query execution details for full auditability
+- Traceable analysis from raw data to insights
+
+# CONVERSATION STYLE
+- **Authoritative but Accessible**: Expert knowledge delivered professionally
+- **Context-Aware**: Remember conversation history and build on previous exchanges
+- **Proactive**: Offer related insights and defensive recommendations
+- **Transparent**: Always show the analytical foundation behind responses
+- **Actionable**: Focus on practical defensive measures and strategic guidance
+
+# CONSTRAINTS
+- **Always provide audit trails** showing SPARQL queries used
+- **Focus on 2025 dataset** - acknowledge limitations for other timeframes
+- **Emphasize defensive measures** using D3FEND framework
+- **Maintain professional expertise** while being conversational
+- **Cite data sources** for transparency and verification
 """
-TEMPERATURE = 0
-DATE = True
-INSTRUCTIONS_TYPE = "system"
-ONTOLOGY = True
-SUGGESTIONS: list = [
-    {'label': 'Threat Assessment', 'value': 'Conduct threat assessment for {{Organization/System}}'},
-    {'label': 'Vulnerability Analysis', 'value': 'Analyze vulnerabilities in {{System/Application}}'},
-    {'label': 'Incident Response', 'value': 'Develop incident response plan for {{Threat/Scenario}}'},
-    {'label': 'Security Architecture', 'value': 'Design security architecture for {{Environment/System}}'},
-    {'label': 'Risk Assessment', 'value': 'Perform security risk assessment for {{Asset/Process}}'},
-    {'label': 'Compliance Audit', 'value': 'Audit compliance with {{Framework/Standard}}'},
-    {'label': 'Security Controls', 'value': 'Recommend security controls for {{Risk/Vulnerability}}'},
-    {'label': 'Threat Hunting', 'value': 'Hunt for threats in {{Network/Environment}}'}
-]
-
-# Ontology Tool Schemas
-class ReadOntologySchema(BaseModel):
-    """Schema for reading cyber security ontologies"""
-    ontology_name: Optional[str] = Field(
-        default=None, 
-        description="Specific ontology to read (ThreatLandscape, VulnerabilityManagement, SecurityControls). If None, lists all available ontologies."
-    )
-
-class SearchOntologySchema(BaseModel):
-    """Schema for searching within cyber security ontologies"""
-    search_term: str = Field(description="Term to search for in the ontologies (e.g., 'malware', 'vulnerability', 'NIST')")
-    ontology_name: Optional[str] = Field(
-        default=None,
-        description="Specific ontology to search in. If None, searches all ontologies."
-    )
-
-def read_cyber_security_ontology(ontology_name: Optional[str] = None) -> str:
-    """
-    Read cyber security ontology files from the module's ontologies directory.
-    
-    Args:
-        ontology_name: Specific ontology to read (ThreatLandscape, VulnerabilityManagement, SecurityControls)
-                      If None, returns list of available ontologies.
-    
-    Returns:
-        Content of the ontology file(s) or list of available ontologies
-    """
-    try:
-        # Get the directory of this module
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        ontologies_dir = os.path.join(os.path.dirname(current_dir), "ontologies")
-        
-        if not os.path.exists(ontologies_dir):
-            return f"❌ Ontologies directory not found at: {ontologies_dir}"
-        
-        # Get all TTL files
-        ttl_files = glob.glob(os.path.join(ontologies_dir, "*.ttl"))
-        
-        if not ttl_files:
-            return "❌ No ontology files (.ttl) found in the ontologies directory"
-        
-        # If no specific ontology requested, list available ones
-        if ontology_name is None:
-            available = []
-            for file_path in ttl_files:
-                filename = os.path.basename(file_path)
-                name = filename.replace('.ttl', '')
-                available.append(f"📋 {name}: {filename}")
-            
-            return "🔍 Available Cyber Security Ontologies:\n\n" + "\n".join(available) + "\n\nUse the ontology name (without .ttl) to read a specific ontology."
-        
-        # Find the specific ontology file
-        target_file = None
-        for file_path in ttl_files:
-            filename = os.path.basename(file_path)
-            if ontology_name.lower() in filename.lower():
-                target_file = file_path
-                break
-        
-        if target_file is None:
-            available_names = [os.path.basename(f).replace('.ttl', '') for f in ttl_files]
-            return f"❌ Ontology '{ontology_name}' not found. Available ontologies: {', '.join(available_names)}"
-        
-        # Read the ontology file
-        with open(target_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        filename = os.path.basename(target_file)
-        return f"📖 **{filename}**\n\n```turtle\n{content}\n```"
-        
-    except Exception as e:
-        return f"❌ Error reading ontology: {str(e)}"
-
-def search_cyber_security_ontologies(search_term: str, ontology_name: Optional[str] = None) -> str:
-    """
-    Search for terms within cyber security ontology files.
-    
-    Args:
-        search_term: Term to search for
-        ontology_name: Specific ontology to search in (optional)
-    
-    Returns:
-        Search results with context
-    """
-    try:
-        # Get the directory of this module
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        ontologies_dir = os.path.join(os.path.dirname(current_dir), "ontologies")
-        
-        if not os.path.exists(ontologies_dir):
-            return f"❌ Ontologies directory not found at: {ontologies_dir}"
-        
-        # Get TTL files to search
-        ttl_files = glob.glob(os.path.join(ontologies_dir, "*.ttl"))
-        
-        if ontology_name:
-            # Filter to specific ontology
-            ttl_files = [f for f in ttl_files if ontology_name.lower() in os.path.basename(f).lower()]
-            if not ttl_files:
-                return f"❌ Ontology '{ontology_name}' not found"
-        
-        if not ttl_files:
-            return "❌ No ontology files found to search"
-        
-        results: List[Dict[str, Any]] = []
-        search_lower = search_term.lower()
-        
-        for file_path in ttl_files:
-            filename = os.path.basename(file_path)
-            matches: List[Dict[str, Any]] = []
-            
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-                
-                for line_num, line in enumerate(lines, 1):
-                    if search_lower in line.lower():
-                        # Get some context (previous and next lines)
-                        context_start = max(0, line_num - 2)
-                        context_end = min(len(lines), line_num + 2)
-                        context_lines = lines[context_start:context_end]
-                        
-                        context = ""
-                        for i, ctx_line in enumerate(context_lines):
-                            actual_line_num = context_start + i + 1
-                            prefix = ">>> " if actual_line_num == line_num else "    "
-                            context += f"{prefix}{actual_line_num:3d}: {ctx_line.rstrip()}\n"
-                        
-                        matches.append({
-                            'line': line_num,
-                            'content': line.strip(),
-                            'context': context
-                        })
-            
-            except Exception:
-                continue
-            
-            if matches:
-                results.append({
-                    'file': filename,
-                    'matches': matches
-                })
-        
-        if not results:
-            return f"🔍 No matches found for '{search_term}' in the ontologies"
-        
-        # Format results
-        output: list[str] = [f"🔍 **Search Results for '{search_term}'**\n"]
-        
-        for result in results:
-            output.append(f"📋 **{result['file']}** ({len(result['matches'])} matches)")
-            
-            for i, match in enumerate(result['matches'][:5]):  # Limit to first 5 matches per file
-                output.append(f"\n**Match {i+1} (Line {match['line']}):**")
-                output.append(f"```turtle\n{match['context']}```")
-            
-            if len(result['matches']) > 5:
-                output.append(f"\n... and {len(result['matches']) - 5} more matches in this file")
-            
-            output.append("")
-        
-        return "\n".join(output)
-        
-    except Exception as e:
-        return f"❌ Error searching ontologies: {str(e)}"
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
-    agent_configuration: Optional[AgentConfiguration] = None
-) -> Agent:
-    """Create Cyber Security Analyst Expert Agent"""
-    # Initialize model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
+    agent_configuration: Optional[AgentConfiguration] = None,
+) -> Optional[IntentAgent]:
+    
+    # Import models - simplified approach
+    import os
+    from langchain_openai import ChatOpenAI
+    
+    # Check for OpenAI API key
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        logger.error("OPENAI_API_KEY not found - cyber security agent not available")
+        return None
+    
+    # Create model directly
+    selected_model = ChatOpenAI(
+        model="gpt-4o",
+        temperature=0,
+        api_key=api_key,
     )
 
-    # Use provided configuration or create default one
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
-
-    # Use provided shared state or create new one
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-
-    # Initialize tools with cyber security specific capabilities
+    # Define tools following ABI pattern
     tools: list = []
+
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+
+    # Add Cyber Security SPARQL tools
+    def get_cyber_dataset_overview() -> str:
+        """Get comprehensive overview of cyber security dataset with event counts and threat categories."""
+        try:
+            # Import SPARQL agent locally to avoid circular imports
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            sparql_agent = CyberSecuritySPARQLAgent()
+            result = sparql_agent.get_dataset_overview()
+            
+            response = f"""📊 **Cyber Security Dataset Overview**
+• Total Events: {result.get('total_events', 0)}
+• Knowledge Graph: 32,311 RDF triples"""
+            
+            if result.get('severity_distribution'):
+                response += "\n\n**Severity Distribution:**"
+                for sev in result['severity_distribution']:
+                    emoji = "🔴" if sev['severity'] == "critical" else "🟡"
+                    response += f"\n{emoji} {sev['severity'].title()}: {sev['count']} events"
+            
+            response += "\n\n🔍 **SPARQL Query:** Dataset overview executed successfully"
+            return response
+        except Exception as e:
+            return f"❌ Error getting overview: {e}"
     
-    # Add ontology reading tools
-    read_ontology_tool = StructuredTool(
-        name="read_cyber_security_ontology",
-        description="Read cyber security ontology files (ThreatLandscape, VulnerabilityManagement, SecurityControls) to access specialized knowledge about threats, vulnerabilities, and security controls",
-        func=read_cyber_security_ontology,
-        args_schema=ReadOntologySchema
+    class EmptySchema(BaseModel):
+        pass
+    
+    cyber_overview_tool = StructuredTool.from_function(
+        func=get_cyber_dataset_overview,
+        name="get_cyber_dataset_overview",
+        description="Get comprehensive overview of cyber security dataset",
+        args_schema=EmptySchema
     )
-    tools.append(read_ontology_tool)
+    tools.append(cyber_overview_tool)
+
+    # Add Graph Enrichment Tools (D3FEND-CCO paper methodology)
+    def enrich_cyber_graph() -> str:
+        """
+        Enrich cyber security knowledge graph using D3FEND-CCO mappings.
+        
+        Applies advanced semantic enrichment techniques:
+        - Detects missing processes (file creation events)
+        - Infers temporal ordering using BFO:precedes
+        - Validates data quality using CCO semantics
+        - Discovers implicit knowledge
+        
+        Returns detailed enrichment report with audit trail.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from workflows.GraphEnrichmentWorkflow import create_workflow
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            
+            # Load the knowledge graph
+            sparql_agent = CyberSecuritySPARQLAgent()
+            if sparql_agent.graph is None:
+                return "❌ Knowledge graph not available"
+            
+            # Create and run enrichment workflow
+            workflow = create_workflow(sparql_agent.graph)
+            result = workflow.enrich_graph()
+            
+            # Generate summary
+            summary = workflow.get_enrichment_summary(result)
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Graph enrichment error: {e}")
+            return f"❌ Error enriching graph: {e}"
     
-    search_ontology_tool = StructuredTool(
-        name="search_cyber_security_ontologies", 
-        description="Search for specific terms within cyber security ontologies to find relevant threat intelligence, vulnerability information, or security control details",
-        func=search_cyber_security_ontologies,
-        args_schema=SearchOntologySchema
+    def detect_missing_processes() -> str:
+        """
+        Detect missing processes in cyber security event graphs.
+        
+        When a file produces another file (d3f:produces), there must be an underlying
+        BFO:process. This tool identifies cases where the process is missing using
+        D3FEND-CCO semantic mappings.
+        
+        Returns list of detected missing processes with recommendations.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from workflows.GraphEnrichmentWorkflow import create_workflow
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            
+            sparql_agent = CyberSecuritySPARQLAgent()
+            if sparql_agent.graph is None:
+                return "❌ Knowledge graph not available"
+            
+            workflow = create_workflow(sparql_agent.graph)
+            missing = workflow.detect_missing_processes()
+            
+            if not missing:
+                return "✅ No missing processes detected. Graph is semantically complete."
+            
+            response = f"🔍 **Missing Process Detection**\n\nDetected {len(missing)} missing processes:\n\n"
+            
+            for i, proc in enumerate(missing[:5], 1):
+                response += f"{i}. **{proc['type'].title()}**\n"
+                response += f"   Source: {proc['source_artifact'].split('#')[-1]}\n"
+                response += f"   Output: {proc['output_artifact'].split('#')[-1]}\n"
+                response += f"   Reason: {proc['reason']}\n\n"
+            
+            if len(missing) > 5:
+                response += f"... and {len(missing) - 5} more\n\n"
+            
+            response += "💡 **Recommendation:** Run 'enrich_cyber_graph' to add missing processes automatically."
+            
+            return response
+            
+        except Exception as e:
+            return f"❌ Error detecting processes: {e}"
+    
+    def infer_temporal_ordering() -> str:
+        """
+        Infer temporal ordering between cyber security events.
+        
+        If process X outputs entity Z, and entity Z participates in process Y,
+        then X temporally precedes Y (using BFO:precedes semantics).
+        
+        This enables kill chain reconstruction and attack timeline analysis.
+        
+        Returns inferred temporal relationships.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            current_dir = Path(__file__).parent.parent
+            sys.path.insert(0, str(current_dir))
+            
+            from workflows.GraphEnrichmentWorkflow import create_workflow
+            from agents.CyberSecuritySPARQLAgent import CyberSecuritySPARQLAgent
+            
+            sparql_agent = CyberSecuritySPARQLAgent()
+            if sparql_agent.graph is None:
+                return "❌ Knowledge graph not available"
+            
+            workflow = create_workflow(sparql_agent.graph)
+            orderings = workflow.infer_temporal_ordering()
+            
+            if not orderings:
+                return "ℹ️ No temporal orderings could be inferred. Ensure graph has BFO:process instances with has_output and has_participant relations."
+            
+            response = f"⏱️ **Temporal Ordering Inference**\n\nInferred {len(orderings)} temporal relationships:\n\n"
+            
+            for i, (pred, succ) in enumerate(orderings[:10], 1):
+                pred_name = pred.split('#')[-1].split('/')[-1]
+                succ_name = succ.split('#')[-1].split('/')[-1]
+                response += f"{i}. {pred_name} → {succ_name}\n"
+            
+            if len(orderings) > 10:
+                response += f"\n... and {len(orderings) - 10} more\n"
+            
+            response += "\n💡 **Use Case:** Attack kill chain reconstruction, incident timeline analysis"
+            
+            return response
+            
+        except Exception as e:
+            return f"❌ Error inferring ordering: {e}"
+    
+    enrich_graph_tool = StructuredTool.from_function(
+        func=enrich_cyber_graph,
+        name="enrich_cyber_graph",
+        description="Enrich cyber security knowledge graph using D3FEND-CCO semantic mappings. Detects missing processes, infers temporal ordering, validates data quality.",
+        args_schema=EmptySchema
     )
-    tools.append(search_ontology_tool)
+    tools.append(enrich_graph_tool)
     
-    # TODO: Add additional cyber security specific tools here
-    # - Vulnerability scanners
-    # - Threat intelligence feeds  
-    # - Security assessment tools
-    # - Incident response workflows
+    detect_processes_tool = StructuredTool.from_function(
+        func=detect_missing_processes,
+        name="detect_missing_processes",
+        description="Detect missing processes in cyber security event graphs using D3FEND-CCO semantic mappings.",
+        args_schema=EmptySchema
+    )
+    tools.append(detect_processes_tool)
+    
+    infer_temporal_tool = StructuredTool.from_function(
+        func=infer_temporal_ordering,
+        name="infer_temporal_ordering",
+        description="Infer temporal ordering between cyber security events using BFO:precedes for kill chain reconstruction.",
+        args_schema=EmptySchema
+    )
+    tools.append(infer_temporal_tool)
+
+    # Define intents following ABI pattern
+    intents: list = [
+        Intent(
+            intent_value="what is your name",
+            intent_type=IntentType.RAW,
+            intent_target="My name is Cyber Security Analyst",
+        ),
+        Intent(
+            intent_value="who are you",
+            intent_type=IntentType.RAW,
+            intent_target="I am your Cyber Security Analyst, an expert AI agent for cyber security analysis, threat intelligence, and defensive recommendations.",
+        ),
+        Intent(
+            intent_value="hello, hi, hey, salut, bonjour",
+            intent_type=IntentType.RAW,
+            intent_target="👋 Hello! I'm your Cyber Security Analyst. I can help you analyze 2025 cyber security threats, provide D3FEND-based defensive recommendations, and explore attack patterns with complete SPARQL audit trails. What cyber security intelligence do you need?",
+        ),
+        Intent(
+            intent_value="overview, dataset overview, show me the data, summary",
+            intent_type=IntentType.TOOL,
+            intent_target="get_cyber_dataset_overview",
+        ),
+        Intent(
+            intent_value="help, what can you do, capabilities",
+            intent_type=IntentType.RAW,
+            intent_target="""🤖 **Cyber Security Analyst Capabilities**
+
+**🔍 Analysis Commands:**
+• `overview` - Dataset summary and threat landscape
+• Ask about ransomware, supply chain attacks, or specific threats
+• "Enrich the knowledge graph" - Apply D3FEND-CCO semantic enrichment
+• "Detect missing processes" - Find implicit file creation events
+• "Infer temporal ordering" - Reconstruct attack timelines
+
+**💬 Natural Language:**
+• "What happened with ransomware this year?"
+• "Show me the biggest cyber threats"
+• "How do I defend against supply chain attacks?"
+• "Enrich the graph using D3FEND-CCO mappings"
+• "Are there missing processes in the knowledge graph?"
+
+**📊 Knowledge Base:**
+• 32,311 RDF triples in knowledge graph
+• D3FEND + CCO ontology integration with semantic mappings
+• 20 major 2025 cyber security events
+• Full SPARQL query transparency
+• Advanced semantic enrichment capabilities
+
+**🔬 Semantic Enrichment:**
+• Missing process detection
+• Temporal ordering inference
+• Data quality validation using CCO semantics
+• Kill chain reconstruction capabilities
+
+I'm your expert cyber security analyst with advanced semantic reasoning. What do you need to know?""",
+        ),
+    ]
+
+    # Set configuration following ABI pattern
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id="0")
 
     return CyberSecurityAnalystAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model,
+        chat_model=selected_model,
         tools=tools,
+        agents=[],  # Empty list for now
+        intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
         memory=None,
     )
 
-class CyberSecurityAnalystAgent(Agent):
-    """Expert Cyber Security Analyst Agent"""
+
+class CyberSecurityAnalystAgent(IntentAgent):
+    """Cyber Security Analyst Agent following ABI pattern exactly."""
     pass

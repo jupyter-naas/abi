@@ -1,35 +1,36 @@
 """
-🚧 NOT FUNCTIONAL YET - Model Configuration Template
-gpt-4o model configuration for Cyber Security Analyst domain expert
+GPT-4o model configuration for Cyber Security Analyst domain expert
+Following ABI model pattern exactly
 """
 
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 from src import secret
 from abi import logger
+from typing import Optional
+
+ID = "gpt-4o"
+NAME = "gpt-4o"
+DESCRIPTION = "GPT-4o optimized for cyber security intelligence and D3FEND analysis"
+
+model: Optional[ChatOpenAI] = None
+openai_api_key = secret.get("OPENAI_API_KEY")
+if openai_api_key:
+    model = ChatOpenAI(
+        model=ID,
+        temperature=0,
+        api_key=SecretStr(openai_api_key),
+    )
+    logger.info("✅ GPT-4o model configured for cyber security analysis")
+else:
+    logger.warning("OPENAI_API_KEY not found - GPT-4o model will not be available")
 
 def create_model():
-    """Create gpt-4o model for Cyber Security Analyst - NOT FUNCTIONAL YET"""
-    logger.warning("🚧 gpt-4o model not functional yet - template only")
-    
-    api_key = secret.get('OPENAI_API_KEY')
-    if not api_key:
-        logger.error("OPENAI_API_KEY not found in environment")
-        return None
-    
-    # Model configuration optimized for cyber security analyst domain
-    model = ChatOpenAI(
-        model="gpt-4o",
-        api_key=api_key,
-        temperature=0.0,  # Zero temperature for security precision
-        max_tokens=4000,
-        # Cyber security specific optimizations
-        model_kwargs={
-            "frequency_penalty": 0.1,  # Reduce repetition in security analysis
-            "presence_penalty": 0.1,   # Encourage comprehensive coverage
-        }
-    )
-    
+    """Create gpt-4o model optimized for cyber security analysis"""
     return model
 
-# Model instance - NOT FUNCTIONAL YET
-model = None  # Would be: create_model()
+def get_model():
+    """Get the configured model instance"""
+    return model
+
+__all__ = ['create_model', 'get_model', 'model']

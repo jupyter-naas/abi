@@ -33,6 +33,8 @@
     - [chat-abi-agent](#chat-abi-agent)
     - [chat-ontology-agent](#chat-ontology-agent)
     - [chat-support-agent](#chat-support-agent)
+  - [AI Model Management](#ai-model-management)
+    - [Listing Available Models](#listing-available-models)
   - [Docker Compose](#docker-compose)
     - [oxigraph-up](#oxigraph-up)
     - [oxigraph-down](#oxigraph-down)
@@ -302,6 +304,36 @@ make chat-support-agent
 **What it does:** Starts the Support agent in terminal mode.
 
 **When to use it:** When you want to interact with the Support agent through the terminal.
+
+## AI Model Management
+
+### Listing Available Models
+
+To see all AI models available on your system, use these direct commands:
+
+```bash
+# Docker Model Runner models
+docker model ls
+
+# Ollama models  
+ollama list
+
+# Both at once
+echo "🐳 DOCKER MODELS:" && docker model ls && echo -e "\n🦙 OLLAMA MODELS:" && ollama list
+```
+
+**Docker Model Runner** shows models with:
+- Model name and architecture
+- Parameters count and quantization
+- Model ID and creation date
+- Size on disk
+
+**Ollama** shows models with:
+- Model name and variant
+- Model ID (SHA hash)
+- Size and last modified date
+
+These commands give you immediate visibility into your local AI model inventory for development and testing.
 
 ## Docker Compose
 

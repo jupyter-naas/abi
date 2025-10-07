@@ -3,7 +3,7 @@ name = "abi"
 version = "0.1.0"
 description = "Abi framework allowing you to build your AI system."
 authors = [{ name = "Maxime Jublou", email = "maxime@naas.ai" }]
-requires-python = "~=3.10"
+requires-python = ">=3.10,<4"
 readme = "README.md"
 dependencies = [
     "rdflib>=7.1.1,<8",
@@ -15,7 +15,7 @@ dependencies = [
     "boto3>=1.38.19,<2",
     "langchain-openai>=0.3.3,<0.4",
     "sparqlwrapper>=2.0.0",
-    "click>=8.2.1",
+    "click>=8.1.1,<8.2",
     "qdrant-client>=1.14.3",
     "spacy>=3.8.7",
     "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",

@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.chatgpt.agents.ChatGPTResponsesAgent import create_agent
+from src.core.chatgpt.agents.ChatGPTResearchAgent import create_agent
 
 @pytest.fixture
 def agent():

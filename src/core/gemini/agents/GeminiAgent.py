@@ -7,20 +7,14 @@ from abi.services.agent.IntentAgent import (
     
 )
 from fastapi import APIRouter
-from src.core.gemini.models.google_gemini_2_5_flash import model
 from typing import Optional
 from enum import Enum
-from abi import logger
 import os
 from datetime import datetime
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
 NAME = "Gemini"
-TYPE = "core"
-SLUG = "gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."
-MODEL = "google-gemini-2-5-flash"
-
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemini.png"
 SYSTEM_PROMPT = """You are Gemini, a helpful AI assistant built by Google. I am going to ask you some questions. Your response should be accurate without hallucination.
 
 You're an AI collaborator that follows the golden rules listed below. You "show rather than tell" these rules by speaking and behaving in accordance with them rather than describing them. Your ultimate goal is to help and empower the user.
@@ -110,13 +104,7 @@ Note: This creates production-ready image concepts. The descriptions can be used
 - Follow ethical guidelines in all interactions
 - Avoid generating harmful, biased, or misleading content
 - Maintain professional boundaries while being approachable"""
-TEMPERATURE = 0
-DATE = True
-INSTRUCTIONS_TYPE = "system"
-ONTOLOGY = True
-SUGGESTIONS: list = []
-
-SUGGESTIONS = [
+SUGGESTIONS: list = [
     {
         "label": "Analyze Code",
         "value": "Analyze this code and suggest improvements: {{Code}}",
@@ -139,10 +127,8 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[IntentAgent]:
-    # Check if model is available
-    if model is None:
-        logger.error("Gemini model not available - missing Google API key")
-        return None
+    # Define model
+    from src.core.gemini.models.google_gemini_2_5_flash import model
     
     # Get current datetime and user location for system prompt
     current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -154,19 +140,9 @@ def create_agent(
         user_location=user_location
     )
     
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=formatted_system_prompt,
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
     # Init
     tools: list = []
     agents: list = []
-
-
 
     # Import workflow here to avoid circular imports
     from src.core.gemini.workflows.ImageGenerationStorageWorkflow import (
@@ -179,17 +155,30 @@ def create_agent(
     tools += image_tools
 
     intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="I am Gemini, Google's most advanced AI assistant, powered by the Gemini 2.0 Flash model.",
-        ),
-        Intent(
-            intent_value="what can you do",
-            intent_type=IntentType.RAW,
-            intent_target="I can help with advanced reasoning, code analysis, mathematical computations, creative writing, research, and multimodal understanding of text, images, audio, and video.",
-        ),
+        # Multimodal analysis intents
+        Intent(intent_value="multimodal analysis", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="analyze this image", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="what can you tell about the content of this image", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="image understanding", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="video analysis", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="audio analysis", intent_type=IntentType.AGENT, intent_target="call_model"),
+        
+        # Image generation intents
+        Intent(intent_value="generate image", intent_type=IntentType.TOOL, intent_target="generate_and_store_image"),
+        Intent(intent_value="create image", intent_type=IntentType.TOOL, intent_target="generate_and_store_image"),
+        Intent(intent_value="draw", intent_type=IntentType.TOOL, intent_target="generate_and_store_image"),
+        Intent(intent_value="illustrate", intent_type=IntentType.TOOL, intent_target="generate_and_store_image"),
+        Intent(intent_value="visualization", intent_type=IntentType.TOOL, intent_target="generate_and_store_image"),
     ]
+
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=formatted_system_prompt,
+        )
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState(thread_id="0")
+
     return GoogleGemini2FlashAgent(
         name=NAME,
         description=DESCRIPTION,
