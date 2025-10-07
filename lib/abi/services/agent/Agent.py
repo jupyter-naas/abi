@@ -409,7 +409,7 @@ class Agent(Expose):
 
             The supervisor agent will review your reason and provide assistance or take over the conversation.
             """
-            logger.debug(f" {self.name} is requesting help from the supervisor agent: {self.state.supervisor_agent}")
+            logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
             return "Requesting help from the supervisor agent."
         
         @tool(return_direct=True)
@@ -814,10 +814,7 @@ SUBAGENT SYSTEM PROMPT:
             # self._state.set_requesting_help(True)
             self._state.set_current_active_agent(self._state.supervisor_agent)
             self._state.set_requesting_help(True)
-            print(self._state.current_active_agent)
-            print(self._state.requesting_help)
             results.append(Command(goto="current_active_agent", graph=Command.PARENT))
-        print(results)
         return results
 
     @property
