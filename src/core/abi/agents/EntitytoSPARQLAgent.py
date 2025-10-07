@@ -1,6 +1,6 @@
 from queue import Queue
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import Tool
+from langchain_core.tools import Tool, BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Callable, Optional, Union, Any
@@ -198,7 +198,7 @@ class EntitytoSPARQLAgent(Agent):
         name: str,
         description: str,
         chat_model: BaseChatModel,
-        tools: list[Union[Tool, "Agent"]] = [],
+        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),
         state: AgentSharedState = AgentSharedState(),
