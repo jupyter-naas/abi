@@ -1,6 +1,5 @@
 from lib.abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
-from typing import Optional
 
 ID = "qwen3:8b"
 NAME = "qwen3-8b"
@@ -9,8 +8,7 @@ IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.
 CONTEXT_WINDOW = 32768
 OWNER = "alibaba"
 
-model: Optional[ChatModel] = None
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
