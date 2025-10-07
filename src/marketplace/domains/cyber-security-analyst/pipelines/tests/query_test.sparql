@@ -1,0 +1,43 @@
+PREFIX d3f: <http://example.org/d3f#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?t1041Instance ?property ?relatedInstance
+WHERE {
+  ?t1041Instance rdf:type d3f:T1041 .
+
+  {
+    ?t1041Instance d3f:may-transfer ?relatedInstance .
+    ?relatedInstance rdf:type d3f:CertificateFile .
+    BIND(d3f:may-transfer AS ?property)
+  }
+  UNION
+  {
+    ?t1041Instance d3f:produces ?relatedInstance .
+    ?relatedInstance rdf:type d3f:InternetNetworkTraffic .
+    BIND(d3f:produces AS ?property)
+  }
+  UNION
+  {
+    ?t1041Instance d3f:initiates ?relatedInstance .
+    ?relatedInstance rdf:type d3f:Access .
+    BIND(d3f:initiates AS ?property)
+  }
+  UNION
+  {
+    ?t1041Instance d3f:enables ?relatedInstance .
+    ?relatedInstance rdf:type d3f:OffensiveTactic .
+    BIND(d3f:enables AS ?property)
+  }
+  UNION
+  {
+    ?t1041Instance d3f:enables ?relatedInstance .
+    ?relatedInstance rdf:type d3f:Exfiltration .
+    BIND(d3f:enables AS ?property)
+  }
+  UNION
+  {
+    ?t1041Instance d3f:implemented-by ?relatedInstance .
+    ?relatedInstance rdf:type d3f:Procedure .
+    BIND(d3f:implemented-by AS ?property)
+  }
+}
