@@ -2,7 +2,7 @@ events:
   - id: "cse-2025-001"
     name: "SolarStorm Supply Chain Attack"
     date: "2025-01-15"
-    severity: "critical"
+    severity: "critical" #try to remove this and see if it work when I ask the agent to answer the question ""
     category: "supply_chain_attack"
     description: "Sophisticated supply chain attack targeting multiple government agencies through compromised software updates"
     affected_sectors: ["government", "defense", "technology"]
