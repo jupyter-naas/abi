@@ -4,11 +4,9 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     
 )
-from fastapi import APIRouter
 from src import secret
 from typing import Optional
 from langchain_openai import ChatOpenAI  # noqa: F401
-from enum import Enum
 from pydantic import SecretStr
 from abi import logger
 
@@ -326,17 +324,4 @@ def create_agent(
 
 
 class KnowledgeGraphBuilderAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME.lower(),
-        name: str = NAME.replace("_", " "),
-        description: str = "API endpoints to call the Knowledge Graph Builder agent completion.",
-        description_stream: str = "API endpoints to call the Knowledge Graph Builder agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

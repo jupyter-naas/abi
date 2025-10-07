@@ -1,7 +1,7 @@
 from pydantic import Field, create_model
 import asyncio
 from rdflib import Graph, URIRef, RDF
-
+from abi import logger
 from .GenericWorkflow import GenericWorkflow
 
 
@@ -92,7 +92,6 @@ def templatable_queries():
             """
             )
             # logger.debug(f"Query: {q}")
-            # results = services.triple_store_service.query(q)
             results = argument_graph.query(q)
 
             for result in results:
@@ -107,47 +106,6 @@ def templatable_queries():
                     "validationFormat": validationFormat,
                 }
 
-    # def __load_arguments(templatableQuery):
-    #     arguments = {}
-    #     for argument in queries[templatableQuery].get("hasArgument"):
-    #         q = (
-    #             """
-    #             PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
-                
-    #             SELECT ?argument ?name ?description ?validationPattern ?validationFormat
-    #             WHERE {
-    #                 BIND(<"""
-    #             + str(argument)
-    #             + """> AS ?argument)
-    #                 ?argument a intentMapping:QueryArgument ;
-    #                     intentMapping:argumentName ?name ;
-    #                     intentMapping:argumentDescription ?description ;
-    #                     intentMapping:validationPattern ?validationPattern ;
-    #                     intentMapping:validationFormat ?validationFormat .
-    #             }
-    #         """
-    #         )
-    #         logger.debug(f"Query: {q}")
-    #         # results = services.triple_store_service.query(q)
-    #         results = argument_graph.query(q)
-
-    #         for result in results:
-    #             argument, name, description, validationPattern, validationFormat = (
-    #                 result
-    #             )
-
-    #             arguments[argument] = {
-    #                 "name": name,
-    #                 "description": description,
-    #                 "validationPattern": validationPattern,
-    #                 "validationFormat": validationFormat,
-    #             }
-    #     return arguments
-
-    # jobs = [(__load_arguments, templatableQuery) for templatableQuery in queries]
-    # for args in asyncio_thread_job(jobs):
-    #     arguments.update(args)
-
     return queries, arguments
 
 
@@ -160,32 +118,35 @@ def load_workflows():
 
     # Now for each query, we need to create a Pydantic BaseModel based on the arguments
     for _query in queries:
-        query = queries[_query]
+        try:
+            query = queries[_query]
 
-        # Arguments Model with validation patterns
-        arguments_model = create_model(
-            f"{str(query['label']).capitalize()}Arguments",
-            **{
-                str(arguments[argument]["name"]): (
-                    str,
-                    Field(
-                        ...,
-                        description=str(arguments[argument]["description"]),
-                        pattern=str(arguments[argument]["validationPattern"]),
-                        # You could also add additional metadata from validationFormat if needed
-                        example=str(arguments[argument]["validationFormat"]),
-                    ),
-                )
-                for argument in query.get("hasArgument")
-            },
-        )
+            # Arguments Model with validation patterns
+            arguments_model = create_model(
+                f"{str(query['label']).capitalize()}Arguments",
+                **{
+                    str(arguments[argument]["name"]): (
+                        str,
+                        Field(
+                            ...,
+                            description=str(arguments[argument]["description"]),
+                            pattern=str(arguments[argument]["validationPattern"]),
+                            # You could also add additional metadata from validationFormat if needed
+                            example=str(arguments[argument]["validationFormat"]),
+                        ),
+                    )
+                    for argument in query.get("hasArgument")
+                },
+            )
 
-        p = GenericWorkflow[arguments_model](
-            str(query["label"]),
-            str(query["description"]),
-            str(query["sparqlTemplate"]),
-            arguments_model,
-        )
-        workflows.append(p)
+            p = GenericWorkflow[arguments_model](
+                str(query["label"]),
+                str(query["description"]),
+                str(query["sparqlTemplate"]),
+                arguments_model,
+            )
+            workflows.append(p)
+        except Exception as e:
+            logger.error(f"Error loading workflow: {e}")
 
     return workflows

@@ -3,8 +3,6 @@ from typing import Optional
 from langchain_openai import ChatOpenAI  # noqa: F401
 from pydantic import SecretStr
 from src import secret
-from fastapi import APIRouter
-from enum import Enum
 from abi import logger
 
 NAME = "Ontology_Engineer_Agent"
@@ -121,17 +119,4 @@ def create_agent(
     )
 
 class OntologyEngineerAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME.lower(),
-        name: str = NAME.replace("_", " "),
-        description: str = "API endpoints to call the Ontology Engineer agent completion.",
-        description_stream: str = "API endpoints to call the Ontology Engineer agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

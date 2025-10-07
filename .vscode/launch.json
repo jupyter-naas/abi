@@ -9,8 +9,9 @@
             "name": "Python Debugger: Supervisor Agent",
             "type": "debugpy",
             "request": "launch",
-            "module": "src.core.apps.terminal_agent.main",
-            "args": ["generic_run_agent", "SupervisorAgent"],
+            // "module": "src.core.apps.terminal_agent.main",
+            "module": "src.cli",
+            "args": ["AbiAgent"],
             "justMyCode": false
         }
     ]
