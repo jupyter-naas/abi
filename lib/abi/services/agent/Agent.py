@@ -505,8 +505,6 @@ class Agent(Expose):
         graph.add_node(self.call_model)
         
         graph.add_node(self.call_tools)
-        # This is not needed because the call_tools is generating the proper Command to go to the right node after each tool call.
-        # graph.add_edge("call_tools", "call_model")
 
         for agent in self._agents:
             graph.add_node(agent.name, agent.graph)
@@ -547,9 +545,9 @@ class Agent(Expose):
             Command: Command to goto the current active agent
         """
         # Log the current active agent
-        logger.debug(f"🤖 Current Agent: '{self.name}'")
-        logger.debug(f"🟢 Active agent: '{self.state.current_active_agent}'")
         logger.debug(f"😏 Supervisor agent: '{self.state.supervisor_agent}'")
+        logger.debug(f"🟢 Active agent: '{self.state.current_active_agent}'")
+        logger.debug(f"🤖 Current Agent: '{self.name}'")
 
         # Get the last human message
         last_human_message = self.get_last_human_message(state)
@@ -844,6 +842,9 @@ SUBAGENT SYSTEM PROMPT:
                 containing the tool call
         """
         self._on_tool_usage = callback
+        # # Also set the callback on all sub-agents to ensure they notify properly
+        # for agent in self._agents:
+        #     agent.on_tool_usage(callback)
 
     def on_tool_response(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool response is received.
@@ -856,11 +857,17 @@ SUBAGENT SYSTEM PROMPT:
                 containing the tool response
         """
         self._on_tool_response = callback
+        # # Also set the callback on all sub-agents to ensure they notify properly
+        # for agent in self._agents:
+        #     agent.on_tool_response(callback)
         
     def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
         """Register a callback to be called when an AI message is received.
         """
         self._on_ai_message = callback
+        # Also set the callback on all sub-agents to ensure they notify properly
+        for agent in self._agents:
+            agent.on_ai_message(callback)
 
     @property
     def app(self):
@@ -905,12 +912,10 @@ SUBAGENT SYSTEM PROMPT:
                     else:
                         continue
                 else:
-                    logger.debug(f"v: {v}")
                     last_messages = [e["messages"][-1] for e in v]
 
 
                 for last_message in last_messages:
-
                     if isinstance(last_message, AIMessage):
                         if pd.get(last_message, "additional_kwargs.tool_calls"):
                             # This is a tool call.
@@ -923,9 +928,7 @@ SUBAGENT SYSTEM PROMPT:
                             # If you need another method to be able to return an AIMessage or a Command(..., update={"messages": [AIMessage(...)]}) we either need to add it to the list or have this specific method calling self._notify_ai_message directly.
                             
                             allowed_sources_of_ai_message = ['call_model', 'call_tools']
-                            
                             if any(source in payload for source in allowed_sources_of_ai_message):
-                                logger.debug(f"Payload: {payload}")
                                 self._notify_ai_message(last_message, agent_name)
 
                     elif isinstance(last_message, ToolMessage):
