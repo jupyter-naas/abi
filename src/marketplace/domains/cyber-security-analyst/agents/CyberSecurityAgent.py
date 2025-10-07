@@ -61,18 +61,37 @@ def create_agent(
     """Create Cyber Security Agent with all 22 competency question tools."""
     
     # Load model based on AI_MODE
-    from os import getenv
+    from src import secret
+    from langchain_openai import ChatOpenAI
+    from langchain_ollama import ChatOllama
+    from pydantic import SecretStr
     
-    ai_mode = getenv("AI_MODE", "cloud")
+    ai_mode = secret.get("AI_MODE")
     
     if ai_mode == "local":
-        from abi.services.chat_model.adaptors.secondary.ollama.OllamaModel import OllamaModel
-        model_name = getenv("LOCAL_MODEL", "llama3.2")
-        selected_model = OllamaModel(model=model_name, temperature=0.0)
-        logger.info(f"Using local model: {model_name}")
+        # Use local Ollama model
+        selected_model = ChatOllama(model="llama3.2", temperature=0.0)
+        logger.info("Using local model: llama3.2")
+    elif ai_mode == "airgap":
+        # Use airgap Docker Model Runner
+        selected_model = ChatOpenAI(
+            model="ai/qwen3",
+            temperature=0.0,
+            api_key=SecretStr("no needed"),  # type: ignore
+            base_url="http://localhost:12434/engines/v1",
+        )
+        logger.info("Using airgap model: qwen3")
     else:
-        from abi.services.chat_model.adaptors.secondary.openai.OpenAIModel import OpenAIModel
-        selected_model = OpenAIModel(model="gpt-4o", temperature=0.0)
+        # Use cloud OpenAI model
+        openai_api_key = secret.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("OpenAI API key not available for CyberSecurityAgent")
+            return None
+        selected_model = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.0,
+            api_key=SecretStr(openai_api_key)
+        )
         logger.info("Using OpenAI model: gpt-4o")
     
     if agent_shared_state is None:
