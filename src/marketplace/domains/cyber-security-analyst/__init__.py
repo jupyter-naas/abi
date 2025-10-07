@@ -1,18 +1,11 @@
 """
 Cyber Security Analyst Domain Module
 
-Expert cyber security analyst specializing in threat analysis, vulnerability assessment,
-incident response, and security architecture.
-
-This module provides:
-- CyberSecurityAnalystAgent: Expert AI agent for cyber security analysis
-- Comprehensive ontologies: ThreatLandscape, VulnerabilityManagement, SecurityControls
-- Specialized workflows: ThreatAssessment, IncidentResponse, VulnerabilityAssessment, SecurityArchitecture
-- Model configurations: Optimized for security analysis tasks
+Competency-question-driven cyber security analysis using D3FEND-CCO ontology.
 """
 
-from .agents.CyberSecurityAnalystAgent import (
-    CyberSecurityAnalystAgent,
+from .agents.CyberSecurityAgent import (
+    CyberSecurityAgent,
     create_agent,
     NAME,
     DESCRIPTION,
@@ -20,7 +13,7 @@ from .agents.CyberSecurityAnalystAgent import (
 )
 
 __all__ = [
-    "CyberSecurityAnalystAgent",
+    "CyberSecurityAgent",
     "create_agent",
     "NAME",
     "DESCRIPTION",

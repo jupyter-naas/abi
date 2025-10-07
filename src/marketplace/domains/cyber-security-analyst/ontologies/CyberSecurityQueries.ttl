@@ -1,0 +1,155 @@
+@prefix : <http://ontology.naas.ai/cyber-security/> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix cse: <https://abi.cyber-security-events.org/ontology/> .
+@prefix d3f: <http://d3fend.mitre.org/ontologies/d3fend.owl#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+
+# Define competency questions as TemplatableSparqlQuery entities
+
+:GetCriticalEvents a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_critical_events" ;
+    intentMapping:intentDescription "Get all critical severity cyber security events with their attack vectors and defensive techniques" ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?event ?name ?date ?category ?attackVector ?defensiveTechnique WHERE {
+            ?event rdf:type cse:CyberSecurityEvent ;
+                   cse:eventName ?name ;
+                   cse:eventDate ?date ;
+                   cse:category ?category ;
+                   cse:severity "critical" .
+            OPTIONAL { 
+                ?event cse:attackVector ?av .
+                ?av rdfs:label ?attackVector .
+            }
+            OPTIONAL { 
+                ?event cse:defensiveTechnique ?dt .
+                ?dt rdfs:label ?defensiveTechnique .
+            }
+        }
+        ORDER BY ?date
+    """ .
+
+:GetEventsByCategory a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_events_by_category" ;
+    intentMapping:intentDescription "Get cyber security events filtered by category (e.g., ransomware, supply chain, data breach)" ;
+    intentMapping:hasArgument :CategoryArgument ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        
+        SELECT ?event ?name ?date ?severity ?sector WHERE {
+            ?event rdf:type cse:CyberSecurityEvent ;
+                   cse:eventName ?name ;
+                   cse:eventDate ?date ;
+                   cse:category "{category}" ;
+                   cse:severity ?severity .
+            OPTIONAL { ?event cse:affectedSector ?sector }
+        }
+        ORDER BY ?date
+    """ .
+
+:CategoryArgument a intentMapping:QueryArgument ;
+    intentMapping:argumentName "category" ;
+    intentMapping:argumentDescription "Category of cyber security events (ransomware, supply chain, data breach, etc.)" ;
+    intentMapping:validationPattern "^[a-zA-Z ]+$" ;
+    intentMapping:validationFormat "ransomware" .
+
+:GetDefensiveTechniques a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_defensive_techniques" ;
+    intentMapping:intentDescription "Get D3FEND defensive techniques for a specific attack vector" ;
+    intentMapping:hasArgument :AttackVectorArgument ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        
+        SELECT DISTINCT ?technique ?techniqueLabel ?description WHERE {
+            ?event cse:attackVector ?av .
+            ?av rdfs:label "{attack_vector}" .
+            ?event cse:defensiveTechnique ?dt .
+            ?dt rdfs:label ?techniqueLabel .
+            BIND(?dt as ?technique)
+            OPTIONAL { ?dt cse:description ?description }
+        }
+    """ .
+
+:AttackVectorArgument a intentMapping:QueryArgument ;
+    intentMapping:argumentName "attack_vector" ;
+    intentMapping:argumentDescription "Attack vector to find defensive techniques for" ;
+    intentMapping:validationPattern "^[a-zA-Z0-9 ]+$" ;
+    intentMapping:validationFormat "phishing" .
+
+:GetEventTimeline a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_event_timeline" ;
+    intentMapping:intentDescription "Get chronological timeline of all cyber security events" ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        
+        SELECT ?event ?name ?date ?category ?severity WHERE {
+            ?event rdf:type cse:CyberSecurityEvent ;
+                   cse:eventName ?name ;
+                   cse:eventDate ?date ;
+                   cse:category ?category ;
+                   cse:severity ?severity .
+        }
+        ORDER BY ?date
+    """ .
+
+:GetSectorImpact a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_sector_impact" ;
+    intentMapping:intentDescription "Get cyber security events affecting a specific sector (healthcare, finance, government, technology)" ;
+    intentMapping:hasArgument :SectorArgument ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        
+        SELECT ?event ?name ?date ?category ?severity ?impact WHERE {
+            ?event rdf:type cse:CyberSecurityEvent ;
+                   cse:eventName ?name ;
+                   cse:eventDate ?date ;
+                   cse:category ?category ;
+                   cse:severity ?severity ;
+                   cse:affectedSector "{sector}" .
+            OPTIONAL { ?event cse:impact ?impact }
+        }
+        ORDER BY DESC(?severity) ?date
+    """ .
+
+:SectorArgument a intentMapping:QueryArgument ;
+    intentMapping:argumentName "sector" ;
+    intentMapping:argumentDescription "Sector to analyze (healthcare, finance, government, technology)" ;
+    intentMapping:validationPattern "^[a-zA-Z ]+$" ;
+    intentMapping:validationFormat "healthcare" .
+
+:GetDatasetOverview a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_dataset_overview" ;
+    intentMapping:intentDescription "Get comprehensive overview of the cyber security dataset with statistics" ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        
+        SELECT (COUNT(?event) as ?totalEvents) WHERE {
+            ?event rdf:type cse:CyberSecurityEvent .
+        }
+    """ .
+
+:GetAttackVectorDistribution a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "get_attack_vector_distribution" ;
+    intentMapping:intentDescription "Get distribution of attack vectors across all events" ;
+    intentMapping:sparqlTemplate """
+        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        
+        SELECT ?attackVector (COUNT(?event) as ?count) WHERE {
+            ?event cse:attackVector ?av .
+            ?av rdfs:label ?attackVector .
+        }
+        GROUP BY ?attackVector
+        ORDER BY DESC(?count)
+    """ .
