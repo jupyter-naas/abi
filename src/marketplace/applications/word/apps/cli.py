@@ -9,10 +9,7 @@ Usage:
     python src/marketplace/applications/word/apps/cli.py --help
 """
 
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from docx import Document as DocumentType
+from typing import Optional, Any
 import argparse
 import sys
 import re
@@ -408,7 +405,7 @@ class WordCLI:
     
     def __init__(self, config: Optional[WordConfig] = None):
         self.config = config or WordConfig()
-        self.document: Optional['DocumentType'] = None
+        self.document: Optional[Any] = None
         
     def create_document(self, template_path: Optional[str] = None):
         """Create a new document."""
