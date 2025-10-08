@@ -5,11 +5,16 @@ FROM ubuntu:24.04 AS builder
 RUN useradd -m -s /bin/bash -G sudo -u 1001 abi -d /app
 RUN mkdir -p /app && chown -R abi:abi /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y curl build-essential git 
+# Install build dependencies including Rust for tiktoken
+RUN apt-get update && apt-get install -y curl build-essential git && \
+    rm -rf /var/lib/apt/lists/*
 
 USER abi
 WORKDIR /app
+
+# Install Rust for the abi user
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/app/.cargo/bin:${PATH}"
 
 # Copy only the files needed for building
 ADD --chown=abi:abi ./lib/ /app/lib
