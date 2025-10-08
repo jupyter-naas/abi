@@ -34,7 +34,6 @@ class AgicapIntegration(Integration):
     """
 
     __configuration: AgicapIntegrationConfiguration
-    __token: Optional[str] = None
 
     def __init__(self, configuration: AgicapIntegrationConfiguration):
         """Initialize Agicap client with credentials."""
