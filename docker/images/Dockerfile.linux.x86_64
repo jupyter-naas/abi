@@ -37,7 +37,9 @@ RUN if git describe --tags > /app/VERSION 2>/dev/null; then \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Run uv sync as abi user with Rust in PATH - no cache to avoid permission issues
-RUN su abi /bin/bash -c "source ~/.cargo/env && /app/.local/bin/uv sync --no-dev"
+USER abi
+RUN source ~/.cargo/env && /app/.local/bin/uv sync --no-dev
+USER root
 
 
 # Final stage
