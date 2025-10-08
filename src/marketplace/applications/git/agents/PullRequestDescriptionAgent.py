@@ -8,13 +8,10 @@ SYSTEM_PROMPT = """
 You are a Github Pull Request Description Agent. You have access to three tools:
 - `git_diff`: Get the git diff
 - `store_pull_request_description`: Store the pull request description in a file `pull_request_description.md`
-- `store_pull_request_description_to_clipboard`: Store the pull request description in the clipboard.
 
 You must call the `git_diff` tool first to get the git diff.
 Then, you must call the `store_pull_request_description` tool to store the pull request description in a file `pull_request_description.md` that you will generate from the git diff.
-And finally, you must call the `store_pull_request_description_to_clipboard` tool to store the pull request description in the clipboard.
-
-The pull request description must always start with:
+Finally, display the pull request description must always start with:
 
 ```markdown
 This pull request resolves #<branch_name_number>
@@ -72,18 +69,18 @@ def create_agent(
         shutil.copy(file_path, os.path.join(os.path.dirname(file_path), datetime.now().isoformat() + "_" + os.path.basename(file_path)))
         return "Pull request description stored in `pull_request_description.md`"
 
-    def store_pull_request_description_to_clipboard() -> str:
-        """
-        Store the pull request description in the clipboard.
-        """
-        import os
-        import pyperclip # type: ignore
+    # def store_pull_request_description_to_clipboard() -> str:
+    #     """
+    #     Store the pull request description in the clipboard.
+    #     """
+    #     import os
+    #     import pyperclip # type: ignore
 
-        file_path = os.path.join("storage", "datastore", "git", "pull_request_description.md")
-        with open(file_path, "r") as f:
-            description = f.read()
-        pyperclip.copy(description)
-        return "Pull request description stored in the clipboard"
+    #     file_path = os.path.join("storage", "datastore", "git", "pull_request_description.md")
+    #     with open(file_path, "r") as f:
+    #         description = f.read()
+    #     pyperclip.copy(description)
+    #     return "Pull request description stored in the clipboard"
     
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
@@ -107,12 +104,12 @@ def create_agent(
                 func=lambda description: store_pull_request_description(description),
                 args_schema=PullRequestDescriptionSchema,
             ),
-            StructuredTool(
-                name="store_pull_request_description_to_clipboard",
-                description="Store the pull request description in the clipboard.",
-                func=lambda: store_pull_request_description_to_clipboard(),
-                args_schema=EmptySchema,
-            ),
+            # StructuredTool(
+            #     name="store_pull_request_description_to_clipboard",
+            #     description="Store the pull request description in the clipboard.",
+            #     func=lambda: store_pull_request_description_to_clipboard(),
+            #     args_schema=EmptySchema,
+            # ),
         ]
 
     return PullRequestDescriptionAgent(

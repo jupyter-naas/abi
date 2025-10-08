@@ -5,20 +5,12 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from abi.services.agent.Agent import Agent
-from src.core.qwen.models.qwen3_8b import model
 from typing import Optional
-from abi import logger
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg"
 NAME = "Qwen"
-TYPE = "core"
-SLUG = "qwen"
 DESCRIPTION = "Local Qwen3 8B model via Ollama - privacy-focused AI for coding, reasoning, and multilingual tasks"
-MODEL = "qwen3-8b"
-
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/qwen.jpg"
 SYSTEM_PROMPT = """You are Qwen, a helpful AI assistant powered by Alibaba's Qwen3 8B model running locally via Ollama.
-
 ## Your Capabilities
 - **Local & Private**: All conversations stay on this device - no data sent to external servers
 - **Multilingual**: Native support for Chinese, English, and many other languages
@@ -40,21 +32,47 @@ SYSTEM_PROMPT = """You are Qwen, a helpful AI assistant powered by Alibaba's Qwe
 
 Remember: You're running locally on this machine, ensuring complete privacy and offline functionality.
 """
-TEMPERATURE = 0
-DATE = True
-INSTRUCTIONS_TYPE = "system"
-ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:    
-    # Check if model is available
-    if model is None:
-        logger.error("Qwen model not available - missing Ollama API key")
-        return None
+) -> IntentAgent:    
+    # Define model
+    from src.core.qwen.models.qwen3_8b import model
     
+    # Define tools
+    tools: list = []
+    
+    # Define agents
+    agents: list = []
+    
+    # Define intents
+    intents = [
+        # Code and programming intents
+        Intent(intent_value="generate code", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="debug code", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="optimize code", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="review code", intent_type=IntentType.AGENT, intent_target="call_model"),
+        
+        # Privacy and local AI intents
+        Intent(intent_value="process privately", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="run locally", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="work offline", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="assist securely", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="help privately", intent_type=IntentType.AGENT, intent_target="call_model"),
+        
+        # Multilingual intents
+        Intent(intent_value="translate chinese", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="translate multilingual", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="communicate multilingually", intent_type=IntentType.AGENT, intent_target="call_model"),
+        
+        # Reasoning and analysis intents
+        Intent(intent_value="analyze problems", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="solve logically", intent_type=IntentType.AGENT, intent_target="call_model"),
+        Intent(intent_value="reason critically", intent_type=IntentType.AGENT, intent_target="call_model"),
+    ]
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -63,42 +81,13 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    from langchain_core.tools import Tool
-    from typing import List, Union
-    
-    tools: List[Union[Tool, Agent]] = []
-
-    # Define Qwen-specific intents
-    intents = [
-        # Code and programming intents
-        Intent(intent_type=IntentType.AGENT, intent_value="code with qwen", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="qwen code", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="local coding", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="private code help", intent_target=NAME),
-        
-        # Privacy and local AI intents
-        Intent(intent_type=IntentType.AGENT, intent_value="private ai", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="local ai", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="offline ai", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="use qwen", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to qwen", intent_target=NAME),
-        
-        # Multilingual intents
-        Intent(intent_type=IntentType.AGENT, intent_value="qwen chinese", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="qwen 中文", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="multilingual help", intent_target=NAME),
-        
-        # Reasoning and analysis intents
-        Intent(intent_type=IntentType.AGENT, intent_value="qwen reasoning", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="local reasoning", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="private analysis", intent_target=NAME),
-    ]
     return QwenAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
         tools=tools,
+        agents=agents,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,

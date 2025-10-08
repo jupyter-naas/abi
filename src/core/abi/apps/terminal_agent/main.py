@@ -19,11 +19,11 @@ from pathlib import Path
 from abi import logger
 
 # Global variable to track active agent for context-aware conversations
-current_active_agent = None
 conversation_file = None
 
 # Fixed width for consistent conversation logs (matches typical wide terminal)
 TERMINAL_WIDTH = 77  # Matches the separator length from the user's example
+
 
 def init_conversation_file():
     """Initialize a new conversation file with timestamp"""
@@ -48,6 +48,7 @@ def init_conversation_file():
     logger.info(f"💾 Conversation logging to: {conversation_file}")
     return conversation_file
 
+
 def save_to_conversation(line: str):
     """Save exactly what appears in terminal to the conversation file"""
     global conversation_file
@@ -67,6 +68,7 @@ def save_to_conversation(line: str):
                 f.write(f"⚠️ LOGGING ERROR: {e}\n")
         except Exception:
             pass  # If we can't log the error, give up
+
 
 def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for help)"):
     """Get user input with a placeholder that disappears when typing starts"""
@@ -143,20 +145,12 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
             message_content = message
         elif isinstance(message, dict) and "content" in message:
             message_content = str(message["content"])
-        # elif isinstance(message, Command):
-        #     message_content = str(message.kwargs.get("content", ""))
         elif isinstance(message, ToolMessage):
             message_content = str(message.content)
         else:
             print("Unknown message type:")
             print(type(message))
             message_content = str(message)
-
-        # This would nicely display JSON but it takes a lot of screen space
-        # try:
-        #     message_content = json.dumps(json.loads(message_content), indent=4)
-        # except:
-        #     pass
 
         print_tool_response(message_content)
 
@@ -177,14 +171,9 @@ def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) 
         save_to_conversation(error_msg)
 
 
-def on_ai_message(message: Any, agent_name) -> None:
-    global current_active_agent
-    
+def on_ai_message(message: Any, agent_name: str) -> None:
     if len(message.content) == 0:
         return
-    
-    # Update active agent when an agent responds
-    current_active_agent = agent_name
     
     print("\r" + " " * 15 + "\r", end="", flush=True)
     
@@ -209,14 +198,28 @@ def on_ai_message(message: Any, agent_name) -> None:
     # Print agent name dynamically using the real intent_target
     
     # Use the actual agent name from intent_target, with color coding for readability
-    if "gemini" in agent_name.lower() or "google" in agent_name.lower():
-        color = "bold blue"
-    elif "supervisor" in agent_name.lower() or "abi" in agent_name.lower():
+    if "abi" in agent_name.lower():
         color = "bold green"
-    elif "ontology" in agent_name.lower():
-        color = "bold cyan"
-    elif "support" in agent_name.lower():
-        color = "bold yellow"
+    elif "claude" in agent_name.lower():
+        color = "bold bright_orange"  # Anthropic's orange
+    elif "chatgpt" in agent_name.lower():
+        color = "bold bright_green"  # OpenAI's green
+    elif "deepseek" in agent_name.lower():
+        color = "bold blue"  # DeepSeek's blue
+    elif "gemini" in agent_name.lower():
+        color = "bold bright_blue"  # Google's blue
+    elif "gemma" in agent_name.lower():
+        color = "bold bright_cyan"  # Google's cyan/blue
+    elif "grok" in agent_name.lower():
+        color = "bold white"  # X/Twitter's white
+    elif "llama" in agent_name.lower():
+        color = "bold bright_blue"  # Meta's blue
+    elif "mistral" in agent_name.lower():
+        color = "bold orange"  # Mistral's orange
+    elif "perplexity" in agent_name.lower():
+        color = "bold white"  # Perplexity's white
+    elif "qwen" in agent_name.lower():
+        color = "bold bright_cyan"  # Alibaba's cyan
     else:
         color = "bold magenta"
     
@@ -237,12 +240,14 @@ def on_ai_message(message: Any, agent_name) -> None:
     save_to_conversation(agent_message_line)
     save_to_conversation("─" * TERMINAL_WIDTH)
     save_to_conversation("")  # Empty line
-    
+
+
 def run_agent(agent: Agent):
-    global current_active_agent
-    
     # Initialize conversation logging
     init_conversation_file()
+
+    # All agents
+    all_agents = agent.agents + [agent]
     
     # Show greeting when truly ready for input - instant like responses
     greeting_line = f"{agent.name}: Hello, World!"
@@ -257,38 +262,23 @@ def run_agent(agent: Agent):
     save_to_conversation("─" * TERMINAL_WIDTH)
     save_to_conversation("")  # Empty line
     
-    # Available agents for mention suggestions (cloud + local)
-    available_agents = [
-        # Cloud agents
-        "gemini", "claude", "mistral", "chatgpt", "perplexity", "llama",
-        # Local agents (privacy-focused)
-        "qwen", "deepseek", "gemma"
-    ]
-    # Map from mention names to actual agent names
-    agent_name_mapping = {
-        # Cloud agents
-        "gemini": "Gemini",
-        "claude": "Claude", 
-        "mistral": "Mistral",
-        "chatgpt": "ChatGPT",
-        "perplexity": "Perplexity",
-        "llama": "Llama",
-        # Local agents
-        "qwen": "Qwen",
-        "deepseek": "DeepSeek", 
-        "gemma": "Gemma"
-    }
-    
     # Just start chatting naturally - like the screenshot
     while True:
-        # Set Abi as active agent after greeting
-        current_active_agent = agent.name
-        if hasattr(agent.chat_model, 'model_name'):
-            model_info = agent.chat_model.model_name
-        elif hasattr(agent.chat_model, 'model'):
-            model_info = agent.chat_model.model
-        else:
-            model_info = "unknown"
+        # Get current active agent and its model
+        current_active_agent = agent.state.current_active_agent
+        if current_active_agent is None:
+            current_active_agent = agent.name
+            
+        model_info = "unknown"
+        
+        # Find the active agent in our agents list
+        import pydash as _
+        current_agent = _.find(all_agents, lambda a: a.name.lower() == current_active_agent.lower() if a.name is not None else False)
+        if current_agent:
+            if hasattr(current_agent.chat_model, 'model_name'):
+                model_info = current_agent.chat_model.model_name
+            elif hasattr(current_agent.chat_model, 'model'):
+                model_info = current_agent.chat_model.model
             
         # Create clean status line showing active agent with model info
         if current_active_agent:
@@ -311,28 +301,6 @@ def run_agent(agent: Agent):
         # Skip empty input
         if not user_input.strip():
             continue
-        
-        # Check for agent switching with @agent syntax
-        agent_mention_match = re.search(r'@(\w+)', user_input.lower())
-        if agent_mention_match:
-            mentioned_agent = agent_mention_match.group(1)
-            # Map agent mentions to full names (use the updated agent names)
-            agent_mapping = agent_name_mapping
-            
-            if mentioned_agent in agent_mapping:
-                current_active_agent = agent_mapping[mentioned_agent]
-                # Remove the @mention from the input and route to agent
-                user_input_clean = re.sub(r'@\w+\s*', '', user_input).strip()
-                if user_input_clean:
-                    # There's additional content, send it to the mentioned agent
-                    user_input = f"ask {mentioned_agent} {user_input_clean}"
-                else:
-                    # Just the mention, initiate conversation with agent
-                    user_input = f"I want to talk to {mentioned_agent}"
-            else:
-                console.print(f"Unknown agent: @{mentioned_agent}", style="red")
-                console.print(f"Available agents: {', '.join(['@' + name for name in available_agents])}", style="dim")
-                continue
             
         # Display user message with color coding and separator (except for commands)
         if (not clean_input.startswith('/') and 
@@ -400,17 +368,25 @@ def run_agent(agent: Agent):
         loader_thread = threading.Thread(target=matrix_loader)
         loader_thread.start()
         
-        # Update the agent's shared state with current active agent info
-        if hasattr(agent, '_state') and hasattr(agent._state, 'set_current_active_agent'):
-            agent._state.set_current_active_agent(current_active_agent)
+        # # Update the agent's shared state with current active agent info
+        # if hasattr(agent, '_state') and hasattr(agent._state, 'set_current_active_agent'):
+        #     agent._state.set_current_active_agent(current_active_agent)
         
-        # Get the response while animation runs with error handling
+        # Get the response with real streaming support
         try:
-            agent.invoke(user_input)
-        except Exception as e:
             # Stop the animation first
             loading = False
             loader_thread.join()
+            print("\r" + " " * 15 + "\r", end="", flush=True)
+            
+            # Use the agent system properly
+            agent.invoke(user_input)
+                
+        except Exception as e:
+            # Stop the animation if still running
+            loading = False
+            if 'loader_thread' in locals():
+                loader_thread.join()
             
             # Clear the loading line
             print("\r" + " " * 15 + "\r", end="", flush=True)
@@ -427,27 +403,7 @@ def run_agent(agent: Agent):
             save_to_conversation(traceback_msg)
             save_to_conversation("─" * TERMINAL_WIDTH)
             save_to_conversation("")  # Empty line
-            return  # Continue conversation instead of crashing
-        
-        # Stop the animation
-        loading = False
-        loader_thread.join()
-        
-        # Clear the loading line properly
-        print("\r" + " " * 15 + "\r", end="", flush=True)
-        
-        # # Convert list response to string if necessary
-        # if isinstance(response, list):
-        #     response = "\n".join(str(item) for item in response)
-        
-        # # Filter out think tags and their content
-        # response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        # response = response.strip()
-        
-        # # Render markdown properly with rich instead of raw typewriter effect
-        # from rich.markdown import Markdown
-        # md = Markdown(response)
-        # console.print(md)
+            continue  # Continue conversation instead of crashing
 
 
 def load_agent(agent_class: str) -> Agent | None:
@@ -466,10 +422,10 @@ def load_agent(agent_class: str) -> Agent | None:
                 agent.on_tool_response(on_tool_response)
                 agent.on_ai_message(on_ai_message)
                 
-            
                 return agent
         
     return None
+
 
 def list_available_agents():
     from src import modules
@@ -486,16 +442,8 @@ def list_available_agents():
     for agent in agents:
         print(f"  - {agent}")
 
-class ConsoleLoader:
 
-    
-    def stop(self):
-        self.loading = False
-        self.loader_thread.join()
-        
-        # Clear the loading line
-        print("\r" + " " * 20 + "\r", end="", flush=True)
-    
+class ConsoleLoader:
     def start(self, message: str):
         # Matrix-style startup animation
         self.loading = True
@@ -516,16 +464,14 @@ class ConsoleLoader:
         self.loader_thread = threading.Thread(target=startup_loader)
         self.loader_thread.daemon = True  # Make thread die when main thread exits
         self.loader_thread.start()
+
+
+    def stop(self):
+        self.loading = False
+        self.loader_thread.join()
         
-        # Suppress all logging during module loading
-        # import logging
-        # logging.getLogger().setLevel(logging.CRITICAL)
-        # try:
-        #     from loguru import logger
-        #     logger.remove()
-        #     logger.add(lambda x: None)
-        # except: # noqa: E722
-        #     pass
+        # Clear the loading line
+        print("\r" + " " * 20 + "\r", end="", flush=True)
 
 
 def generic_run_agent(agent_class: Optional[str] = None) -> None:
@@ -549,15 +495,10 @@ def generic_run_agent(agent_class: Optional[str] = None) -> None:
         finding and running the requested agent from the loaded modules. The agent
         must be properly registered in a module under src/modules for this to work.
     """
-    
-    console_loader = ConsoleLoader()
-    console_loader.start("Loading")
-    
+        
     assert agent_class is not None, "Agent class is required"
     
     agent = load_agent(agent_class)
-    
-    console_loader.stop()
     
     if agent is None:
         print(f"Agent {agent_class} not found")
