@@ -70,7 +70,9 @@ dependencies = [
     "dagster>=1.11.12",
     "dagster-webserver>=1.11.12",
     "dagster-postgres>=0.27.12",
-    "dagster-aws[s3]>=0.27.12"
+    "dagster-aws[s3]>=0.27.12",
+    "python-docx>=1.2.0",
+    "markdown>=3.9",
 ]
 
 [project.scripts]
