@@ -486,7 +486,7 @@ class WordIntegration(Integration):
         Returns:
             Dict: Document structure information
         """
-        structure = {
+        structure: Dict[str, Any] = {
             "paragraphs": [],
             "tables": [],
             "sections": len(document.sections)
@@ -569,47 +569,60 @@ def as_tools(configuration: WordIntegrationConfiguration):
 
     def create_document_wrapper(**kwargs):
         doc = integration.create_document(**kwargs)
-        integration._WordIntegration__document = doc
+        # Store document reference - using name mangling for private attribute
+        setattr(integration, '_WordIntegration__document', doc)
         return "Document created successfully"
 
     def generate_from_markdown_wrapper(**kwargs):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             integration.create_document()
-        integration.generate_from_markdown(integration._WordIntegration__document, **kwargs)
+            current_doc = getattr(integration, '_WordIntegration__document')
+        integration.generate_from_markdown(current_doc, **kwargs)
         return "Content generated from markdown successfully"
 
     def generate_from_html_wrapper(**kwargs):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             integration.create_document()
-        integration.generate_from_html(integration._WordIntegration__document, **kwargs)
+            current_doc = getattr(integration, '_WordIntegration__document')
+        integration.generate_from_html(current_doc, **kwargs)
         return "Content generated from HTML successfully"
 
     def generate_from_text_wrapper(**kwargs):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             integration.create_document()
-        integration.generate_from_text(integration._WordIntegration__document, **kwargs)
+            current_doc = getattr(integration, '_WordIntegration__document')
+        integration.generate_from_text(current_doc, **kwargs)
         return "Content generated from text successfully"
 
     def add_paragraph_wrapper(**kwargs):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             integration.create_document()
-        integration.add_paragraph(integration._WordIntegration__document, **kwargs)
+            current_doc = getattr(integration, '_WordIntegration__document')
+        integration.add_paragraph(current_doc, **kwargs)
         return "Paragraph added successfully"
 
     def add_heading_wrapper(**kwargs):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             integration.create_document()
-        integration.add_heading(integration._WordIntegration__document, **kwargs)
+            current_doc = getattr(integration, '_WordIntegration__document')
+        integration.add_heading(current_doc, **kwargs)
         return "Heading added successfully"
 
     def replace_placeholder_wrapper(**kwargs):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             return "No document available. Create a document first."
-        integration.replace_placeholder(integration._WordIntegration__document, **kwargs)
+        integration.replace_placeholder(current_doc, **kwargs)
         return "Placeholder replaced successfully"
 
     def save_document_wrapper(output_path: str):
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             return "No document available. Create a document first."
         
         # Ensure the output path uses the proper storage directory
@@ -624,13 +637,14 @@ def as_tools(configuration: WordIntegrationConfiguration):
         else:
             full_path = output_file
             
-        integration.save_document(integration._WordIntegration__document, str(full_path))
+        integration.save_document(current_doc, str(full_path))
         return f"Document saved to {full_path}"
 
     def get_structure_wrapper():
-        if not integration._WordIntegration__document:
+        current_doc = getattr(integration, '_WordIntegration__document', None)
+        if not current_doc:
             return "No document available. Create a document first."
-        return integration.get_document_structure(integration._WordIntegration__document)
+        return integration.get_document_structure(current_doc)
 
     return [
         StructuredTool(

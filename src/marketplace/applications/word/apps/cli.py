@@ -9,7 +9,10 @@ Usage:
     python src/marketplace/applications/word/apps/cli.py --help
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from docx import Document as DocumentType
 import argparse
 import sys
 import re
@@ -403,9 +406,9 @@ class MarkdownProcessor:
 class WordCLI:
     """Simple command-line interface for Word document generation."""
     
-    def __init__(self, config: WordConfig = None):
+    def __init__(self, config: Optional[WordConfig] = None):
         self.config = config or WordConfig()
-        self.document = None
+        self.document: Optional['DocumentType'] = None
         
     def create_document(self, template_path: Optional[str] = None):
         """Create a new document."""
@@ -459,13 +462,13 @@ class WordCLI:
                 Path(temp_docx_path).unlink()
                 # Fallback to styled blank document
                 self.document = Document()
-                self._setup_forvis_mazars_styles()
+                self._setup_custom_styles()
                 return False
                 
         except Exception as e:
             print(f"   Conversion error: {e}")
             self.document = Document()
-            self._setup_forvis_mazars_styles()
+            self._setup_custom_styles()
             return False
             
     def _setup_default_styles(self):
@@ -562,7 +565,7 @@ class WordCLI:
             print(f"✅ Replaced '{placeholder}' with '{replacement}'")
         return True
         
-    def save_document(self, output_path: str, input_filename: str = None, add_timestamp: bool = True):
+    def save_document(self, output_path: str, input_filename: Optional[str] = None, add_timestamp: bool = True):
         """Save the document with optional timestamp prefix using input filename."""
         if not self.document:
             print("❌ Error: No document to save. Create and process content first.")
