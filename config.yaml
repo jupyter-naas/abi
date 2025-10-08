@@ -49,3 +49,5 @@ modules:
     enabled: false
   - path: src/marketplace/domains/support
     enabled: true
+  - path: src/marketplace/applications/word
+    enabled: true
