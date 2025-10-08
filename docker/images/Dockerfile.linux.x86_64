@@ -38,8 +38,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 RUN mkdir -p /app/.cache/ && chown -R abi:abi /app/.cache/
 
-# Run uv sync as abi user with Rust in PATH
-RUN --mount=type=cache,target=/app/.cache/ chmod -R 777 /app/.cache/ && su abi /bin/bash -c "source ~/.cargo/env && /app/.local/bin/uv sync --no-dev"
+# Run uv sync as abi user with Rust in PATH - no chmod needed for cache mount
+RUN --mount=type=cache,target=/app/.cache/,uid=1001,gid=1001 su abi /bin/bash -c "source ~/.cargo/env && /app/.local/bin/uv sync --no-dev"
 
 
 # Final stage
