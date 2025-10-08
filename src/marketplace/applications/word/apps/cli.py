@@ -9,18 +9,17 @@ Usage:
     python src/marketplace/applications/word/apps/cli.py --help
 """
 
+from typing import Optional
 import argparse
 import sys
-import os
 import re
 from pathlib import Path
-from typing import Optional
 from dataclasses import dataclass
 
 # Simple Word document processing using python-docx directly
 try:
     from docx import Document
-    from docx.shared import Pt, RGBColor
+    from docx.shared import Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.style import WD_STYLE_TYPE
     from docx.oxml.shared import OxmlElement, qn
@@ -97,7 +96,7 @@ class MarkdownProcessor:
                 style_name = f'Heading {min(level, 9)}'
                 
             self.doc.add_paragraph(clean_text, style=style_name)
-        except:
+        except Exception:
             # Fallback to manual formatting
             p = self.doc.add_paragraph(clean_text)
             if p.runs:
@@ -114,13 +113,13 @@ class MarkdownProcessor:
         try:
             # Try List Bullet first, fallback to List Paragraph
             self.doc.add_paragraph(clean_text, style='List Bullet')
-        except:
+        except Exception:
             try:
                 self.doc.add_paragraph(clean_text, style='List Paragraph')
-            except:
+            except Exception:
                 self.doc.add_paragraph(f"• {clean_text}")
     
-    def _add_numbered_item(self, text: str, number: str = None):
+    def _add_numbered_item(self, text: str, number: Optional[str] = None):
         """Add a numbered list item with proper list style."""
         clean_text = self._process_inline_formatting(text)
         
@@ -133,10 +132,10 @@ class MarkdownProcessor:
         try:
             # Try List Number first, fallback to List Paragraph
             self.doc.add_paragraph(formatted_text, style='List Number')
-        except:
+        except Exception:
             try:
                 self.doc.add_paragraph(formatted_text, style='List Paragraph')
-            except:
+            except Exception:
                 # Final fallback with manual numbering
                 self.doc.add_paragraph(formatted_text)
     
@@ -151,7 +150,7 @@ class MarkdownProcessor:
         p = self.doc.add_paragraph(clean_text)
         try:
             p.paragraph_format.space_after = Pt(3)
-        except:
+        except Exception:
             pass
         
         # Add bookmark for this reference so hyperlinks can target it
@@ -172,7 +171,7 @@ class MarkdownProcessor:
                 run = p.add_run(clean_text)
                 run.font.italic = True
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        except:
+        except Exception:
             pass
     
     def _add_paragraph(self, text: str):
@@ -184,7 +183,7 @@ class MarkdownProcessor:
             try:
                 p = self.doc.add_paragraph(style='Strong')
                 self._process_text_with_references(clean_text, p)
-            except:
+            except Exception:
                 p = self.doc.add_paragraph()
                 self._process_text_with_references(clean_text, p)
                 if p.runs:
@@ -195,7 +194,7 @@ class MarkdownProcessor:
             try:
                 p = self.doc.add_paragraph(style='Emphasis')
                 self._process_text_with_references(clean_text, p)
-            except:
+            except Exception:
                 p = self.doc.add_paragraph()
                 self._process_text_with_references(clean_text, p)
                 if p.runs:
@@ -206,7 +205,7 @@ class MarkdownProcessor:
             try:
                 p = self.doc.add_paragraph(style='Normal')
                 self._process_text_with_references(clean_text, p)
-            except:
+            except Exception:
                 p = self.doc.add_paragraph()
                 self._process_text_with_references(clean_text, p)
     
@@ -221,7 +220,7 @@ class MarkdownProcessor:
         try:
             p.paragraph_format.space_before = Pt(12)
             p.paragraph_format.space_after = Pt(12)
-        except:
+        except Exception:
             pass
     
     def _add_hyperlink(self, paragraph, text, bookmark_name):
@@ -385,7 +384,7 @@ class MarkdownProcessor:
             if i % 2 == 0:
                 # Regular text
                 if part:
-                    run = paragraph.add_run(part)
+                     paragraph.add_run(part)
             else:
                 # Reference number - make it a hyperlink
                 bookmark_name = f"source_{part}"
@@ -419,14 +418,14 @@ class WordCLI:
             except ValueError as e:
                 if "is not a Word file" in str(e):
                     # Handle .dotx templates by converting to .docx first
-                    print(f"🔄 Converting .dotx template to usable format...")
+                    print("🔄 Converting .dotx template to usable format...")
                     print(f"   Template: {template_path}")
                     
                     # Try to convert .dotx to .docx using a workaround
                     if self._convert_dotx_template(template_path):
-                        print(f"✅ Template converted and applied successfully")
+                        print("✅ Template converted and applied successfully")
                     else:
-                        print(f"⚠️  Template conversion failed, using blank document with template styling")
+                        print("⚠️  Template conversion failed, using blank document with template styling")
                         self.document = Document()
                         self._setup_custom_styles()
                 else:
@@ -439,7 +438,6 @@ class WordCLI:
     def _convert_dotx_template(self, template_path: str) -> bool:
         """Convert .dotx template to usable document."""
         try:
-            import zipfile
             import tempfile
             import shutil
             
@@ -456,7 +454,7 @@ class WordCLI:
                 # Clean up temp file
                 Path(temp_docx_path).unlink()
                 return True
-            except:
+            except Exception:
                 # Clean up temp file
                 Path(temp_docx_path).unlink()
                 # Fallback to styled blank document
@@ -611,13 +609,13 @@ class WordCLI:
         table_count = len(self.document.tables)
         section_count = len(self.document.sections)
         
-        print(f"\n📊 Document Information:")
+        print("\n📊 Document Information:")
         print(f"   Paragraphs: {paragraph_count}")
         print(f"   Tables: {table_count}")
         print(f"   Sections: {section_count}")
         
         if self.document.paragraphs:
-            print(f"\n📝 First few paragraphs:")
+            print("\n📝 First few paragraphs:")
             for i, para in enumerate(self.document.paragraphs[:3]):
                 text_preview = para.text[:50] + "..." if len(para.text) > 50 else para.text
                 print(f"   {i+1}. {text_preview}")
