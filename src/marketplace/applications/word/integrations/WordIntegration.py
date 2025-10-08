@@ -611,8 +611,21 @@ def as_tools(configuration: WordIntegrationConfiguration):
     def save_document_wrapper(output_path: str):
         if not integration._WordIntegration__document:
             return "No document available. Create a document first."
-        integration.save_document(integration._WordIntegration__document, output_path)
-        return f"Document saved to {output_path}"
+        
+        # Ensure the output path uses the proper storage directory
+        from pathlib import Path
+        storage_dir = Path("storage/datastore/marketplace/applications/word")
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        
+        # If output_path is just a filename, use the storage directory
+        output_file = Path(output_path)
+        if not output_file.is_absolute() and len(output_file.parts) == 1:
+            full_path = storage_dir / output_path
+        else:
+            full_path = output_file
+            
+        integration.save_document(integration._WordIntegration__document, str(full_path))
+        return f"Document saved to {full_path}"
 
     def get_structure_wrapper():
         if not integration._WordIntegration__document:
