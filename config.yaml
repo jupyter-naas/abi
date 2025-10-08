@@ -51,3 +51,5 @@ modules:
     enabled: true
   - path: src/marketplace/domains/cyber-security-analyst
     enabled: true
+  - path: src/marketplace/applications/word
+    enabled: true

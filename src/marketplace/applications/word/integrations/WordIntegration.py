@@ -564,6 +564,9 @@ def as_tools(configuration: WordIntegrationConfiguration):
         placeholder: str = Field(..., description="Placeholder text to find")
         replacement: str = Field(..., description="Text to replace placeholder with")
 
+    class SaveDocumentSchema(BaseModel):
+        output_path: str = Field(..., description="Path to save the document")
+
     def create_document_wrapper(**kwargs):
         doc = integration.create_document(**kwargs)
         integration._WordIntegration__document = doc
@@ -663,9 +666,7 @@ def as_tools(configuration: WordIntegrationConfiguration):
             name="word_save_document",
             description="Save the current document to a file",
             func=lambda output_path: save_document_wrapper(output_path),
-            args_schema=type('SaveSchema', (BaseModel,), {
-                'output_path': Field(..., description="Path to save the document")
-            }),
+            args_schema=SaveDocumentSchema,
         ),
         StructuredTool(
             name="word_get_structure",
