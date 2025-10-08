@@ -37,7 +37,7 @@ jobs:
       
       - name: Install naas-python
         run: |
-          pip install naas-python
+          pip install naas-python --upgrade
           pip install --upgrade pydantic==2.7.4
       
       - name: Create Naas Container registry
@@ -211,7 +211,7 @@ jobs:
       
       - name: Install naas-python
         run: |
-          pip install naas-python
+          pip install naas-python --upgrade
           pip install --upgrade pydantic==2.7.4
       
       - name: Create Naas Container registry
@@ -286,7 +286,7 @@ jobs:
       
       - name: Install naas-python
         run: |
-          pip install naas-python
+          pip install naas-python --upgrade
           pip install --upgrade pydantic==2.7.4
       
       - name: Create Naas Container registry

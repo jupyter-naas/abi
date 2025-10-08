@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from abi.utils.Expose import Expose
 from pydantic import BaseModel
+from typing import TypeVar, Generic
 
 
 @dataclass
@@ -12,7 +13,10 @@ class WorkflowParameters(BaseModel):
     pass
 
 
-class Workflow(Expose):
+P = TypeVar('P', bound=WorkflowParameters)
+
+
+class Workflow(Expose, Generic[P]):
     """A workflow represents a sequence of operations that can be exposed in multiple ways.
 
     Workflows encapsulate business logic that can be:
@@ -38,5 +42,5 @@ class Workflow(Expose):
     def __init__(self, configuration: WorkflowConfiguration):
         self.__configuration = configuration
 
-    def run(self, parameters: WorkflowParameters):
+    def run(self, parameters: P):
         pass

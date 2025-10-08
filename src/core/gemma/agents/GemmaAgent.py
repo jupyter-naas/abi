@@ -5,18 +5,11 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from abi.services.agent.Agent import Agent
-from src.core.gemma.models.gemma3_4b import model
 from typing import Optional
-from abi import logger
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemma.png"
 NAME = "Gemma"
-TYPE = "core"
-SLUG = "gemma"
 DESCRIPTION = "Local Gemma3 4B model via Ollama - lightweight, fast alternative to cloud Gemini"
-MODEL = "gemma3-4b"
-
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/gemma.png"
 SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's open-source Gemma3 4B model running locally via Ollama.
 
 ## Your Strengths
@@ -57,22 +50,55 @@ SYSTEM_PROMPT = """You are Gemma, a helpful AI assistant powered by Google's ope
 
 Remember: I'm your local, private AI assistant - fast, efficient, and completely offline!
 """
-TEMPERATURE = 0
-DATE = True
-INSTRUCTIONS_TYPE = "system"
-ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
+) -> IntentAgent:
 
-    # Check if model is available
-    if not model:
-        logger.error("⚠️  Gemma model not available. Make sure Ollama is running and 'gemma3:4b' is pulled.")
-        return None
+    # Define model
+    from src.core.gemma.models.gemma3_4b import model
     
+    # Define tools
+    tools: list = []
+    
+    # Define agents
+    agents: list = []
+    
+    # Define intents
+    intents = [
+        # General conversation intents
+        Intent(intent_type=IntentType.AGENT, intent_value="ask quick question", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="get fast response", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="use lightweight ai", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="use efficient ai", intent_target="call_model"),
+        
+        # Privacy and local AI intents
+        Intent(intent_type=IntentType.AGENT, intent_value="start private chat", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="have local conversation", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="chat offline", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="get personal assistance", intent_target="call_model"),
+        
+        # Alternative to Gemini intents
+        Intent(intent_type=IntentType.AGENT, intent_value="use local gemini", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="run offline gemini", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="access private gemini", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="try open source gemini", intent_target="call_model"),
+        
+        # General Gemma intents
+        Intent(intent_type=IntentType.AGENT, intent_value="activate gemma", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="change to gemma", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="start gemma chat", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="get gemma help", intent_target="call_model"),
+        
+        # Task-specific intents
+        Intent(intent_type=IntentType.AGENT, intent_value="get writing help", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="do quick editing", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="ask general question", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="handle everyday task", intent_target="call_model"),
+    ]
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -81,49 +107,13 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    from langchain_core.tools import Tool
-    from typing import List, Union
-    
-    tools: List[Union[Tool, Agent]] = []
-
-    # Define Gemma-specific intents
-    intents = [
-        # General conversation intents
-        Intent(intent_type=IntentType.AGENT, intent_value="quick question", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="fast response", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="lightweight ai", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="efficient ai", intent_target=NAME),
-        
-        # Privacy and local AI intents
-        Intent(intent_type=IntentType.AGENT, intent_value="private chat", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="local conversation", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="offline chat", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="personal assistant", intent_target=NAME),
-        
-        # Alternative to Gemini intents
-        Intent(intent_type=IntentType.AGENT, intent_value="local gemini", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="offline gemini", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="private gemini", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="open source gemini", intent_target=NAME),
-        
-        # General Gemma intents
-        Intent(intent_type=IntentType.AGENT, intent_value="use gemma", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to gemma", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="gemma chat", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="gemma help", intent_target=NAME),
-        
-        # Task-specific intents
-        Intent(intent_type=IntentType.AGENT, intent_value="writing help", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="quick editing", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="general question", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="everyday task", intent_target=NAME),
-    ]
     return GemmaAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
         tools=tools,
+        agents=agents,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,
