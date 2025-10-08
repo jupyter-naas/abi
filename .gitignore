@@ -57,7 +57,7 @@ wheels/
 thread_id.txt
 agentic-director/
 
-# Storage - ignore everything in storage except example directories and README files
+# Storage - ignore everything in storage except README files
 storage/*
 !storage/README.md
 !storage/*/README.md
@@ -67,11 +67,8 @@ storage/*
 storage/datastore/*
 storage/triplestore/*
 storage/vectorstore/*
-!storage/datastore/example/
-!storage/triplestore/example/
-!storage/vectorstore/example/
 
-# Ignore data files in any directory except in example directories
+# Ignore data files globally
 *.csv
 *.parquet
 *.json
@@ -88,29 +85,12 @@ storage/vectorstore/*
 *.jpeg
 *.webp
 *.heic
-!storage/*/example/**/*.csv
-!storage/*/example/**/*.parquet
-!storage/*/example/**/*.json
-!storage/*/example/**/*.pdf
-!storage/*/example/**/*.ttl
-!storage/*/example/**/*.rdf
-!storage/*/example/**/*.owl
-!storage/*/example/**/*.doc
-!storage/*/example/**/*.docx
-!storage/*/example/**/*.ppt
-!storage/*/example/**/*.pptx
-!storage/*/example/**/*.xls
-!storage/*/example/**/*.xlsx
-!storage/*/example/**/*.db
-!storage/*/example/**/*.sqlite
-!storage/*/example/**/*.sqlite3
-!storage/*/example/**/*.jpg
-!storage/*/example/**/*.png
-!storage/*/example/**/*.gif
-!storage/*/example/**/*.jpeg
-!storage/*/example/**/*.webp
-!storage/*/example/**/*.heic
 
 
 *.pid
 sandbox/
+
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/

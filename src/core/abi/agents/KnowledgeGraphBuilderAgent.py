@@ -4,12 +4,11 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     
 )
-from langchain_openai import ChatOpenAI
-from fastapi import APIRouter
 from src import secret
 from typing import Optional
-from enum import Enum
+from langchain_openai import ChatOpenAI  # noqa: F401
 from pydantic import SecretStr
+from abi import logger
 
 NAME: str = "Knowledge_Graph_Builder"
 MODEL: str = "gpt-4o"
@@ -144,13 +143,30 @@ SUGGESTIONS: list = [
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Agent:
-    # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+) -> Optional[Agent]:
+    # Set model based on AI_MODE
+    ai_mode = secret.get("AI_MODE")
+    
+    if ai_mode == "airgap":
+        # Use airgap model (Docker Model Runner)
+        model = ChatOpenAI(
+            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
+            temperature=TEMPERATURE,
+            api_key="no needed",  # type: ignore
+            base_url="http://localhost:12434/engines/v1",
+        )
+    else:
+        # Use cloud model for cloud/local modes
+        openai_api_key = secret.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("OpenAI API key not available for KnowledgeGraphBuilderAgent")
+            logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
+            return None
+        model = ChatOpenAI(
+            model=MODEL, 
+            temperature=TEMPERATURE, 
+            api_key=SecretStr(openai_api_key)
+        )
 
     # Use provided configuration or create default one
     if agent_configuration is None:
@@ -308,17 +324,4 @@ def create_agent(
 
 
 class KnowledgeGraphBuilderAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME.lower(),
-        name: str = NAME.replace("_", " "),
-        description: str = "API endpoints to call the Knowledge Graph Builder agent completion.",
-        description_stream: str = "API endpoints to call the Knowledge Graph Builder agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

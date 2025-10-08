@@ -5,17 +5,12 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from abi.services.agent.Agent import Agent
-from src.core.deepseek.models.deepseek_r1_8b import model
 from typing import Optional
-from abi import logger
 
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
+
 NAME = "DeepSeek"
-TYPE = "core"
-SLUG = "deepseek"
 DESCRIPTION = "Local DeepSeek R1 8B model via Ollama - advanced reasoning, mathematics, and problem-solving"
-MODEL = "deepseek-r1-8b"
+AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/deepseek.png"
 SYSTEM_PROMPT = """You are DeepSeek, an advanced reasoning AI assistant powered by DeepSeek R1 8B model running locally via Ollama.
 
 ## Your Expertise
@@ -49,22 +44,51 @@ SYSTEM_PROMPT = """You are DeepSeek, an advanced reasoning AI assistant powered 
 
 Remember: I excel at reasoning tasks and run completely locally for maximum privacy and security.
 """
-TEMPERATURE = 0
-DATE = True
-INSTRUCTIONS_TYPE = "system"
-ONTOLOGY = True
 SUGGESTIONS: list = []
 
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
+) -> IntentAgent:
 
-    # Check if model is available
-    if not model:
-        logger.error("⚠️  DeepSeek model not available. Make sure Ollama is running and 'deepseek-r1:8b' is pulled.")
-        return None
-    
+    # Define model
+    from src.core.deepseek.models.deepseek_r1_8b import model
+
+    # Define tools
+    tools: list = []
+
+    # Define agents
+    agents: list = []
+
+    # Define intents
+    intents: list = [
+        # Reasoning and problem-solving intents
+        Intent(intent_type=IntentType.AGENT, intent_value="help me with complex reasoning", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="analyze this problem deeply", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="analyze this logically", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="explain this step by step", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="walk me through your chain of thought", intent_target="call_model"),
+        
+        # Mathematics intents
+        Intent(intent_type=IntentType.AGENT, intent_value="help me solve this math problem", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me solve this equation", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me prove this theorem", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me with calculus", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="analyze these statistics", intent_target="call_model"),
+        
+        # Scientific research intents
+        Intent(intent_type=IntentType.AGENT, intent_value="analyze this scientific problem", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me design research methodology", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me test this hypothesis", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me design an experiment", intent_target="call_model"),
+        
+        # Problem types
+        Intent(intent_type=IntentType.AGENT, intent_value="help me solve this problem", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me solve this puzzle", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me break down this complex problem", intent_target="call_model"),
+        Intent(intent_type=IntentType.AGENT, intent_value="help me answer this research question", intent_target="call_model"),
+    ]
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
@@ -73,51 +97,13 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    from langchain_core.tools import Tool
-    from typing import List, Union
-    
-    tools: List[Union[Tool, Agent]] = []
-
-    # Define DeepSeek-specific intents
-    intents = [
-        # Reasoning and problem-solving intents
-        Intent(intent_type=IntentType.AGENT, intent_value="complex reasoning", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="deep reasoning", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="logical analysis", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="step by step", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="chain of thought", intent_target=NAME),
-        
-        # Mathematics intents
-        Intent(intent_type=IntentType.AGENT, intent_value="mathematics", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="solve equation", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="mathematical proof", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="calculus help", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="statistics analysis", intent_target=NAME),
-        
-        # Scientific research intents
-        Intent(intent_type=IntentType.AGENT, intent_value="scientific analysis", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="research methodology", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="hypothesis testing", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="experimental design", intent_target=NAME),
-        
-        # General DeepSeek intents
-        Intent(intent_type=IntentType.AGENT, intent_value="use deepseek", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to deepseek", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="deepseek reasoning", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="local reasoning", intent_target=NAME),
-        
-        # Problem types
-        Intent(intent_type=IntentType.AGENT, intent_value="solve problem", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="logical puzzle", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="complex problem", intent_target=NAME),
-        Intent(intent_type=IntentType.AGENT, intent_value="research question", intent_target=NAME),
-    ]
     return DeepSeekAgent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model.model,
         intents=intents,
         tools=tools,
+        agents=agents,
         configuration=agent_configuration,
         state=agent_shared_state,
         memory=None,
