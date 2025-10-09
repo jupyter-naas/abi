@@ -2,7 +2,6 @@ from lib.abi.models.Model import ChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
-from typing import Optional
 
 ID = "gpt-4.1"
 NAME = "gpt-4.1"
@@ -11,7 +10,7 @@ IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.
 CONTEXT_WINDOW = 1047576
 OWNER = "openai"
 
-model: Optional[ChatModel] = None
+model: ChatModel
 openai_api_key = secret.get("OPENAI_API_KEY")
 model = ChatModel(
     model_id=ID,
