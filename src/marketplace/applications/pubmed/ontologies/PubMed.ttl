@@ -1,0 +1,214 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/BFO_> .
+@prefix pubmed: <https://w3id.org/pubmed/> .
+
+pubmed: a owl:Ontology ;
+    owl:imports <http://purl.obolibrary.org/obo/bfo.owl> ;
+    rdfs:comment "Ontology module for representing PubMed article summaries aligned with the Basic Formal Ontology (BFO)." .
+
+### Classes ###
+
+pubmed:PubMedPaperSummary a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty pubmed:summarizes ;
+          owl:allValuesFrom pubmed:PubMedPaper
+        ] ;
+    rdfs:label "PubMed paper summary" ;
+    rdfs:comment "A generically dependent continuant that encodes the metadata summary returned by the PubMed API for a single paper." .
+
+pubmed:PubMedPaper a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "PubMed paper" ;
+    rdfs:comment "The information content entity representing the canonical description of a PubMed article." .
+
+pubmed:LiteralContent a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Literal content" ;
+    rdfs:comment "An information content entity that holds literal text values." .
+
+pubmed:Journal a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Journal" ;
+    rdfs:comment "A serial publication venue that bears PubMed papers." .
+
+pubmed:JournalIssue a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ,
+        [ a owl:Restriction ;
+          owl:onProperty pubmed:issueOf ;
+          owl:allValuesFrom pubmed:Journal
+        ] ;
+    rdfs:label "Journal issue" ;
+    rdfs:comment "A generically dependent continuant denoting a specific issue of a journal." .
+
+pubmed:Author a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000040 ;
+    rdfs:label "Author" ;
+    rdfs:comment "A human who bears an authorship role for a PubMed paper." .
+
+pubmed:AuthorshipRole a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000023 ,
+        [ a owl:Restriction ;
+          owl:onProperty pubmed:roleHeldBy ;
+          owl:allValuesFrom pubmed:Author
+        ] ;
+    rdfs:label "Authorship role" ;
+    rdfs:comment "A role inhering in a person when they author a PubMed paper." .
+
+### Object properties ###
+
+pubmed:summarizes a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range pubmed:PubMedPaper ;
+    rdfs:label "summarizes" ;
+    rdfs:comment "Links a summary record to the PubMed paper it describes." .
+
+pubmed:aboutJournal a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range pubmed:Journal ;
+    rdfs:label "about journal" ;
+    rdfs:comment "Associates a summary with the journal in which the paper is published." .
+
+pubmed:aboutJournalIssue a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range pubmed:JournalIssue ;
+    rdfs:label "about journal issue" ;
+    rdfs:comment "Associates a summary with the journal issue encompassing the paper." .
+
+pubmed:hasAuthorshipRole a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range pubmed:AuthorshipRole ;
+    rdfs:label "has authorship role" ;
+    rdfs:comment "Connects a summary to the authorship roles involved." .
+
+pubmed:roleHeldBy a owl:ObjectProperty ;
+    rdfs:domain pubmed:AuthorshipRole ;
+    rdfs:range pubmed:Author ;
+    rdfs:label "role held by" ;
+    rdfs:comment "Relates an authorship role to the author who bears it." .
+
+pubmed:issueOf a owl:ObjectProperty ;
+    rdfs:domain pubmed:JournalIssue ;
+    rdfs:range pubmed:Journal ;
+    rdfs:label "issue of" ;
+    rdfs:comment "Links a journal issue to its parent journal." .
+
+pubmed:publishedIn a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaper ;
+    rdfs:range pubmed:JournalIssue ;
+    rdfs:label "published in" ;
+    rdfs:comment "Relates a PubMed paper to the journal issue in which it appears." .
+
+pubmed:hasAbstract a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaper ;
+    rdfs:range pubmed:LiteralContent ;
+    rdfs:label "has abstract" ;
+    rdfs:comment "Associates a paper with the literal content representing its abstract." .
+
+pubmed:hasKeyword a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaper ;
+    rdfs:range pubmed:LiteralContent ;
+    rdfs:label "has keyword" ;
+    rdfs:comment "Associates a paper with a keyword literal." .
+
+pubmed:hasMeshDescriptor a owl:ObjectProperty ;
+    rdfs:domain pubmed:PubMedPaper ;
+    rdfs:range pubmed:LiteralContent ;
+    rdfs:label "has MeSH descriptor" ;
+    rdfs:comment "Associates a paper with a MeSH descriptor literal." .
+
+### Data properties ###
+
+pubmed:pubmedIdentifier a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "PubMed identifier" ;
+    rdfs:comment "The primary PubMed identifier for the paper." .
+
+pubmed:title a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "title" ;
+    rdfs:comment "The preferred title for the PubMed paper." .
+
+pubmed:journalTitleLiteral a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "journal title literal" ;
+    rdfs:comment "Literal journal title captured by the PubMed API when no journal individual is modeled." .
+
+pubmed:publicationDate a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:date ;
+    rdfs:label "publication date" ;
+    rdfs:comment "Calendar date of publication." .
+
+pubmed:sortPublicationDate a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "sort publication date" ;
+    rdfs:comment "Normalized publication timestamp supplied by PubMed for sorting." .
+
+pubmed:authorLiteral a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "author literal" ;
+    rdfs:comment "Literal author string as provided by the PubMed API." .
+
+pubmed:doi a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "DOI" ;
+    rdfs:comment "Digital Object Identifier associated with the paper." .
+
+pubmed:pmcid a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "PMCID" ;
+    rdfs:comment "PubMed Central identifier associated with the paper." .
+
+pubmed:url a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "URL" ;
+    rdfs:comment "Canonical PubMed URL for the paper." .
+
+pubmed:downloadUrl a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:anyURI ;
+    rdfs:label "download URL" ;
+    rdfs:comment "Download URL for the paper if available." .
+
+pubmed:issn a owl:DatatypeProperty ;
+    rdfs:domain pubmed:Journal ;
+    rdfs:range xsd:string ;
+    rdfs:label "ISSN" ;
+    rdfs:comment "International Standard Serial Number for the journal." .
+
+pubmed:volume a owl:DatatypeProperty ;
+    rdfs:domain pubmed:JournalIssue ;
+    rdfs:range xsd:string ;
+    rdfs:label "volume" ;
+    rdfs:comment "Volume identifier for the journal issue." .
+
+pubmed:issueLabel a owl:DatatypeProperty ;
+    rdfs:domain pubmed:JournalIssue ;
+    rdfs:range xsd:string ;
+    rdfs:label "issue label" ;
+    rdfs:comment "Label for the journal issue (issue number or identifier)." .
+
+pubmed:pages a owl:DatatypeProperty ;
+    rdfs:domain pubmed:PubMedPaperSummary ;
+    rdfs:range xsd:string ;
+    rdfs:label "pages" ;
+    rdfs:comment "Page range for the paper within the journal issue." .
+
+pubmed:literalValue a owl:DatatypeProperty ;
+    rdfs:domain pubmed:LiteralContent ;
+    rdfs:range xsd:string ;
+    rdfs:label "literal value" ;
+    rdfs:comment "The literal text value contained in a LiteralContent node." .
+

@@ -202,3 +202,5 @@ class CacheService(ICacheService):
         cached_data = CachedData(key=key, data=base64.b64encode(pickle.dumps(value)).decode(), data_type=DataType.PICKLE)
         self.adapter.set(key, cached_data)
     
+    def exists(self, key: str) -> bool:
+        return self.adapter.exists(key)

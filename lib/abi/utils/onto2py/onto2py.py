@@ -24,7 +24,7 @@ class ClassInfo:
     description: Optional[str] = None
     property_uris: Dict[str, str] = field(default_factory=dict)  # Maps property name to URI
 
-def ttl2py(ttl_file: str | io.TextIOBase) -> str:
+def onto2py(ttl_file: str | io.TextIOBase) -> str:
     """
     Convert TTL file to Python classes
     
@@ -115,8 +115,22 @@ def ttl2py(ttl_file: str | io.TextIOBase) -> str:
     for prop_uri, prop_info in properties.items():
         for domain in g.objects(rdflib.URIRef(prop_uri), RDFS.domain):
             if str(domain) in classes:
-                classes[str(domain)].properties.append(prop_info)
-                classes[str(domain)].property_uris[prop_info.name] = prop_uri
+                class_info = classes[str(domain)]
+                # Avoid emitting duplicate property declarations when a property
+                # specifies the same domain multiple times in the ontology.
+                existing_props = {prop.name: prop for prop in class_info.properties}
+
+                if prop_info.name in existing_props:
+                    existing_prop = existing_props[prop_info.name]
+                    # Merge stronger constraints if the duplicate carries them.
+                    if prop_info.required and not existing_prop.required:
+                        existing_prop.required = True
+                    if prop_info.cardinality and not existing_prop.cardinality:
+                        existing_prop.cardinality = prop_info.cardinality
+                    continue
+
+                class_info.properties.append(prop_info)
+                class_info.property_uris[prop_info.name] = prop_uri
     
     # Inherit properties from parent classes
     inherit_parent_properties(classes)
@@ -308,10 +322,11 @@ def inherit_parent_properties(classes: Dict[str, ClassInfo]):
                             if uri:
                                 return uri
                     return None
-                
+
                 prop_uri = find_property_uri(inherited_prop.name, class_info)
                 if prop_uri:
                     class_info.property_uris[inherited_prop.name] = prop_uri
+                existing_prop_names.add(inherited_prop.name)
 
 def generate_python_code(classes: Dict[str, ClassInfo], 
                         properties: Dict[str, PropertyInfo]) -> str:
@@ -320,7 +335,7 @@ def generate_python_code(classes: Dict[str, ClassInfo],
     code_lines = [
         "from __future__ import annotations",
         "from typing import Optional, List, Any, Union, ClassVar",
-        "from pydantic import BaseModel, Field",
+        "from pydantic import BaseModel, Field, PrivateAttr",
         "import datetime",
         "import uuid",
         "import rdflib",
@@ -333,6 +348,7 @@ def generate_python_code(classes: Dict[str, ClassInfo],
         "class RDFEntity(BaseModel):",
         "    \"\"\"Base class for all RDF entities with URI and namespace management\"\"\"",
         "    _namespace: ClassVar[str] = \"http://example.org/instance/\"",
+        "    _uri: str = \"\"",
         "    ",
         "    model_config = {",
         "        'arbitrary_types_allowed': True,",
@@ -340,16 +356,19 @@ def generate_python_code(classes: Dict[str, ClassInfo],
         "    }",
         "    ",
         "    def __init__(self, **kwargs):",
+        "        uri = kwargs.pop('_uri', None)",
         "        super().__init__(**kwargs)",
-        "        if not hasattr(self, '_uri'):",
-        "            object.__setattr__(self, '_uri', f\"{self._namespace}{uuid.uuid4()}\")",
+        "        if uri is not None:",
+        "            self._uri = uri",
+        "        elif not self._uri:",
+        "            self._uri = f\"{self._namespace}{uuid.uuid4()}\"",
         "    ",
         "    @classmethod",
         "    def set_namespace(cls, namespace: str):",
         "        \"\"\"Set the namespace for generating URIs\"\"\"",
         "        cls._namespace = namespace",
         "        ",
-        "    def rdf(self, subject_uri: str = None) -> Graph:",
+        "    def rdf(self, subject_uri: str | None = None) -> Graph:",
         "        \"\"\"Generate RDF triples for this instance\"\"\"",
         "        g = Graph()",
         "        ",
@@ -471,37 +490,96 @@ def topological_sort_classes(classes: Dict[str, ClassInfo]) -> List[ClassInfo]:
 
 def generate_class_code(class_info: ClassInfo) -> List[str]:
     """Generate Python code for a single class"""
-    
+
     lines = []
-    
-    # Add class docstring if description exists
-    if class_info.description:
-        lines.append('"""')
-        lines.append(f'{class_info.description}')
-        lines.append('"""')
-    
-    # Class definition with inheritance
+
+    # Deduplicate properties by name while merging stricter constraints.
+    unique_props: Dict[str, PropertyInfo] = {}
+    for prop in class_info.properties:
+        if prop.name in unique_props:
+            existing = unique_props[prop.name]
+            if prop.required and not existing.required:
+                existing.required = True
+            if prop.cardinality and not existing.cardinality:
+                existing.cardinality = prop.cardinality
+            continue
+        unique_props[prop.name] = prop
+
+    properties_list = list(unique_props.values())
+
+    # Determine class bases
     if class_info.parent_classes:
-        parents = ", ".join(class_info.parent_classes)
-        lines.append(f"class {class_info.name}({parents}, RDFEntity):")
+        parents = list(class_info.parent_classes)
+        if "RDFEntity" not in parents:
+            parents.append("RDFEntity")
+        lines.append(f"class {class_info.name}({', '.join(parents)}):")
     else:
         lines.append(f"class {class_info.name}(RDFEntity):")
+
+    # Add class docstring if description exists
+    if class_info.description:
+        lines.append('    """')
+        for line in class_info.description.splitlines():
+            lines.append(f"    {line}")
+        lines.append('    """')
     
+    if class_info.description:
+        lines.append("")
+
     # Add class-specific metadata
     lines.append(f"    _class_uri: ClassVar[str] = '{class_info.uri}'")
-    
+
     # Add property URI mapping
     if class_info.property_uris:
-        prop_uris_dict = ", ".join([f"'{prop_name}': '{prop_uri}'" for prop_name, prop_uri in class_info.property_uris.items()])
+        prop_uris_dict = ", ".join(
+            [
+                f"'{prop_name}': '{prop_uri}'"
+                for prop_name, prop_uri in sorted(class_info.property_uris.items())
+            ]
+        )
         lines.append(f"    _property_uris: ClassVar[dict] = {{{prop_uris_dict}}}")
     else:
         lines.append("    _property_uris: ClassVar[dict] = {}")
-    
-    # Add properties
-    if class_info.properties:
-        for prop in class_info.properties:
+
+    if class_info.property_uris:
+        lines.append("")
+
+    # Add properties grouped by type for readability
+    data_properties = sorted(
+        (prop for prop in properties_list if prop.property_type == 'data'),
+        key=lambda prop: prop.name,
+    )
+    object_properties = sorted(
+        (prop for prop in properties_list if prop.property_type == 'object'),
+        key=lambda prop: prop.name,
+    )
+    other_properties = sorted(
+        (
+            prop
+            for prop in properties_list
+            if prop.property_type not in {'data', 'object'}
+        ),
+        key=lambda prop: prop.name,
+    )
+
+    property_groups = [
+        ("Data properties", data_properties),
+        ("Object properties", object_properties),
+        ("Other properties", other_properties),
+    ]
+
+    emitted_property_group = False
+    for group_label, props in property_groups:
+        if not props:
+            continue
+        if emitted_property_group:
+            lines.append("")
+        lines.append(f"    # {group_label}")
+        for prop in props:
             lines.append(f"    {generate_property_code(prop)}")
-    else:
+        emitted_property_group = True
+
+    if not emitted_property_group:
         lines.append("    pass")
     
 
