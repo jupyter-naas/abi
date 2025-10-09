@@ -340,8 +340,11 @@ def generate_python_code(classes: Dict[str, ClassInfo],
         "    }",
         "    ",
         "    def __init__(self, **kwargs):",
+        "        uri = kwargs.pop('_uri', None)",
         "        super().__init__(**kwargs)",
-        "        if not hasattr(self, '_uri'):",
+        "        if uri is not None:",
+        "            object.__setattr__(self, '_uri', uri)",
+        "        elif not hasattr(self, '_uri'):",
         "            object.__setattr__(self, '_uri', f\"{self._namespace}{uuid.uuid4()}\")",
         "    ",
         "    @classmethod",
@@ -474,34 +477,77 @@ def generate_class_code(class_info: ClassInfo) -> List[str]:
     
     lines = []
     
-    # Add class docstring if description exists
-    if class_info.description:
-        lines.append('"""')
-        lines.append(f'{class_info.description}')
-        lines.append('"""')
-    
-    # Class definition with inheritance
+    # Determine class bases
     if class_info.parent_classes:
         parents = ", ".join(class_info.parent_classes)
-        lines.append(f"class {class_info.name}({parents}, RDFEntity):")
+        lines.append(f"class {class_info.name}({parents}):")
     else:
         lines.append(f"class {class_info.name}(RDFEntity):")
+
+    # Add class docstring if description exists
+    if class_info.description:
+        lines.append('    """')
+        for line in class_info.description.splitlines():
+            lines.append(f"    {line}")
+        lines.append('    """')
     
+    if class_info.description:
+        lines.append("")
+
     # Add class-specific metadata
     lines.append(f"    _class_uri: ClassVar[str] = '{class_info.uri}'")
-    
+
     # Add property URI mapping
     if class_info.property_uris:
-        prop_uris_dict = ", ".join([f"'{prop_name}': '{prop_uri}'" for prop_name, prop_uri in class_info.property_uris.items()])
+        prop_uris_dict = ", ".join(
+            [
+                f"'{prop_name}': '{prop_uri}'"
+                for prop_name, prop_uri in sorted(class_info.property_uris.items())
+            ]
+        )
         lines.append(f"    _property_uris: ClassVar[dict] = {{{prop_uris_dict}}}")
     else:
         lines.append("    _property_uris: ClassVar[dict] = {}")
-    
-    # Add properties
-    if class_info.properties:
-        for prop in class_info.properties:
+
+    if class_info.property_uris:
+        lines.append("")
+
+    # Add properties grouped by type for readability
+    data_properties = sorted(
+        (prop for prop in class_info.properties if prop.property_type == 'data'),
+        key=lambda prop: prop.name,
+    )
+    object_properties = sorted(
+        (prop for prop in class_info.properties if prop.property_type == 'object'),
+        key=lambda prop: prop.name,
+    )
+    other_properties = sorted(
+        (
+            prop
+            for prop in class_info.properties
+            if prop.property_type not in {'data', 'object'}
+        ),
+        key=lambda prop: prop.name,
+    )
+
+    property_groups = [
+        ("Data properties", data_properties),
+        ("Object properties", object_properties),
+        ("Other properties", other_properties),
+    ]
+
+    emitted_property_group = False
+    for group_label, props in property_groups:
+        if not props:
+            continue
+        if emitted_property_group:
+            lines.append("")
+        lines.append(f"    # {group_label}")
+        for prop in props:
             lines.append(f"    {generate_property_code(prop)}")
-    else:
+        emitted_property_group = True
+
+    if not emitted_property_group:
         lines.append("    pass")
     
 
