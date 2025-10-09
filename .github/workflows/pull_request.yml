@@ -51,6 +51,8 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Scan
+        env:
+          UV_PYTHON: "3.11"
         run: |
           wget https://github.com/aquasecurity/trivy/releases/download/v0.62.1/trivy_0.62.1_Linux-64bit.tar.gz && tar zxvf trivy_*.tar.gz && mv trivy /usr/local/bin/
 
