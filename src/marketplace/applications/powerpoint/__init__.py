@@ -1,2 +1,0 @@
-def requirements():
-    return True
