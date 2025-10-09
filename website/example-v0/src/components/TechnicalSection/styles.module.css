@@ -1,0 +1,50 @@
+.technicalGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  max-width: var(--bob-container-lg);
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* Add a subtle gradient background to the section */
+:global(.section--technical) {
+  background: linear-gradient(180deg, 
+    var(--ifm-background-surface-color) 0%,
+    var(--ifm-background-color) 100%
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+/* Add subtle background pattern */
+:global(.section--technical)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--ifm-color-emphasis-200) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+@media (max-width: 1200px) {
+  .technicalGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .technicalGrid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 0 1rem;
+  }
+} 

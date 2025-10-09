@@ -1,0 +1,26 @@
+.riskText {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 1.5rem;
+  line-height: 1.6;
+  color: var(--bob-white);
+}
+
+.riskText p {
+  margin-bottom: 2.5rem;
+  opacity: 0.9;
+}
+
+.riskText p:last-child {
+  margin-bottom: 0;
+  opacity: 1;
+  font-weight: 500;
+}
+
+/* Style line breaks for better rhythm */
+.riskText br {
+  display: block;
+  content: "";
+  margin-top: 0.5rem;
+} 

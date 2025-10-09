@@ -94,3 +94,4 @@ sandbox/
 .coverage
 coverage.xml
 htmlcov/
+website/example-v0/node_modules/

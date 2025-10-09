@@ -1,0 +1,141 @@
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bob-white);
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  height: var(--bob-navbar-height, 80px);
+}
+
+.navbar--transparent {
+  background: transparent;
+  box-shadow: none;
+}
+
+.navbar--transparent .navbar__link {
+  color: var(--bob-white);
+}
+
+.navbar--transparent .navbar__logo {
+  filter: brightness(0) invert(1);
+}
+
+.navbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: var(--bob-width-5xl);
+  margin: 0 auto;
+  padding: 0 var(--bob-space-lg);
+  height: 100%;
+}
+
+.navbar__items {
+  display: flex;
+  align-items: center;
+  gap: var(--bob-space-lg);
+}
+
+.navbar__brand {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.navbar__logo {
+  height: 32px;
+  width: auto;
+  transition: filter 0.3s ease;
+}
+
+.navbar__link {
+  color: var(--bob-gray-800);
+  text-decoration: none;
+  font-size: var(--bob-font-sm);
+  font-weight: 500;
+  padding: var(--bob-space-xs) var(--bob-space-sm);
+  border-radius: var(--bob-radius-sm);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--bob-space-xs);
+}
+
+.navbar__link:hover {
+  color: var(--bob-primary);
+  background: rgba(var(--bob-primary-rgb), 0.05);
+}
+
+.navbar-demo-button {
+  margin-left: var(--bob-space-md);
+  padding: var(--bob-space-sm) var(--bob-space-lg);
+  border-radius: var(--bob-radius-md);
+  font-weight: 600;
+  transition: all 0.2s ease;
+  background: var(--bob-primary);
+  color: var(--bob-white);
+  text-decoration: none;
+}
+
+.navbar-demo-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--bob-primary-rgb), 0.2);
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown__menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--bob-white);
+  border-radius: var(--bob-radius-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  padding: var(--bob-space-sm);
+  min-width: 220px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+}
+
+.dropdown:hover .dropdown__menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.dropdown__link {
+  display: block;
+  padding: var(--bob-space-sm) var(--bob-space-md);
+  color: var(--bob-gray-700);
+  text-decoration: none;
+  font-size: var(--bob-font-sm);
+  border-radius: var(--bob-radius-sm);
+  transition: all 0.2s ease;
+}
+
+.dropdown__link:hover {
+  background: rgba(var(--bob-primary-rgb), 0.05);
+  color: var(--bob-primary);
+}
+
+@media (max-width: 996px) {
+  .navbar-item-desktop {
+    display: none;
+  }
+  
+  .navbar__inner {
+    padding: 0 var(--bob-space-md);
+  }
+}
+
+/* Add mobile menu styles here when implementing responsive navigation */ 

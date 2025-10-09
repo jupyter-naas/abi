@@ -1,0 +1,21 @@
+/* Page-level layout styles only */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.mainContent {
+  flex: 1;
+  width: 100%;
+  max-width: var(--fm-container-width);
+  margin: 0 auto;
+  padding: var(--fm-space-lg);
+}
+
+/* Responsive adjustments */
+@media (max-width: 996px) {
+  .mainContent {
+    padding: var(--fm-space-md);
+  }
+} 
