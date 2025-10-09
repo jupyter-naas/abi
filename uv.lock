@@ -4990,6 +4990,12 @@ wheels = [
 ]
 
 [[package]]
+name = "ratelimit"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/38/ff60c8fc9e002d50d48822cc5095deb8ebbc5f91a6b8fdd9731c87a147c9/ratelimit-2.2.1.tar.gz", hash = "sha256:af8a9b64b821529aca09ebaf6d8d279100d766f19e90b5059ac6a718ca6dee42", size = 5251, upload-time = "2018-12-17T18:55:49.675Z" }
+
+[[package]]
 name = "rdflib"
 version = "7.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -5697,6 +5703,7 @@ dependencies = [
     { name = "python-pptx" },
     { name = "pyyaml" },
     { name = "qdrant-client" },
+    { name = "ratelimit" },
     { name = "replicate" },
     { name = "requests", extra = ["socks"] },
     { name = "rich" },
@@ -5783,6 +5790,7 @@ requires-dist = [
     { name = "python-pptx", specifier = ">=1.0.2,<2" },
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "qdrant-client", specifier = ">=1.7.0" },
+    { name = "ratelimit", specifier = ">=2.2.1" },
     { name = "replicate", specifier = ">=1.0.4,<2" },
     { name = "requests", extras = ["socks"], specifier = ">=2.32.3,<3" },
     { name = "rich", specifier = ">=13.9.4,<14" },

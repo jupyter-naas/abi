@@ -70,7 +70,8 @@ dependencies = [
     "dagster>=1.11.12",
     "dagster-webserver>=1.11.12",
     "dagster-postgres>=0.27.12",
-    "dagster-aws[s3]>=0.27.12"
+    "dagster-aws[s3]>=0.27.12",
+    "ratelimit>=2.2.1",
 ]
 
 [project.scripts]
