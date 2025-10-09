@@ -353,6 +353,7 @@ class LinkedInIntegration(Integration):
             raise ValueError(f"No organization found for URL: {linkedin_url}")
         return elements[0].replace('urn:li:fs_normalized_company:', '')
     
+
     def get_organization_info(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get detailed information about a LinkedIn organization using LinkedIn's native API.
         
@@ -380,6 +381,7 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, org_id, data)
         return data
     
+
     def get_profile_public_id(self, linkedin_url: str) -> str:
         """Extract profile ID from LinkedIn URL.
         
@@ -389,33 +391,18 @@ class LinkedInIntegration(Integration):
             return linkedin_url.rsplit("/in/")[-1].rsplit("/")[0]
         return ""
     
+
     def get_profile_id(self, linkedin_url: str) -> str:
         """Extract profile ID from LinkedIn URL.
         
         Handles profile URLs with or without the /in/ prefix.
         """
-        data = self.get_profile_view(linkedin_url)
-        return f"{data.get('data', {}).get('*profile', {}).replace('urn:li:fs_profile:', '')}"
-    
-    def get_profile_view(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
-        """Get profile view for a LinkedIn organization.
-        
-        Args:
-            linkedin_url (str): LinkedIn organization URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
-            
-        Returns:
-            Dict: Raw profile view data from LinkedIn API
-        """
-        # Get organization ID
-        profile_id = self.get_profile_public_id(linkedin_url)
-        prefix = os.path.join("get_profile_view", profile_id)
-        
-        endpoint = f"/identity/profiles/{profile_id}/profileView"
-        data = self._make_request(method="GET", endpoint=endpoint)
-        self.__save_json(prefix, profile_id, data)
-        if return_cleaned_json:
-            return self.clean_json(prefix, profile_id, data)
-        return data
+        data = self.get_profile_top_card(linkedin_url)
+        elements = data.get('data', {}).get('data', {}).get('identityDashProfilesByMemberIdentity', {}).get('*elements', [])
+        if not elements:
+            raise ValueError("No profile found")
+        return elements[0].replace('urn:li:fsd_profile:', '')
+
 
     def get_profile_top_card(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile top card information for a LinkedIn profile.
@@ -436,6 +423,35 @@ class LinkedInIntegration(Integration):
         if return_cleaned_json:
             return self.clean_json(prefix, profile_id, data)
         return data
+    
+
+    def get_profile_data(
+        self, 
+        linkedin_url: str, 
+        profile_type: str = "skills", 
+        locale: str = "en_US", 
+        return_cleaned_json: bool = False
+    ) -> Dict:
+        """Get profile skills for a LinkedIn profile.
+        
+        Args:
+            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            
+        Returns:
+            Dict: Raw profile skills data from LinkedIn API
+        """
+        # Get profile ID
+        profile_id = self.get_profile_id(linkedin_url)
+        profile_public_id = self.get_profile_public_id(linkedin_url)
+        prefix = os.path.join("get_profile_data", profile_public_id, profile_type)
+        
+        endpoint = f"/graphql?variables=(profileUrn:urn%3Ali%3Afsd_profile%3A{profile_id},sectionType:{profile_type},locale:{locale})&queryId=voyagerIdentityDashProfileComponents.c5d4db426a0f8247b8ab7bc1d660775a"
+        data = self._make_request(method="GET", endpoint=endpoint)
+        self.__save_json(prefix, profile_id, data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, profile_id, data)
+        return data
+
 
     def get_profile_skills(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get profile skills for a LinkedIn profile.
@@ -446,68 +462,86 @@ class LinkedInIntegration(Integration):
         Returns:
             Dict: Raw profile skills data from LinkedIn API
         """
-        # Get profile ID
-        profile_id = self.get_profile_public_id(linkedin_url)
-        prefix = os.path.join("get_profile_skills", profile_id)
-        
-        endpoint = f"/identity/profiles/{profile_id}/skillCategory"
-        data = self._make_request(method="GET", endpoint=endpoint)
-        self.__save_json(prefix, profile_id, data)
-        if return_cleaned_json:
-            return self.clean_json(prefix, profile_id, data)
-        return data
-    
-    def get_profile_network_info(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
-        """Get network information for a LinkedIn profile.
+        return self.get_profile_data(linkedin_url, profile_type="skills", return_cleaned_json=return_cleaned_json)
+
+
+    def get_profile_experience(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
+        """Get profile experience for a LinkedIn profile.
         
         Args:
             linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
             
         Returns:
-            Dict: Raw network information data from LinkedIn API
+            Dict: Raw profile experience data from LinkedIn API
         """
-        # Get profile ID
-        profile_id = self.get_profile_public_id(linkedin_url)
-        prefix = os.path.join("get_network_info", profile_id)
+        return self.get_profile_data(linkedin_url, profile_type="experience", return_cleaned_json=return_cleaned_json)
+
+
+    def get_profile_education(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
+        """Get profile experience for a LinkedIn profile.
         
-        endpoint = f"/identity/profiles/{profile_id}/networkinfo"
-        data = self._make_request(method="GET", endpoint=endpoint)
-        self.__save_json(prefix, profile_id, data)
-        if return_cleaned_json:
-            return self.clean_json(prefix, profile_id, data)
-        return data
+        Args:
+            linkedin_url (str): LinkedIn profile URL (e.g., "https://www.linkedin.com/in/florent-ravenel/")
+            
+        Returns:
+            Dict: Raw profile experience data from LinkedIn API
+        """
+        return self.get_profile_data(linkedin_url, profile_type="education", return_cleaned_json=return_cleaned_json)
     
-    def get_profile_posts_feed(self, profile_id: str, count: int = 1, return_cleaned_json: bool = False) -> Dict:
+
+    def get_date_from_token(self, token):
+        import base64
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        date = None
+        epoch_str = str(base64.b64decode(token)).split("-")[-1][:-1]
+        date = datetime.fromtimestamp(
+            int(epoch_str) / 1000.0, ZoneInfo("Europe/Paris")
+        ).strftime("%Y-%m-%dT%H:%M:%S%z")
+        return date
+
+
+    def get_profile_posts_feed(
+        self, 
+        linkedin_url: str,
+        start: int = 0,
+        count: int = 1,
+        pagination_token: str = None,
+        return_cleaned_json: bool = False
+    ) -> Dict:
         """Get posts feed for a LinkedIn profile.
         
         Args:
-            profile_id (str): LinkedIn profile ID (e.g., "ACoAAX0AADoBAAA5V9mHvH1a8_9Nc_fEk3D-wZf4cVU")
-            start (int, optional): Start index for pagination. Defaults to 0.
-            count (int, optional): Number of posts to fetch per request. Defaults to 10.
-            limit (int, optional): Maximum number of posts to return. Defaults to -1 (no limit).
+            profile_id (str): LinkedIn profile URL or ID
+            count (int, optional): Number of posts to fetch. Defaults to 1.
+            return_cleaned_json (bool, optional): Whether to return cleaned JSON. Defaults to False.
             
         Returns:
             Dict: Raw posts feed data from LinkedIn API
         """
-        # Get profile ID
-        prefix = os.path.join("get_profile_posts_feed", profile_id)
-        filename = f"{profile_id}_{count}"
-
-        params = {
-            "count": count,
-            "includeLongTermHistory": "true", 
-            "moduleKey": "member-shares:phone",
-            "profileUrn": f"urn:li:fsd_profile:{profile_id}",
-            "q": "memberShareFeed",
-        }
-        endpoint = f"/identity/profileUpdatesV2?{urllib.parse.urlencode(params, doseq=True)}"
+        # Get profile ID from URL
+        profile_id = self.get_profile_id(linkedin_url)
+        profile_public_id = self.get_profile_public_id(linkedin_url)
+    
+        endpoint = f"/graphql?includeWebMetadata=true&variables=(start:{start},count:{count},profileUrn:urn%3Ali%3Afsd_profile%3A{profile_id})&queryId=voyagerFeedDashProfileUpdates.80d5abb3cd25edff72c093a5db696079"
         data = self._make_request(method="GET", endpoint=endpoint)
+
+        assert data["data"]["data"] is not None, data
+        assert data["data"]["data"]["feedDashProfileUpdatesByMemberShareFeed"]["*elements"] is not None, data
+        activity_id = data["data"]["data"]["feedDashProfileUpdatesByMemberShareFeed"]["*elements"][0].split("urn:li:activity:")[-1].split(",")[0]
+
+        assert data["data"]["data"]["feedDashProfileUpdatesByMemberShareFeed"]["metadata"]["paginationToken"] is not None, data
+        pagination_token = data["data"]["data"]["feedDashProfileUpdatesByMemberShareFeed"]["metadata"]["paginationToken"]
+        date_published = self.get_date_from_token(pagination_token)
+        filename = f"profile_{profile_id}_post_{activity_id}"
+        prefix = os.path.join("get_profile_posts_feed", profile_public_id, f"{date_published}_{activity_id}")
         self.__save_json(prefix, filename, data)
         if return_cleaned_json:
             return self.clean_json(prefix, filename, data)
         return data
-    
-    def get_activity_id(self, linkedin_url: str) -> str:
+
+
+    def get_activity_id_from_url(self, linkedin_url: str) -> str:
         """Extract activity ID from LinkedIn URL.
         
         Handles activity URLs with or without the -activity- or :activity: prefix.
@@ -518,6 +552,7 @@ class LinkedInIntegration(Integration):
             return linkedin_url.split(":activity:")[-1].split("/")[0]
         return ""
     
+
     def get_post_stats(self, linkedin_url: str, return_cleaned_json: bool = False) -> Dict:
         """Get activity for a LinkedIn activity.
         
@@ -528,7 +563,7 @@ class LinkedInIntegration(Integration):
             Dict: Raw post stats data from LinkedIn API
         """
         # Get activity ID
-        activity_id = self.get_activity_id(linkedin_url)
+        activity_id = self.get_activity_id_from_url(linkedin_url)
         prefix = os.path.join("get_post_stats", activity_id)
             
         endpoint = f"/feed/updates/urn:li:activity:{activity_id}"
@@ -537,6 +572,7 @@ class LinkedInIntegration(Integration):
         if return_cleaned_json:
             return self.clean_json(prefix, activity_id, data)
         return data
+    
     
     def get_post_reactions(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1, return_cleaned_json: bool = False) -> Dict:
         """Get reactions for a LinkedIn post.
@@ -548,25 +584,24 @@ class LinkedInIntegration(Integration):
             limit (int, optional): Maximum number of reactions to return. Defaults to -1 (no limit).
         """
         # Get activity ID
-        activity_id = self.get_activity_id(linkedin_url)
+        activity_id = self.get_activity_id_from_url(linkedin_url)
         prefix = os.path.join("get_post_reactions", activity_id)
-        filename = f"{activity_id}_{start}_{count}"
+        filename = f"post_reactions_{activity_id}_{start}_{count}"
 
-        params = {
-            "q": "reactionType",
+        variables = {
             "start": start,
             "count": count,
-            "threadUrn": f"urn:li:activity:{activity_id}",
+            "threadUrn": f"urn:li:activity:{activity_id}"
         }
-        endpoint = f"/feed/reactions?{urllib.parse.urlencode(params, doseq=True)}"
+        endpoint = f"/graphql?variables={urllib.parse.quote(str(variables))}&queryId=voyagerSocialDashReactions.41ebf31a9f4c4a84e35a49d5abc9010b"
 
         all_data = None
         while True:
             if limit != -1 and limit < count:
                 count = limit
                 
-            params["start"] = start
-            params["count"] = count
+            variables["start"] = start
+            variables["count"] = count
             filename = f"{activity_id}_{start}_{count}"
             
             data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
@@ -577,8 +612,8 @@ class LinkedInIntegration(Integration):
                 all_data["included"].extend(data.get("included", []))
                 all_data["data"]["*elements"].extend(data["data"]["*elements"])
             
-            total = data.get("data", {}).get("paging", {}).get("total", 0)
-            fetched = start + len(data.get("data", {}).get("*elements", []))
+            total = data.get("data", {}).get("data", {}).get("socialDashReactionsByReactionType", {}).get("paging", {}).get("total", 0)
+            fetched = start + len(data.get("data", {}).get("data", {}).get("socialDashReactionsByReactionType", {}).get("*elements", []))
             
             if fetched >= total:
                 break
@@ -594,38 +629,40 @@ class LinkedInIntegration(Integration):
         if return_cleaned_json:
             return self.clean_json(prefix, filename, all_data)
         return all_data
+    
     
     def get_post_comments(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1, return_cleaned_json: bool = False) -> Dict:
         """Get comments for a LinkedIn post.
         
         Args:
-            activity_id (str): LinkedIn activity ID.
+            linkedin_url (str): LinkedIn post URL.
             start (int, optional): Start index for pagination. Defaults to 0.
             count (int, optional): Number of comments to fetch per request. Defaults to 100.
             limit (int, optional): Maximum number of comments to return. Defaults to -1 (no limit).
+            return_cleaned_json (bool, optional): Whether to return cleaned JSON. Defaults to False.
         """
         # Get activity ID
-        activity_id = self.get_activity_id(linkedin_url)
+        activity_id = self.get_activity_id_from_url(linkedin_url)
         prefix = os.path.join("get_post_comments", activity_id)
-        filename = f"{activity_id}_{start}_{count}"
+        filename = f"post_comments_{activity_id}_{start}_{count}"
 
-        # Request
-        params = {
-            "q": "comments",
+        # Build GraphQL query parameters
+        variables = {
             "start": start,
             "count": count,
-            "updateId": f"activity:{activity_id}",
-            "sortOrder": "RECENT",
+            "socialDetailUrn": f"urn:li:fsd_socialDetail:(urn:li:activity:{activity_id},urn:li:activity:{activity_id},urn:li:highlightedReply:-)",
+            "sortOrder": "REVERSE_CHRONOLOGICAL"
         }
-        endpoint = f"/feed/comments?{urllib.parse.urlencode(params, safe='(),')}"
         
+        endpoint = f"/graphql?variables={urllib.parse.quote(str(variables))}&queryId=voyagerSocialDashComments.afec6d88d7810d45548797a8dac4fb87"
+
         all_data = None
         while True:
             if limit != -1 and limit < count:
                 count = limit
                 
-            params["start"] = start
-            params["count"] = count
+            variables["start"] = start
+            variables["count"] = count
             filename = f"{activity_id}_{start}_{count}"
             
             data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
@@ -634,10 +671,12 @@ class LinkedInIntegration(Integration):
                 all_data = data
             else:
                 all_data["included"].extend(data.get("included", []))
-                all_data["data"]["*elements"].extend(data["data"]["*elements"])
+                all_data["data"]["socialDashCommentsBySocialDetail"]["*elements"].extend(
+                    data["data"]["socialDashCommentsBySocialDetail"]["*elements"]
+                )
             
-            total = data.get("data", {}).get("paging", {}).get("total", 0)
-            fetched = start + len(data.get("data", {}).get("*elements", []))
+            total = data.get("data", {}).get("socialDashCommentsBySocialDetail", {}).get("paging", {}).get("total", 0)
+            fetched = start + len(data.get("data", {}).get("socialDashCommentsBySocialDetail", {}).get("*elements", []))
             
             if fetched >= total:
                 break
@@ -654,6 +693,68 @@ class LinkedInIntegration(Integration):
             return self.clean_json(prefix, filename, all_data)
         return all_data
     
+
+    def get_post_reposts(self, linkedin_url: str, start: int = 0, count: int = 100, limit: int = -1, return_cleaned_json: bool = False) -> Dict:
+        """Get reposts for a LinkedIn post.
+        
+        Args:
+            repost_id (str): LinkedIn repost ID (stored in shareUrn in get_post_stats).
+            start (int, optional): Start index for pagination. Defaults to 0.
+            count (int, optional): Number of reposts to fetch per request. Defaults to 100.
+            limit (int, optional): Maximum number of reposts to return. Defaults to -1 (no limit).
+            return_cleaned_json (bool, optional): Whether to return cleaned JSON. Defaults to False.
+        """
+        # Get activity ID
+        activity_id = self.get_activity_id_from_url(linkedin_url)
+        prefix = os.path.join("get_post_reposts", activity_id)
+        filename = f"post_repost_{activity_id}_{start}_{count}"
+
+        # Build GraphQL query parameters
+        variables = {
+            "start": start,
+            "count": count,
+            "targetUrn": f"urn:li:share:{activity_id}"
+        }
+        
+        endpoint = f"/graphql?includeWebMetadata=true&variables={urllib.parse.quote(str(variables))}&queryId=voyagerFeedDashReshareFeed.47df8432a2f218e699221ed615e04842"
+
+        all_data = None
+        while True:
+            if limit != -1 and limit < count:
+                count = limit
+                
+            variables["start"] = start
+            variables["count"] = count
+            filename = f"{activity_id}_{start}_{count}"
+            
+            data = self._make_request(prefix=prefix, filename=filename, method="GET", endpoint=endpoint)
+            
+            if not all_data:
+                all_data = data
+            else:
+                all_data["data"]["data"]["feedDashReshareFeedByReshareFeed"]["*elements"].extend(
+                    data["data"]["data"]["feedDashReshareFeedByReshareFeed"]["*elements"]
+                )
+            
+            total = data.get("data", {}).get("data", {}).get("feedDashReshareFeedByReshareFeed", {}).get("paging", {}).get("total", 0)
+            fetched = start + len(data.get("data", {}).get("data", {}).get("feedDashReshareFeedByReshareFeed", {}).get("*elements", []))
+            
+            if fetched >= total:
+                break
+                
+            if limit != -1:
+                limit -= count
+                if limit <= 0:
+                    break
+                    
+            start += count
+            
+        self.__save_json(prefix, filename, all_data)
+        if return_cleaned_json:
+            return self.clean_json(prefix, filename, all_data)
+        return all_data
+    
+
     def get_mutual_connexions(
         self, 
         profile_id: str, 
@@ -710,6 +811,7 @@ class LinkedInIntegration(Integration):
             return final_data
         return data
     
+
 def as_tools(configuration: LinkedInIntegrationConfiguration):
     """Convert LinkedIn integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
@@ -718,12 +820,12 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
 
     integration = LinkedInIntegration(configuration)
 
-    # class GetOrganizationInfoSchema(BaseModel):
-    #     linkedin_url: str = Field(
-    #         ..., 
-    #         description="LinkedIn organization URL", 
-    #         pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
-    #     )
+    class GetOrganizationInfoSchema(BaseModel):
+        linkedin_url: str = Field(
+            ..., 
+            description="LinkedIn organization URL", 
+            pattern=r"https://.+\.linkedin\.com/(company|school|showcase)/[^?]+"
+        )
 
     class GetProfileSchema(BaseModel):
         linkedin_url: str = Field(
@@ -732,22 +834,22 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             pattern=r"https://.+\.linkedin\.[^/]+/in/[^?]+"
         )
 
-    # class GetProfilePostsFeedSchema(BaseModel):
-    #     profile_id: str = Field(
-    #         ..., 
-    #         description="LinkedIn profile URL", 
-    #         pattern=r"^ACoAA.+"
-    #     )
-    #     count: int = Field(
-    #         1,
-    #         description="Number of posts to fetch", 
-    #     )
+    class GetProfilePostsFeedSchema(BaseModel):
+        profile_id: str = Field(
+            ..., 
+            description="LinkedIn profile URL", 
+            pattern=r"^ACoAA.+"
+        )
+        count: int = Field(
+            1,
+            description="Number of posts to fetch", 
+        )
 
-    # class GetActivitySchema(BaseModel):
-    #     linkedin_url: str = Field(
-    #         ..., 
-    #         description="LinkedIn activity ID extracted from the URL", 
-    #     )
+    class GetActivitySchema(BaseModel):
+        linkedin_url: str = Field(
+            ..., 
+            description="LinkedIn activity ID extracted from the URL", 
+        )
 
     class GetMutualConnectionsSchema(BaseModel):
         profile_id: Annotated[str, Field(
@@ -767,18 +869,18 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
         )]
 
     return [
-        # StructuredTool(
-        #     name="linkedin_get_organization_id",
-        #     description="Get LinkedIn organization ID for a LinkedIn organization.",
-        #     func=lambda linkedin_url: integration.get_organization_id(linkedin_url),
-        #     args_schema=GetOrganizationInfoSchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_organization_info",
-        #     description="Get organization information for a LinkedIn organization.",
-        #     func=lambda linkedin_url: integration.get_organization_info(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetOrganizationInfoSchema
-        # ),
+        StructuredTool(
+            name="linkedin_get_organization_id",
+            description="Get LinkedIn organization ID for a LinkedIn organization.",
+            func=lambda linkedin_url: integration.get_organization_id(linkedin_url),
+            args_schema=GetOrganizationInfoSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_organization_info",
+            description="Get organization information for a LinkedIn organization.",
+            func=lambda linkedin_url: integration.get_organization_info(linkedin_url, return_cleaned_json=True),
+            args_schema=GetOrganizationInfoSchema
+        ),
         StructuredTool(
             name="linkedin_get_profile_id",
             description="Get LinkedIn unique profile ID for a LinkedIn profile starting with AcoAA.",
@@ -791,48 +893,48 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             func=lambda linkedin_url: integration.get_profile_top_card(linkedin_url, return_cleaned_json=True),
             args_schema=GetProfileSchema
         ),
-        # StructuredTool(
-        #     name="linkedin_get_profile_view",
-        #     description="Get profile view for a LinkedIn organization.",
-        #     func=lambda linkedin_url: integration.get_profile_view(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetProfileSchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_profile_skills",
-        #     description="Get profile skills for a LinkedIn profile.",
-        #     func=lambda linkedin_url: integration.get_profile_skills(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetProfileSchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_profile_network_info",
-        #     description="Get network information for a LinkedIn profile.",
-        #     func=lambda linkedin_url: integration.get_profile_network_info(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetProfileSchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_profile_posts_feed",
-        #     description="Get posts feed for a LinkedIn profile.",
-        #     func=lambda profile_id, count: integration.get_profile_posts_feed(profile_id, count, return_cleaned_json=True),
-        #     args_schema=GetProfilePostsFeedSchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_post_stats",
-        #     description="Get post stats for a LinkedIn activity.",
-        #     func=lambda linkedin_url: integration.get_post_stats(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetActivitySchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_post_comments",
-        #     description="Get comments for a LinkedIn activity.",
-        #     func=lambda linkedin_url: integration.get_post_comments(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetActivitySchema
-        # ),
-        # StructuredTool(
-        #     name="linkedin_get_post_reactions",
-        #     description="Get reactions for a LinkedIn activity.",
-        #     func=lambda linkedin_url: integration.get_post_reactions(linkedin_url, return_cleaned_json=True),
-        #     args_schema=GetActivitySchema
-        # ),
+        StructuredTool(
+            name="linkedin_get_profile_skills",
+            description="Get profile skills for a LinkedIn profile.",
+            func=lambda linkedin_url: integration.get_profile_skills(linkedin_url, return_cleaned_json=True),
+            args_schema=GetProfileSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_profile_experience",
+            description="Get profile experience for a LinkedIn profile.",
+            func=lambda linkedin_url: integration.get_profile_experience(linkedin_url, return_cleaned_json=True),
+            args_schema=GetProfileSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_profile_education",
+            description="Get profile education for a LinkedIn profile.",
+            func=lambda linkedin_url: integration.get_profile_education(linkedin_url, return_cleaned_json=True),
+            args_schema=GetProfileSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_profile_posts_feed",
+            description="Get posts feed for a LinkedIn profile.",
+            func=lambda profile_id, count: integration.get_profile_posts_feed(profile_id, count, return_cleaned_json=True),
+            args_schema=GetProfilePostsFeedSchema
+        ),
+        StructuredTool(
+            name="linkedin_get_post_comments",
+            description="Get comments for a LinkedIn activity.",
+            func=lambda linkedin_url: integration.get_post_comments(linkedin_url, return_cleaned_json=True),
+            args_schema=GetActivitySchema
+        ),
+        StructuredTool(
+            name="linkedin_get_post_reactions",
+            description="Get reactions for a LinkedIn activity.",
+            func=lambda linkedin_url: integration.get_post_reactions(linkedin_url, return_cleaned_json=True),
+            args_schema=GetActivitySchema
+        ),
+        StructuredTool(
+            name="linkedin_get_post_reposts",
+            description="Get reposts for a LinkedIn activity.",
+            func=lambda linkedin_url: integration.get_post_reposts(linkedin_url, return_cleaned_json=True),
+            args_schema=GetActivitySchema
+        ),
         StructuredTool(
             name="linkedin_get_mutual_connexions",
             description="Get mutual connections for a LinkedIn profile.",
