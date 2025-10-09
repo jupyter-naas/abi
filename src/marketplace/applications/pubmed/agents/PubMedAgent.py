@@ -25,7 +25,7 @@ def create_agent() -> PubMedAgent:
         name=NAME,
         description=DESCRIPTION,
         chat_model=cast(ChatModel, model).model,
-        tools=cast(list[Tool | Agent], [cast(BaseTool, t) for t in tools]),
+        tools=cast(list[Tool | BaseTool | Agent], [cast(BaseTool, t) for t in tools]),
         agents=[],
         state=AgentSharedState(thread_id=str(__import__("uuid").uuid4().hex)),
         configuration=AgentConfiguration(system_prompt=SYSTEM_PROMPT),
