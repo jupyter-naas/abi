@@ -1,12 +1,12 @@
 import requests
 from io import StringIO
-from abi.utils.ttl2py.ttl2py import ttl2py
+from abi.utils.onto2py.onto2py import onto2py
 import pytest
 from pydantic import ValidationError
 
 def ttl_to_module(ttl_file, module_name):
         # Generate Python code from TTL
-    python_code = ttl2py(ttl_file)
+    python_code = onto2py(ttl_file)
     
     with open(module_name + ".py", "w") as f:
         f.write(python_code)
@@ -41,7 +41,7 @@ def test_bfo_to_py():
     ttl_file = StringIO(response.text)
     
     # Generate Python code from TTL
-    python_code = ttl2py(ttl_file)
+    python_code = onto2py(ttl_file)
     
     with open("bfo-core.py", "w") as f:
         f.write(python_code)
@@ -99,7 +99,7 @@ ex:worksFor rdf:type owl:ObjectProperty ;
 """
     
     ttl_file = StringIO(simple_ttl)
-    python_code = ttl2py(ttl_file)
+    python_code = onto2py(ttl_file)
     
     print("Generated Python code from simple TTL:")
     print("=" * 50)
@@ -195,7 +195,7 @@ ex:PetOwnerShape rdf:type sh:NodeShape ;
 """
     
     ttl_file = StringIO(shacl_ttl)
-    python_code = ttl2py(ttl_file)
+    python_code = onto2py(ttl_file)
     
     print("Generated Python code from SHACL TTL:")
     print("=" * 50)

@@ -382,6 +382,27 @@ dtest: deps
 frun: deps
 	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
 
+# TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
+TTL_FILES := $(shell find src -name '*.ttl')
+PY_FILES := $(patsubst %.ttl, %.py, $(TTL_FILES))
+
+onto2py-force: onto2py-clean $(PY_FILES) onto2py-ruff-fix
+
+onto2py-ruff-fix: $(PY_FILES)
+	@uv run ruff check --fix $(PY_FILES)
+
+onto2py-clean:
+	@rm -f $(PY_FILES)
+
+onto2py-list:
+	@echo $(PY_FILES)
+
+onto2py: $(PY_FILES)
+
+%.py: %.ttl
+	@printf "📦 Converting ttl to py for $< ... "
+	@uv run python -m lib.abi.utils.onto2py '$<' '$@'
+
 # Test command for debugging
 hello:
 	@echo 'hello' | make

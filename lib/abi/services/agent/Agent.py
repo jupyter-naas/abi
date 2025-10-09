@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict
+from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict, cast
 import os
 
 # LangChain Core imports for base components
@@ -299,7 +299,7 @@ class Agent(Expose):
 
         # We store the provided tools in __structured_tools because we will need to know which ones are provided by the user and which one are agents.
         # This is needed when we duplicate the agent.
-        _structured_tools, _agents = self.prepare_tools(tools, agents)
+        _structured_tools, _agents = self.prepare_tools(cast(list[Union[Tool, BaseTool, "Agent"]], tools), agents)
         self._structured_tools = _structured_tools
         self._agents = _agents
 
@@ -474,9 +474,11 @@ class Agent(Expose):
                             _tools.append(tool)
                             _tool_names.add(tool.name)
             else:
-                if t.name not in _tool_names:
-                    _tools.append(t)
-                    _tool_names.add(t.name)
+                # Accept both Tool and BaseTool
+                if hasattr(t, "name"):
+                    if t.name not in _tool_names:
+                        _tools.append(t)
+                        _tool_names.add(t.name)
 
         # We process agents that are not provided in tools.
         for agent in agents:
