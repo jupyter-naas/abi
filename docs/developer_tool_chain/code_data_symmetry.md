@@ -1,8 +1,10 @@
 # Code-Data Symmetry
 
-## The Rule
+> **Guideline**: This document describes the recommended pattern for organizing data in ABI. New modules should follow this structure. Existing modules may use different patterns.
 
-**Every code component has a mirror folder in `storage/datastore/`**
+## The Principle
+
+**Every code component should have a mirror folder in `storage/datastore/`**
 
 ```
 src/core/your_module/orchestration/    →    storage/datastore/core/modules/your_module/orchestration/
@@ -10,6 +12,17 @@ src/core/your_module/pipelines/        →    storage/datastore/core/modules/you
 ```
 
 **Why?** No hunting for data. No root pollution. Clean scaling.
+
+## When to Use This Pattern
+
+**For new modules**: Follow this pattern from the start. Use `ensure_data_directory()` to create storage paths automatically.
+
+**For existing modules**: Migration is optional. Use this pattern when:
+- Adding new data-generating components
+- Refactoring existing modules
+- Experiencing data organization issues
+
+**Current adoption**: The `__demo__` module implements this pattern fully. Other modules may use different storage approaches.
 
 ## Quick Start
 
@@ -88,9 +101,9 @@ class YourIntegration:
             f.write(api_response)
 ```
 
-## Rules
+## Guidelines
 
-### ✅ Do This
+### ✅ Recommended Pattern
 ```python
 # Use ABI utility (recommended)
 from abi.utils.Storage import ensure_data_directory
@@ -108,7 +121,7 @@ DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/your_module/orchestration
 src/core/demo/pipelines/ → storage/datastore/core/modules/demo/pipelines/
 ```
 
-### ❌ Don't Do This
+### ⚠️ Patterns to Avoid
 ```bash
 # Manual directory creation (fragile)
 mkdir -p storage/datastore/...
@@ -133,7 +146,7 @@ tree storage/datastore/core/modules/your_module
 find . -maxdepth 1 -name "tmp*" -o -name "*.db" -o -name "*.log"
 ```
 
-### Fix Existing Module
+### Migrating Existing Module (Optional)
 ```bash
 # 1. Find scattered data
 find . -name "*.db" -o -name "*.log" | grep -v storage/datastore
@@ -149,6 +162,6 @@ mv scattered_file.db storage/datastore/core/modules/your_module/orchestration/
 # To:     DAGSTER_HOME=$(PWD)/storage/datastore/core/modules/your_module/orchestration
 ```
 
-## Reference
+## Reference Implementation
 
-See `src/core/__demo__/` for a working example of Code-Data Symmetry.
+See `src/marketplace/__demo__/orchestration/` for a working example that fully implements this pattern. Use it as a template when building new data-generating modules.

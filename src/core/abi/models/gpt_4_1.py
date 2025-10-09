@@ -10,9 +10,7 @@ IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.
 CONTEXT_WINDOW = 1047576
 OWNER = "openai"
 
-model: ChatModel
-openai_api_key = secret.get("OPENAI_API_KEY")
-model = ChatModel(
+model: ChatModel = ChatModel(
     model_id=ID,
     name=NAME,
     description=DESCRIPTION,
@@ -21,7 +19,7 @@ model = ChatModel(
     model=ChatOpenAI(
         model=ID,
         temperature=0,
-        api_key=SecretStr(openai_api_key),
+        api_key=SecretStr(secret.get("OPENAI_API_KEY")),
     ),
     context_window=CONTEXT_WINDOW,
 )
