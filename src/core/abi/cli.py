@@ -16,18 +16,16 @@ def format_module_name(name: str) -> str:
     """Format module name to lowercase with proper formatting."""
     # Convert to lowercase
     formatted = name.lower()
-    # Replace spaces with hyphens
-    formatted = formatted.replace(' ', '-')
-    # Replace underscores with hyphens
-    formatted = formatted.replace('_', '-')
-    # Replace dots with hyphens
-    formatted = formatted.replace('.', '-')
-    # Remove any other special characters except letters, numbers, and hyphens
-    formatted = re.sub(r'[^a-z0-9-]', '', formatted)
-    # Remove multiple consecutive hyphens
-    formatted = re.sub(r'-+', '-', formatted)
-    # Remove leading/trailing hyphens
-    formatted = formatted.strip('-')
+    # Replace spaces with underscores
+    formatted = formatted.replace(' ', '_')
+    # Replace dots with underscores
+    formatted = formatted.replace('.', '_')
+    # Remove any other special characters except letters, numbers, and underscores
+    formatted = re.sub(r'[^a-z0-9_]', '', formatted)
+    # Remove multiple consecutive underscores
+    formatted = re.sub(r'_+', '_', formatted)
+    # Remove leading/trailing underscores
+    formatted = formatted.strip('_')
     return formatted
 
 def get_component_selection():
@@ -132,19 +130,21 @@ def create_new_module():
     """Create a new module by duplicating the __templates__ folder."""
     console.print("🚀 Creating a new module...\n", style="bright_cyan")
     
-    # Get module name
+    # Get module name and validate format
     while True:
         raw_module_name = Prompt.ask("What is the module name?")
-        if raw_module_name.strip():
-            module_name = format_module_name(raw_module_name)
-            if module_name and re.match(r'^[a-z][a-z0-9-]*$', module_name):
-                if raw_module_name != module_name:
-                    console.print(f"📝 Module name formatted as: {module_name}", style="yellow")
-                break
-            else:
-                console.print("❌ Invalid module name. Must start with a letter and contain only letters, numbers, spaces, underscores, dots, or hyphens.", style="red")
-        else:
+        if not raw_module_name.strip():
             console.print("❌ Module name cannot be empty.", style="red")
+            continue
+            
+        module_name = format_module_name(raw_module_name)
+        if not module_name or not re.match(r'^[a-z][a-z0-9_\-\.]*$', module_name):
+            console.print("❌ Invalid module name. Must start with a lowercase letter and can contain letters, numbers, underscores, dots, or hyphens.", style="red")
+            continue
+            
+        if raw_module_name != module_name:
+            console.print(f"📝 Module name formatted as: {module_name}", style="yellow")
+        break
     
     # Get target path with explanations
     console.print("\nWhere would you like to create this module?\n", style="bright_blue")
@@ -230,8 +230,8 @@ def create_new_module():
                     
                     # Replace template references
                     content = content.replace('__templates__', module_name)
-                    content = content.replace('Template', module_name.title())
-                    content = content.replace('template', module_name.lower())
+                    content = content.replace('Template', module_name.replace('_', '').title())
+                    content = content.replace('template', module_name.replace('_', '').lower())
                     
                     # Update path references
                     old_path_pattern = "src/core/__templates__"
@@ -247,7 +247,7 @@ def create_new_module():
             for file in files:
                 if 'Template' in file:
                     old_file_path = os.path.join(root, file)
-                    new_file_name = file.replace('Template', module_name.title())
+                    new_file_name = file.replace('Template', module_name.replace('_', '').title())
                     new_file_path = os.path.join(root, new_file_name)
                     os.rename(old_file_path, new_file_path)
         
