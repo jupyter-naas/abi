@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 import os
 from src.utils.Storage import save_json
-from abi.services.cache.CacheFactory import CacheFactory
-from abi.services.cache.CachePort import DataType
+from lib.abi.services.cache.CacheFactory import CacheFactory
+from lib.abi.services.cache.CachePort import DataType
 import datetime
 from abi import logger
 
@@ -45,7 +45,7 @@ class YfinanceIntegration(Integration):
         super().__init__(configuration)
         self.__configuration = configuration
 
-    def _result_df_to_dict(self, result: pd.DataFrame) -> List[Dict]:
+    def _result_df_to_dict(self, result: pd.DataFrame | None) -> List[Dict]:
         """Convert DataFrame to dictionary format with proper indexing.
         
         Args:

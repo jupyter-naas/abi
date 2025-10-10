@@ -506,7 +506,7 @@ class LinkedInIntegration(Integration):
         linkedin_url: str,
         start: int = 0,
         count: int = 1,
-        pagination_token: str = None,
+        pagination_token: str | None = None,
         return_cleaned_json: bool = False
     ) -> Dict:
         """Get posts feed for a LinkedIn profile.

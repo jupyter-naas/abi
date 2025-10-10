@@ -15,6 +15,7 @@ def integration() -> AgicapIntegration:
         client_id=secret.get("AGICAP_CLIENT_ID"),
         client_secret=secret.get("AGICAP_CLIENT_SECRET"),
         api_token=secret.get("AGICAP_API_TOKEN"),
+        bearer_token=secret.get("AGICAP_BEARER_TOKEN"),
     )
     return AgicapIntegration(configuration)
 
