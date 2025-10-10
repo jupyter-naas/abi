@@ -197,6 +197,17 @@ linkedin:FollowingInfo a owl:Class ;
     skos:example "A company page having 521,188 followers and tracking whether a user follows that page." ;
     abi:is_curated_in_foundry "enterprise_management_foundry" .
 
+linkedin:Location a owl:Class ;
+    rdfs:subClassOf cco:ont00000686 ; # Designative Information Content Entity
+    rdfs:label "LinkedIn Location" ;
+    skos:definition "A LinkedIn Location that can represent and concatenate multiple location types including countries, states, geographical areas, cities and metropolitan regions." ;
+    skos:example "Greater Paris Metropolitan Region, France"@en ,
+                 "Berlin, Berlin, Germany"@en ,
+                 "St Augustine, Florida, United States"@en ,
+                 "France"@en ;
+    rdfs:comment "A LinkedIn Location represents a hierarchical geographical designation that can combine multiple location types (country, state/region, metropolitan area, city) into a single concatenated string." ;
+    abi:is_curated_in_foundry "enterprise_management_foundry" .
+
 #################################################################
 #    Object Properties
 #################################################################
@@ -431,7 +442,7 @@ linkedin:isPublicationOf a owl:ObjectProperty ;
     rdfs:label "is publication of"@en ;
     skos:definition "Relates a publication to the LinkedIn profile it belongs to."@en ;
     skos:example "A publication is listed on John Doe's LinkedIn profile."@en ;
-    owl:inverseOf abi:hasPublication .
+    owl:inverseOf linkedin:hasPublication .
 
 linkedin:hasPositionGroup a owl:ObjectProperty ;
     rdfs:domain linkedin:Profile ;
