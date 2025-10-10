@@ -780,9 +780,9 @@ publish-remote-agents-dry-run: deps
 # Clean up build artifacts, caches, and Docker containers
 clean:
 	@echo "Cleaning up build artifacts..."
-	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
-	find . -name "*.pyc" -delete
-	find . -name "__pycache__" -delete
+	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv .mypy_cache
+	sudo find . -name "*.pyc" -delete
+	sudo find . -name "__pycache__" -delete
 	docker compose down
 	docker compose rm -f
 	rm -f dagster.pid dagster.log
