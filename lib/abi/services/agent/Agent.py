@@ -684,7 +684,7 @@ SUBAGENT SYSTEM PROMPT:
         self._state.set_current_active_agent(self.name)
         
         logger.debug(f"call_model on: {self.name}")
-        logger.debug(f"tools: {self._structured_tools}")
+        # logger.debug(f"tools: {self._structured_tools}")
         messages = state["messages"]
         if self._system_prompt:
             messages = [

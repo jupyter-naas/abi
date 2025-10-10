@@ -1,0 +1,48 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+
+<http://ontology.naas.ai/abi/naas.ttl> a owl:Ontology ;
+                                    owl:imports <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/domain-level/task.ttl> ;
+                                    owl:versionIRI <https://github.com/jupyter-naas/abi/tree/cli/src/ontologies/application-level/naas.ttl> ;
+                                    dc11:contributor "Jeremy Ravenel" , "Maxime Jublou" , "Florent Ravenel" ;
+                                    dc:description "Application ontology for Naas."@en ;
+                                    dc:license "" ;
+                                    dc:title "Naas Application Ontology" .
+
+#################################################################
+#    Classes
+#################################################################
+
+abi:NaasAsset a owl:Class ;
+    rdfs:subClassOf bfo:BFO_0000031 ;
+    rdfs:label "Naas Asset"@en ;
+    skos:definition "A Naas asset is a representation of an existing asset in the context of Naas."@en ;
+    skos:example "https://www.naas.ai/assets/images/naas-logo.png"@en .
+
+#################################################################
+#    Object Properties
+#################################################################
+
+
+
+#################################################################
+#    Data properties
+#################################################################
+
+abi:asset_url a owl:DatatypeProperty ;
+    rdfs:domain bfo:BFO_0000031 ;
+    rdfs:range xsd:string ;
+    rdfs:label "asset url"@en ;
+    skos:definition "The URL of the asset."@en .
+
+abi:naas_ontology_id a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "naas ontology id"@en ;
+    skos:definition "The ID of the ontology."@en .
