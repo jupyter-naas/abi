@@ -36,6 +36,14 @@ help:
 	@echo "  lock                     Update dependency lock files"
 	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
 	@echo ""
+	@echo "MODULE AND COMPONENT CREATION:"
+	@echo "  create-module            Create a new module from template with guided setup"
+	@echo "  create-agent             Create a new agent from template with path validation"
+	@echo "  create-integration       Create a new integration from template"
+	@echo "  create-workflow          Create a new workflow from template"
+	@echo "  create-pipeline          Create a new pipeline from template"
+	@echo "  create-ontology          Create a new ontology from template"
+	@echo ""
 	@echo "CHAT WITH CORE AGENTS:"
 	@echo "  chat-abi-agent           Start the main ABI agent (default target)"
 	@echo "  chat-chatgpt-agent       Start ChatGPT-based agent"
@@ -257,6 +265,34 @@ chat-perplexity-agent: deps
 
 chat-qwen-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
+
+# =============================================================================
+# MODULE AND COMPONENT CREATION
+# =============================================================================
+
+# Create a new module from template
+create-module: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-module
+
+# Create a new agent from template
+create-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-agent
+
+# Create a new integration from template
+create-integration: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-integration
+
+# Create a new workflow from template
+create-workflow: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-workflow
+
+# Create a new pipeline from template
+create-pipeline: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-pipeline
+
+# Create a new ontology from template
+create-ontology: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-ontology 
 
 # =============================================================================
 # CHAT WITH MARKETPLACE AGENTS
@@ -792,4 +828,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
