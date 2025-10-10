@@ -442,7 +442,7 @@ linkedin:isPublicationOf a owl:ObjectProperty ;
     rdfs:label "is publication of"@en ;
     skos:definition "Relates a publication to the LinkedIn profile it belongs to."@en ;
     skos:example "A publication is listed on John Doe's LinkedIn profile."@en ;
-    owl:inverseOf abi:hasPublication .
+    owl:inverseOf linkedin:hasPublication .
 
 linkedin:hasPositionGroup a owl:ObjectProperty ;
     rdfs:domain linkedin:Profile ;
