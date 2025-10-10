@@ -1,11 +1,10 @@
 import pytest
-import os
-from typing import Dict, List
 
 from src.marketplace.applications.yahoofinance.integrations.YfinanceIntegration import (
     YfinanceIntegration,
     YfinanceIntegrationConfiguration
 )
+import pandas as pd
 
 @pytest.fixture
 def integration() -> YfinanceIntegration:
@@ -194,10 +193,7 @@ def test_integration_configuration():
     assert custom_config.data_store_path == "custom/path/yahoofinance"
 
 def test_data_conversion_methods(integration: YfinanceIntegration):
-    """Test internal data conversion methods."""
-    import pandas as pd # type: ignore
-    from datetime import datetime
-    
+    """Test internal data conversion methods."""    
     # Test _result_df_to_dict with sample DataFrame
     sample_data = {
         'Open': [100.0, 101.0],
