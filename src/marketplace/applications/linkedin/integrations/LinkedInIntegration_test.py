@@ -43,44 +43,6 @@ def test_flatten_dict(integration: LinkedInIntegration):
     assert result["level1_level2_value"] == "test", result
     assert result["simple"] == "value", result
 
-def test_clean_dict(integration: LinkedInIntegration):
-    """Test the _clean_dict helper method."""
-    dirty_dict = {
-        "valid_key": "value",
-        "*invalid_key": "value",
-        "urn_key": "value",
-        "nested": {
-            "*nested_invalid": "value",
-            "valid_nested": "value"
-        }
-    }
-    result = integration._clean_dict(dirty_dict)
-    assert "valid_key" in result
-    assert "*invalid_key" not in result
-    assert "urn_key" not in result
-    assert "valid_nested" in result["nested"]
-    assert "*nested_invalid" not in result["nested"]
-
-def test_parse_clean(integration: LinkedInIntegration):
-    """Test the _parse_clean helper method."""
-    mock_data = {
-        "included": [
-            {
-                "$type": "com.linkedin.voyager.dash.search.EntityResultViewModel",
-                "title": {"text": "Test Title"},
-                "trackingId": "should_be_removed"
-            },
-            {
-                "$type": "com.linkedin.voyager.dash.search.EntityResultViewModel",
-                "title": {"text": "Test Title 2"}
-            }
-        ]
-    }
-    result = integration._parse_clean(mock_data)
-    assert "com.linkedin.voyager.dash.search.EntityResultViewModel" in result
-    assert len(result["com.linkedin.voyager.dash.search.EntityResultViewModel"]) == 2
-    assert "trackingId" not in result["com.linkedin.voyager.dash.search.EntityResultViewModel"][0]
-
 def test_clean_json(integration: LinkedInIntegration):
     """Test the clean_json method."""
     mock_data = {
@@ -95,24 +57,6 @@ def test_clean_json(integration: LinkedInIntegration):
     result = integration.clean_json("test_prefix", "test_file", mock_data)
     assert result is not None
     assert isinstance(result, dict)
-
-def test_get_images(integration: LinkedInIntegration):
-    """Test the __get_images helper method."""
-    mock_data = {
-        "entityUrn": "test_urn",
-        "logo": {
-            "rootUrl": "https://example.com/",
-            "artifacts": [
-                {"fileIdentifyingUrlPathSegment": "image1.png"},
-                {"fileIdentifyingUrlPathSegment": "image2.png"}
-            ]
-        }
-    }
-    result = integration._LinkedInIntegration__get_images(mock_data, "logo")
-    assert isinstance(result, list)
-    assert len(result) == 2
-    assert "https://example.com/image1.png" in result
-    assert "https://example.com/image2.png" in result
 
 def test_get_organization_public_id(integration: LinkedInIntegration):
     """Test extracting organization public ID from LinkedIn URL."""

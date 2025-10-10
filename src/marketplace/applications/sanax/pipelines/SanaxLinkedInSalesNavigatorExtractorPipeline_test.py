@@ -41,7 +41,7 @@ def test_sanax_linkedin_sales_navigator_extractor_pipeline(pipeline: SanaxLinked
     })
 
     # Save test data to datastore Excel file
-    dir_path = os.path.join(pipeline._SanaxLinkedInSalesNavigatorExtractorPipeline__configuration.data_store_path, "test")
+    dir_path = os.path.join(SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration.data_store_path, "test")
     file_name = "test.xlsx"
     sheet_name = 'Sales Navigator Data'
     from src.utils.Storage import save_excel
