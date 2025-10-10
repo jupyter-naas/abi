@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from src.utils.Storage import get_excel, save_triples, save_excel
 from src.utils.SPARQL import get_identifier
 from abi.utils.String import create_hash_from_string
-from abi.utils.Graph import ABI, CCO, BFO, URI_REGEX
+from abi.utils.Graph import ABI, CCO, BFO
 from enum import Enum
 from abi import logger
 import pandas as pd
@@ -151,7 +151,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 sheet_name=parameters.sheet_name,
                 skiprows=0,
             )
-            logger.debug(f"✅ Successfully read file from storage: {storage_path}/{file_name}")
+            logger.debug(f"✅ Successfully read file from storage: {dir_path}/{file_name}")
         except Exception as e:
             logger.debug(f"❌ File not found in storage: {e}")
             
@@ -219,7 +219,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
             graph.add((data_source_uri, ABI.source_type, Literal("EXCEL_FILE")))
         
         # Step 3: Processing rows from Excel file
-        logger.debug(f"Step 3: Processing rows")
+        logger.debug("Step 3: Processing rows")
         count_row: int = 0
         linkedin_profile_page_uris: dict[str, URIRef] = {}
         position_uris: dict[str, URIRef] = {}
@@ -424,7 +424,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 graph.add((person_uri, BFO.BFO_0000171, location_uri)) # located in
 
         # Save to triple store
-        logger.debug(f"Step 4: Saving to triple store")
+        logger.debug("Step 4: Saving to triple store")
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         log_dir_path = os.path.join(dir_path, timestamp)
         if len(graph) > 0:

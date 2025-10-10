@@ -1,13 +1,13 @@
 from typing import Dict, List, Any
-import yfinance as yf # type: ignore
-from yahooquery import search # type: ignore
-import pandas as pd # type: ignore
+import yfinance as yf 
+from yahooquery import search
+import pandas as pd
 from dataclasses import dataclass
-from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
+from abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 import os
 from src.utils.Storage import save_json
 from abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 import datetime
 from abi import logger
 
