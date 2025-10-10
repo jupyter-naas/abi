@@ -19,7 +19,6 @@ def results_to_list(
     data = []
     for row in results:
         assert isinstance(row, query.ResultRow)
-        logger.debug(f"==> Row: {row}")
         data_dict = {}
         for key in row.labels:
             data_dict[key] = str(row[key]) if row[key] else None
