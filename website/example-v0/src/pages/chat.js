@@ -1,28 +1,20 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import Layout from '@theme/Layout';
-import ChatContainer from '../components/Chat/ChatContainer';
-import styles from '../components/Chat/Chat.module.css';
+import Chat from '../components/Chat';
 
-function ChatPage() {
-  console.log('ChatPage is rendering');
-
-  useEffect(() => {
-    console.log('ChatPage mounted');
-  }, []);
-
+export default function ChatPage() {
   return (
     <Layout
       title="Chat"
-      description="Chat interface"
-      wrapperClassName={styles.pageWrapper}
-      noFooter
-    >
-      <main className={styles.container}>
-        <h1 style={{ textAlign: 'center', marginTop: '2rem' }}>Chat Page Test</h1>
-        <ChatContainer />
-      </main>
+      description="Chat with ABI - Agentic Brain Infrastructure">
+      
+      <div style={{ 
+        height: 'calc(100vh - var(--ifm-navbar-height))', 
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <Chat />
+      </div>
     </Layout>
   );
 }
-
-export default ChatPage; 

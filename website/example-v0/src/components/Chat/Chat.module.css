@@ -1,41 +1,16 @@
-/* Page wrapper styles */
-.pageWrapper {
-  padding: 0;
-}
-
-.pageWrapper main {
-  padding: 0;
-  max-width: none;
-  width: 100%;
-  margin-top: var(--ifm-navbar-height);
-}
-
-.pageWrapper .container {
-  margin: 0;
-  max-width: none;
-  padding: 0;
-}
+/* Removed page wrapper overrides to allow navbar to show */
 
 /* Chat container styles */
 .chatWrapper {
-  position: absolute; /* Change from fixed to absolute */
-  top: 0; /* Start from top of main content */
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative; /* Change from absolute to relative */
   width: 100%;
-  height: calc(100vh - var(--ifm-navbar-height));
+  height: 100%; /* Use full height of parent container */
   overflow: hidden;
   display: flex;
   background-color: #ffffff;
 }
 
-/* Override the page wrapper styles */
-:global(.pageWrapper_MHhd) :global(.container_b_n_) {
-  margin: 0;
-  max-width: none;
-  padding: 0 !important;
-}
+/* Removed global overrides that were hiding the navbar */
 
 .container {
   flex: 1;
@@ -236,9 +211,9 @@
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -246,14 +221,15 @@
   font-size: 13px;
   flex-shrink: 0;
   overflow: hidden;
-  background-color: white;
+  background-color: transparent;
 }
 
 .avatarImage {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
+  border-radius: 8px;
 }
 
 .avatar.user {
@@ -261,7 +237,7 @@
 }
 
 .avatar.assistant {
-  background-color: #19c37d;
+  background: transparent;
 }
 
 .messageContent {

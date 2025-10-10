@@ -5,7 +5,7 @@ import ChatInput from './ChatInput';
 import ModeSelector from './ModeSelector';
 import styles from './Chat.module.css';
 import ExecutionEnvironment from '@docusaurus/ExecutionEnvironment';
-import { generateResponse } from './services/geminiService';
+import { generateResponse } from '../../../services/geminiService';
 
 function ChatContainer() {
   console.log('ChatContainer is rendering');
@@ -35,7 +35,7 @@ function ChatContainer() {
     setTimeout(() => {
       const greetingMessage = {
         id: 'initial-greeting',
-        content: "Hi, I'm Bob, how can I help? If you want to explore what I can do maybe start [here](/docs/solutions/market-intelligence).",
+        content: "Hi, I'm ABI. How can I help you?",
         timestamp: new Date().toISOString(),
         role: 'assistant',
       };
@@ -96,9 +96,11 @@ function ChatContainer() {
       console.error('Error getting response:', error);
       const errorMessage = {
         id: (Date.now() + 1).toString(),
-        content: error.message.includes('API key') 
-          ? 'Gemini API key not configured. Please switch to Test Mode or configure your API key.'
-          : 'I apologize, but I encountered an error. Please try again.',
+        content: error.message.includes('not running') 
+          ? 'ABI backend is not running. Please start the ABI server with: python -m src.api'
+          : error.message.includes('API error')
+          ? 'ABI API error. Please check your configuration and try again.'
+          : 'I apologize, but I encountered an error connecting to ABI. Please try again.',
         timestamp: new Date().toISOString(),
         role: 'assistant',
       };

@@ -72,7 +72,7 @@ ChatInput.propTypes = {
 };
 
 ChatInput.defaultProps = {
-  placeholder: 'Message BOB...',
+  placeholder: 'Message ABI...',
   disabled: false
 };
 
