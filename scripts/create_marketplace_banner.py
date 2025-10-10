@@ -31,7 +31,7 @@ DOMAIN_EXPERTS = [
     "human-resources-manager.png",
     "osint-researcher.png",
     "private-investigator.png",
-    "inside-sales representative.png"
+    "inside-sales-representative.png"
 ]
 
 # Application Integration logos (to be added)

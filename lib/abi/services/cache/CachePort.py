@@ -42,7 +42,10 @@ class ICacheService:
     def __init__(self, adapter: ICacheAdapter):
         self.adapter = adapter
     
-    def get(self, key: str, ttl: datetime.timedelta | None = None) -> CachedData:
+    def exists(self, key: str) -> bool:
+        raise NotImplementedError("Not implemented")
+    
+    def get(self, key: str, ttl: datetime.timedelta | None = None) -> Any:
         raise NotImplementedError("Not implemented")
     
     def set_text(self, key: str, value: str) -> None:

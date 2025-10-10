@@ -30,7 +30,7 @@ DOMAIN_EXPERTS = [
     "human-resources-manager.png",
     "osint-researcher.png",
     "private-investigator.png",
-    "inside-sales representative.png"
+    "inside-sales-representative.png"
 ]
 
 def create_rounded_image(img_path, size=(60, 60), radius_percent=0.25):
