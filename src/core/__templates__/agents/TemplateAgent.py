@@ -6,11 +6,7 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
     
 )
-from fastapi import APIRouter
-from abi import logger
-from src.core.__templates__.models.template_model import model
 from typing import Optional
-from enum import Enum
 
 NAME = "Template"
 DESCRIPTION = "Example template agent to demonstrate agent creation."
@@ -54,11 +50,16 @@ SUGGESTIONS: list = []
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
-) -> Optional[IntentAgent]:
-    # Check if model is available
-    if model is None:
-        logger.error("Template model not available - missing OpenAI API key")
-        return None
+) -> IntentAgent:
+    # Define model based on AI_MODE
+    from src import secret
+    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
+    if ai_mode == "cloud":
+        from src.core.__templates__.models.gpt_4_1 import model as cloud_model
+        selected_model = cloud_model.model
+    else:
+        from src.core.__templates__.models.qwen3_8b import model as local_model
+        selected_model = local_model.model
     
     # Set configuration
     if agent_configuration is None:
@@ -68,9 +69,10 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
     
+    # Define tools
     tools: list = []
 
-    # Get tools from intentmapping
+    ## Get tools from intentmapping
     from src.core.templatablesparqlquery import get_tools
     templates_tools = [
         "search_class"
@@ -82,51 +84,22 @@ def create_agent(
 
     # Define intents
     intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="I am Template, an example agent that demonstrates the basic structure and capabilities of agents in the system.",
-        ),
-        Intent(
-            intent_value="what is your favorite color",
-            intent_type=IntentType.RAW,
-            intent_target="Blue is my favorite color",
-        ),
-        Intent(
-            intent_value="what is your favorite animal",
-            intent_type=IntentType.RAW,
-            intent_target="A dog is my favorite animal",
-        ),
-        Intent(
-            intent_value="what is your favorite food",
-            intent_type=IntentType.RAW,
-            intent_target="Pizza is my favorite food",
-        ),
+        Intent(intent_value="what is your favorite color", intent_type=IntentType.RAW, intent_target="Blue is my favorite color"),
+        Intent(intent_value="what is your favorite animal", intent_type=IntentType.RAW, intent_target="A dog is my favorite animal"),
+        Intent(intent_value="what is your favorite food", intent_type=IntentType.RAW, intent_target="Pizza is my favorite food"),
     ]
+
     return TemplateAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=selected_model,
         tools=tools, 
         agents=agents,
         intents=intents,
         state=agent_shared_state, 
         configuration=agent_configuration, 
         memory=None
-    ) 
+    )
 
 class TemplateAgent(IntentAgent):
-    def as_api(
-        self, 
-        router: APIRouter, 
-        route_name: str = NAME, 
-        name: str = NAME.replace("_", " "), 
-        description: str = "API endpoints to call the Template agent completion.", 
-        description_stream: str = "API endpoints to call the Template agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass
