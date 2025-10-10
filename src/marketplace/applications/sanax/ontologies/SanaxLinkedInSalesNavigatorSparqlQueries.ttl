@@ -277,12 +277,12 @@ intentMapping:getPeopleByLocationQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX cco: <https://www.commoncoreontologies.org/>
         PREFIX abi: <http://ontology.naas.ai/abi/>
 
-        SELECT DISTINCT ?person ?personName ?linkedinUrl ?position ?positionLabel
+        SELECT DISTINCT ?person ?personName ?linkedinUrl ?position ?positionLabel ?locationName
         WHERE {
           # Find the location by name
           ?location a <http://ontology.naas.ai/abi/linkedin/Location> ;
                    rdfs:label ?locationName .
-          FILTER(LCASE(STR(?locationName)) = LCASE("{{ location_name }}"))
+          FILTER(CONTAINS(LCASE(STR(?locationName)), LCASE("{{ location_name }}")))
           
           # Find people located there
           ?location bfo:BFO_0000124 ?person .
@@ -327,7 +327,7 @@ intentMapping:countPeopleByLocationQuery a intentMapping:TemplatableSparqlQuery 
           # Find the location by name
           ?location a <http://ontology.naas.ai/abi/linkedin/Location> ;
                    rdfs:label ?locationName .
-          FILTER(LCASE(STR(?locationName)) = LCASE("{{ location_name }}"))
+          FILTER(CONTAINS(LCASE(STR(?locationName)), LCASE("{{ location_name }}")))
           
           # Count people located there
           ?location bfo:BFO_0000124 ?person .
