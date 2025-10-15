@@ -29,13 +29,11 @@ class SearchIndividualWorkflowParameters(WorkflowParameters):
         example="https://www.commoncoreontologies.org/ont00000443",
     )]] = None
     limit: Optional[Annotated[int, Field(
-        default=10,
         description="Maximum number of results to return.",
         ge=1,
         le=100,
     )]] = 10
     query: Optional[Annotated[str, Field(
-        default=None,
         description="Custom SPARQL query to use to search for individuals.",
     )]] = None
 

@@ -40,8 +40,7 @@ class ExportGraphInstancesToExcelWorkflowConfiguration(WorkflowConfiguration):
 
 class ExportGraphInstancesToExcelWorkflowParameters(WorkflowParameters):
     """Parameters for ExportGraphInstancesToExcel workflow."""
-    excel_file_name: Annotated[Optional[str], Field(
-        default="graph_instances_export.xlsx",
+    excel_file_name: Annotated[str, Field(
         description="Name of the Excel file to export.",
     )] = "graph_instances_export.xlsx"
 
