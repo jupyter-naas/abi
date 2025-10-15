@@ -1,6 +1,6 @@
 from lib.abi.integration.integration import Integration, IntegrationConfiguration, IntegrationConnectionError
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Annotated
 import requests
 from abi import logger
 
@@ -245,11 +245,13 @@ def as_tools(configuration: AgicapIntegrationConfiguration):
     class GetTransactionsSchema(BaseModel):
         company_id: str = Field(..., description="The ID of the company")
         account_id: str = Field(..., description="The ID of the account")
-        limit: Optional[int] = Field(default=10, description="The number of transactions to retrieve")
+        limit: Optional[Annotated[int, Field(
+            description="The number of transactions to retrieve"
+        )]] = 10
 
     class GetBalanceSchema(BaseModel):
         company_id: str = Field(..., description="The ID of the company")
-        account_id: Optional[str] = Field(default=None, description="The ID of the account")
+        account_id: Optional[str] = Field(description="The ID of the account")
 
     class GetDebtsSchema(BaseModel):
         company_id: str = Field(..., description="The ID of the company")
