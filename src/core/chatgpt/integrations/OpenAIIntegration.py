@@ -147,7 +147,7 @@ def as_tools(configuration: OpenAIIntegrationConfiguration):
         prompt: str = Field(description="The prompt to use")
         system_prompt: str = Field(description="The system prompt to use")
         model: str = Field(description="The model to use")
-        response_format: Optional[BaseModel] = Field(default=None, description="The response format to use")
+        response_format: Optional[BaseModel] = Field(description="The response format to use")
 
     return [
         StructuredTool(
