@@ -287,7 +287,8 @@ class IntentAgent(Agent):
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]['score']
-        if max_score >= self._direct_intent_score:
+        max_score_2 = intents[1]['score'] if len(intents) > 1 else 0
+        if max_score >= self._direct_intent_score and max_score > max_score_2:
             logger.debug(f"🎯 Intent mapping score above {self._direct_intent_score*100}% ({round(max_score*100, 2)}%), routing to intent_mapping_router")
             return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": [intents[0]]}})
         
