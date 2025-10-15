@@ -418,8 +418,11 @@ class Agent(Expose):
             from datetime import datetime
             from zoneinfo import ZoneInfo
             return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
-        
-        return [get_time_date, request_help]
+
+        tools: list[Tool | BaseTool] = [get_time_date]
+        if self.state.supervisor_agent:
+            tools.append(request_help)
+        return tools
 
     @property
     def system_prompt(self) -> str:
@@ -431,11 +434,11 @@ class Agent(Expose):
     @property
     def structured_tools(self) -> list[Tool | BaseTool]:
         return self._structured_tools
-    
+
     @property
     def state(self) -> AgentSharedState:
         return self._state
-    
+
     def validate_tool_name(self, tool: BaseTool) -> BaseTool:
         if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
             # Replace invalid characters with '_'
