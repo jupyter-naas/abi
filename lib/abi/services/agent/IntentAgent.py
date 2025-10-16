@@ -40,6 +40,15 @@ DEFAULT_INTENTS: list = [
     Intent(intent_value="Merci", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Merci beaucoup", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Merci bien", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List tools available", intent_type=IntentType.TOOL, intent_target="list_agent_tools", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List sub-agents available", intent_type=IntentType.TOOL, intent_target="list_sub_agents", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the tools available?", intent_type=IntentType.TOOL, intent_target="list_agent_tools", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the sub-agents available?", intent_type=IntentType.TOOL, intent_target="list_sub_agents", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List intents", intent_type=IntentType.TOOL, intent_target="list_agent_intents", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are your intents?", intent_type=IntentType.TOOL, intent_target="list_agent_intents", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Get supervisor agent", intent_type=IntentType.TOOL, intent_target="get_supervisor_agent", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Do you have a supervisor agent?", intent_type=IntentType.TOOL, intent_target="get_supervisor_agent", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Who is your supervisor agent?", intent_type=IntentType.TOOL, intent_target="get_supervisor_agent", intent_scope=IntentScope.DIRECT),
 ]
 
 
@@ -681,8 +690,10 @@ Last user message: "{last_human_message.content}"
 INTENT RULES:
 Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
 The following is the list of mapped intents. This list will change over time as new messages comes in.
-You must analyze if the user message and the mapped intents are related to each other. If it's the case, you must take them into account, otherwise you must ignore the ones that are not related.
+You must analyze if the user message and the mapped intents are related to each other. 
+If it's the case, you must take them into account, otherwise you must ignore the ones that are not related.
 If you endup with a single intent which is of type RAW, you must output the intent_target and nothing else as there will be tests asserting the correctness of the output.
+If you endup with a single intent which is of type TOOL, you must call this tool.
 
 
 
