@@ -50,55 +50,53 @@ DEFAULT_INTENTS: list = [
 ]
 DEV_INTENTS: list = [
     # General development questions
-    Intent(intent_value="How do I start developing?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="What are the available make commands?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="Show me all make commands", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I start developing on ABI?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the available make commands?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Show me all make commands", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Environment setup
-    Intent(intent_value="How do I set up my development environment?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I install dependencies?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I create a virtual environment?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I set up my development environment?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I install dependencies?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create a virtual environment?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Testing
-    Intent(intent_value="How do I run tests?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I check code quality?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I run security scans?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I run tests?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I check code quality?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I run security scans?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Docker operations
-    Intent(intent_value="How do I work with Docker containers?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I start local services?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I manage Docker containers?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with Docker containers?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I start local services?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I manage Docker containers?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Chat agents
-    Intent(intent_value="How do I start a chat agent?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="What chat agents are available?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I use different AI models?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What chat agents are available?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Development tools
-    Intent(intent_value="How do I use the API server?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I work with the knowledge graph?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I use Dagster for data orchestration?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I use the API server?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with the knowledge graph?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I use Dagster for data orchestration?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Module creation
-    Intent(intent_value="How do I create new modules?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I create new agents?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I create new integrations?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I create new workflows?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I create new pipelines?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I create new ontologies?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new modules?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new agents?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new integrations?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new workflows?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new pipelines?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new ontologies?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Data management
-    Intent(intent_value="How do I manage data storage?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I work with the triplestore?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I handle data exports?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I manage data storage?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with the triplestore?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I handle data exports?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Documentation
-    Intent(intent_value="How do I generate documentation?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I publish agents?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I generate documentation?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I publish agents?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 
     # Cleanup and maintenance
-    Intent(intent_value="How do I clean up the project?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="How do I handle Docker cleanup?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I clean up the project?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I handle Docker cleanup?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 ]
 
 
