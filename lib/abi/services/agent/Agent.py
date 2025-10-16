@@ -41,7 +41,6 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
-# import base64
 import re
 
 
@@ -342,7 +341,6 @@ class Agent(Expose):
         
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
         import uuid
-        import os
         if os.getenv("ENV") == "dev":
             self._state.set_thread_id(str(uuid.uuid4()))
 
@@ -414,14 +412,91 @@ class Agent(Expose):
         
         @tool(return_direct=False)
         def get_time_date(timezone: str = 'Europe/Paris') -> str:
-            """Get the current time and date."""
+            """Returns the current date and time for a given timezone."""
             from datetime import datetime
             from zoneinfo import ZoneInfo
             return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+        
+        @tool(return_direct=True)
+        def list_tools_available() -> str:
+            """Displays a formatted list of all available tools."""
+            if not hasattr(self, "_structured_tools") or len(self._structured_tools) == 0:
+                return "I don't have any tools available to help you at the moment."
+            
+            tools_text = "Here are the tools I can use to help you:\n\n"
+            for t in self._structured_tools:
+                if not t.name.startswith("transfer_to"):
+                    tools_text += f"- `{t.name}`: {t.description.splitlines()[0]}\n"
+            return tools_text.rstrip()
 
-        tools: list[Tool | BaseTool] = [get_time_date]
-        if self.state.supervisor_agent:
+        @tool(return_direct=True)
+        def list_subagents_available() -> str:
+            """Displays a formatted list of all available sub-agents."""
+            if not hasattr(self, "_agents") or len(self._agents) == 0:
+                return "I don't have any sub-agents that can assist me at the moment."
+                
+            agents_text = "I can collaborate with these sub-agents:\n"
+            for agent in self._agents:
+                agents_text += f"- `{agent.name}`: {agent.description}\n"
+            return agents_text.rstrip()
+        
+        @tool(return_direct=True)
+        def list_intents_available() -> str:
+            """Displays a formatted list of all available intents."""
+            if not hasattr(self, "_intents") or len(self._intents) == 0:
+                return "I haven't been configured with any specific intents yet."
+            
+            from abi.services.agent.IntentAgent import Intent, IntentType, IntentScope
+            
+            # Group intents by scope and type
+            intents_by_scope: dict[Optional[IntentScope], dict[IntentType, list[Intent]]] = {}
+            for intent in self._intents:
+                if intent.intent_scope not in intents_by_scope:
+                    intents_by_scope[intent.intent_scope] = {}
+                if intent.intent_type not in intents_by_scope[intent.intent_scope]:
+                    intents_by_scope[intent.intent_scope][intent.intent_type] = []
+                intents_by_scope[intent.intent_scope][intent.intent_type].append(intent)
+            
+            intents_text = "Here are all the intents I'm configured with:\n\n"
+            for scope, types_dict in intents_by_scope.items():
+                intents_text += f"### Intents for {str(scope)}\n\n"
+                for intent_type, intents in types_dict.items():
+                    intents_text += f"#### {str(intent_type)}\n\n"
+                    intents_text += "| Intent | Target |\n"
+                    intents_text += "|--------|--------|\n"
+                    for intent in intents:
+                        if intent.intent_scope == IntentType.RAW:
+                            intents_text += f"| {intent.intent_value} | {intent.intent_target} |\n"
+                        else:
+                            intents_text += f"| {intent.intent_value} | `{intent.intent_target}` |\n"
+                    intents_text += "\n"
+            return intents_text.rstrip()
+        
+        @tool(return_direct=False)
+        def read_makefile() -> str:
+            """Read the Makefile and return the content."""
+            try:
+                with open("Makefile", "r") as f:
+                    makefile_content = f.read()
+                
+                return "Here are the make commands available:\n\n" + makefile_content
+
+            except FileNotFoundError:
+                return "Could not find Makefile in the root directory."
+            except Exception as e:
+                return f"Error reading Makefile: {str(e)}"
+
+        tools: list[Tool | BaseTool] = [
+            get_time_date, 
+            list_tools_available, 
+            list_subagents_available, 
+            list_intents_available,
+        ]
+        if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
+            
+        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev":
+            tools.append(read_makefile)
         return tools
 
     @property
@@ -587,14 +662,13 @@ class Agent(Expose):
         
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with agent '{self.name}'")
-        if self.state.supervisor_agent != self.name:
+        if self.state.supervisor_agent != self.name and "SUPERVISOR SYSTEM PROMPT" not in self._system_prompt:
             # This agent is a subagent with a supervisor
             subagent_prompt = f"""
 SUPERVISOR SYSTEM PROMPT:
 
-You are a specialized agent working under the supervision of {self.state.supervisor_agent}.
+Remember, you are a specialized agent working under the supervision of {self.state.supervisor_agent}.
 
-# OPERATING GUIDELINES:
 1. Stay focused on your specialized role and core capabilities
 2. Follow your system prompt instructions precisely
 3. For EVERY user message, first evaluate if you can handle it within your core capabilities
@@ -616,10 +690,24 @@ Your supervisor will help ensure you operate effectively within your role while 
 SUBAGENT SYSTEM PROMPT:
 
 {self._system_prompt}
-
 """
-            self.set_system_prompt(self._system_prompt + subagent_prompt)
-        # logger.debug(f"System prompt: {self._system_prompt}")
+            self.set_system_prompt(subagent_prompt)
+
+        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev" and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt:
+            dev_prompt = f"""
+DEVELOPPER SYSTEM PROMPT:
+
+For any questions/commands related to the project, use tool: `read_makefile` to get the information you need.
+
+--------------------------------
+
+AGENT SYSTEM PROMPT:
+
+{self._system_prompt}
+"""
+
+            self.set_system_prompt(dev_prompt)
+        logger.debug(f"System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:

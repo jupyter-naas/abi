@@ -19,26 +19,118 @@ def test_sanax_linkedin_sales_navigator_extractor_pipeline(pipeline: SanaxLinked
     # Create test data
     import pandas as pd
     import os
-    test_data = pd.DataFrame({
-        'Name': ['John Smith', 'Jane Doe', 'Bob Wilson', 'John Johnson'],
-        'Job Title': ['Executive Partner', 'CEO', 'CTO', 'Director'], 
-        'Company': ['Example Corp', 'Tech Solutions', 'Global Systems', 'Acme Inc'],
-        'Company URL': ['https://www.linkedin.com/company/example', 
-                       'https://www.linkedin.com/company/techsolutions',
-                       '',
-                       'https://www.linkedin.com/company/acme'],
-        'Location': ['New York, United States', 'London, United Kingdom', 
-                    'Singapore', 'Toronto, Canada'],
-        'Follows Your Company': ['No', 'Yes', 'No', 'Yes'],
-        'Time in Role': ['1 year 1 month in role', '3 years 6 months in role',
-                        '2 years 3 months in role', '5 years in role'],
-        'Time in Company': ['1 year 1 month in company', '5 years in company',
-                          '2 years 3 months in company', '7 years in company'],
-        'LinkedIn URL': ['https://www.linkedin.com/sales/lead/example',
-                        'https://www.linkedin.com/sales/lead/janedoe',
-                        'https://www.linkedin.com/sales/lead/bobwilson',
-                        'https://www.linkedin.com/sales/lead/johnjohnson']
-    })
+    test_data = pd.DataFrame([
+        {
+            'Name': 'John Smith',
+            'Job Title': 'Executive Partner',
+            'Company': '',
+            'Company URL': '',
+            'Location': 'New York, United States',
+            'Follows Your Company': 'No',
+            'Time in Role': '1 year 1 month in role',
+            'Time in Company': '1 year 1 month in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/example'
+        },
+        {
+            'Name': 'Jane Doe',
+            'Job Title': 'CEO',
+            'Company': 'Tech Solutions',
+            'Company URL': 'https://www.linkedin.com/company/techsolutions',
+            'Location': 'London, United Kingdom',
+            'Follows Your Company': 'Yes', 
+            'Time in Role': '3 years 6 months in role',
+            'Time in Company': '5 years in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/janedoe'
+        },
+        {
+            'Name': 'John Wilson',
+            'Job Title': 'CTO',
+            'Company': 'Global Systems',
+            'Company URL': '',
+            'Location': 'Singapore',
+            'Follows Your Company': 'No',
+            'Time in Role': '2 years 3 months in role',
+            'Time in Company': '2 years 3 months in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/johnwilson'
+        },
+        {
+            'Name': 'Sarah Johnson',
+            'Job Title': 'VP of Sales',
+            'Company': 'Acme Corp',
+            'Company URL': 'https://www.linkedin.com/company/acmecorp',
+            'Location': 'Toronto, Canada',
+            'Follows Your Company': 'Yes',
+            'Time in Role': '4 years 2 months in role',
+            'Time in Company': '6 years in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/sarahjohnson'
+        },
+        {
+            'Name': 'Michael Chang',
+            'Job Title': 'Senior Developer',
+            'Company': 'Tech Innovators',
+            'Company URL': 'https://www.linkedin.com/company/techinnovators',
+            'Location': 'San Francisco, United States',
+            'Follows Your Company': 'No',
+            'Time in Role': '2 years 8 months in role',
+            'Time in Company': '2 years 8 months in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/michaelchang'
+        },
+        {
+            'Name': 'Emma Wilson',
+            'Job Title': 'Product Manager',
+            'Company': 'Digital Solutions',
+            'Company URL': 'https://www.linkedin.com/company/digitalsolutions',
+            'Location': 'Berlin, Germany',
+            'Follows Your Company': 'Yes',
+            'Time in Role': '1 year 9 months in role',
+            'Time in Company': '3 years in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/emmawilson'
+        },
+        {
+            'Name': 'David Kim',
+            'Job Title': 'Solutions Architect',
+            'Company': 'Cloud Systems',
+            'Company URL': 'https://www.linkedin.com/company/cloudsystems',
+            'Location': 'Seoul, South Korea',
+            'Follows Your Company': 'No',
+            'Time in Role': '3 years 1 month in role',
+            'Time in Company': '3 years 1 month in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/davidkim'
+        },
+        {
+            'Name': 'Lisa Chen',
+            'Job Title': 'Marketing Director',
+            'Company': 'Global Marketing',
+            'Company URL': 'https://www.linkedin.com/company/globalmarketing',
+            'Location': 'Sydney, Australia',
+            'Follows Your Company': 'Yes',
+            'Time in Role': '2 years 5 months in role',
+            'Time in Company': '4 years in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/lisachen'
+        },
+        {
+            'Name': 'Thomas Mueller',
+            'Job Title': 'Head of Engineering',
+            'Company': 'Software AG',
+            'Company URL': 'https://www.linkedin.com/company/softwareag',
+            'Location': 'Munich, Germany',
+            'Follows Your Company': 'No',
+            'Time in Role': '3 years 8 months in role',
+            'Time in Company': '5 years in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/thomasmueller'
+        },
+        {
+            'Name': 'Maria Garcia',
+            'Job Title': 'Business Development Manager',
+            'Company': 'Global Ventures',
+            'Company URL': 'https://www.linkedin.com/company/globalventures',
+            'Location': 'Madrid, Spain',
+            'Follows Your Company': 'Yes',
+            'Time in Role': '1 year 11 months in role',
+            'Time in Company': '1 year 11 months in company',
+            'LinkedIn URL': 'https://www.linkedin.com/sales/lead/mariagarcia'
+        }
+    ])
 
     # Save test data to datastore Excel file
     dir_path = os.path.join(SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration.data_store_path, "test")
