@@ -40,15 +40,12 @@ DEFAULT_INTENTS: list = [
     Intent(intent_value="Merci", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Merci beaucoup", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Merci bien", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="List tools available", intent_type=IntentType.TOOL, intent_target="list_agent_tools", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="List sub-agents available", intent_type=IntentType.TOOL, intent_target="list_sub_agents", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="What are the tools available?", intent_type=IntentType.TOOL, intent_target="list_agent_tools", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="What are the sub-agents available?", intent_type=IntentType.TOOL, intent_target="list_sub_agents", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="List intents", intent_type=IntentType.TOOL, intent_target="list_agent_intents", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="What are your intents?", intent_type=IntentType.TOOL, intent_target="list_agent_intents", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="Get supervisor agent", intent_type=IntentType.TOOL, intent_target="get_supervisor_agent", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="Do you have a supervisor agent?", intent_type=IntentType.TOOL, intent_target="get_supervisor_agent", intent_scope=IntentScope.DIRECT),
-    Intent(intent_value="Who is your supervisor agent?", intent_type=IntentType.TOOL, intent_target="get_supervisor_agent", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List tools available", intent_type=IntentType.TOOL, intent_target="list_tools_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the tools available?", intent_type=IntentType.TOOL, intent_target="list_tools_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List sub-agents available", intent_type=IntentType.TOOL, intent_target="list_subagents_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the sub-agents available?", intent_type=IntentType.TOOL, intent_target="list_subagents_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List intents", intent_type=IntentType.TOOL, intent_target="list_intents_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are your intents?", intent_type=IntentType.TOOL, intent_target="list_intents_available", intent_scope=IntentScope.DIRECT),
 ]
 
 
