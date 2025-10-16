@@ -172,15 +172,6 @@ def create_agent(
 You can browse the data and run queries there."""
     tools.append(open_knowledge_graph_explorer)
 
-    @tool
-    def get_time(current_time: bool = False) -> str:
-        """Get the current time."""
-        from datetime import datetime
-        return datetime.now().strftime("%H:%M:%S")
-
-    tools.append(get_time)
-    
-
     # Get tools
     from src.core.templatablesparqlquery import get_tools
     agent_recommendation_tools = [
