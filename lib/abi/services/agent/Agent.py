@@ -481,24 +481,8 @@ class Agent(Expose):
                 with open("Makefile", "r") as f:
                     makefile_content = f.read()
                 
-                commands_text = "Here are the make commands available:\n\n"
-                
-                # Parse makefile content to find commands and their descriptions
-                current_description = ""
-                for line in makefile_content.split('\n'):
-                    line = line.strip()
-                    if line.startswith('#'):
-                        current_description = line[1:].strip()
-                    elif ':' in line and not line.startswith('.'):
-                        target = line.split(':')[0].strip()
-                        if not target.startswith('@') and not target.startswith('echo'):
-                            commands_text += f"- `make {target}`"
-                            if current_description:
-                                commands_text += f": {current_description}"
-                            commands_text += "\n"
-                        current_description = ""
-                
-                return commands_text.rstrip()
+                return "Here are the make commands available:\n\n" + makefile_content
+
             except FileNotFoundError:
                 return "Could not find Makefile in the root directory."
             except Exception as e:
