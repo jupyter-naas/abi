@@ -419,43 +419,39 @@ class Agent(Expose):
             from zoneinfo import ZoneInfo
             return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
         
-        @tool(return_direct=True)   
-        def get_supervisor_agent() -> str:
-            """Returns the name of the current supervisor agent if one is assigned."""
-            return f"Let me check... {self.state.supervisor_agent} is my supervisor agent." if self.state.supervisor_agent is not None else "I don't have a supervisor agent at the moment."
-        
         @tool(return_direct=True)
-        def list_agent_tools() -> str:
-            """Displays a formatted list of all available tools and their descriptions."""
+        def list_tools_available() -> str:
+            """Displays a formatted list of all available tools."""
             if not hasattr(self, "_structured_tools") or len(self._structured_tools) == 0:
                 return "I don't have any tools available to help you at the moment."
             
-            tools_text = "Here are the tools I can use to help you:\n"
+            tools_text = "Here are the tools I can use to help you:\n\n"
             for t in self._structured_tools:
-                tools_text += f"- {t.name}: {t.description}\n"
+                if not t.name.startswith("transfer_to"):
+                    tools_text += f"- `{t.name}`: {t.description.splitlines()[0]}\n"
             return tools_text.rstrip()
 
         @tool(return_direct=True)
-        def list_sub_agents() -> str:
-            """Displays a formatted list of all available sub-agents and their descriptions."""
+        def list_subagents_available() -> str:
+            """Displays a formatted list of all available sub-agents."""
             if not hasattr(self, "_agents") or len(self._agents) == 0:
                 return "I don't have any sub-agents that can assist me at the moment."
                 
             agents_text = "I can collaborate with these sub-agents:\n"
             for agent in self._agents:
-                agents_text += f"- {agent.name}: {agent.description}\n"
+                agents_text += f"- `{agent.name}`: {agent.description}\n"
             return agents_text.rstrip()
         
         @tool(return_direct=True)
-        def list_agent_intents() -> str:
-            """Displays a formatted list of all configured intents and their properties."""
+        def list_intents_available() -> str:
+            """Displays a formatted list of all available intents."""
             if not hasattr(self, "_intents") or len(self._intents) == 0:
                 return "I haven't been configured with any specific intents yet."
             
-            # Group intents first by scope, then by type
-            from abi.services.agent.IntentAgent import Intent,IntentType, IntentScope
-            intents_by_scope: dict[Optional[IntentScope], dict[IntentType, list[Intent]]] = {}
+            from abi.services.agent.IntentAgent import Intent, IntentType, IntentScope
             
+            # Group intents by scope and type
+            intents_by_scope: dict[Optional[IntentScope], dict[IntentType, list[Intent]]] = {}
             for intent in self._intents:
                 if intent.intent_scope not in intents_by_scope:
                     intents_by_scope[intent.intent_scope] = {}
@@ -463,23 +459,28 @@ class Agent(Expose):
                     intents_by_scope[intent.intent_scope][intent.intent_type] = []
                 intents_by_scope[intent.intent_scope][intent.intent_type].append(intent)
             
-            intents_text = "Here are the specific tasks and queries I'm trained to handle:\n"
+            intents_text = "Here are all the intents I'm configured with:\n\n"
             for scope, types_dict in intents_by_scope.items():
-                intents_text += f"\n**Intents for {str(scope)}:**\n"
+                intents_text += f"### Intents for {str(scope)}\n\n"
                 for intent_type, intents in types_dict.items():
-                    intents_text += f"\n  {str(intent_type)}:\n"
+                    intents_text += f"#### {str(intent_type)}\n\n"
+                    intents_text += "| Intent | Target |\n"
+                    intents_text += "|--------|--------|\n"
                     for intent in intents:
-                        intents_text += f"  - {intent.intent_value}: {intent.intent_target}\n"
+                        if intent.intent_scope == IntentType.RAW:
+                            intents_text += f"| {intent.intent_value} | {intent.intent_target} |\n"
+                        else:
+                            intents_text += f"| {intent.intent_value} | `{intent.intent_target}` |\n"
+                    intents_text += "\n"
             return intents_text.rstrip()
 
         tools: list[Tool | BaseTool] = [
             get_time_date, 
-            get_supervisor_agent, 
-            list_agent_tools, 
-            list_sub_agents, 
-            list_agent_intents,
+            list_tools_available, 
+            list_subagents_available, 
+            list_intents_available,
         ]
-        if self.state.supervisor_agent:
+        if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
         return tools
 
