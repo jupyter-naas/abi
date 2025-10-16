@@ -414,12 +414,71 @@ class Agent(Expose):
         
         @tool(return_direct=False)
         def get_time_date(timezone: str = 'Europe/Paris') -> str:
-            """Get the current time and date."""
+            """Returns the current date and time for a given timezone."""
             from datetime import datetime
             from zoneinfo import ZoneInfo
             return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+        
+        @tool(return_direct=True)   
+        def get_supervisor_agent() -> str:
+            """Returns the name of the current supervisor agent if one is assigned."""
+            return f"Let me check... {self.state.supervisor_agent} is my supervisor agent." if self.state.supervisor_agent is not None else "I don't have a supervisor agent at the moment."
+        
+        @tool(return_direct=True)
+        def list_agent_tools() -> str:
+            """Displays a formatted list of all available tools and their descriptions."""
+            if not hasattr(self, "_structured_tools") or len(self._structured_tools) == 0:
+                return "I don't have any tools available to help you at the moment."
+            
+            tools_text = "Here are the tools I can use to help you:\n"
+            for tool in self._structured_tools:
+                tools_text += f"- {tool.name}: {tool.description}\n"
+            return tools_text.rstrip()
 
-        tools: list[Tool | BaseTool] = [get_time_date]
+        @tool(return_direct=True)
+        def list_sub_agents() -> str:
+            """Displays a formatted list of all available sub-agents and their descriptions."""
+            if not hasattr(self, "_agents") or len(self._agents) == 0:
+                return "I don't have any sub-agents that can assist me at the moment."
+                
+            agents_text = "I can collaborate with these sub-agents:\n"
+            for agent in self._agents:
+                agents_text += f"- {agent.name}: {agent.description}\n"
+            return agents_text.rstrip()
+        
+        @tool(return_direct=True)
+        def list_agent_intents() -> str:
+            """Displays a formatted list of all configured intents and their properties."""
+            if not hasattr(self, "_intents") or len(self._intents) == 0:
+                return "I haven't been configured with any specific intents yet."
+            
+            # Group intents first by scope, then by type
+            from abi.services.agent.IntentAgent import Intent,IntentType, IntentScope
+            intents_by_scope: dict[Optional[IntentScope], dict[IntentType, list[Intent]]] = {}
+            
+            for intent in self._intents:
+                if intent.intent_scope not in intents_by_scope:
+                    intents_by_scope[intent.intent_scope] = {}
+                if intent.intent_type not in intents_by_scope[intent.intent_scope]:
+                    intents_by_scope[intent.intent_scope][intent.intent_type] = []
+                intents_by_scope[intent.intent_scope][intent.intent_type].append(intent)
+            
+            intents_text = "Here are the specific tasks and queries I'm trained to handle:\n"
+            for scope, types_dict in intents_by_scope.items():
+                intents_text += f"\n**Intents for {str(scope)}:**\n"
+                for intent_type, intents in types_dict.items():
+                    intents_text += f"\n  {str(intent_type)}:\n"
+                    for intent in intents:
+                        intents_text += f"  - {intent.intent_value}: {intent.intent_target}\n"
+            return intents_text.rstrip()
+
+        tools: list[Tool | BaseTool] = [
+            get_time_date, 
+            get_supervisor_agent, 
+            list_agent_tools, 
+            list_sub_agents, 
+            list_agent_intents,
+        ]
         if self.state.supervisor_agent:
             tools.append(request_help)
         return tools
