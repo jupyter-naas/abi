@@ -475,8 +475,8 @@ class Agent(Expose):
             return intents_text.rstrip()
         
         @tool(return_direct=False)
-        def list_make_commands_available() -> str:
-            """Displays a formatted list of all available make commands."""
+        def read_makefile() -> str:
+            """Read the Makefile and return the content."""
             try:
                 with open("Makefile", "r") as f:
                     makefile_content = f.read()
@@ -497,8 +497,8 @@ class Agent(Expose):
         if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
             
-        if os.environ.get("ENV") != "prod" and os.path.exists("Makefile"):
-            tools.append(list_make_commands_available)
+        if self.state.supervisor_agent == self.name and os.environ.get("ENV") != "prod":
+            tools.append(read_makefile)
         return tools
 
     @property
@@ -664,14 +664,13 @@ class Agent(Expose):
         
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with agent '{self.name}'")
-        if self.state.supervisor_agent != self.name:
+        if self.state.supervisor_agent != self.name and "SUPERVISOR SYSTEM PROMPT" not in self._system_prompt:
             # This agent is a subagent with a supervisor
             subagent_prompt = f"""
 SUPERVISOR SYSTEM PROMPT:
 
-You are a specialized agent working under the supervision of {self.state.supervisor_agent}.
+Remember, you are a specialized agent working under the supervision of {self.state.supervisor_agent}.
 
-# OPERATING GUIDELINES:
 1. Stay focused on your specialized role and core capabilities
 2. Follow your system prompt instructions precisely
 3. For EVERY user message, first evaluate if you can handle it within your core capabilities
@@ -693,10 +692,24 @@ Your supervisor will help ensure you operate effectively within your role while 
 SUBAGENT SYSTEM PROMPT:
 
 {self._system_prompt}
-
 """
-            self.set_system_prompt(self._system_prompt + subagent_prompt)
-        # logger.debug(f"System prompt: {self._system_prompt}")
+            self.set_system_prompt(subagent_prompt)
+
+        if self.state.supervisor_agent == self.name and os.environ.get("ENV") != "prod" and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt:
+            dev_prompt = f"""
+DEVELOPPER SYSTEM PROMPT:
+
+For any questions/commands related to the project, use tool: `read_makefile` to get the information you need.
+
+--------------------------------
+
+AGENT SYSTEM PROMPT:
+
+{self._system_prompt}
+"""
+
+            self.set_system_prompt(dev_prompt)
+        logger.debug(f"System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:
