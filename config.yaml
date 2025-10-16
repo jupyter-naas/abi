@@ -20,29 +20,29 @@ modules:
   - path: src/core/abi
     enabled: true
   - path: src/core/chatgpt
-    enabled: false
+    enabled: true
   - path: src/core/claude
-    enabled: false
+    enabled: true
   - path: src/core/deepseek
     enabled: false
   - path: src/core/gemini
-    enabled: false
+    enabled: true
   - path: src/core/gemma
-    enabled: true
+    enabled: false
   - path: src/core/grok
-    enabled: false
-  - path: src/core/llama
     enabled: true
+  - path: src/core/llama
+    enabled: false
   - path: src/core/mistral
-    enabled: false
+    enabled: true
   - path: src/core/perplexity
-    enabled: false
+    enabled: true
   - path: src/core/qwen
     enabled: false
   - path: src/core/templatablesparqlquery
     enabled: true
   - path: src/marketplace/applications/git
-    enabled: true
+    enabled: false
   - path: src/marketplace/applications/github
     enabled: false
   - path: src/marketplace/applications/naas
