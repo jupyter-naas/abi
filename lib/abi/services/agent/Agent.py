@@ -431,8 +431,8 @@ class Agent(Expose):
                 return "I don't have any tools available to help you at the moment."
             
             tools_text = "Here are the tools I can use to help you:\n"
-            for tool in self._structured_tools:
-                tools_text += f"- {tool.name}: {tool.description}\n"
+            for t in self._structured_tools:
+                tools_text += f"- {t.name}: {t.description}\n"
             return tools_text.rstrip()
 
         @tool(return_direct=True)
