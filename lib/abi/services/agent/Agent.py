@@ -41,7 +41,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
-# import base64
+import os
 import re
 
 
@@ -342,7 +342,6 @@ class Agent(Expose):
         
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
         import uuid
-        import os
         if os.getenv("ENV") == "dev":
             self._state.set_thread_id(str(uuid.uuid4()))
 
@@ -497,7 +496,7 @@ class Agent(Expose):
         if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
             
-        if self.state.supervisor_agent == self.name and os.environ.get("ENV") != "prod":
+        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev":
             tools.append(read_makefile)
         return tools
 
@@ -695,7 +694,7 @@ SUBAGENT SYSTEM PROMPT:
 """
             self.set_system_prompt(subagent_prompt)
 
-        if self.state.supervisor_agent == self.name and os.environ.get("ENV") != "prod" and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt:
+        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev" and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt:
             dev_prompt = f"""
 DEVELOPPER SYSTEM PROMPT:
 
