@@ -4,6 +4,7 @@ from rdflib import URIRef, query, Graph, RDFS, RDF, OWL, XSD, DCTERMS
 from typing import List, Dict, Optional
 from abi.utils.Graph import BFO, ABI, TEST, CCO
 
+
 def results_to_list(
     results: query.Result
 ) -> Optional[List[Dict]]:
@@ -26,17 +27,18 @@ def results_to_list(
         data.append(data_dict)
     return data if len(data) > 0 else None
 
+
 def get_class_uri_from_individual_uri(
     uri: str | URIRef,
 ) -> Optional[str]:
     """
-    Get the class URI for a given URI from the triple store.
+    Get the class URI for a given individual URI from the triple store.
 
     Args:
-        uri (str): The URI to look up
+        uri (str | URIRef): The individual URI to look up
 
     Returns:
-        str: The class URI if found, None otherwise
+        Optional[str]: The class URI if found, None otherwise
     """
     sparql_query = f"""
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -59,17 +61,18 @@ def get_class_uri_from_individual_uri(
         logger.error(f"Error getting class URI for {uri}: {e}")
         return None
     
+
 def get_rdfs_label_from_individual_uri(
     uri: str | URIRef,
 ) -> Optional[str]:
     """
-    Get the RDFS label for a given URI from the triple store.
+    Get the RDFS label for a given individual URI from the triple store.
     
     Args:
-        uri (str): The URI to look up
+        uri (str | URIRef): The individual URI to look up
 
     Returns:
-        str: The RDFS label if found, None otherwise
+        Optional[str]: The RDFS label if found, None otherwise
     """
     sparql_query = f"""
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -90,18 +93,21 @@ def get_rdfs_label_from_individual_uri(
         logger.error(f"Error getting label for {uri}: {e}")
         return None
 
+
 def get_identifier(
     identifier: str, 
     type: URIRef = URIRef("http://ontology.naas.ai/abi/unique_id"),
     graph: Graph = Graph()
 ) -> Optional[URIRef]:
     """
-    Get the URI for a given identifier from the triple store.
+    Get the URI for a given identifier from the triple store or provided graph.
 
     Args:
         identifier (str): The identifier string to look up
         type (URIRef, optional): The predicate type to use for the lookup. 
                                 Defaults to "http://ontology.naas.ai/abi/unique_id"
+        graph (Graph, optional): Optional RDFlib Graph to query instead of triple store.
+                               Defaults to empty Graph.
 
     Returns:
         Optional[URIRef]: The URI if found, None otherwise
@@ -128,6 +134,44 @@ def get_identifier(
         return None
     return None
 
+
+def get_identifiers(
+    property_uri: URIRef = URIRef("http://ontology.naas.ai/abi/unique_id"),
+    class_uri: Optional[URIRef] = None
+) -> dict[str, URIRef]:
+    """
+    Get a mapping of all identifiers to their URIs from the triple store.
+
+    Args:
+        property_uri (URIRef, optional): The predicate URI to use for the lookup.
+                                       Defaults to "http://ontology.naas.ai/abi/unique_id"
+        class_uri (URIRef, optional): Optional class URI to filter results.
+                                     Only return identifiers for instances of this class.
+                                     Defaults to None.
+
+    Returns:
+        dict[str, URIRef]: Dictionary mapping identifiers to their URIs
+    """
+    sparql_query = f"""
+        SELECT ?s ?id
+        WHERE {{
+            ?s <{str(property_uri)}> ?id .
+            {f"?s a <{str(class_uri)}> ." if class_uri else ""}
+        }}
+    """
+    try:
+        results = services.triple_store_service.query(sparql_query) # type: ignore
+
+        id_map = {}
+        for row in results:
+            assert isinstance(row, query.ResultRow)
+            id_map[str(row.id)] = URIRef(str(row.s))
+        return id_map
+    except Exception as e:
+        logger.error(f"Error getting identifiers map: {e}")
+        return {}
+
+
 def get_subject_graph(
     uri: str | URIRef,
     depth: int = 1
@@ -135,13 +179,18 @@ def get_subject_graph(
     """
     Get a graph for a given URI with a specified depth of relationships.
     This recursively follows relationships to build a more detailed subgraph.
+    The resulting graph includes all triples where the given URI is the subject,
+    and optionally follows object URIs to include their relationships up to the specified depth.
 
     Args:
-        uri (str): The URI to build the graph around
-        depth (int): How many levels deep to traverse relationships (default: 1)
+        uri (str | URIRef): The URI to build the graph around
+        depth (int): How many levels deep to traverse relationships. A depth of 0 returns an empty graph,
+                    1 returns direct relationships, 2 includes relationships of related objects, etc.
+                    Defaults to 1.
 
     Returns:
-        Graph: RDFlib Graph containing triples within the specified depth
+        Graph: RDFlib Graph containing all triples within the specified depth, with standard namespace
+              prefixes bound (rdfs, rdf, owl, xsd, dcterms, abi, bfo, cco, test)
     """
     if depth <= 0:
         return Graph()
