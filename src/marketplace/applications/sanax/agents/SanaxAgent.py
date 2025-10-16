@@ -144,7 +144,7 @@ def create_agent(
                         count = len(parsed)
                     else:
                         count = 1
-                except:
+                except Exception:
                     count = 1
             else:
                 # For other types, assume it's a single result

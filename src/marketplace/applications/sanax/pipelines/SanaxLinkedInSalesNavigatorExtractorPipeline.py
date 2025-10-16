@@ -10,7 +10,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from src.utils.Storage import get_excel, save_triples, save_excel
-from src.utils.SPARQL import get_identifier, get_identifiers
+from src.utils.SPARQL import get_identifiers
 from abi.utils.String import create_hash_from_string
 from abi.utils.Graph import ABI, CCO, BFO
 from enum import Enum
@@ -275,7 +275,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
             row_hash = create_hash_from_string(str(tuple(row)))
             row_uri = unique_identifiers.get(row_hash)
             if row_uri is None:
-                logger.debug(f"Step 3.1: Adding backing datasource component for row")
+                logger.debug("Step 3.1: Adding backing datasource component for row")
                 row_uri = ABI[str(uuid.uuid4())]
                 # Add backing datasource component
                 graph.add((row_uri, RDF.type, OWL.NamedIndividual))
@@ -284,7 +284,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 graph.add((row_uri, ABI.isComponentOf, data_source_uri))
                 graph.add((data_source_uri, ABI.hasComponent, row_uri))
             else:
-                logger.warning(f"Row already processed!")
+                logger.warning("Row already processed!")
                 continue
 
             # Add LinkedIn profile page
@@ -309,7 +309,7 @@ class SanaxLinkedInSalesNavigatorExtractorPipeline(Pipeline):
                 graph.add((linkedin_profile_page_uri, ABI.linkedin_id, Literal(lk_linkedin_id)))
                 graph.add((linkedin_profile_page_uri, ABI.hasBackingDataSource, row_uri))
             else:
-                logger.warning(f"LinkedIn profile page already processed!")
+                logger.warning("LinkedIn profile page already processed!")
                 continue
 
             # Add person to the graph
