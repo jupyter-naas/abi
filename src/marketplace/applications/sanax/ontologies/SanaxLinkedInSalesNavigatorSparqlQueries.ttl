@@ -10,10 +10,14 @@
 @prefix abi: <http://ontology.naas.ai/abi/> .
 @prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
 
-# Query 1: What do you know about X? (person)
-intentMapping:getPersonInfoQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_person_info"@en ;
-    intentMapping:intentDescription "Get comprehensive information about a specific person including their positions, companies, LinkedIn profile, and location" ;
+########################################################
+# Queries
+########################################################
+
+# Who has the name starting with "John"? (person)
+intentMapping:SanaxGetPersonsByNamePrefix a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_persons_by_name_prefix"@en ;
+    intentMapping:intentDescription "Find all people whose names start with a specific prefix." ;
     intentMapping:sparqlTemplate """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -21,12 +25,51 @@ intentMapping:getPersonInfoQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX cco: <https://www.commoncoreontologies.org/>
         PREFIX abi: <http://ontology.naas.ai/abi/>
 
-        SELECT DISTINCT ?person ?personName ?position ?positionLabel ?company ?companyName ?linkedinUrl ?location ?locationName ?startDate
+        SELECT DISTINCT ?person ?personName ?locationName ?linkedinUrl ?positionLabel
         WHERE {
-          # Find the person by name
+          # Find people whose names start with the prefix.
           ?person a cco:ont00001262 ;
                   rdfs:label ?personName .
-          FILTER(LCASE(STR(?personName)) = LCASE("{{ person_name }}"))
+          FILTER(STRSTARTS(LCASE(STR(?personName)), LCASE("{{ name_prefix }}")))
+          
+          # Get location if it exists
+          OPTIONAL {
+            ?person bfo:BFO_0000171 ?location .
+            ?location rdfs:label ?locationName .
+          }
+
+          # Get LinkedIn profile URL if it exists
+          OPTIONAL {
+            ?person abi:hasLinkedInPage ?linkedinPage .
+            ?linkedinPage abi:linkedin_url ?linkedinUrl .
+          }
+
+          # Get position if it exists
+          OPTIONAL {
+            ?person abi:holdsPosition ?position .
+            ?position rdfs:label ?positionLabel .
+          }
+        }
+        ORDER BY ?personName
+    """ ;
+    intentMapping:hasArgument intentMapping:namePrefixArg .
+
+# Search for person by name
+intentMapping:SanaxSearchPersonsByName a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_search_persons_by_name"@en ;
+    intentMapping:intentDescription "Search for people by name in the triple store." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personName ?similarity ?linkedinUrl ?locationName ?positionLabel
+        WHERE {
+          # Find all people
+          ?person a cco:ont00001262 ;
+                  rdfs:label ?personName .
           
           # Get LinkedIn profile URL
           OPTIONAL {
@@ -39,37 +82,32 @@ intentMapping:getPersonInfoQuery a intentMapping:TemplatableSparqlQuery ;
             ?person bfo:BFO_0000171 ?location .
             ?location rdfs:label ?locationName .
           }
-          
-          # Get positions held
+
+          # Get position if it exists
           OPTIONAL {
             ?person abi:holdsPosition ?position .
             ?position rdfs:label ?positionLabel .
           }
           
-          # Get employment associations
-          OPTIONAL {
-            ?association a cco:ont00000433 ;
-                        bfo:BFO_0000057 ?person, ?company .
-            ?company a cco:ont00001180 ;
-                    rdfs:label ?companyName .
-            OPTIONAL { ?association abi:startDate ?startDateEntity . 
-                      ?startDateEntity rdfs:label ?startDate . }
-          }
+          BIND(
+            IF(LCASE(STR(?personName)) = LCASE("{{ search_term }}"), 1.0,
+            IF(STRSTARTS(LCASE(STR(?personName)), LCASE("{{ search_term }}")), 0.9,
+            IF(CONTAINS(LCASE(STR(?personName)), LCASE("{{ search_term }}")), 0.8,
+            IF(STRENDS(LCASE(STR(?personName)), LCASE("{{ search_term }}")), 0.7,
+            0.0)))) AS ?similarity
+          )
+          
+          # Only return results with some similarity
+          FILTER(?similarity > 0.0)
         }
-        ORDER BY DESC(?startDate)
+        ORDER BY DESC(?similarity) ?personName
     """ ;
-    intentMapping:hasArgument intentMapping:personNameArg .
+    intentMapping:hasArgument intentMapping:searchTermArg .
 
-intentMapping:personNameArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "person_name" ;
-    intentMapping:argumentDescription "Full name of the person to get information about" ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "person_name" .
-
-# Query 2: Who is working for X? (organization)
-intentMapping:getCompanyEmployeesQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_company_employees"@en ;
-    intentMapping:intentDescription "Find all people working for a specific organization/company" ;
+# List all persons
+intentMapping:SanaxListPersons a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_list_persons"@en ;
+    intentMapping:intentDescription "List all persons in the triple store with their details." ;
     intentMapping:sparqlTemplate """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -77,7 +115,157 @@ intentMapping:getCompanyEmployeesQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX cco: <https://www.commoncoreontologies.org/>
         PREFIX abi: <http://ontology.naas.ai/abi/>
 
-        SELECT DISTINCT ?person ?personName ?position ?positionLabel ?startDate ?linkedinUrl
+        SELECT DISTINCT ?person ?personName ?linkedinUrl ?locationName ?positionLabel
+        WHERE {
+          # Get all persons
+          ?person a cco:ont00001262 ;
+                  rdfs:label ?personName .
+          
+          # Get LinkedIn profile URL if exists
+          OPTIONAL {
+            ?person abi:hasLinkedInPage ?linkedinPage .
+            ?linkedinPage abi:linkedin_url ?linkedinUrl .
+          }
+          
+          # Get location if exists
+          OPTIONAL {
+            ?person bfo:BFO_0000171 ?location .
+            ?location rdfs:label ?locationName .
+          }
+
+          # Get position if exists
+          OPTIONAL {
+            ?person abi:holdsPosition ?position .
+            ?position rdfs:label ?positionLabel .
+          }
+        }
+        ORDER BY ?personName
+        LIMIT 50
+    """ .
+
+# Get information about X (person)
+intentMapping:SanaxGetPersonInformation a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_information_about_person"@en ;
+    intentMapping:intentDescription "Get comprehensive information about a specific person including their positions, companies, LinkedIn profile, and location." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personName ?locationName ?linkedinUrl ?employmentLabel ?positionLabel ?company ?companyName ?startDate
+        WHERE {
+          # Find people whose names match exactly
+          ?person a cco:ont00001262 ;
+                  rdfs:label ?personName .
+          FILTER(LCASE(STR(?personName)) = LCASE("{{ person_name }}"))
+          
+          # Get location if it exists
+          OPTIONAL {
+            ?person bfo:BFO_0000171 ?location .
+            ?location rdfs:label ?locationName .
+          }
+
+          # Get LinkedIn profile URL if it exists
+          OPTIONAL {
+            ?person abi:hasLinkedInPage ?linkedinPage .
+            ?linkedinPage abi:linkedin_url ?linkedinUrl .
+          }
+          # Get positions and employment associations
+          OPTIONAL {
+            ?association a cco:ont00000433 ;
+                        rdfs:label ?employmentLabel ;
+                        bfo:BFO_0000057 ?person, ?company ;
+                        bfo:BFO_0000055 ?position .
+            OPTIONAL { ?position rdfs:label ?positionLabel . }
+            OPTIONAL { ?company rdfs:label ?companyName . }
+            
+            OPTIONAL { 
+              ?association abi:startDate ?startDateEntity .
+              ?startDateEntity rdfs:label ?startDate .
+            }
+          }
+        }
+        ORDER BY DESC(?startDate)
+    """ ;
+    intentMapping:hasArgument intentMapping:personNameArg .
+
+# Search for companies by name
+intentMapping:SanaxSearchCompaniesByName a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_search_companies_by_name"@en ;
+    intentMapping:intentDescription "Search for companies by name in the triple store." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?company ?companyName ?similarity ?linkedinUrl
+        WHERE {
+          # Find all companies
+          ?company a cco:ont00001180 ;
+                  rdfs:label ?companyName .
+          
+          # Get LinkedIn company page URL
+          OPTIONAL {
+            ?company abi:hasLinkedInPage ?linkedinPage .
+            ?linkedinPage abi:linkedin_url ?linkedinUrl .
+          }
+          
+          BIND(
+            IF(LCASE(STR(?companyName)) = LCASE("{{ search_term }}"), 1.0,
+            IF(STRSTARTS(LCASE(STR(?companyName)), LCASE("{{ search_term }}")), 0.9,
+            IF(CONTAINS(LCASE(STR(?companyName)), LCASE("{{ search_term }}")), 0.8,
+            IF(STRENDS(LCASE(STR(?companyName)), LCASE("{{ search_term }}")), 0.7,
+            0.0)))) AS ?similarity
+          )
+          
+          # Only return results with some similarity
+          FILTER(?similarity > 0.0)
+        }
+        ORDER BY DESC(?similarity) ?companyName
+    """ ;
+    intentMapping:hasArgument intentMapping:searchTermArg .
+
+# List all companies
+intentMapping:SanaxListCompanies a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_list_companies"@en ;
+    intentMapping:intentDescription "List all companies in the triple store (limited to 50 results)." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?company ?companyName ?linkedinUrl
+        WHERE {
+          # Get all companies
+          ?company a cco:ont00001180 ;
+                  rdfs:label ?companyName .
+          
+          # Get LinkedIn company page URL if available
+          OPTIONAL {
+            ?company abi:hasLinkedInPage ?linkedinPage .
+            ?linkedinPage abi:linkedin_url ?linkedinUrl .
+          }
+        }
+        ORDER BY ?companyName
+        LIMIT 50
+    """ .
+
+# Get people working for X (company)
+intentMapping:SanaxGetCompanyEmployeesQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_company_employees"@en ;
+    intentMapping:intentDescription "Find all people working for a specific organization/company." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personName ?positionLabel ?linkedinUrl
         WHERE {
           # Find the company by name
           ?company a cco:ont00001180 ;
@@ -92,37 +280,31 @@ intentMapping:getCompanyEmployeesQuery a intentMapping:TemplatableSparqlQuery ;
           ?person a cco:ont00001262 ;
                  rdfs:label ?personName .
           
-          # Get position if realized in this association
+          # Get location if it exists
           OPTIONAL {
-            ?association bfo:BFO_0000055 ?position .
-            ?position rdfs:label ?positionLabel .
+            ?person bfo:BFO_0000171 ?location .
+            ?location rdfs:label ?locationName .
           }
-          
-          # Get start date
-          OPTIONAL { 
-            ?association abi:startDate ?startDateEntity . 
-            ?startDateEntity rdfs:label ?startDate . 
-          }
-          
-          # Get LinkedIn profile URL
+
+          # Get LinkedIn profile URL if it exists
           OPTIONAL {
             ?person abi:hasLinkedInPage ?linkedinPage .
             ?linkedinPage abi:linkedin_url ?linkedinUrl .
+          }
+
+          # Get position if it exists
+          OPTIONAL {
+            ?person abi:holdsPosition ?position .
+            ?position rdfs:label ?positionLabel .
           }
         }
         ORDER BY ?personName
     """ ;
     intentMapping:hasArgument intentMapping:companyNameArg .
 
-intentMapping:companyNameArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "company_name" ;
-    intentMapping:argumentDescription "Name of the company/organization to find employees for" ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "company_name" .
-
-# Query 3: Who has role X? (position)
-intentMapping:getRoleHoldersQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_role_holders"@en ;
+# Get people holding position X
+intentMapping:SanaxGetPeopleHoldingPositionQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_people_holding_position"@en ;
     intentMapping:intentDescription "Find all people who hold a specific position/role" ;
     intentMapping:sparqlTemplate """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -131,12 +313,21 @@ intentMapping:getRoleHoldersQuery a intentMapping:TemplatableSparqlQuery ;
         PREFIX cco: <https://www.commoncoreontologies.org/>
         PREFIX abi: <http://ontology.naas.ai/abi/>
 
-        SELECT DISTINCT ?person ?personName ?company ?companyName ?startDate ?linkedinUrl
+        SELECT DISTINCT ?person ?personName ?position ?positionLabel ?company ?companyName ?startDate ?linkedinUrl ?matchType
         WHERE {
-          # Find the position by title
+          # Find positions with either perfect or partial matches
           ?position a bfo:BFO_0000023 ;
                    rdfs:label ?positionLabel .
-          FILTER(LCASE(STR(?positionLabel)) = LCASE("{{ position_title }}"))
+          
+          # Create match type indicator
+          BIND(
+            IF(LCASE(STR(?positionLabel)) = LCASE("{{ position_title }}"), "perfect",
+               IF(CONTAINS(LCASE(STR(?positionLabel)), LCASE("{{ position_title }}")), "partial", "none")
+            ) AS ?matchType
+          )
+          
+          # Filter to only include perfect or partial matches
+          FILTER(?matchType != "none")
           
           # Find people who hold this position
           ?person abi:holdsPosition ?position ;
@@ -162,74 +353,14 @@ intentMapping:getRoleHoldersQuery a intentMapping:TemplatableSparqlQuery ;
             }
           }
         }
-        ORDER BY ?personName
+        ORDER BY ?matchType ?personName
     """ ;
     intentMapping:hasArgument intentMapping:positionTitleArg .
 
-intentMapping:positionTitleArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "position_title" ;
-    intentMapping:argumentDescription "Title of the position/role to search for" ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "position_title" .
-
-# Query 4: Provide LinkedIn URL of X (person)
-intentMapping:getPersonLinkedInQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_person_linkedin_url"@en ;
-    intentMapping:intentDescription "Get the LinkedIn profile URL for a specific person" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?linkedinUrl ?linkedinId
-        WHERE {
-          # Find the person by name
-          ?person a cco:ont00001262 ;
-                  rdfs:label ?personName .
-          FILTER(LCASE(STR(?personName)) = LCASE("{{ person_name }}"))
-          
-          # Get LinkedIn profile page and URL
-          ?person abi:hasLinkedInPage ?linkedinPage .
-          ?linkedinPage a abi:LinkedInProfilePage ;
-                       abi:linkedin_url ?linkedinUrl ;
-                       abi:linkedin_id ?linkedinId .
-        }
-        ORDER BY ?personName
-    """ ;
-    intentMapping:hasArgument intentMapping:personNameArg .
-
-# Query 5: Profile LinkedIn URL of X (company)
-intentMapping:getCompanyLinkedInQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_company_linkedin_url"@en ;
-    intentMapping:intentDescription "Get the LinkedIn company page URL for a specific organization" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?company ?companyName ?linkedinUrl ?linkedinId
-        WHERE {
-          # Find the company by name
-          ?company a cco:ont00001180 ;
-                  rdfs:label ?companyName .
-          FILTER(LCASE(STR(?companyName)) = LCASE("{{ company_name }}"))
-          
-          # Get LinkedIn company page and URL
-          ?company abi:hasLinkedInPage ?linkedinPage .
-          ?linkedinPage a abi:LinkedInCompanyPage ;
-                       abi:linkedin_url ?linkedinUrl ;
-                       abi:linkedin_id ?linkedinId .
-        }
-        ORDER BY ?companyName
-    """ ;
-    intentMapping:hasArgument intentMapping:companyNameArg .
-
-# Query 6: Who has the name starting with "John"? (person)
-intentMapping:getPersonsByNamePrefixQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_persons_by_name_prefix"@en ;
-    intentMapping:intentDescription "Find all people whose names start with a specific prefix" ;
+# Search for locations by name
+intentMapping:SanaxSearchLocationsByName a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_search_locations_by_name"@en ;
+    intentMapping:intentDescription "Search for locations by name in the triple store." ;
     intentMapping:sparqlTemplate """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -237,38 +368,51 @@ intentMapping:getPersonsByNamePrefixQuery a intentMapping:TemplatableSparqlQuery
         PREFIX cco: <https://www.commoncoreontologies.org/>
         PREFIX abi: <http://ontology.naas.ai/abi/>
 
-        SELECT DISTINCT ?person ?personName ?linkedinUrl ?location ?locationName
+        SELECT DISTINCT ?location ?locationName ?similarity
         WHERE {
-          # Find people whose names start with the prefix
-          ?person a cco:ont00001262 ;
-                  rdfs:label ?personName .
-          FILTER(STRSTARTS(LCASE(STR(?personName)), LCASE("{{ name_prefix }}")))
+          # Find all locations
+          ?location a <http://ontology.naas.ai/abi/linkedin/Location> ;
+                   rdfs:label ?locationName .
           
-          # Get LinkedIn profile URL
-          OPTIONAL {
-            ?person abi:hasLinkedInPage ?linkedinPage .
-            ?linkedinPage abi:linkedin_url ?linkedinUrl .
-          }
+          BIND(
+            IF(LCASE(STR(?locationName)) = LCASE("{{ search_term }}"), 1.0,
+            IF(STRSTARTS(LCASE(STR(?locationName)), LCASE("{{ search_term }}")), 0.9,
+            IF(CONTAINS(LCASE(STR(?locationName)), LCASE("{{ search_term }}")), 0.8,
+            IF(STRENDS(LCASE(STR(?locationName)), LCASE("{{ search_term }}")), 0.7,
+            0.0)))) AS ?similarity
+          )
           
-          # Get location
-          OPTIONAL {
-            ?person bfo:BFO_0000171 ?location .
-            ?location rdfs:label ?locationName .
-          }
+          # Only return results with some similarity
+          FILTER(?similarity > 0.0)
         }
-        ORDER BY ?personName
+        ORDER BY DESC(?similarity) ?locationName
     """ ;
-    intentMapping:hasArgument intentMapping:namePrefixArg .
+    intentMapping:hasArgument intentMapping:searchTermArg .
 
-intentMapping:namePrefixArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "name_prefix" ;
-    intentMapping:argumentDescription "Name prefix to search for (e.g., 'John')" ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "name_prefix" .
+# List all locations
+intentMapping:SanaxListLocations a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_list_locations"@en ;
+    intentMapping:intentDescription "List all locations in the triple store." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
 
-# Query 7: Who is located in Singapore? (location)
-intentMapping:getPeopleByLocationQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_people_by_location"@en ;
+        SELECT DISTINCT ?location ?locationName
+        WHERE {
+          # Find all locations
+          ?location a <http://ontology.naas.ai/abi/linkedin/Location> ;
+                   rdfs:label ?locationName .
+        }
+        ORDER BY ?locationName
+        LIMIT 50
+    """ .
+
+# Get people located in X (location)
+intentMapping:SanaxGetPeopleLocatedInLocationQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_people_located_in_location"@en ;
     intentMapping:intentDescription "Find all people located in a specific location" ;
     intentMapping:sparqlTemplate """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -305,16 +449,10 @@ intentMapping:getPeopleByLocationQuery a intentMapping:TemplatableSparqlQuery ;
     """ ;
     intentMapping:hasArgument intentMapping:locationNameArg .
 
-intentMapping:locationNameArg a intentMapping:QueryArgument ;
-    intentMapping:argumentName "location_name" ;
-    intentMapping:argumentDescription "Name of the location to search for people in" ;
-    intentMapping:validationPattern "." ;
-    intentMapping:validationFormat "location_name" .
-
-# Query 8: How many people work in X (location)?
-intentMapping:countPeopleByLocationQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "count_people_by_location"@en ;
-    intentMapping:intentDescription "Count the number of people located in a specific location" ;
+# Get people who started their job most recently
+intentMapping:SanaxGetPeopleWithMostRecentJobStartsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_people_with_most_recent_job_starts"@en ;
+    intentMapping:intentDescription "Get people who started their job/role/position most recently." ;
     intentMapping:sparqlTemplate """
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
@@ -322,60 +460,7 @@ intentMapping:countPeopleByLocationQuery a intentMapping:TemplatableSparqlQuery 
         PREFIX cco: <https://www.commoncoreontologies.org/>
         PREFIX abi: <http://ontology.naas.ai/abi/>
 
-        SELECT ?locationName (COUNT(DISTINCT ?person) AS ?personCount)
-        WHERE {
-          # Find the location by name
-          ?location a <http://ontology.naas.ai/abi/linkedin/Location> ;
-                   rdfs:label ?locationName .
-          FILTER(CONTAINS(LCASE(STR(?locationName)), LCASE("{{ location_name }}")))
-          
-          # Count people located there
-          ?location bfo:BFO_0000124 ?person .
-          ?person a cco:ont00001262 .
-        }
-        GROUP BY ?locationName
-    """ ;
-    intentMapping:hasArgument intentMapping:locationNameArg .
-
-# Query 9: How many people work in X (company)?
-intentMapping:countPeopleByCompanyQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "count_people_by_company"@en ;
-    intentMapping:intentDescription "Count the number of people working for a specific company" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT ?companyName (COUNT(DISTINCT ?person) AS ?employeeCount)
-        WHERE {
-          # Find the company by name
-          ?company a cco:ont00001180 ;
-                  rdfs:label ?companyName .
-          FILTER(LCASE(STR(?companyName)) = LCASE("{{ company_name }}"))
-          
-          # Count employment associations with this company
-          ?association a cco:ont00000433 ;
-                      bfo:BFO_0000057 ?person, ?company .
-          ?person a cco:ont00001262 .
-        }
-        GROUP BY ?companyName
-    """ ;
-    intentMapping:hasArgument intentMapping:companyNameArg .
-
-# Query 10: Who started their job most recently?
-intentMapping:getMostRecentJobStartsQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_most_recent_job_starts"@en ;
-    intentMapping:intentDescription "Find people who started their jobs most recently" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?company ?companyName ?position ?positionLabel ?startDate
+        SELECT DISTINCT ?person ?personName ?companyName ?positionLabel ?startDate ?locationName
         WHERE {
           # Find employment associations with start dates
           ?association a cco:ont00000433 ;
@@ -397,11 +482,185 @@ intentMapping:getMostRecentJobStartsQuery a intentMapping:TemplatableSparqlQuery
             ?association bfo:BFO_0000055 ?position .
             ?position rdfs:label ?positionLabel .
           }
+          
+          # Get location information
+          OPTIONAL {
+            ?person bfo:BFO_0000171 ?location .
+            ?location rdfs:label ?locationName .
+          }
+
+          # Filter by company name if provided
+          FILTER(
+            "{{ company_name }}" = "" ||
+            CONTAINS(LCASE(STR(?companyName)), LCASE("{{ company_name }}"))
+          )
+
+          # Filter by location if provided
+          FILTER(
+            "{{ location_name }}" = "" ||
+            EXISTS {
+              ?person bfo:BFO_0000171 ?location .
+              ?location rdfs:label ?locationName .
+              FILTER(CONTAINS(LCASE(STR(?locationName)), LCASE("{{ location_name }}")))
+            }
+          )
         }
         ORDER BY DESC(?startDate)
         LIMIT {{ limit }}
     """ ;
-    intentMapping:hasArgument intentMapping:limitArg .
+    intentMapping:hasArgument intentMapping:limitArg ;
+    intentMapping:hasArgument intentMapping:locationNameArg ;
+    intentMapping:hasArgument intentMapping:companyNameArg .
+
+# Get people who started their job longest ago
+intentMapping:SanaxGetPeopleWithOldestJobStartsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_people_with_longest_job_starts"@en ;
+    intentMapping:intentDescription "Get people who started their job/role/position longest ago" ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personName ?companyName ?positionLabel ?startDate ?locationName
+        WHERE {
+          # Find employment associations with start dates and required position
+          ?association a cco:ont00000433 ;
+                      bfo:BFO_0000057 ?person, ?company ;
+                      bfo:BFO_0000055 ?position ;
+                      abi:startDate ?startDateEntity .
+          
+          ?startDateEntity rdfs:label ?startDate .
+          
+          # Get person details
+          ?person a cco:ont00001262 ;
+                 rdfs:label ?personName .
+          
+          # Get company details
+          ?company a cco:ont00001180 ;
+                  rdfs:label ?companyName .
+          
+          # Get position details (required)
+          ?position rdfs:label ?positionLabel .
+
+          # Filter by company name if provided
+          FILTER(
+            "{{ company_name }}" = "" ||
+            CONTAINS(LCASE(STR(?companyName)), LCASE("{{ company_name }}"))
+          )
+
+          # Filter by location if provided
+          FILTER(
+            "{{ location_name }}" = "" ||
+            EXISTS {
+              ?person bfo:BFO_0000171 ?location .
+              ?location rdfs:label ?locationName .
+              FILTER(CONTAINS(LCASE(STR(?locationName)), LCASE("{{ location_name }}")))
+            }
+          )
+        }
+        ORDER BY ?startDate
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:limitArg ;
+    intentMapping:hasArgument intentMapping:locationNameArg ;
+    intentMapping:hasArgument intentMapping:companyNameArg .
+
+# Get people who have been working for a company the longest
+intentMapping:SanaxGetPeopleWithLongestTenureQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "sanax_get_people_with_longest_tenure"@en ;
+    intentMapping:intentDescription "Get people who have been working for a company the longest" ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX bfo: <http://purl.obolibrary.org/obo/>
+        PREFIX cco: <https://www.commoncoreontologies.org/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?person ?personName ?companyName ?startDate ?locationName
+        WHERE {
+          # Find employment associations with start dates
+          ?association a cco:ont00000433 ;
+                      bfo:BFO_0000057 ?person, ?company ;
+                      abi:startDate ?startDateEntity .
+          
+          ?startDateEntity rdfs:label ?startDate .
+          
+          # Get person details
+          ?person a cco:ont00001262 ;
+                 rdfs:label ?personName .
+          
+          # Get company details
+          ?company a cco:ont00001180 ;
+                  rdfs:label ?companyName .
+
+          # Get location if it exists
+          OPTIONAL {
+            ?person bfo:BFO_0000171 ?location .
+            ?location rdfs:label ?locationName .
+          }
+
+          # Enforce empty string if location_name not provided
+          BIND(COALESCE("{{ location_name }}", "") AS ?locationFilter)
+
+          # Enforce empty string if company_name not provided  
+          BIND(COALESCE("{{ company_name }}", "") AS ?companyFilter)
+
+          # Filter by company name if provided
+          FILTER(
+            ?companyFilter = "" ||
+            CONTAINS(LCASE(STR(?companyName)), LCASE(?companyFilter))
+          )
+
+          # Filter by location if provided
+          FILTER(
+            ?locationFilter = "" ||
+            EXISTS {
+              ?person bfo:BFO_0000171 ?location .
+              FILTER(CONTAINS(LCASE(STR(?locationName)), LCASE(?locationFilter)))
+            }
+          )
+        }
+        ORDER BY ASC(?startDate)
+        LIMIT 10
+    """ ;
+    intentMapping:hasArgument intentMapping:locationNameArg ;
+    intentMapping:hasArgument intentMapping:companyNameArg .
+
+########################################################
+# Arguments
+########################################################
+
+intentMapping:namePrefixArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "name_prefix" ;
+    intentMapping:argumentDescription "Name prefix to search for (e.g., 'John')" ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "name_prefix" .
+
+intentMapping:personNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_name" ;
+    intentMapping:argumentDescription "Full name of the person (must include first and last name)" ;
+    intentMapping:validationPattern "^.+\\s+.+$" ;
+    intentMapping:validationFormat "person_name" .
+
+intentMapping:positionTitleArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "position_title" ;
+    intentMapping:argumentDescription "Title of the position/role to search for" ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "position_title" .
+
+intentMapping:companyNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "company_name" ;
+    intentMapping:argumentDescription "Name of the company/organization to find employees for" ;
+    intentMapping:validationPattern "^$|." ;
+    intentMapping:validationFormat "company_name" .
+
+intentMapping:locationNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "location_name" ;
+    intentMapping:argumentDescription "Name of the location to search for people in" ;
+    intentMapping:validationPattern "^$|." ;
+    intentMapping:validationFormat "location_name" .
 
 intentMapping:limitArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "limit" ;
@@ -409,328 +668,8 @@ intentMapping:limitArg a intentMapping:QueryArgument ;
     intentMapping:validationPattern "^[0-9]+$" ;
     intentMapping:validationFormat "integer" .
 
-# Query 11: Who started their job least recently (oldest)?
-intentMapping:getOldestJobStartsQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_oldest_job_starts"@en ;
-    intentMapping:intentDescription "Find people who started their jobs longest ago" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?company ?companyName ?position ?positionLabel ?startDate
-        WHERE {
-          # Find employment associations with start dates
-          ?association a cco:ont00000433 ;
-                      bfo:BFO_0000057 ?person, ?company ;
-                      abi:startDate ?startDateEntity .
-          
-          ?startDateEntity rdfs:label ?startDate .
-          
-          # Get person details
-          ?person a cco:ont00001262 ;
-                 rdfs:label ?personName .
-          
-          # Get company details
-          ?company a cco:ont00001180 ;
-                  rdfs:label ?companyName .
-          
-          # Get position if available
-          OPTIONAL {
-            ?association bfo:BFO_0000055 ?position .
-            ?position rdfs:label ?positionLabel .
-          }
-        }
-        ORDER BY ?startDate
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:limitArg .
-
-# Query 12: Who has been working for a company the longest?
-intentMapping:getLongestTenureQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "get_longest_tenure"@en ;
-    intentMapping:intentDescription "Find people who have been working for companies the longest (earliest start dates)" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?company ?companyName ?position ?positionLabel ?startDate
-        WHERE {
-          # Find employment associations with start dates
-          ?association a cco:ont00000433 ;
-                      bfo:BFO_0000057 ?person, ?company ;
-                      abi:startDate ?startDateEntity .
-          
-          ?startDateEntity rdfs:label ?startDate .
-          
-          # Get person details
-          ?person a cco:ont00001262 ;
-                 rdfs:label ?personName .
-          
-          # Get company details
-          ?company a cco:ont00001180 ;
-                  rdfs:label ?companyName .
-          
-          # Get position if available
-          OPTIONAL {
-            ?association bfo:BFO_0000055 ?position .
-            ?position rdfs:label ?positionLabel .
-          }
-        }
-        ORDER BY ?startDate
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:limitArg .
-
-# Query 13: Fuzzy search for person names (when exact match fails)
-intentMapping:fuzzyPersonSearchQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "fuzzy_person_search"@en ;
-    intentMapping:intentDescription "Find people with names similar to the search term using fuzzy matching" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?similarity ?linkedinUrl ?location ?locationName
-        WHERE {
-          # Find all people
-          ?person a cco:ont00001262 ;
-                  rdfs:label ?personName .
-          
-          # Get LinkedIn profile URL
-          OPTIONAL {
-            ?person abi:hasLinkedInPage ?linkedinPage .
-            ?linkedinPage abi:linkedin_url ?linkedinUrl .
-          }
-          
-          # Get location
-          OPTIONAL {
-            ?person bfo:BFO_0000171 ?location .
-            ?location rdfs:label ?locationName .
-          }
-          
-          # Calculate similarity using CONTAINS for partial matching
-          # This will match names that contain parts of the search term
-          BIND(
-            IF(CONTAINS(LCASE(STR(?personName)), LCASE("{{ search_term }}")), 0.8,
-            IF(STRSTARTS(LCASE(STR(?personName)), LCASE("{{ search_term }}")), 0.9,
-            IF(STRENDS(LCASE(STR(?personName)), LCASE("{{ search_term }}")), 0.7,
-            0.0))) AS ?similarity
-          )
-          
-          # Only return results with some similarity
-          FILTER(?similarity > 0.0)
-        }
-        ORDER BY DESC(?similarity) ?personName
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:searchTermArg ;
-    intentMapping:hasArgument intentMapping:limitArg .
-
 intentMapping:searchTermArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "search_term" ;
     intentMapping:argumentDescription "Search term for fuzzy matching (e.g., 'Jo Smit' to find 'John Smith')" ;
     intentMapping:validationPattern "." ;
     intentMapping:validationFormat "search_term" .
-
-# Query 14: Fuzzy search for company names (when exact match fails)
-intentMapping:fuzzyCompanySearchQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "fuzzy_company_search"@en ;
-    intentMapping:intentDescription "Find companies with names similar to the search term using fuzzy matching" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?company ?companyName ?similarity ?linkedinUrl
-        WHERE {
-          # Find all companies
-          ?company a cco:ont00001180 ;
-                  rdfs:label ?companyName .
-          
-          # Get LinkedIn company page URL
-          OPTIONAL {
-            ?company abi:hasLinkedInPage ?linkedinPage .
-            ?linkedinPage abi:linkedin_url ?linkedinUrl .
-          }
-          
-          # Calculate similarity using CONTAINS for partial matching
-          BIND(
-            IF(CONTAINS(LCASE(STR(?companyName)), LCASE("{{ search_term }}")), 0.8,
-            IF(STRSTARTS(LCASE(STR(?companyName)), LCASE("{{ search_term }}")), 0.9,
-            IF(STRENDS(LCASE(STR(?companyName)), LCASE("{{ search_term }}")), 0.7,
-            0.0))) AS ?similarity
-          )
-          
-          # Only return results with some similarity
-          FILTER(?similarity > 0.0)
-        }
-        ORDER BY DESC(?similarity) ?companyName
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:searchTermArg ;
-    intentMapping:hasArgument intentMapping:limitArg .
-
-# Query 15: Advanced fuzzy person search with word-level matching
-intentMapping:advancedFuzzyPersonSearchQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "advanced_fuzzy_person_search"@en ;
-    intentMapping:intentDescription "Find people using advanced fuzzy matching that handles partial names and common abbreviations" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?matchType ?linkedinUrl ?location ?locationName
-        WHERE {
-          # Find all people
-          ?person a cco:ont00001262 ;
-                  rdfs:label ?personName .
-          
-          # Get LinkedIn profile URL
-          OPTIONAL {
-            ?person abi:hasLinkedInPage ?linkedinPage .
-            ?linkedinPage abi:linkedin_url ?linkedinUrl .
-          }
-          
-          # Get location
-          OPTIONAL {
-            ?person bfo:BFO_0000171 ?location .
-            ?location rdfs:label ?locationName .
-          }
-          
-          # Multiple matching strategies
-          {
-            # Strategy 1: Contains search term
-            FILTER(CONTAINS(LCASE(STR(?personName)), LCASE("{{ search_term }}")))
-            BIND("contains" AS ?matchType)
-          }
-          UNION
-          {
-            # Strategy 2: Search term contains person name parts
-            FILTER(CONTAINS(LCASE("{{ search_term }}"), LCASE(STR(?personName))))
-            BIND("contained_in" AS ?matchType)
-          }
-          UNION
-          {
-            # Strategy 3: First name matching (for cases like "Jo" -> "John")
-            FILTER(REGEX(LCASE(STR(?personName)), CONCAT("^", LCASE("{{ search_term }}"), ".*"), "i"))
-            BIND("starts_with" AS ?matchType)
-          }
-          UNION
-          {
-            # Strategy 4: Last name matching
-            FILTER(REGEX(LCASE(STR(?personName)), CONCAT(".*\\s", LCASE("{{ search_term }}"), ".*"), "i"))
-            BIND("last_name" AS ?matchType)
-          }
-        }
-        ORDER BY 
-          (CASE ?matchType 
-            WHEN "contains" THEN 1
-            WHEN "starts_with" THEN 2  
-            WHEN "last_name" THEN 3
-            WHEN "contained_in" THEN 4
-            ELSE 5 END) 
-          ?personName
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:searchTermArg ;
-    intentMapping:hasArgument intentMapping:limitArg .
-
-# Query 16: Smart person search with exact and fuzzy fallback
-intentMapping:smartPersonSearchQuery a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "smart_person_search"@en ;
-    intentMapping:intentDescription "Smart search that tries exact matching first, then falls back to fuzzy matching if no exact match found" ;
-    intentMapping:sparqlTemplate """
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        PREFIX owl: <http://www.w3.org/2002/07/owl#>
-        PREFIX bfo: <http://purl.obolibrary.org/obo/>
-        PREFIX cco: <https://www.commoncoreontologies.org/>
-        PREFIX abi: <http://ontology.naas.ai/abi/>
-
-        SELECT DISTINCT ?person ?personName ?matchType ?similarity ?linkedinUrl ?location ?locationName ?position ?positionLabel ?company ?companyName
-        WHERE {
-          # Find all people
-          ?person a cco:ont00001262 ;
-                  rdfs:label ?personName .
-          
-          # Get LinkedIn profile URL
-          OPTIONAL {
-            ?person abi:hasLinkedInPage ?linkedinPage .
-            ?linkedinPage abi:linkedin_url ?linkedinUrl .
-          }
-          
-          # Get location
-          OPTIONAL {
-            ?person bfo:BFO_0000171 ?location .
-            ?location rdfs:label ?locationName .
-          }
-          
-          # Get positions held
-          OPTIONAL {
-            ?person abi:holdsPosition ?position .
-            ?position rdfs:label ?positionLabel .
-          }
-          
-          # Get employment associations
-          OPTIONAL {
-            ?association a cco:ont00000433 ;
-                        bfo:BFO_0000057 ?person, ?company .
-            ?company a cco:ont00001180 ;
-                    rdfs:label ?companyName .
-          }
-          
-          # Matching strategies with priority
-          {
-            # Priority 1: Exact match (case insensitive)
-            FILTER(LCASE(STR(?personName)) = LCASE("{{ person_name }}"))
-            BIND("exact" AS ?matchType)
-            BIND(1.0 AS ?similarity)
-          }
-          UNION
-          {
-            # Priority 2: Starts with search term
-            FILTER(STRSTARTS(LCASE(STR(?personName)), LCASE("{{ person_name }}")))
-            FILTER(LCASE(STR(?personName)) != LCASE("{{ person_name }}"))  # Exclude exact matches
-            BIND("starts_with" AS ?matchType)
-            BIND(0.9 AS ?similarity)
-          }
-          UNION
-          {
-            # Priority 3: Contains search term
-            FILTER(CONTAINS(LCASE(STR(?personName)), LCASE("{{ person_name }}")))
-            FILTER(!STRSTARTS(LCASE(STR(?personName)), LCASE("{{ person_name }}")))  # Exclude starts_with matches
-            BIND("contains" AS ?matchType)
-            BIND(0.8 AS ?similarity)
-          }
-          UNION
-          {
-            # Priority 4: Search term contains person name (for abbreviations)
-            FILTER(CONTAINS(LCASE("{{ person_name }}"), LCASE(STR(?personName))))
-            FILTER(!CONTAINS(LCASE(STR(?personName)), LCASE("{{ person_name }}")))  # Exclude contains matches
-            BIND("abbreviation" AS ?matchType)
-            BIND(0.7 AS ?similarity)
-          }
-          UNION
-          {
-            # Priority 5: Word boundary matching (for partial names like "Jo" -> "John")
-            FILTER(REGEX(LCASE(STR(?personName)), CONCAT("\\b", LCASE("{{ person_name }}"), "\\b"), "i"))
-            FILTER(!CONTAINS(LCASE(STR(?personName)), LCASE("{{ person_name }}")))  # Exclude previous matches
-            BIND("word_match" AS ?matchType)
-            BIND(0.6 AS ?similarity)
-          }
-        }
-        ORDER BY DESC(?similarity) ?personName
-        LIMIT {{ limit }}
-    """ ;
-    intentMapping:hasArgument intentMapping:personNameArg ;
-    intentMapping:hasArgument intentMapping:limitArg .
