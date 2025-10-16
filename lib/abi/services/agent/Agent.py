@@ -473,6 +473,36 @@ class Agent(Expose):
                             intents_text += f"| {intent.intent_value} | `{intent.intent_target}` |\n"
                     intents_text += "\n"
             return intents_text.rstrip()
+        
+        @tool(return_direct=False)
+        def list_make_commands_available() -> str:
+            """Displays a formatted list of all available make commands."""
+            try:
+                with open("Makefile", "r") as f:
+                    makefile_content = f.read()
+                
+                commands_text = "Here are the make commands available:\n\n"
+                
+                # Parse makefile content to find commands and their descriptions
+                current_description = ""
+                for line in makefile_content.split('\n'):
+                    line = line.strip()
+                    if line.startswith('#'):
+                        current_description = line[1:].strip()
+                    elif ':' in line and not line.startswith('.'):
+                        target = line.split(':')[0].strip()
+                        if not target.startswith('@') and not target.startswith('echo'):
+                            commands_text += f"- `make {target}`"
+                            if current_description:
+                                commands_text += f": {current_description}"
+                            commands_text += "\n"
+                        current_description = ""
+                
+                return commands_text.rstrip()
+            except FileNotFoundError:
+                return "Could not find Makefile in the root directory."
+            except Exception as e:
+                return f"Error reading Makefile: {str(e)}"
 
         tools: list[Tool | BaseTool] = [
             get_time_date, 
@@ -482,6 +512,9 @@ class Agent(Expose):
         ]
         if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
+            
+        if os.environ.get("ENV") != "prod" and os.path.exists("Makefile"):
+            tools.append(list_make_commands_available)
         return tools
 
     @property

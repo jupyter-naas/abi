@@ -13,6 +13,7 @@ from langchain_core.tools import tool, BaseTool
 from abi import logger
 import pydash as pd
 import spacy
+import os
 
 
 nlp = spacy.load("en_core_web_sm")
@@ -46,6 +47,58 @@ DEFAULT_INTENTS: list = [
     Intent(intent_value="What are the sub-agents available?", intent_type=IntentType.TOOL, intent_target="list_subagents_available", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="List intents", intent_type=IntentType.TOOL, intent_target="list_intents_available", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="What are your intents?", intent_type=IntentType.TOOL, intent_target="list_intents_available", intent_scope=IntentScope.DIRECT),
+]
+DEV_INTENTS: list = [
+    # General development questions
+    Intent(intent_value="How do I start developing?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the available make commands?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Show me all make commands", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Environment setup
+    Intent(intent_value="How do I set up my development environment?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I install dependencies?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create a virtual environment?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Testing
+    Intent(intent_value="How do I run tests?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I check code quality?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I run security scans?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Docker operations
+    Intent(intent_value="How do I work with Docker containers?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I start local services?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I manage Docker containers?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Chat agents
+    Intent(intent_value="How do I start a chat agent?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What chat agents are available?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I use different AI models?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Development tools
+    Intent(intent_value="How do I use the API server?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with the knowledge graph?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I use Dagster for data orchestration?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Module creation
+    Intent(intent_value="How do I create new modules?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new agents?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new integrations?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new workflows?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new pipelines?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new ontologies?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Data management
+    Intent(intent_value="How do I manage data storage?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with the triplestore?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I handle data exports?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Documentation
+    Intent(intent_value="How do I generate documentation?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I publish agents?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+
+    # Cleanup and maintenance
+    Intent(intent_value="How do I clean up the project?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I handle Docker cleanup?", intent_type=IntentType.TOOL, intent_target="list_make_commands_available", intent_scope=IntentScope.DIRECT),
 ]
 
 
@@ -134,6 +187,11 @@ class IntentAgent(Agent):
         for default_intent in DEFAULT_INTENTS:
             if (default_intent.intent_value, default_intent.intent_type, default_intent.intent_target) not in intent_values:
                 intents.append(default_intent)
+
+        if os.environ.get("ENV") != "prod":
+            for dev_intent in DEV_INTENTS:
+                if (dev_intent.intent_value, dev_intent.intent_type, dev_intent.intent_target) not in intent_values:
+                    intents.append(dev_intent)
 
         self._intents = intents
         self._intent_mapper = IntentMapper(self._intents)
