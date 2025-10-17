@@ -5,11 +5,14 @@ from src.marketplace.applications.github.integrations.GitHubGraphqlIntegration i
 from src import config
 from dataclasses import dataclass
 from pydantic import Field
-from typing import List, Dict
+from typing import List, Dict, Annotated, Optional
 from abi import logger
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
 from enum import Enum
+import os
+from src.utils.Storage import save_json
+
 
 @dataclass
 class ReportBugWorkflowConfiguration(WorkflowConfiguration):
@@ -21,8 +24,12 @@ class ReportBugWorkflowConfiguration(WorkflowConfiguration):
     """
     github_integration_config: GitHubIntegrationConfiguration
     github_graphql_integration_config: GitHubGraphqlIntegrationConfiguration
-    repo_name: str = config.github_repository
+    data_store_path: str = "datastore/support"
     project_node_id: str = "PVT_kwDOBESWNM4AKRt3"
+    status_field_id: str = "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
+    priority_field_id: str = "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
+    iteration_field_id: str = "PVTIF_lADOBESWNM4AKRt3zgGZRc4"
+
 
 class ReportBugParameters(WorkflowParameters):
     """Parameters for bug report creation.
@@ -31,8 +38,14 @@ class ReportBugParameters(WorkflowParameters):
         issue_title: Title of the bug report
         issue_body: Body content of the bug report
     """
-    issue_title: str = Field(..., description="The title of the bug report")
-    issue_body: str = Field(..., description="The description of the bug, including steps to reproduce")
+    issue_title: Annotated[str, Field(..., description="The title of the bug report")]
+    issue_body: Annotated[str, Field(..., description="The description of the bug, including steps to reproduce")]
+    repo_name: Annotated[str, Field(..., description="The name of the repository to create the bug report in")] = config.github_repository
+    assignees: Optional[Annotated[list, Field(..., description="The assignees of the bug report")]] = []
+    labels: Optional[Annotated[list, Field(..., description="The labels of the bug report")]] = ["bug"]
+    priority_id: Optional[Annotated[str, Field(..., description="The ID of the priority of the bug report")]] = "4fb76f2d"
+    status_id: Optional[Annotated[str, Field(..., description="The ID of the status of the bug report")]] = "97363483"
+    
 
 class ReportBugWorkflow(Workflow):
     """Workflow class that handles bug report creation."""
@@ -45,33 +58,35 @@ class ReportBugWorkflow(Workflow):
 
     def report_bug(self, parameters: ReportBugParameters) -> Dict:
         """Creates a new bug report issue and adds it to the project."""
-        assignees: list = []
-        labels = ["bug"]
-        status_field_id = "PVTSSF_lADOBESWNM4AKRt3zgGZRV8"
-        priority_field_id = "PVTSSF_lADOBESWNM4AKRt3zgGac0g"
-        status_option_id = "97363483"
-        priority_option_id = "4fb76f2d"
+        # Get the current iteration ID
+        iteration_option_id = self.__github_graphql_integration.get_current_iteration_id(self.__configuration.project_node_id)
 
         # Create an issue
         issue = self.__github_integration.create_issue(
-            repo_name=self.__configuration.repo_name,
+            repo_name=parameters.repo_name,
             title=parameters.issue_title,
             body=parameters.issue_body,
-            labels=labels,
-            assignees=assignees
+            labels=parameters.labels,
+            assignees=parameters.assignees
         )
+        issue_repository_url = issue.get("repository_url", "")
+        issue_path = issue_repository_url.split("https://api.github.com/repos/")[-1]
+        save_json(issue, os.path.join(self.__configuration.data_store_path, issue_path, "issues"), f"{issue.get('number')}.json")
         
         # Add the issue to project using direct project_node_id
         issue_node_id = issue['node_id']
         logger.debug(f"Issue node ID: {issue_node_id}")
-        self.__github_graphql_integration.add_issue_to_project(
+        issue_graphql = self.__github_graphql_integration.add_issue_to_project(
             project_node_id=self.__configuration.project_node_id,
+            status_field_id=self.__configuration.status_field_id,
+            priority_field_id=self.__configuration.priority_field_id,
+            iteration_field_id=self.__configuration.iteration_field_id,
             issue_node_id=issue_node_id,
-            status_field_id=status_field_id,
-            priority_field_id=priority_field_id,
-            status_option_id=status_option_id,
-            priority_option_id=priority_option_id
+            status_option_id=parameters.status_id,
+            priority_option_id=parameters.priority_id,
+            iteration_option_id=iteration_option_id
         )
+        save_json(issue_graphql, os.path.join(self.__configuration.data_store_path, issue_path, "issues"), f"{issue.get('number')}_graphql.json")
         return issue
     
     def as_tools(self) -> List[BaseTool]:
@@ -84,7 +99,7 @@ class ReportBugWorkflow(Workflow):
             StructuredTool(
                 name="report_bug",
                 description="Report a bug to the support team.",
-                func=lambda issue_title, issue_body: self.report_bug(ReportBugParameters(issue_title=issue_title, issue_body=issue_body)),
+                func=lambda **kwargs: self.report_bug(ReportBugParameters(**kwargs)),
                 args_schema=ReportBugParameters
             ),
         ]
