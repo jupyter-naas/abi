@@ -13,6 +13,7 @@ from langchain_core.tools import tool, BaseTool
 from abi import logger
 import pydash as pd
 import spacy
+import os
 
 
 nlp = spacy.load("en_core_web_sm")
@@ -40,6 +41,62 @@ DEFAULT_INTENTS: list = [
     Intent(intent_value="Merci", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Merci beaucoup", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
     Intent(intent_value="Merci bien", intent_type=IntentType.RAW, intent_target="Je vous en prie, puis-je vous aider avec autre chose?", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List tools available", intent_type=IntentType.TOOL, intent_target="list_tools_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the tools available?", intent_type=IntentType.TOOL, intent_target="list_tools_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List sub-agents available", intent_type=IntentType.TOOL, intent_target="list_subagents_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the sub-agents available?", intent_type=IntentType.TOOL, intent_target="list_subagents_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="List intents", intent_type=IntentType.TOOL, intent_target="list_intents_available", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are your intents?", intent_type=IntentType.TOOL, intent_target="list_intents_available", intent_scope=IntentScope.DIRECT),
+]
+DEV_INTENTS: list = [
+    # General development questions
+    Intent(intent_value="How do I start developing on ABI?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="What are the available make commands?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="Show me all make commands", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Environment setup
+    Intent(intent_value="How do I set up my development environment?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I install dependencies?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create a virtual environment?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Testing
+    Intent(intent_value="How do I run tests?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I check code quality?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I run security scans?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Docker operations
+    Intent(intent_value="How do I work with Docker containers?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I start local services?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I manage Docker containers?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Chat agents
+    Intent(intent_value="What chat agents are available?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Development tools
+    Intent(intent_value="How do I use the API server?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with the knowledge graph?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I use Dagster for data orchestration?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Module creation
+    Intent(intent_value="How do I create new modules?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new agents?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new integrations?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new workflows?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new pipelines?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I create new ontologies?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Data management
+    Intent(intent_value="How do I manage data storage?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I work with the triplestore?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I handle data exports?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Documentation
+    Intent(intent_value="How do I generate documentation?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I publish agents?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+
+    # Cleanup and maintenance
+    Intent(intent_value="How do I clean up the project?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
+    Intent(intent_value="How do I handle Docker cleanup?", intent_type=IntentType.TOOL, intent_target="read_makefile", intent_scope=IntentScope.DIRECT),
 ]
 
 
@@ -128,6 +185,11 @@ class IntentAgent(Agent):
         for default_intent in DEFAULT_INTENTS:
             if (default_intent.intent_value, default_intent.intent_type, default_intent.intent_target) not in intent_values:
                 intents.append(default_intent)
+
+        if os.environ.get("ENV") != "prod":
+            for dev_intent in DEV_INTENTS:
+                if (dev_intent.intent_value, dev_intent.intent_type, dev_intent.intent_target) not in intent_values:
+                    intents.append(dev_intent)
 
         self._intents = intents
         self._intent_mapper = IntentMapper(self._intents)
@@ -287,7 +349,8 @@ class IntentAgent(Agent):
 
         # Keep intents that are close to the best intent.
         max_score = intents[0]['score']
-        if max_score >= self._direct_intent_score:
+        max_score_2 = intents[1]['score'] if len(intents) > 1 else 0
+        if max_score >= self._direct_intent_score and max_score > max_score_2:
             logger.debug(f"🎯 Intent mapping score above {self._direct_intent_score*100}% ({round(max_score*100, 2)}%), routing to intent_mapping_router")
             return Command(goto="intent_mapping_router", update={"intent_mapping": {"intents": [intents[0]]}})
         
@@ -680,8 +743,10 @@ Last user message: "{last_human_message.content}"
 INTENT RULES:
 Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
 The following is the list of mapped intents. This list will change over time as new messages comes in.
-You must analyze if the user message and the mapped intents are related to each other. If it's the case, you must take them into account, otherwise you must ignore the ones that are not related.
+You must analyze if the user message and the mapped intents are related to each other. 
+If it's the case, you must take them into account, otherwise you must ignore the ones that are not related.
 If you endup with a single intent which is of type RAW, you must output the intent_target and nothing else as there will be tests asserting the correctness of the output.
+If you endup with a single intent which is of type TOOL, you must call this tool.
 
 
 

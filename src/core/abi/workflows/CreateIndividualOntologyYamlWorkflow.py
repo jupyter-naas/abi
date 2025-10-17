@@ -47,9 +47,8 @@ class CreateIndividualOntologyYamlWorkflowParameters(WorkflowParameters):
         pattern=URI_REGEX
     )]
     depth: Annotated[int, Field(
-        default=2,
         description="The depth of the subject graph to get. 1 means the individual and its direct properties, 2 means the individual and its direct properties and the properties of the properties, etc."
-    )]
+    )] = 2
 
 
 class CreateIndividualOntologyYamlWorkflow(Workflow):

@@ -5,7 +5,8 @@ from abi.integration.integration import (
 )
 from dataclasses import dataclass
 import requests
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
+from datetime import datetime, timedelta
 
 
 @dataclass
@@ -40,8 +41,10 @@ class GitHubGraphqlIntegration(Integration):
         }
 
     def execute_query(
-        self, query: str, variables: Optional[Dict] = None
-    ) -> Union[Dict[str, Any], IntegrationConnectionError]:
+        self, 
+        query: str, 
+        variables: Optional[Dict] = None
+    ) -> Dict[str, Any]:
         """Execute a GraphQL query against Github's API.
 
         Args:
@@ -64,17 +67,17 @@ class GitHubGraphqlIntegration(Integration):
             result = response.json()
 
             if "errors" in result:
-                return IntegrationConnectionError(
+                raise IntegrationConnectionError(
                     f"GraphQL query failed: {result['errors']}"
                 )
 
             return result
         except requests.exceptions.RequestException as e:
-            return IntegrationConnectionError(
+            raise IntegrationConnectionError(
                 f"Github GraphQL API request failed: {str(e)}"
             )
 
-    def get_project_node_id(self, organization: str, number: int) -> Union[Dict[str, Any], IntegrationConnectionError]:
+    def get_project_node_id(self, organization: str, number: int) -> Dict[str, Any]:
         """Get the node ID of an organization project.
 
         Args:
@@ -95,8 +98,8 @@ class GitHubGraphqlIntegration(Integration):
         """
         variables = {"org": organization, "number": int(number)}
         return self.execute_query(query, variables)
-
-    def get_project_details(self, project_node_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
+    
+    def get_project_details(self, project_node_id: str) -> Dict[str, Any]:
         """Get detailed information about a GitHub Project.
 
         Args:
@@ -162,6 +165,72 @@ class GitHubGraphqlIntegration(Integration):
         variables = {"projectId": project_node_id}
         return self.execute_query(query, variables)
 
+    def get_current_iteration_id(self, project_node_id: str) -> str | None:
+        """Get the ID of the current iteration in a GitHub Project.
+
+        Args:
+            project_node_id (str): The node ID of the GitHub Project
+
+        Returns:
+            str: The ID of the current iteration
+            None: If no current iteration is found
+            IntegrationConnectionError: If the API request fails
+
+        """
+        
+
+        project_details = self.get_project_details(project_node_id)
+
+        # Get current date
+        current_date = datetime.now()
+
+        # Find iteration field and extract iterations
+        iteration_field = next(
+            (field for field in project_details['data']['node']['fields']['nodes'] 
+             if field.get('configuration', {}).get('iterations')),
+            None
+        )
+
+        if not iteration_field:
+            return None
+
+        iterations = iteration_field['configuration']['iterations']
+
+        # Find current iteration based on start date and duration
+        for iteration in iterations:
+            start_date = datetime.strptime(iteration['startDate'], '%Y-%m-%d')
+            end_date = start_date + timedelta(days=iteration['duration'])
+            if start_date <= current_date <= end_date:
+                return iteration['id']
+
+        return None
+
+    def list_priorities(self, project_node_id: str) -> List[Dict[str, Any]]:
+        """List all priorities configured in a GitHub Project.
+
+        Args:
+            project_node_id (str): The node ID of the GitHub Project
+
+        Returns:
+            List[str]: List of formatted priority strings (name and ID)
+            None: If no priority field is found
+            IntegrationConnectionError: If the API request fails
+        """
+        project_details = self.get_project_details(project_node_id)
+
+        # Find priority field and extract priorities
+        priority_field = next(
+            (field for field in project_details['data']['node']['fields']['nodes'] 
+             if field['name'] == 'Priority'),
+            None
+        )
+
+        if not priority_field:
+            return []
+
+        priorities = priority_field.get('options', [])
+        return priorities
+
     def get_project_fields(self, project_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
         """Get information about project fields in a GitHub Project.
 
@@ -212,7 +281,7 @@ class GitHubGraphqlIntegration(Integration):
         variables = {"projectId": project_id}
         return self.execute_query(query, variables)
 
-    def get_item_id_from_node_id(self, node_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
+    def get_item_id_from_node_id(self, node_id: str) -> Dict[str, Any]:
         """Retrieves a project item ID from a node ID using the GitHub GraphQL API.
 
         Args:
@@ -258,7 +327,7 @@ class GitHubGraphqlIntegration(Integration):
         variables = {"nodeId": node_id}
         return self.execute_query(query, variables)
 
-    def get_item_details(self, item_id: str) -> Union[Dict[str, Any], IntegrationConnectionError]:
+    def get_item_details(self, item_id: str) -> Dict[str, Any]:
         """Retrieves a project item using its ID from the GitHub GraphQL API.
 
         Args:
@@ -340,16 +409,19 @@ class GitHubGraphqlIntegration(Integration):
 
         variables = {"itemId": item_id}
         return self.execute_query(query, variables)
-
+    
+    
     def add_issue_to_project(
         self,
         project_node_id: str,
         issue_node_id: str,
         status_field_id: Optional[str] = None,
         priority_field_id: Optional[str] = None,
+        iteration_field_id: Optional[str] = None,
         status_option_id: Optional[str] = None,
         priority_option_id: Optional[str] = None,
-    ) -> Union[Dict[str, Any], IntegrationConnectionError]:
+        iteration_option_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Associates an issue with a project using the GitHub GraphQL API and sets the status and priority fields.
 
@@ -358,8 +430,10 @@ class GitHubGraphqlIntegration(Integration):
             issue_node_id (str): The Node ID of the issue
             status_field_id (str): The field ID for status (e.g., "PVTSSF_lADOBESWNM4AKRt3zgGZRV8")
             priority_field_id (str): The field ID for priority (e.g., "PVTSSF_lADOBESWNM4AKRt3zgGac0g")
+            iteration_field_id (str): The field ID for iteration (e.g., "PVTIF_lADOBESWNM4AKRt3zgGZRc4")
             status_option_id (str): The option ID for status (e.g., "97363483" for "📥Inbox")
             priority_option_id (str): The option ID for priority (e.g., "82a23910" for "Urgent")
+            iteration_option_id (str): The option ID for iteration (e.g., "6e296546" for "Iteration 42 - 2025")
 
         Returns:
             dict: Response data from the API
@@ -381,9 +455,6 @@ class GitHubGraphqlIntegration(Integration):
         # Add issue to project
         variables = {"projectId": project_node_id, "issueId": issue_node_id}
         add_result = self.execute_query(add_mutation, variables)
-
-        if isinstance(add_result, IntegrationConnectionError):
-            return add_result
 
         # Get the item ID from the response
         item_id = add_result["data"]["addProjectV2ItemById"]["item"]["id"]
@@ -440,6 +511,32 @@ class GitHubGraphqlIntegration(Integration):
             if isinstance(priority_result, IntegrationConnectionError):
                 return priority_result
 
+        # Update iteration field if provided
+        if iteration_field_id and iteration_option_id:
+            iteration_mutation = """
+            mutation UpdateIteration($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId
+                    itemId: $itemId
+                    fieldId: $fieldId
+                    value: { iterationId: $optionId }
+                }) {
+                    projectV2Item {
+                        id
+                    }
+                }
+            }
+            """
+            variables = {
+                "projectId": project_node_id,
+                "itemId": item_id,
+                "fieldId": iteration_field_id,
+                "optionId": iteration_option_id,
+            }
+            iteration_result = self.execute_query(iteration_mutation, variables)
+            if isinstance(iteration_result, IntegrationConnectionError):
+                return iteration_result
+
         return add_result
 
 
@@ -454,6 +551,11 @@ def as_tools(configuration: GitHubGraphqlIntegrationConfiguration):
         number: int = Field(..., description="The project number")
 
     class GetProjectDetailsSchema(BaseModel):
+        project_node_id: str = Field(
+            ..., description="The Node ID of the GitHub Project"
+        )
+
+    class ListPrioritiesSchema(BaseModel):
         project_node_id: str = Field(
             ..., description="The Node ID of the GitHub Project"
         )
@@ -474,5 +576,13 @@ def as_tools(configuration: GitHubGraphqlIntegrationConfiguration):
                 project_node_id
             ),
             args_schema=GetProjectDetailsSchema,
+        ),
+        StructuredTool(
+            name="githubgraphql_list_priorities",
+            description="List all priorities configured in a GitHub Project.",
+            func=lambda project_node_id: integration.list_priorities(
+                project_node_id
+            ),
+            args_schema=ListPrioritiesSchema,
         ),
     ]

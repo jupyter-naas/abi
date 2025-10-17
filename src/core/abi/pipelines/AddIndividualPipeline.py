@@ -54,7 +54,6 @@ class AddIndividualPipelineParameters(PipelineParameters):
     )]
     threshold: Annotated[Optional[int], Field(
         description="Threshold to use for the search individual workflow.",
-        default=90,
         ge=0,
         le=100
     )] = 80

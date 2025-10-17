@@ -6,53 +6,14 @@ from src.marketplace.applications.pubmed.integrations.PubMedAPI import (
     PubMedAPIConfiguration,
     PubMedPaperSummary,
 )
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Annotated
 from pydantic import Field
 from abi import logger
 from langchain_core.tools import BaseTool, StructuredTool
 
+
 class PubMedPipelineConfiguration(PipelineConfiguration):
     pass
-
-# class PubMedPipelineParameters(PipelineParameters):
-#     """
-#     Parameters for running the PubMedPipeline.
-
-#     Attributes:
-#         query (str): The query to search for in PubMed.
-#         start_date (str): The start date to search for in PubMed.
-#         end_date (Optional[str]): The end date to search for in PubMed. If not provided, searches up to the present.
-#         downloadable_only (bool): Whether to only return papers that are downloadable from PubMedCentral.
-#         max_results (int): The maximum number of results to return.
-#     """
-#     query: Annotated[str, Field(
-#         description="The query to search for in PubMed"
-#     )]
-#     start_date: Annotated[str, Field(
-#         description="The start date to search for in PubMed"
-#     )]
-#     end_date: Optional[str] = Field(
-#         description="The end date to search for in PubMed",
-#         default=None
-#     )
-#     sort: Annotated[str, Field(
-#         description=(
-#             "The sort method to use. Accepted values: "
-#             "'pub_date' (descending by publication date), "
-#             "'Author' (ascending by first author), "
-#             "'JournalName' (ascending by journal name), "
-#             "'relevance' (default, 'Best Match' on PubMed web)"
-#         ),
-#         default="pub_date"
-#     )]
-#     downloadable_only: Annotated[bool, Field(
-#         description="Whether to only return papers that are downloadable from PubMedCentral",
-#         default=False
-#     )]
-#     max_results: Annotated[int, Field(
-#         description="The maximum number of results to return",
-#         default=100
-#     )]
 
 
 class PubMedPipelineParameters(PipelineParameters):
@@ -66,21 +27,28 @@ class PubMedPipelineParameters(PipelineParameters):
         downloadable_only (bool): Whether to only return papers that are downloadable from PubMedCentral.
         max_results (int): The maximum number of results to return.
     """
-    query: str = Field(description="The query to search for in PubMed")
-    start_date: str = Field(description="The start date to search for in PubMed")
-    end_date: str | None = Field(
-        default=None, description="The end date to search for in PubMed"
-    )
-    sort: Literal['pub_date', 'Author', 'JournalName', 'relevance'] = Field(
-        default='pub_date',
+    query: Annotated[str, Field(
+        description="The query to search for in PubMed"
+    )]
+    start_date: Annotated[str, Field(
+        description="The start date to search for in PubMed"
+    )]
+    end_date: Optional[Annotated[str, Field(
+        description="The end date to search for in PubMed"
+    )]] = None
+    sort: Optional[Annotated[Literal['pub_date', 'Author', 'JournalName', 'relevance'], Field(
         description="Sort: 'pub_date', 'Author', 'JournalName', or 'relevance' (Best Match)"
-    )
-    downloadable_only: bool = Field(
-        default=False, description="Only return papers downloadable from PubMedCentral"
-    )
-    max_results: int = Field(
-        default=100, ge=1, le=10_000, description="Maximum number of results to return"
-    )
+    )]] = 'pub_date'
+    downloadable_only: Optional[Annotated[bool, Field(
+        description="Only return papers downloadable from PubMedCentral"
+    )]] = False
+    max_results: Optional[Annotated[int, Field(
+        ge=1,
+        le=10_000,
+        description="Maximum number of results to return"
+    )]] = 100
+
+    
 class PubMedPipeline(Pipeline):
     
     __configuration: PubMedPipelineConfiguration
