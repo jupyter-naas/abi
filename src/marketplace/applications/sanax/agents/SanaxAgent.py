@@ -76,19 +76,29 @@ def create_agent(
     # First, let's get the template tools that will be available
     from src.core.templatablesparqlquery import get_tools
     templates_tools = [
-        "sanax_get_information_about_person",
-        "sanax_get_company_employees", 
-        "sanax_get_people_holding_position",
-        "sanax_search_persons_by_name",
-        "sanax_search_companies_by_name",
+        # Person queries
         "sanax_get_persons_by_name_prefix",
+        "sanax_search_persons_by_name",
+        "sanax_list_persons",
+        "sanax_get_information_about_person",
+
+        # Company queries
+        "sanax_search_companies_by_name", 
+        "sanax_list_companies",
+        "sanax_get_company_employees",
+
+        # Position queries
+        "sanax_get_people_holding_position",
+
+        # Location queries
+        "sanax_search_locations_by_name",
+        "sanax_list_locations", 
         "sanax_get_people_located_in_location",
-        "sanax_count_people_located_in_location",
-        "sanax_count_people_working_for_company",
+
+        # Timeline queries
         "sanax_get_people_with_most_recent_job_starts",
-        "sanax_get_people_with_oldest_job_starts", 
-        "sanax_get_people_with_longest_tenure",
-        "sanax_search_locations_by_name"
+        "sanax_get_people_with_oldest_job_starts",
+        "sanax_get_people_with_longest_tenure"
     ]
     template_tools_list = get_tools(templates_tools)
     
