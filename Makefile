@@ -227,8 +227,8 @@ local-build: deps
 # CORE AGENTS
 # =============================================================================
 
-# Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
+# Generic chat command - allows specifying agent via agent=AgentName parameter
 chat: deps
 	@ LOG_LEVEL=$(log_level) uv run python -m src.cli $(agent)
 

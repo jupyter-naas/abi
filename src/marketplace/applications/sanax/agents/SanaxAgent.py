@@ -4,43 +4,51 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
 from typing import Optional
 
 NAME = "Sanax"
 DESCRIPTION = "Sanax agent to extract sales navigator data from LinkedIn."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-SYSTEM_PROMPT = """# ROLE
+SYSTEM_PROMPT = """
+<role>
 You are Sanax, an AI agent specialized in extracting and analyzing LinkedIn Sales Navigator data.
+</role>
 
-# OBJECTIVE
-Help users access and analyze LinkedIn Sales Navigator data.
+<objective>
+Help users gain insights from LinkedIn Sales Navigator data by providing accurate information and analysis.
+</objective>
 
-# CONTEXT
+<context>
 You receive messages from users or the supervisor agent.
+</context>
 
-# TASKS
-- Search for people by position title
-- Look up LinkedIn profile URLs
-- Find company information
-- Analyze employment relationships
-- Answer questions about available data
+<tasks>
+- Extract relevant information from LinkedIn Sales Navigator data using available tools
+- Answer specific questions about people, companies, and roles
+- Provide quantitative analysis when requested
+- Guide users by asking for missing information needed to use tools effectively
+</tasks>
 
-# TOOLS
-- get_time_date: Get the current datetime in Paris timezone.
+<tools>
+- count_items: Count of items returned by another tool.
 [TOOLS]
+</tools>
 
-# OPERATING GUIDELINES
-1. Focus on accurate data extraction and get the current datetime if needed.
-2. Return structured, relevant information
-3. Respect data privacy requirements
-4. Maintain professional communication
+<operating_guidelines>
+- Find appropriate tool to answer the question.
+- Make sure user provide all necessary arguments to the tool, otherwise ask for the missing arguments.
+- Use tool to answer questions
+- If user is asking a quantitative question, use the count_items tool to answer the question.
+- Present clear and concise answer:
+    - If url is provided, return it in markdown: [URL](url).
+    - If an image is provided, return it in markdown: ![Image](url).
+</operating_guidelines>
 
-# CONSTRAINTS
-- Only access authorized data
-- Provide factual responses
+<constraints>
+- Only use tools to answer questions.
 - Never user your internal knowledge to answer the question.
+</constraints>
 """
 SUGGESTIONS: list = []
 
@@ -52,147 +60,170 @@ def create_agent(
     from src import secret
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
-        from src.core.__templates__.models.gpt_4_1 import model as cloud_model
+        from src.marketplace.applications.sanax.models.gpt_4_1 import model as cloud_model
         selected_model = cloud_model.model
     else:
-        from src.core.__templates__.models.qwen3_8b import model as local_model
+        from src.marketplace.applications.sanax.models.qwen3_8b import model as local_model
         selected_model = local_model.model
     
     # Define tools
-    from src.marketplace.applications.sanax.pipelines.SanaxLinkedInSalesNavigatorExtractorPipeline import (
-        SanaxLinkedInSalesNavigatorExtractorPipeline,
-        SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration
-    )
-    from src import services
-    tools: list = [
-        SanaxLinkedInSalesNavigatorExtractorPipeline(
-            configuration=SanaxLinkedInSalesNavigatorExtractorPipelineConfiguration(
-                triple_store=services.triple_store_service
-            )
-        ).as_tools()
-    ]
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel
+    from typing import Dict, Any
+    from pydantic import Field
+    from abi import logger
 
-    ## Get tools from intentmapping
+    # First, let's get the template tools that will be available
     from src.core.templatablesparqlquery import get_tools
     templates_tools = [
-        "get_person_info",
-        "get_company_employees",
-        "get_role_holders",
-        "get_person_linkedin_url",
-        "get_company_linkedin_url",
-        "get_persons_by_name_prefix",
-        "get_people_by_location",
-        "count_people_by_location",
-        "count_people_by_company",
-        "get_most_recent_job_starts",
-        "get_oldest_job_starts",
-        "get_longest_tenure",
+        # Person queries
+        "sanax_get_persons_by_name_prefix",
+        "sanax_search_persons_by_name",
+        "sanax_list_persons",
+        "sanax_get_information_about_person",
+
+        # Company queries
+        "sanax_search_companies_by_name", 
+        "sanax_list_companies",
+        "sanax_get_company_employees",
+
+        # Position queries
+        "sanax_get_people_holding_position",
+
+        # Location queries
+        "sanax_search_locations_by_name",
+        "sanax_list_locations", 
+        "sanax_get_people_located_in_location",
+
+        # Timeline queries
+        "sanax_get_people_with_most_recent_job_starts",
+        "sanax_get_people_with_oldest_job_starts",
+        "sanax_get_people_with_longest_tenure"
     ]
-    tools += get_tools(templates_tools)
+    template_tools_list = get_tools(templates_tools)
     
+    # Create a dictionary to map tool names to tool instances
+    tools_by_name = {}
+    for tool in template_tools_list:
+        tools_by_name[tool.name] = tool
+
+    class CountSchema(BaseModel):
+        function_name: str = Field(description="The name of the function to call")
+        function_args: Optional[Dict[str, Any]] = Field(default=None, description="Arguments to pass to the target function")
+
+    def count_items(function_name: str, function_args: Optional[Dict[str, Any]] = None) -> int:
+        """Count the number of results returned by another tool.
+        
+        Args:
+            function_name: The name of the tool/function to call
+            function_args: Optional arguments to pass to the target function
+            
+        Returns:
+            int: The number of items returned by the target function
+        """
+        try:
+            logger.info(f"count_items called with function_name: {function_name}, args: {function_args}")
+            
+            # Check if the tool exists in our registry
+            if function_name not in tools_by_name:
+                logger.error(f"Tool '{function_name}' not found in available tools: {list(tools_by_name.keys())}")
+                return 0
+            
+            # Get the target tool
+            target_tool = tools_by_name[function_name]
+            
+            # Prepare arguments for the target tool
+            args = function_args or {}
+            
+            # Call the target tool
+            logger.info(f"Calling tool '{function_name}' with args: {args}")
+            result = target_tool.invoke(args)
+            
+            # Count the results
+            if isinstance(result, list):
+                count = len(result)
+            elif isinstance(result, dict):
+                # If it's a dict, count the number of items
+                count = len(result)
+            elif isinstance(result, str):
+                # If it's a string, try to parse it as JSON to count items
+                try:
+                    import json
+                    parsed = json.loads(result)
+                    if isinstance(parsed, (list, dict)):
+                        count = len(parsed)
+                    else:
+                        count = 1
+                except Exception:
+                    count = 1
+            else:
+                # For other types, assume it's a single result
+                count = 1
+            
+            logger.info(f"Tool '{function_name}' returned {count} items")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error in count_items: {str(e)}")
+            return 0
+
+    count_items_tool = StructuredTool(
+        name="count_items", 
+        description="Count the number of results returned by another tool by calling it and counting the returned items.",
+        func=count_items,
+        args_schema=CountSchema
+    )
+
+    tools: list = [
+        count_items_tool
+    ]
+    
+    # Add the template tools to the tools list
+    tools += template_tools_list
+
     # Define agents
     agents: list = []
 
     # Define intents
     intents: list = [
-        # Person information queries
-        Intent(intent_value="what do you know about", intent_type=IntentType.TOOL, intent_target="get_person_info"),
-        Intent(intent_value="tell me about", intent_type=IntentType.TOOL, intent_target="get_person_info"),
-        Intent(intent_value="who is", intent_type=IntentType.TOOL, intent_target="get_person_info"),
-        Intent(intent_value="information about", intent_type=IntentType.TOOL, intent_target="get_person_info"),
-        Intent(intent_value="details about", intent_type=IntentType.TOOL, intent_target="get_person_info"),
-        Intent(intent_value="profile of", intent_type=IntentType.TOOL, intent_target="get_person_info"),
+        # Person search and information queries
+        Intent(intent_value="what do you know about {person}", intent_type=IntentType.TOOL, intent_target="sanax_get_information_about_person"),
+        Intent(intent_value="tell me about {person}", intent_type=IntentType.TOOL, intent_target="sanax_get_information_about_person"),
+        Intent(intent_value="who is {person}", intent_type=IntentType.TOOL, intent_target="sanax_get_information_about_person"),
+        Intent(intent_value="search for people named {name}", intent_type=IntentType.TOOL, intent_target="sanax_search_persons_by_name"),
+        Intent(intent_value="find people with name {name}", intent_type=IntentType.TOOL, intent_target="sanax_search_persons_by_name"),
+        Intent(intent_value="show me people whose names start with {prefix}", intent_type=IntentType.TOOL, intent_target="sanax_get_persons_by_name_prefix"),
         
-        # Company employees queries
-        Intent(intent_value="who works at", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
-        Intent(intent_value="who is working for", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
-        Intent(intent_value="employees at", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
-        Intent(intent_value="staff at", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
-        Intent(intent_value="people working at", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
-        Intent(intent_value="team members at", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
-        Intent(intent_value="show me employees of", intent_type=IntentType.TOOL, intent_target="get_company_employees"),
+        # Company related queries
+        Intent(intent_value="who works at {company}", intent_type=IntentType.TOOL, intent_target="sanax_get_company_employees"),
+        Intent(intent_value="show me employees at {company}", intent_type=IntentType.TOOL, intent_target="sanax_get_company_employees"),
+        Intent(intent_value="search for companies named {name}", intent_type=IntentType.TOOL, intent_target="sanax_search_companies_by_name"),
+        Intent(intent_value="find companies with name {name}", intent_type=IntentType.TOOL, intent_target="sanax_search_companies_by_name"),
+        Intent(intent_value="how many people work at {company}", intent_type=IntentType.TOOL, intent_target="sanax_count_people_working_for_company"),
         
-        # Role/position holders queries
-        Intent(intent_value="who has the role", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
-        Intent(intent_value="who is a", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
-        Intent(intent_value="find all", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
-        Intent(intent_value="who holds the position", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
-        Intent(intent_value="people with role", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
-        Intent(intent_value="show me all", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
-        Intent(intent_value="list all", intent_type=IntentType.TOOL, intent_target="get_role_holders"),
+        # Position/role queries
+        Intent(intent_value="who has the position of {position}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_holding_position"),
+        Intent(intent_value="show me people with title {position}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_holding_position"),
+        Intent(intent_value="find people who are {position}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_holding_position"),
         
-        # LinkedIn URL queries for persons
-        Intent(intent_value="linkedin profile of", intent_type=IntentType.TOOL, intent_target="get_person_linkedin_url"),
-        Intent(intent_value="linkedin url for", intent_type=IntentType.TOOL, intent_target="get_person_linkedin_url"),
-        Intent(intent_value="linkedin link for", intent_type=IntentType.TOOL, intent_target="get_person_linkedin_url"),
-        Intent(intent_value="find linkedin profile", intent_type=IntentType.TOOL, intent_target="get_person_linkedin_url"),
-        Intent(intent_value="get linkedin url", intent_type=IntentType.TOOL, intent_target="get_person_linkedin_url"),
+        # Location based queries
+        Intent(intent_value="who are the people in {location}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_located_in_location"),
+        Intent(intent_value="show me people located in {location}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_located_in_location"),
+        Intent(intent_value="how many people are in {location}", intent_type=IntentType.TOOL, intent_target="sanax_count_people_located_in_location"),
+        Intent(intent_value="count people in {location}", intent_type=IntentType.TOOL, intent_target="sanax_count_people_located_in_location"),
         
-        # LinkedIn URL queries for companies
-        Intent(intent_value="company linkedin", intent_type=IntentType.TOOL, intent_target="get_company_linkedin_url"),
-        Intent(intent_value="linkedin page for", intent_type=IntentType.TOOL, intent_target="get_company_linkedin_url"),
-        Intent(intent_value="linkedin company page", intent_type=IntentType.TOOL, intent_target="get_company_linkedin_url"),
-        Intent(intent_value="find company linkedin", intent_type=IntentType.TOOL, intent_target="get_company_linkedin_url"),
-        
-        # Name prefix searches
-        Intent(intent_value="people named", intent_type=IntentType.TOOL, intent_target="get_persons_by_name_prefix"),
-        Intent(intent_value="names starting with", intent_type=IntentType.TOOL, intent_target="get_persons_by_name_prefix"),
-        Intent(intent_value="find people with name", intent_type=IntentType.TOOL, intent_target="get_persons_by_name_prefix"),
-        Intent(intent_value="who has name starting", intent_type=IntentType.TOOL, intent_target="get_persons_by_name_prefix"),
-        Intent(intent_value="search for names", intent_type=IntentType.TOOL, intent_target="get_persons_by_name_prefix"),
-        
-        # Location-based queries
-        Intent(intent_value="who is in", intent_type=IntentType.TOOL, intent_target="get_people_by_location"),
-        Intent(intent_value="people in", intent_type=IntentType.TOOL, intent_target="get_people_by_location"),
-        Intent(intent_value="who lives in", intent_type=IntentType.TOOL, intent_target="get_people_by_location"),
-        Intent(intent_value="located in", intent_type=IntentType.TOOL, intent_target="get_people_by_location"),
-        Intent(intent_value="find people in", intent_type=IntentType.TOOL, intent_target="get_people_by_location"),
-        Intent(intent_value="who is based in", intent_type=IntentType.TOOL, intent_target="get_people_by_location"),
-        
-        # Location count queries
-        Intent(intent_value="how many people in", intent_type=IntentType.TOOL, intent_target="count_people_by_location"),
-        Intent(intent_value="count people in", intent_type=IntentType.TOOL, intent_target="count_people_by_location"),
-        Intent(intent_value="number of people in", intent_type=IntentType.TOOL, intent_target="count_people_by_location"),
-        Intent(intent_value="total people in", intent_type=IntentType.TOOL, intent_target="count_people_by_location"),
-        
-        # Company count queries
-        Intent(intent_value="how many people work at", intent_type=IntentType.TOOL, intent_target="count_people_by_company"),
-        Intent(intent_value="count employees at", intent_type=IntentType.TOOL, intent_target="count_people_by_company"),
-        Intent(intent_value="number of employees at", intent_type=IntentType.TOOL, intent_target="count_people_by_company"),
-        Intent(intent_value="total employees at", intent_type=IntentType.TOOL, intent_target="count_people_by_company"),
-        Intent(intent_value="company size of", intent_type=IntentType.TOOL, intent_target="count_people_by_company"),
-        
-        # Recent job starts
-        Intent(intent_value="who started recently", intent_type=IntentType.TOOL, intent_target="get_most_recent_job_starts"),
-        Intent(intent_value="recent hires", intent_type=IntentType.TOOL, intent_target="get_most_recent_job_starts"),
-        Intent(intent_value="newest employees", intent_type=IntentType.TOOL, intent_target="get_most_recent_job_starts"),
-        Intent(intent_value="latest job starts", intent_type=IntentType.TOOL, intent_target="get_most_recent_job_starts"),
-        Intent(intent_value="who joined recently", intent_type=IntentType.TOOL, intent_target="get_most_recent_job_starts"),
-        Intent(intent_value="most recent job changes", intent_type=IntentType.TOOL, intent_target="get_most_recent_job_starts"),
-        
-        # Oldest job starts
-        Intent(intent_value="who started earliest", intent_type=IntentType.TOOL, intent_target="get_oldest_job_starts"),
-        Intent(intent_value="oldest employees", intent_type=IntentType.TOOL, intent_target="get_oldest_job_starts"),
-        Intent(intent_value="earliest hires", intent_type=IntentType.TOOL, intent_target="get_oldest_job_starts"),
-        Intent(intent_value="who joined first", intent_type=IntentType.TOOL, intent_target="get_oldest_job_starts"),
-        Intent(intent_value="longest serving", intent_type=IntentType.TOOL, intent_target="get_oldest_job_starts"),
-        
-        # Longest tenure
-        Intent(intent_value="who has worked longest", intent_type=IntentType.TOOL, intent_target="get_longest_tenure"),
-        Intent(intent_value="longest tenure", intent_type=IntentType.TOOL, intent_target="get_longest_tenure"),
-        Intent(intent_value="most experienced", intent_type=IntentType.TOOL, intent_target="get_longest_tenure"),
-        Intent(intent_value="senior employees", intent_type=IntentType.TOOL, intent_target="get_longest_tenure"),
-        Intent(intent_value="veteran employees", intent_type=IntentType.TOOL, intent_target="get_longest_tenure"),
+        # Job timing queries
+        Intent(intent_value="who started their job most recently", intent_type=IntentType.TOOL, intent_target="sanax_get_people_with_most_recent_job_starts"),
+        Intent(intent_value="show me recent job starts", intent_type=IntentType.TOOL, intent_target="sanax_get_people_with_most_recent_job_starts"),
+        Intent(intent_value="who started their job longest ago", intent_type=IntentType.TOOL, intent_target="sanax_get_people_with_oldest_job_starts"),
+        Intent(intent_value="show me oldest job starts", intent_type=IntentType.TOOL, intent_target="sanax_get_people_with_oldest_job_starts"),
+        Intent(intent_value="who has worked the longest for a {company}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_with_longest_tenure"),
+        Intent(intent_value="show me people with longest tenure for a {company}", intent_type=IntentType.TOOL, intent_target="sanax_get_people_with_longest_tenure")
     ]
-
     # Set configuration
-    tools_list = [
-        tools[0][0], # Handle nested list for first tool
-        *tools[1:]   # Unpack remaining tools
-    ]
     system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([
         f"- {tool.name}: {tool.description}" 
-        for tool in tools_list
+        for tool in tools
     ]))
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(

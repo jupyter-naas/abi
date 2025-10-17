@@ -25,30 +25,25 @@ class UpdateCommercialOrganizationPipelineParameters(PipelineParameters):
         pattern=URI_REGEX
     )]
     legal_uri: Annotated[Optional[str], Field(
-        default=None,
         description="Individual URI from class: https://www.commoncoreontologies.org/ont00001331",
         pattern=URI_REGEX
-    )]
+    )] = None
     ticker_uri: Annotated[Optional[str], Field(
-        default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/Ticker",
         pattern=URI_REGEX
-    )]
+    )] = None
     website_uri: Annotated[Optional[str], Field(
-        default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/Website",
         pattern=URI_REGEX
-    )]
+    )] = None
     linkedin_page_uri: Annotated[Optional[str], Field(
-        default=None,
         description="Individual URI from class: http://ontology.naas.ai/abi/LinkedInOrganizationPage",
         pattern=URI_REGEX
-    )]
+    )] = None
     logo_url: Annotated[Optional[str], Field(
-        default=None,
         description="Logo URL of the commercial organization.",
         pattern=r"https?://.*"
-    )]
+    )] = None
 
 class UpdateCommercialOrganizationPipeline(Pipeline):
     """Pipeline for updating a commercial organization in the ontology."""
