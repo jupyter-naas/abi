@@ -40,7 +40,7 @@ class FeatureRequestParameters(WorkflowParameters):
     """
     issue_title: Annotated[str, Field(..., description="The title of the feature request")]
     issue_body: Annotated[str, Field(..., description="The description of the feature request")]
-    repo_name: Optional[Annotated[str, Field(..., description="The name of the repository to create the feature request in")]] = config.github_repository
+    repo_name: Annotated[str, Field(..., description="The name of the repository to create the feature request in")] = config.github_repository
     assignees: Optional[Annotated[list, Field(..., description="The assignees of the feature request")]] = []
     labels: Optional[Annotated[list, Field(..., description="The labels of the feature request")]] = ["enhancement"]
     priority_id: Optional[Annotated[str, Field(..., description="The ID of the priority of the feature request")]] = "4fb76f2d"
@@ -69,7 +69,7 @@ class FeatureRequestWorkflow(Workflow):
             assignees=parameters.assignees,
             labels=parameters.labels
         )
-        issue_repository_url = issue.get("repository_url")
+        issue_repository_url = issue.get("repository_url", "")
         issue_path = issue_repository_url.split("https://api.github.com/repos/")[-1]
         save_json(issue, os.path.join(self.__configuration.data_store_path, issue_path, "issues"), f"{issue.get('number')}.json")
 
