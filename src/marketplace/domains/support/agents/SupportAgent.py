@@ -9,136 +9,88 @@ from abi.services.agent.IntentAgent import (
 from typing import Optional
 from src import secret
 from pydantic import SecretStr
+from src import config
 
 NAME = "Support"
 MODEL = "gpt-4.1-mini"
 TEMPERATURE = 0
 AVATAR_URL = "https://t3.ftcdn.net/jpg/05/10/88/82/360_F_510888200_EentlrpDCeyf2L5FZEeSfgYaeiZ80qAU.jpg"
 DESCRIPTION = "A Support Agent that helps to get any feedbacks/bugs or needs from user."
-SYSTEM_PROMPT = """
-## ROLE
-You are a Support Agent focused on handling user feedback, bug reports, and feature requests efficiently.
+SYSTEM_PROMPT = f"""
+<role>
+You are a Support Agent focused on handling user feedbacks.
+</role>
 
-## OBJECTIVE
-1. Quickly identify if the request is support-related (bugs, features, technical help)
-2. For non-support topics, use the request_help tool to redirect to appropriate agent
-3. For support requests, gather key details and create tickets
-4. Provide clear status updates and next steps
+<objective>
+Gather feedbacks from users and create tickets for support team.
+</objective>
 
-## CONTEXT
-You will receive messages from users or the supervisor agent.
+<context>
+You will receive messages from users.
+You are working with the GitHub repository: {config.github_repository}, {config.github_project_id}.
+</context>
 
-## TASKS
-1. Answer question about your capabilities
-2. Quickly identify if the request is support-related (bugs, features, technical help)
-3. For non-support topics, use the request_help tool to redirect to appropriate agent
-4. For support requests, gather key details and create tickets
-5. Provide clear status updates and next steps
+<tasks>
+- Understand user's request
+- Create ticket from user's request for support team.
+- Provide clear status updates and next steps.
+</tasks>
 
-## TOOLS
-- `report_bug`: Create GitHub bug reports
-- `feature_request`: Create GitHub feature requests
-- `request_help`: Redirect non-support queries to supervisor agent
+<tools>
+- `report_bug`: Create bug reports about issues, errors, crashes etc.
+- `feature_request`: Create feature requests about new features or improvements, documentation, etc.
+- `github_list_repository_contributors`: List contributors to a repository.
+- `github_list_organization_repositories`: List repositories for an organization.
+- `githubgraphql_list_priorities`: List priorities for a project.
+- `githubgraphql_get_project_node_id`: Get the node ID of a project.
+</tools>
 
-## OPERATING GUIDELINES
+<operating_guidelines>
+- Identify is the request is feature request or bug report.
+- Use the `githubgraphql_list_priorities` tool to get the priority's information and assign the appropriate priority to the ticket. If not specified, assign medium priority.
+- Create a draft ticket with:
+    - title: based on the request in markdown format.
+    - description: based on the request in markdown format.
+    - priority: use the `githubgraphql_list_priorities` tool to get the priority's information and assign the appropriate priority to the ticket. If not specified, assign medium priority.
+    - assignees (optional): if specified in brief, use the `github_list_repository_contributors` tool to get the contributor's information and add it to the assignee list if it matches a contributor.
+    - repository (optional): if specified in brief, use the `github_list_organization_repositories` tool to get the repository's information and assign the appropriate repository to the ticket. If not specified, use the default repository.
+    ```
+    ### Repository (change if specified in brief)
+    {config.github_repository} (default)
 
-### Key Information to Gather
-For Bugs:
-- Clear description of issue
-- Steps to reproduce
-- Expected vs actual behavior
-- Error messages/screenshots
-- Draft format:
-```
-### Description
-[Description of the issue]
+    ### Title
+    Title of the ticket.
+    
+    ### Description
+    Description of the ticket.
 
-### Steps to reproduce
-[Steps to reproduce the issue]
+    ### Priority (change if specified in brief)
+    Medium (default)
+    
+    ### Assignees (if specified in brief)
+    
+    ```
+- Validate draft ticket with user and ask for approval.
+- Use appropriate tool to create the ticket.
+- Report back the URL of the ticket to the user.
+</operating_guidelines>
 
-### Expected behavior
-[Expected behavior]
-
-### Actual behavior
-[Actual behavior]
-```
-
-For Feature Requests:
-- Use case and business value
-- Desired functionality
-- Success criteria
-- Priority level
-- Draft format:
-```
-### Use case
-[Use case of the feature request]
-
-### Business value
-[Business value of the feature request]
-
-### Success criteria
-[Success criteria of the feature request]
-
-### Priority level
-[Priority level of the feature request]
-
-### Desired functionality
-[Desired functionality of the feature request]
-```
-
-### COMMUNICATION GUIDELINES
-- Be direct and professional
-- Focus on key details only
-- Ask for draft approval before creating tickets
-
-## CONSTRAINTS
-- Only handle support-related requests
-- Request help for non-support topics
-- Validate inputs before creating tickets
-- Protect sensitive information
-- Document all interactions
+<constraints>
+- Be professional and friendly.
+- Do not ask user for title and description, directly create the draft ticket with the title and description based on the user's request.
+- Use tools specificied in your system prompt to end your task successfully.
+- Do not use any other tools than the ones specified in your system prompt.
+</constraints>
 """
 
 SUGGESTIONS: list[dict[str, str]] = [
     {
-        "label": "I found a bug in the application",
-        "value": "I found a bug in the application",
+        "label": "Feature Request",
+        "value": "As a user, I would like to: {{Feature Request}}",
     },
     {
-        "label": "I have a feature request", 
-        "value": "I have a feature request",
-    },
-    {
-        "label": "I need help with an integration",
-        "value": "I need help with an integration",
-    },
-    {
-        "label": "The system is running slowly",
-        "value": "The system is running slowly", 
-    },
-    {
-        "label": "I'm getting an error message",
-        "value": "I'm getting an error message",
-    },
-    {
-        "label": "I have feedback about the user interface",
-        "value": "I have feedback about the user interface",
-    },
-    {
-        "label": "I need technical support",
-        "value": "I need technical support",
-    },
-    {
-        "label": "Report a security issue",
-        "value": "Report a security issue",
-    },
-    {
-        "label": "Request a new integration",
-        "value": "Request a new integration",
-    },
-    {
-        "label": "Suggest a workflow improvement",
-        "value": "Suggest a workflow improvement",
+        "label": "Report Bug",
+        "value": "Report a bug on: {{Bug Description}}",
     },
 ]
 
@@ -158,9 +110,11 @@ def create_agent(
     tools: list = []
     from src.marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
         GitHubGraphqlIntegrationConfiguration,
+        as_tools as GitHubGraphqlIntegration_tools,
     )
     from src.marketplace.applications.github.integrations.GitHubIntegration import (
         GitHubIntegrationConfiguration,
+        as_tools as GitHubIntegration_tools,
     )
     from src.marketplace.domains.support.workflows.ReportBugWorkflow import (
         ReportBugWorkflow,
@@ -177,6 +131,8 @@ def create_agent(
     github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
         access_token=github_access_token
     )
+    tools += [tool for tool in GitHubIntegration_tools(github_integration_config) if tool.name in ["github_list_repository_contributors", "github_list_organization_repositories"]]
+    tools += [tool for tool in GitHubGraphqlIntegration_tools(github_graphql_integration_config) if tool.name in ["githubgraphql_list_priorities", "githubgraphql_get_project_node_id"]]
 
     # Add ReportBugWorkflow tool
     report_bug_workflow = ReportBugWorkflow(
@@ -204,19 +160,12 @@ def create_agent(
         Intent(intent_value="Something is broken", intent_type=IntentType.TOOL, intent_target="report_bug"),
         Intent(intent_value="Error in the system", intent_type=IntentType.TOOL, intent_target="report_bug"),
         Intent(intent_value="Application crashed", intent_type=IntentType.TOOL, intent_target="report_bug"),
-        Intent(intent_value="Performance issue", intent_type=IntentType.TOOL, intent_target="report_bug"),
         Intent(intent_value="System not working", intent_type=IntentType.TOOL, intent_target="report_bug"),
         Intent(intent_value="Integration problem", intent_type=IntentType.TOOL, intent_target="report_bug"),
         
         # Feature request intents
         Intent(intent_value="Feature request", intent_type=IntentType.TOOL, intent_target="feature_request"),
         Intent(intent_value="I need a new feature", intent_type=IntentType.TOOL, intent_target="feature_request"),
-        Intent(intent_value="Can you add", intent_type=IntentType.TOOL, intent_target="feature_request"),
-        Intent(intent_value="Enhancement request", intent_type=IntentType.TOOL, intent_target="feature_request"),
-        Intent(intent_value="New integration", intent_type=IntentType.TOOL, intent_target="feature_request"),
-        Intent(intent_value="Workflow improvement", intent_type=IntentType.TOOL, intent_target="feature_request"),
-        Intent(intent_value="UI improvement", intent_type=IntentType.TOOL, intent_target="feature_request"),
-        Intent(intent_value="API integration", intent_type=IntentType.TOOL, intent_target="feature_request"),
     ]
    
     # Set configuration

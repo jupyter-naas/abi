@@ -831,6 +831,52 @@ class GitHubIntegration(Integration):
             "DELETE", f"/repos/{repo_name}/actions/secrets/{secret_name}"
         )
 
+    def list_repository_contributors(
+        self,
+        repo_name: str,
+        page: int = 1,
+        per_page: int = 30,
+        return_login: bool = False,
+    ) -> List:
+        """Lists contributors to a repository.
+
+        Args:
+            repo_name (str): Repository name in 'owner/repo' format
+            anon (bool, optional): Include anonymous contributors. Defaults to False.
+            per_page (int, optional): Results per page. Defaults to 30.
+            page (int, optional): Page number of results. Defaults to 1.
+            return_login (bool, optional): Return only login names of contributors. Defaults to False.
+            accept (str, optional): Media type for response format. Defaults to "application/vnd.github+json"
+
+        Returns:
+            Dict: List of contributors to the repository, including:
+                - Login
+                - ID
+                - Node ID
+                - Avatar URL
+                - URL
+                - Type
+                - Contributions count
+                - And more
+
+        Note:
+            Lists contributors to the specified repository, sorted by number of commits per contributor in descending order.
+        """
+        params = {
+            "per_page": per_page,
+            "page": page
+        }
+        response = self._make_request(
+            "GET",
+            f"/repos/{repo_name}/contributors",
+            params=params
+        )
+        
+        if return_login:
+            return [{'login': c.get('login'), "contributions": c.get('contributions')} for c in response if c.get('type') == 'User' and c.get('login')]
+        return response
+
+
 
 def as_tools(configuration: GitHubIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
@@ -1035,6 +1081,11 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
             ..., description="Full repository name in format 'owner/repo'"
         )
         secret_name: str = Field(..., description="Name of the secret to delete")
+
+    class ListRepositoryContributorsSchema(BaseModel):
+        repo_name: str = Field(
+            ..., description="Full repository name in format 'owner/repo'"
+        )
 
     return [
         StructuredTool(
@@ -1257,5 +1308,11 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
                 repo_name, secret_name
             ),
             args_schema=DeleteRepositorySecretSchema,
+        ),
+        StructuredTool(
+            name="github_list_repository_contributors",
+            description="List contributors to a GitHub repository",
+            func=lambda repo_name: integration.list_repository_contributors(repo_name, return_login=True),
+            args_schema=ListRepositoryContributorsSchema,
         ),
     ]
