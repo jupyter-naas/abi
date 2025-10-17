@@ -569,6 +569,19 @@ class GitHubIntegration(Integration):
         data = {"title": title, "body": body, "head": head, "base": base}
         return self._make_request("POST", f"/repos/{repo_name}/pulls", data)
 
+    def list_pull_requests(
+        self, 
+        repo_name: str, 
+        state: str = "open", 
+        sort: str = "created", 
+        direction: str = "desc", 
+        per_page: int = 30, 
+        page: int = 1,
+    ) -> Dict:
+        """List pull requests for a repository."""
+        params = {"state": state, "sort": sort, "direction": direction, "per_page": per_page, "page": page}
+        return self._make_request("GET", f"/repos/{repo_name}/pulls", params=params)
+
     def list_assignees(
         self,
         repo_name: str,
@@ -837,7 +850,7 @@ class GitHubIntegration(Integration):
         page: int = 1,
         per_page: int = 30,
         return_login: bool = False,
-    ) -> List:
+    ) -> List | Dict:
         """Lists contributors to a repository.
 
         Args:
