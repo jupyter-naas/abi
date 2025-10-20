@@ -136,7 +136,7 @@ async def wait_for_api():
     for attempt in range(max_retries):
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{ABI_API_BASE}/health")
+                response = await client.get(f"{ABI_API_BASE}")
                 if response.status_code == 200:
                     print("✅ API is ready!")
                     return True
