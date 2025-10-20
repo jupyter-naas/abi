@@ -21,7 +21,7 @@ competency_questions:
 
  - id: CQ5
     category: Temporal Ordering
-    question: "Temporal Ordering: Which processes or events are temporally simultaneous or dependent on others?"
+    question: "Temporal Ordering: Which processes or events are temporally simultaneous with others?"
     ontology_elements: [BFO:precedes, BFO:precededby, BFO:process, d3f:DigitalEvent, BFO:hasOccurrentPart, BFO:occurrentPartOf d3f:contains, d3f:contained-by]
 
   - id: CQ6
@@ -34,11 +34,6 @@ competency_questions:
     question: "Which artifacts where the output of specific digital events?"
     ontology_elements: [cco:hasOutput, d3f:produces, CCO:Artifact]
 
-  - id: CQ9
-    category: Infrastructure
-    question: "What infrastructure elements (hosts, networks, software components) were involved in an attack?"
-    ontology_elements: [CCO:Infrastructure, d3f:DigitalEvent, d3f:Artifact]
-
   - id: CQ10
     category: Infrastructure
     question: "Which network events were correlated with malicious artifacts or payloads?"
@@ -47,6 +42,11 @@ competency_questions:
   - id: CQ21
     category: Cross-Domain Context
     question: "Can we correlate digital events with physical-world entities besides the information bearers (e.g., systems, personnel, missions)?"
+    ontology_elements: [BFO:process, CCO:PhysicalSystem, CCO:Agent]
+
+  - id: CQ23
+    category: High-level D3F
+    question: "What are the high-level goals that an attacker is trying to achieve with this lower-level tactic?"
     ontology_elements: [BFO:process, CCO:PhysicalSystem, CCO:Agent]
 
 
