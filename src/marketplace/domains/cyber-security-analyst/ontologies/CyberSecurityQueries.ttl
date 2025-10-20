@@ -47,8 +47,7 @@ WHERE {
   FILTER (?artifactSuperClass IN (
       cco:Artifact,
       cco:InformationBearingEntity,
-      d3f:Artifact,
-      d3f:DigitalArtifact
+      d3f:Artifact
   )) .
 }
     """ .
@@ -58,7 +57,7 @@ WHERE {
     rdfs:label "cq2_file_creation_processes" ;
     intentMapping:intentDescription "CQ2 - Digital Events: Which processes or events resulted in the creation of a specific file, payload, or executable?" ;
     intentMapping:sparqlTemplate """
- PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
 PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
@@ -72,8 +71,7 @@ WHERE {
   FILTER (?artifactSuperClass IN (
       cco:Artifact,
       cco:InformationBearingEntity,
-      d3f:Artifact,
-      d3f:DigitalArtifact
+      d3f:Artifact
   )) .
 
   # --- Process/Event that produced the artifact ---
@@ -106,8 +104,7 @@ WHERE {
   FILTER (?producedSuperClass IN (
       cco:Artifact,
       cco:InformationBearingEntity,
-      d3f:Artifact,
-      d3f:DigitalArtifact
+      d3f:Artifact
   )) .
 
   # --- Producer artifact acting as agent in process ---
@@ -121,7 +118,7 @@ WHERE {
   )) .
 
   # Artifact is an agent in or participates in the process
-  ?producer (bfo:participatesIn | cco:agent_in | d3f:participate-in) ?process .
+  ?producer (cco:agent_in | d3f:participates-in) ?process .
 
   # The process produced the artifact
   ?process (d3f:produces | ^d3f:produced-by | cco:hasOutput | ^cco:isOutputOf) ?producedArtifact .
@@ -147,7 +144,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
 PREFIX bfo:  <http://purl.obolibrary.org/obo/>
  
-SELECT DISTINCT ?event ?eventType ?nextEvent ?nextEventType ?technique
+SELECT DISTINCT ?event ?eventType ?nextEvent ?nextEventType ?technique ?digitalevent ?digitalEventType
 WHERE {
   # --- First event in chain ---
   # --- Attack stage / process ---
@@ -155,31 +152,32 @@ WHERE {
 {
   ?attackStageType rdfs:subClassOf* d3f:OffensiveAction .
 }
-UNION
-{
-  ?attackStageType rdfs:subClassOf* d3f:DigitalEvent .
-}
+
   ?attackStage d3f:implements ?technique .
   ?technique rdfs:subClassOf* d3f:OffensiveTechnique .
 
   # --- Second event in chain ---
-  ?nextEvent rdf:type ?nextEventType .
+ ?nextEvent rdf:type ?nextEventType .
  ?attackStage rdf:type ?attackStageType .
 {
   ?attackStageType rdfs:subClassOf* d3f:OffensiveAction .
 }
-UNION
-{
-  ?attackStageType rdfs:subClassOf* d3f:DigitalEvent .
-}
+
   ?attackStage d3f:implements ?technique .
   ?technique rdfs:subClassOf* d3f:OffensiveTechnique .
 
   # --- Temporal ordering ---
   ?event (bfo:precedes | ^bfo:preceded_by | d3f:precedes | d3f:preceded-by) ?nextEvent .
 }
-ORDER BY ?event ?nextEvent
 
+  # --- OPTIONAL: Action causing a digital event ---
+  OPTIONAL {
+    ?attackStage d3f:causes ?digitalevent .
+    ?digitalevent rdf:type ?digitalEventType .
+    ?event rdfs:subClassOf* d3f:DigitalEvent .
+    }
+
+ORDER BY ?event ?nextEvent
     """ .
 
 # Competency Question 5: Temporally simultaneous or dependent processes
@@ -187,7 +185,7 @@ ORDER BY ?event ?nextEvent
     rdfs:label "cq5_temporal_dependencies" ;
     intentMapping:intentDescription "CQ5 - Temporal Ordering: Which processes or events are temporally simultaneous with others?" ;
     intentMapping:sparqlTemplate """
-        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
 PREFIX bfo:  <http://purl.obolibrary.org/obo/>
@@ -237,10 +235,6 @@ WHERE {
   # --- Event ---
   ?event rdf:type ?eventType .
   {
-    ?eventType rdfs:subClassOf* bfo:BFO_0000015 .
-  }
-  UNION
-  {
     ?eventType rdfs:subClassOf* d3f:DigitalEvent .
   }
 # --- Agent or system ---
@@ -279,18 +273,20 @@ WHERE {
   FILTER (?artifactSuperClass IN (
       cco:Artifact,
       cco:InformationBearingEntity,
-      d3f:Artifact,
-      d3f:DigitalArtifact
+      d3f:Artifact
   )) .
 
   # --- Attack stage / process ---
- ?attackStage rdf:type ?attackStageType .
+  ?attackStage rdf:type ?attackStageType .
 {
   ?attackStageType rdfs:subClassOf* d3f:OffensiveAction .
 }
 UNION
 {
   ?attackStageType rdfs:subClassOf* d3f:DigitalEvent .
+  ?causingAction rdf:type ?causingActionType .
+  ?causingActionType rdfs:subClassOf* d3f:OffensiveAction .
+  ?causingAction d3f:causes ?attackStage .
 }
   ?attackStage d3f:implements ?technique .
   ?technique rdfs:subClassOf* d3f:OffensiveTechnique .
@@ -380,8 +376,7 @@ WHERE {
   FILTER (?artifactSuperClass IN (
       cco:Artifact,
       cco:InformationBearingEntity,
-      d3f:Artifact,
-      d3f:DigitalArtifact
+      d3f:Artifact
   )) .
 
   # --- Artifact participates in an OffensiveAction ---
@@ -397,7 +392,7 @@ WHERE {
   UNION
   {
     ?networkEvent (d3f:produces | ^d3f:produced-by | cco:hasOutput | ^cco:isOutputOf) ?artifact .
-    BIND("produces/consumes" AS ?relation)
+    BIND("produces" AS ?relation)
   }
 }
 ORDER BY ?networkEvent ?artifact
