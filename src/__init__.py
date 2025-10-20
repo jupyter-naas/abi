@@ -46,7 +46,6 @@ class Config:
     workspace_id: str
     storage_name: str
     github_repository: str
-    github_repository: str
     github_project_id: int
     triple_store_path: str
     api_title: str
