@@ -2,87 +2,60 @@ competency_questions:
   - id: CQ1
     category: Digital Events
     question: "What digital artifacts participated in a given cyber event?"
-    ontology_elements: [d3f:DigitalEvent, CCO:Artifact, CCO:InformationBearingEntity]
+    ontology_elements: [d3f:DigitalEvent, CCO:Artifact, CCO:InformationBearingEntity, d3f:Artifact, d3f:DigitalArtifact]
 
   - id: CQ2
     category: Digital Events
     question: "Which processes or events resulted in the creation of a specific file, payload, or executable?"
-    ontology_elements: [d3f:produces, cco:hasOutput, BFO:process]
+    ontology_elements: [d3f:produces, d3f:produced-by, cco:hasOutput, cco:isOutputOf BFO:process]
 
   - id: CQ3
     category: Digital Events
     question: "Which artifacts or processes generated other artifacts (e.g., scripts producing payloads)?"
-    ontology_elements: [d3f:Artifact, d3f:produces, CCO:Artifact]
+    ontology_elements: [d3f:Artifact, d3f:produces, BFO:participatesin, d3f:produced-by, CCO:Artifact]
 
   - id: CQ4
     category: Temporal Ordering
     question: "What is the temporal sequence of events in an attack chain?"
-    ontology_elements: [BFO:precedes, BFO:process, d3f:DigitalEvent]
-
-  - id: CQ5
-    category: Temporal Ordering
-    question: "Which processes or events are temporally simultaneous or dependent on others?"
-    ontology_elements: [BFO:precedes, BFO:occurs_during]
+    ontology_elements: [BFO:precedes, BFO:precededby, BFO:process, d3f:DigitalEvent]
 
   - id: CQ6
     category: Agent Participation
-    question: "Which agents or systems executed or triggered a digital event?"
-    ontology_elements: [CCO:Agent, d3f:Action, d3f:DigitalEvent]
+    question: "Which agents executed or triggered a digital event?"
+    ontology_elements: [CCO:Agent, d3f:Agent, d3f:Action, d3f:DigitalEvent]
 
   - id: CQ7
     category: Artifact Lineage
-    question: "Which artifacts were the targets or outputs of specific attack stages?"
+    question: "Which artifacts where the output of specific digital events?"
     ontology_elements: [cco:hasOutput, d3f:produces, CCO:Artifact]
-
-  - id: CQ8
-    category: Threat Modeling
-    question: "Can we reconstruct an intrusion kill chain from observed digital events and artifacts?"
-    ontology_elements: [d3f:DigitalEvent, BFO:process, BFO:precedes]
 
   - id: CQ9
     category: Infrastructure
     question: "What infrastructure elements (hosts, networks, software components) were involved in an attack?"
-    ontology_elements: [CCO:Infrastructure, d3f:NetworkEvent, d3f:Artifact]
+    ontology_elements: [CCO:Infrastructure, d3f:DigitalEvent, d3f:Artifact]
 
   - id: CQ10
     category: Infrastructure
     question: "Which network events were correlated with malicious artifacts or payloads?"
     ontology_elements: [d3f:NetworkEvent, d3f:Artifact, BFO:process]
 
-  - id: CQ11
-    category: Causality
-    question: "How do processes relate causally (e.g., process A creates artifact X that enables process B)?"
-    ontology_elements: [BFO:precedes, cco:hasOutput, cco:hasParticipant]
+  - id: CQ17
+    category: Data Enrichment
+    question: "Can we automatically enrich incomplete threat data with inferred processes or entities?"
+    ontology_elements: [SPARQL:insert, BFO:process, cco:hasParticipant]
 
-  - id: CQ12
-    category: Countermeasures
-    question: "Which vulnerabilities or defensive countermeasures are associated with particular artifacts or events?"
-    ontology_elements: [D3FEND:Technique, CCO:Disposition, CCO:Artifact]
+  - id: CQ21
+    category: Cross-Domain Context
+    question: "Can we correlate digital events with physical-world entities besides the information bearers (e.g., systems, personnel, missions)?"
+    ontology_elements: [BFO:process, CCO:PhysicalSystem, CCO:Agent]
 
-  - id: CQ13
-    category: Information Entities
-    question: "What information content entities were transmitted or modified during a digital event?"
-    ontology_elements: [CCO:InformationContentEntity, d3f:DigitalEvent, cco:transmits]
 
-  - id: CQ14
-    category: State Changes
-    question: "Which digital events resulted in state changes to computing artifacts?"
-    ontology_elements: [CCO:StateChange, BFO:process, d3f:Artifact]
-
-  - id: CQ15
-    category: Data Quality
-    question: "Are there missing process nodes or relations in the current threat graph (e.g., file creation, network transmission)?"
-    ontology_elements: [SPARQL:construct, BFO:process, d3f:produces]
+These specifically to be worked on in the future with more complex means than simple SPARQL SELECT
 
   - id: CQ16
     category: Data Quality
     question: "Can we detect inconsistencies between reported events and expected temporal or causal relations?"
     ontology_elements: [Reasoner, BFO:precedes, d3f:produces]
-
-  - id: CQ17
-    category: Data Enrichment
-    question: "Can we automatically enrich incomplete threat data with inferred processes or entities?"
-    ontology_elements: [SPARQL:insert, BFO:process, cco:hasParticipant]
 
   - id: CQ18
     category: Data Validation
@@ -94,17 +67,3 @@ competency_questions:
     question: "How can inferred temporal orderings help validate or refute observed attack narratives?"
     ontology_elements: [BFO:precedes, CCO:Event, d3f:DigitalEvent]
 
-  - id: CQ20
-    category: Cross-Domain Context
-    question: "How do cyber events relate to higher-level organizational or mission processes?"
-    ontology_elements: [CCO:MissionProcess, CCO:Agent, d3f:DigitalEvent]
-
-  - id: CQ21
-    category: Cross-Domain Context
-    question: "Can we correlate digital events with physical-world entities (e.g., systems, personnel, missions)?"
-    ontology_elements: [BFO:process, CCO:PhysicalSystem, CCO:Agent]
-
-  - id: CQ22
-    category: Cross-Domain Context
-    question: "Which events cross domain boundaries, such as a digital breach causing a physical failure?"
-    ontology_elements: [CCO:Process, CCO:Artifact, BFO:MaterialEntity]
