@@ -19,6 +19,11 @@ competency_questions:
     question: "What is the temporal sequence of events in an attack chain?"
     ontology_elements: [BFO:precedes, BFO:precededby, BFO:process, d3f:DigitalEvent]
 
+ - id: CQ5
+    category: Temporal Ordering
+    question: "Temporal Ordering: Which processes or events are temporally simultaneous or dependent on others?"
+    ontology_elements: [BFO:precedes, BFO:precededby, BFO:process, d3f:DigitalEvent, BFO:hasOccurrentPart, BFO:occurrentPartOf d3f:contains, d3f:contained-by]
+
   - id: CQ6
     category: Agent Participation
     question: "Which agents executed or triggered a digital event?"
@@ -39,11 +44,6 @@ competency_questions:
     question: "Which network events were correlated with malicious artifacts or payloads?"
     ontology_elements: [d3f:NetworkEvent, d3f:Artifact, BFO:process]
 
-  - id: CQ17
-    category: Data Enrichment
-    question: "Can we automatically enrich incomplete threat data with inferred processes or entities?"
-    ontology_elements: [SPARQL:insert, BFO:process, cco:hasParticipant]
-
   - id: CQ21
     category: Cross-Domain Context
     question: "Can we correlate digital events with physical-world entities besides the information bearers (e.g., systems, personnel, missions)?"
@@ -56,6 +56,11 @@ These specifically to be worked on in the future with more complex means than si
     category: Data Quality
     question: "Can we detect inconsistencies between reported events and expected temporal or causal relations?"
     ontology_elements: [Reasoner, BFO:precedes, d3f:produces]
+
+  - id: CQ17
+    category: Data Enrichment
+    question: "Can we automatically enrich incomplete threat data with inferred processes or entities?"
+    ontology_elements: [SPARQL:insert, BFO:process, cco:hasParticipant]
 
   - id: CQ18
     category: Data Validation
