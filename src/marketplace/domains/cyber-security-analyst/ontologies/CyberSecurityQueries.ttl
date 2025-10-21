@@ -11,18 +11,45 @@
     rdfs:label "cq1_digital_artifacts" ;
     intentMapping:intentDescription "CQ1 - Digital Events: What digital artifacts participated in a given cyber event?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?category ?attackVector ?defensiveTechnique WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date ;
-                   cse:category ?category .
-            OPTIONAL { ?event cse:attackVector ?attackVector }
-            OPTIONAL { ?event cse:defensiveTechnique ?defensiveTechnique }
-        }
-        ORDER BY DESC(?date)
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX ex:   <http://example.org/cc#>
+
+SELECT DISTINCT ?event ?eventType ?artifact ?artifactType
+WHERE {
+  # --- Event must be a Digital Event or CyberAction (or any of their subclasses) ---
+  ?event rdf:type ?eventType .
+  ?eventType rdfs:subClassOf* ?eventSuperClass .
+  FILTER (?eventSuperClass IN (d3f:DigitalEvent, d3f:CyberAction)) .
+
+  # --- Participation relation (d3f, cco, and inverses) ---
+  {
+    ?event d3f:hasParticipant ?artifact .
+  }
+  UNION
+  {
+    ?event cco:hasParticipant ?artifact .
+  }
+  UNION
+  {
+    ?artifact d3f:isParticipantIn ?event .
+  }
+  UNION
+  {
+    ?artifact cco:isParticipantIn ?event .
+  }
+
+  # --- Artifact must be subclass of relevant classes ---
+  ?artifact rdf:type ?artifactType .
+  ?artifactType rdfs:subClassOf* ?artifactSuperClass .
+  FILTER (?artifactSuperClass IN (
+      cco:Artifact,
+      cco:InformationBearingEntity,
+      d3f:Artifact
+  )) .
+}
     """ .
 
 # Competency Question 2: Which processes resulted in creation of files/payloads?
@@ -30,18 +57,32 @@
     rdfs:label "cq2_file_creation_processes" ;
     intentMapping:intentDescription "CQ2 - Digital Events: Which processes or events resulted in the creation of a specific file, payload, or executable?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?category ?attackVector WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date ;
-                   cse:category ?category ;
-                   cse:attackVector ?attackVector .
-            FILTER(CONTAINS(LCASE(?category), "malware") || CONTAINS(LCASE(?category), "ransomware"))
-        }
-        ORDER BY ?date
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?process ?processType ?artifact ?artifactType
+WHERE {
+  # --- Artifact (e.g., file, payload, executable) ---
+  ?artifact rdf:type ?artifactType .
+  ?artifactType rdfs:subClassOf* ?artifactSuperClass .
+  FILTER (?artifactSuperClass IN (
+      cco:Artifact,
+      cco:InformationBearingEntity,
+      d3f:Artifact
+  )) .
+
+  # --- Process/Event that produced the artifact ---
+  ?process (d3f:produces|cco:hasOutput|^d3f:produced-by|^cco:isOutputOf) ?artifact .
+
+  # --- Process must be subclass of BOTH BFO:Process and d3f:Event ---
+  ?process rdf:type ?processType .
+  ?processType rdfs:subClassOf* bfo:BFO_0000015 .
+  ?processType rdfs:subClassOf* d3f:Event .
+}
+
     """ .
 
 # Competency Question 3: Artifact generation
@@ -49,17 +90,48 @@
     rdfs:label "cq3_artifact_generation" ;
     intentMapping:intentDescription "CQ3 - Digital Events: Which artifacts or processes generated other artifacts (e.g., scripts producing payloads)?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?attackVector ?defensiveTechnique WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date .
-            OPTIONAL { ?event cse:attackVector ?av . ?av rdfs:label ?attackVector }
-            OPTIONAL { ?event cse:defensiveTechnique ?dt . ?dt rdfs:label ?defensiveTechnique }
-        }
-        ORDER BY ?date
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?producer ?producerType ?producedArtifact ?producedArtifactType ?process ?processType
+WHERE {
+  # --- Produced artifact ---
+  ?producedArtifact rdf:type ?producedArtifactType .
+  ?producedArtifactType rdfs:subClassOf* ?producedSuperClass .
+  FILTER (?producedSuperClass IN (
+      cco:Artifact,
+      cco:InformationBearingEntity,
+      d3f:Artifact
+  )) .
+
+  # --- Producer artifact acting as agent in process ---
+  ?producer rdf:type ?producerType .
+  ?producerType rdfs:subClassOf* ?producerSuperClass .
+  FILTER (?producerSuperClass IN (
+      cco:Artifact,
+      cco:InformationBearingEntity,
+      d3f:Artifact,
+      d3f:DigitalArtifact
+  )) .
+
+  # Artifact is an agent in or participates in the process
+  ?producer (cco:agent_in | d3f:participates-in) ?process .
+
+  # The process produced the artifact
+  ?process (d3f:produces | ^d3f:produced-by | cco:hasOutput | ^cco:isOutputOf) ?producedArtifact .
+
+  # --- Process must be either a BFO Process or a D3F Event ---
+?process rdf:type ?processType .
+{
+  ?processType rdfs:subClassOf* bfo:BFO_0000015 .
+}
+UNION
+{
+  ?processType rdfs:subClassOf* d3f:Event .
+}
     """ .
 
 # Competency Question 4: Temporal sequence in attack chain
@@ -67,56 +139,119 @@
     rdfs:label "cq4_temporal_sequence" ;
     intentMapping:intentDescription "CQ4 - Temporal Ordering: What is the temporal sequence of events in an attack chain?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?category ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date ;
-                   cse:category ?category ;
-                   cse:severity ?severity .
-        }
-        ORDER BY ?date
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+ 
+SELECT DISTINCT ?event ?eventType ?nextEvent ?nextEventType ?technique ?digitalevent ?digitalEventType
+WHERE {
+  # --- First event in chain ---
+  # --- Attack stage / process ---
+ ?attackStage rdf:type ?attackStageType .
+{
+  ?attackStageType rdfs:subClassOf* d3f:OffensiveAction .
+}
+
+  ?attackStage d3f:implements ?technique .
+  ?technique rdfs:subClassOf* d3f:OffensiveTechnique .
+
+  # --- Second event in chain ---
+ ?nextEvent rdf:type ?nextEventType .
+ ?attackStage rdf:type ?attackStageType .
+{
+  ?attackStageType rdfs:subClassOf* d3f:OffensiveAction .
+}
+
+  ?attackStage d3f:implements ?technique .
+  ?technique rdfs:subClassOf* d3f:OffensiveTechnique .
+
+  # --- Temporal ordering ---
+  ?event (bfo:precedes | ^bfo:preceded_by | d3f:precedes | d3f:preceded-by) ?nextEvent .
+}
+
+  # --- OPTIONAL: Action causing a digital event ---
+  OPTIONAL {
+    ?attackStage d3f:causes ?digitalevent .
+    ?digitalevent rdf:type ?digitalEventType .
+    ?event rdfs:subClassOf* d3f:DigitalEvent .
+    }
+
+ORDER BY ?event ?nextEvent
     """ .
 
 # Competency Question 5: Temporally simultaneous or dependent processes
 :cq5_temporal_dependencies a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "cq5_temporal_dependencies" ;
-    intentMapping:intentDescription "CQ5 - Temporal Ordering: Which processes or events are temporally simultaneous or dependent on others?" ;
+    intentMapping:intentDescription "CQ5 - Temporal Ordering: Which processes or events are temporally simultaneous with others?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-        
-        SELECT ?event1 ?name1 ?date1 ?event2 ?name2 ?date2 WHERE {
-            ?event1 rdf:type cse:CyberSecurityEvent ;
-                    cse:eventName ?name1 ;
-                    cse:eventDate ?date1 .
-            ?event2 rdf:type cse:CyberSecurityEvent ;
-                    cse:eventName ?name2 ;
-                    cse:eventDate ?date2 .
-            FILTER(?event1 != ?event2 && ?date1 = ?date2)
-        }
-        ORDER BY ?date1
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?subProcess ?subProcessType ?superProcess ?superProcessType
+WHERE {
+  # --- Sub-process or sub-event ---
+  ?subProcess rdf:type ?subProcessType .
+  {
+    ?subProcessType rdfs:subClassOf* bfo:BFO_0000015 .
+  }
+  UNION
+  {
+    ?subProcessType rdfs:subClassOf* d3f:DigitalEvent .
+  }
+
+  # --- Super-process or containing event ---
+  ?superProcess rdf:type ?superProcessType .
+  {
+    ?superProcessType rdfs:subClassOf* bfo:BFO_0000015 .
+  }
+  UNION
+  {
+    ?superProcessType rdfs:subClassOf* d3f:DigitalEvent .
+  }
+
+  # --- Temporal dependency via part-of structure ---
+  ?subProcess (bfo:occurrent_part_of | ^bfo:has_occurrent_part | d3f:contains | ^d3f:contained-by) ?superProcess .
+}
+ORDER BY ?superProcess ?subProcess
+
     """ .
 
 # Competency Question 6: Agent participation
 :cq6_agent_participation a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "cq6_agent_participation" ;
-    intentMapping:intentDescription "CQ6 - Agent Participation: Which agents or systems executed or triggered a digital event?" ;
+    intentMapping:intentDescription "CQ6 - Agent Participation: Which agents executed or triggered a digital event?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?sector ?attackVector WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date .
-            OPTIONAL { ?event cse:affectedSector ?sector }
-            OPTIONAL { ?event cse:attackVector ?av . ?av rdfs:label ?attackVector }
-        }
-        ORDER BY ?sector ?date
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?agent ?agentType ?event ?eventType
+WHERE {
+  # --- Event ---
+  ?event rdf:type ?eventType .
+  {
+    ?eventType rdfs:subClassOf* d3f:DigitalEvent .
+  }
+# --- Agent or system ---
+?agent rdf:type ?agentType .
+{
+  ?agentType rdfs:subClassOf* cco:Agent .
+}
+UNION
+{
+  ?agentType rdfs:subClassOf* d3f:Agent .
+}
+
+  # --- Participation relation (agent executes or triggers event) ---
+  ?agent (d3f:participates-in| ^d3f:has-participant | cco:agent_in | ^cco:has_agent) ?event .
+}
+ORDER BY ?event ?agent
+
     """ .
 
 # Competency Question 7: Artifact lineage
@@ -124,54 +259,96 @@
     rdfs:label "cq7_artifact_lineage" ;
     intentMapping:intentDescription "CQ7 - Artifact Lineage: Which artifacts were the targets or outputs of specific attack stages?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?attackVector ?defensiveTechnique ?impact WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName .
-            OPTIONAL { ?event cse:attackVector ?av . ?av rdfs:label ?attackVector }
-            OPTIONAL { ?event cse:defensiveTechnique ?dt . ?dt rdfs:label ?defensiveTechnique }
-            OPTIONAL { ?event cse:impact ?impact }
-        }
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?artifact ?artifactType ?attackStage ?attackStageType ?role
+WHERE {
+  # --- Artifact ---
+  ?artifact rdf:type ?artifactType .
+  ?artifactType rdfs:subClassOf* ?artifactSuperClass .
+  FILTER (?artifactSuperClass IN (
+      cco:Artifact,
+      cco:InformationBearingEntity,
+      d3f:Artifact
+  )) .
+
+  # --- Attack stage / process ---
+  ?attackStage rdf:type ?attackStageType .
+{
+  ?attackStageType rdfs:subClassOf* d3f:OffensiveAction .
+}
+UNION
+{
+  ?attackStageType rdfs:subClassOf* d3f:DigitalEvent .
+  ?causingAction rdf:type ?causingActionType .
+  ?causingActionType rdfs:subClassOf* d3f:OffensiveAction .
+  ?causingAction d3f:causes ?attackStage .
+}
+  ?attackStage d3f:implements ?technique .
+  ?technique rdfs:subClassOf* d3f:OffensiveTechnique .
+
+  # --- Artifact is output of OR target of the attack stage ---
+  {
+    ?artifact (d3f:produced-by | ^d3f:produces | cco:isOutputOf | ^cco:hasOutput) ?attackStage .
+    BIND("output" AS ?role)
+  }
+  UNION
+  {
+    ?attackStage (d3f:hasParticipant | cco:hasParticipant | d3f:has-agent | cco:hasAgent | ^cco:agentIn ) ?artifact .
+    BIND("target" AS ?role)
+  }
+}
+ORDER BY ?attackStage ?artifact
+ 
     """ .
 
-# Competency Question 8: Reconstruct intrusion kill chain
-:cq8_kill_chain a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq8_kill_chain" ;
-    intentMapping:intentDescription "CQ8 - Threat Modeling: Can we reconstruct an intrusion kill chain from observed digital events and artifacts?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?category ?severity ?attackVector WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date ;
-                   cse:category ?category ;
-                   cse:severity ?severity .
-            OPTIONAL { ?event cse:attackVector ?av . ?av rdfs:label ?attackVector }
-        }
-        ORDER BY ?date
-    """ .
 
-# Competency Question 9: Infrastructure elements in attack
+# Competency Question 23: Techniques and Goals
 :cq9_infrastructure a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq9_infrastructure" ;
-    intentMapping:intentDescription "CQ9 - Infrastructure: What infrastructure elements (hosts, networks, software components) were involved in an attack?" ;
+    rdfs:label "cq23_high_level" ;
+    intentMapping:intentDescription "What are the high-level goals that an attacker is trying to achieve with this lower-level tactic?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?sector ?attackVector ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:severity ?severity .
-            OPTIONAL { ?event cse:affectedSector ?sector }
-            OPTIONAL { ?event cse:attackVector ?av . ?av rdfs:label ?attackVector }
-        }
-        GROUP BY ?event ?eventName ?sector ?attackVector ?severity
-        ORDER BY ?sector
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?agent ?agentType ?action ?actionType ?technique ?techType ?tactic ?tacticType
+WHERE {
+# --- Agent ---
+?agent rdf:type ?agentType .
+{
+  ?agentType rdfs:subClassOf* d3f:Agent .
+}
+UNION
+{
+  ?agentType rdfs:subClassOf* cco:Agent .
+}
+
+  # --- Offensive Action ---
+  ?action rdf:type ?actionType .
+  ?actionType rdfs:subClassOf* d3f:OffensiveAction .
+
+  # Agent participates in the action
+  ?agent (bfo:participatesIn | d3f:has-agent | cco:agentIn | ^cco:hasAgent) ?action .
+
+  # --- Technique implemented by action ---
+  ?action (d3f:implements | ^d3f:implemented-by) ?technique .
+  ?technique rdf:type ?techType .
+  ?techType rdfs:subClassOf* d3f:OffensiveTechnique .
+
+  # --- Tactic enabled by technique ---
+  ?technique d3f:enables ?tactic .
+  ?tactic rdf:type ?tacticType .
+  ?tacticType rdfs:subClassOf* d3f:OffensiveTactic .
+}
+ORDER BY ?agent ?action ?technique ?tactic
+
     """ .
 
 # Competency Question 10: Network events correlated with malicious artifacts
@@ -179,232 +356,92 @@
     rdfs:label "cq10_network_correlation" ;
     intentMapping:intentDescription "CQ10 - Infrastructure: Which network events were correlated with malicious artifacts or payloads?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        
-        SELECT ?event ?eventName ?date ?attackVector ?defensiveTechnique WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date .
-            ?event cse:attackVector ?av .
-            ?av rdfs:label ?attackVector .
-            OPTIONAL { ?event cse:defensiveTechnique ?dt . ?dt rdfs:label ?defensiveTechnique }
-        }
-        ORDER BY ?date
-    """ .
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
 
-# Competency Question 11: Causal relations between processes
-:cq11_causality a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq11_causality" ;
-    intentMapping:intentDescription "CQ11 - Causality: How do processes relate causally (e.g., process A creates artifact X that enables process B)?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event1 ?name1 ?date1 ?event2 ?name2 ?date2 WHERE {
-            ?event1 rdf:type cse:CyberSecurityEvent ;
-                    cse:eventName ?name1 ;
-                    cse:eventDate ?date1 .
-            ?event2 rdf:type cse:CyberSecurityEvent ;
-                    cse:eventName ?name2 ;
-                    cse:eventDate ?date2 .
-            FILTER(?event1 != ?event2 && ?date1 < ?date2)
-        }
-        ORDER BY ?date1 ?date2
-        LIMIT 50
-    """ .
+SELECT DISTINCT ?networkEvent ?networkEventType ?artifact ?artifactType ?relation ?offensiveAction
+WHERE {
+  # --- Network event ---
+  ?networkEvent rdf:type ?networkEventType .
+  {
+    ?networkEventType rdfs:subClassOf* d3f:NetworkEvent .
+  }
 
-# Competency Question 12: Vulnerabilities and defensive countermeasures
-:cq12_countermeasures a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq12_countermeasures" ;
-    intentMapping:intentDescription "CQ12 - Countermeasures: Which vulnerabilities or defensive countermeasures are associated with particular artifacts or events?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        
-        SELECT ?event ?eventName ?attackVector ?defensiveTechnique WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName .
-            OPTIONAL { ?event cse:attackVector ?av . ?av rdfs:label ?attackVector }
-            OPTIONAL { ?event cse:defensiveTechnique ?dt . ?dt rdfs:label ?defensiveTechnique }
-            FILTER(BOUND(?defensiveTechnique))
-        }
-    """ .
+  # --- Artifact / payload ---
+  ?artifact rdf:type ?artifactType .
+  ?artifactType rdfs:subClassOf* ?artifactSuperClass .
+  FILTER (?artifactSuperClass IN (
+      cco:Artifact,
+      cco:InformationBearingEntity,
+      d3f:Artifact
+  )) .
 
-# Competency Question 13: Information content entities transmitted/modified
-:cq13_information_entities a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq13_information_entities" ;
-    intentMapping:intentDescription "CQ13 - Information Entities: What information content entities were transmitted or modified during a digital event?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?category ?description WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:category ?category ;
-                   cse:description ?description .
-        }
-    """ .
+  # --- Artifact participates in an OffensiveAction ---
+  ?artifact (d3f:participatesIn | cco:participatesIn | ^cco:hasParticipant) ?offensiveAction .
+  ?offensiveAction rdf:type ?offensiveActionType .
+  ?offensiveActionType rdfs:subClassOf* d3f:OffensiveAction .
 
-# Competency Question 14: State changes to computing artifacts
-:cq14_state_changes a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq14_state_changes" ;
-    intentMapping:intentDescription "CQ14 - State Changes: Which digital events resulted in state changes to computing artifacts?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?impact ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date ;
-                   cse:severity ?severity .
-            OPTIONAL { ?event cse:impact ?impact }
-            FILTER(BOUND(?impact))
-        }
-        ORDER BY ?date
-    """ .
-
-# Competency Question 15: Missing process nodes in threat graph
-:cq15_missing_processes a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq15_missing_processes" ;
-    intentMapping:intentDescription "CQ15 - Data Quality: Are there missing process nodes or relations in the current threat graph?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName (COUNT(?attackVector) as ?vectorCount) (COUNT(?technique) as ?techniqueCount) WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName .
-            OPTIONAL { ?event cse:attackVector ?attackVector }
-            OPTIONAL { ?event cse:defensiveTechnique ?technique }
-        }
-        GROUP BY ?event ?eventName
-        HAVING (?vectorCount = 0 || ?techniqueCount = 0)
-    """ .
-
-# Competency Question 16: Detect inconsistencies in temporal/causal relations
-:cq16_inconsistencies a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq16_inconsistencies" ;
-    intentMapping:intentDescription "CQ16 - Data Quality: Can we detect inconsistencies between reported events and expected temporal or causal relations?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date .
-            OPTIONAL { ?event cse:severity ?severity }
-            FILTER(!BOUND(?severity))
-        }
-    """ .
-
-# Competency Question 17: Auto-enrich incomplete threat data
-:cq17_data_enrichment a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq17_data_enrichment" ;
-    intentMapping:intentDescription "CQ17 - Data Enrichment: Can we automatically enrich incomplete threat data with inferred processes or entities?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName (COUNT(?property) as ?propertyCount) WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   ?property ?value .
-        }
-        GROUP BY ?event ?eventName
-        ORDER BY ?propertyCount
-    """ .
-
-# Competency Question 18: Data source contradictions/gaps
-:cq18_data_validation a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq18_data_validation" ;
-    intentMapping:intentDescription "CQ18 - Data Validation: Which data sources contain contradictions or gaps?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?sourceTitle WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:hasSource ?source .
-            ?source cse:sourceTitle ?sourceTitle .
-        }
-    """ .
-
-# Competency Question 19: Temporal validation of attack narratives
-:cq19_temporal_validation a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq19_temporal_validation" ;
-    intentMapping:intentDescription "CQ19 - Temporal Validation: How can inferred temporal orderings help validate or refute observed attack narratives?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?date ?category ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:eventDate ?date ;
-                   cse:category ?category ;
-                   cse:severity ?severity .
-        }
-        ORDER BY ?category ?date
-    """ .
-
-# Competency Question 20: Relation to organizational/mission processes
-:cq20_mission_context a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq20_mission_context" ;
-    intentMapping:intentDescription "CQ20 - Cross-Domain Context: How do cyber events relate to higher-level organizational or mission processes?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?sector ?impact ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:affectedSector ?sector ;
-                   cse:severity ?severity .
-            OPTIONAL { ?event cse:impact ?impact }
-        }
-        ORDER BY ?sector DESC(?severity)
+  # --- Correlation relations ---
+  {
+    ?networkEvent (d3f:hasParticipant | cco:hasParticipant) ?artifact .
+    BIND("participant" AS ?relation)
+  }
+  UNION
+  {
+    ?networkEvent (d3f:produces | ^d3f:produced-by | cco:hasOutput | ^cco:isOutputOf) ?artifact .
+    BIND("produces" AS ?relation)
+  }
+}
+ORDER BY ?networkEvent ?artifact
     """ .
 
 # Competency Question 21: Correlation with physical-world entities
 :cq21_physical_correlation a intentMapping:TemplatableSparqlQuery ;
     rdfs:label "cq21_physical_correlation" ;
-    intentMapping:intentDescription "CQ21 - Cross-Domain Context: Can we correlate digital events with physical-world entities (e.g., systems, personnel, missions)?" ;
+    intentMapping:intentDescription "CQ21 - Cross-Domain Context: Can we correlate digital events with physical-world entities (e.g., systems, personnel,...)?" ;
     intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?sector ?category ?impact WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:affectedSector ?sector ;
-                   cse:category ?category .
-            OPTIONAL { ?event cse:impact ?impact }
-        }
-        ORDER BY ?sector
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX d3f:  <http://d3fend.mitre.org/ontologies/d3fend.owl#>
+PREFIX cco:  <http://www.ontologyrepository.com/CommonCoreOntologies/>
+PREFIX bfo:  <http://purl.obolibrary.org/obo/>
+
+SELECT DISTINCT ?digitalEvent ?digitalEventType ?materialentity ?entityType ?relation
+WHERE {
+  # --- Digital Event ---
+  ?digitalEvent rdf:type ?digitalEventType .
+  {
+    ?digitalEventType rdfs:subClassOf* d3f:DigitalEvent .
+  }
+  UNION
+  {
+    ?digitalEventType rdfs:subClassOf* bfo:BFO_0000015 .
+  }
+
+  # --- Physical-world Entity ---
+  ?materialentity rdf:type ?entityType .
+  {
+    ?entityType rdfs:subClassOf* bfo:MaterialEntity .
+  }
+   UNION
+  {
+    ?entityType rdfs:subClassOf* d3f:Agent .
+  }
+   UNION
+  {
+    ?entityType rdfs:subClassOf* d3f:Artifact .
+  }
+
+  # --- Participation / involvement relation ---
+  {
+    ?entity (bfo:participatesIn | cco:agent_in | ^cco:has_agent | cco:hasParticipant | d3f:hasAgent) ?digitalEvent .
+    BIND("participant/agent" AS ?relation)
+  }
+}
+ORDER BY ?digitalEvent ?entity
+
     """ .
 
-# Competency Question 22: Events crossing domain boundaries
-:cq22_cross_domain a intentMapping:TemplatableSparqlQuery ;
-    rdfs:label "cq22_cross_domain" ;
-    intentMapping:intentDescription "CQ22 - Cross-Domain Context: Which events cross domain boundaries, such as a digital breach causing a physical failure?" ;
-    intentMapping:sparqlTemplate """
-        PREFIX cse: <https://abi.cyber-security-events.org/ontology/>
-        PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        
-        SELECT ?event ?eventName ?category ?impact ?severity WHERE {
-            ?event rdf:type cse:CyberSecurityEvent ;
-                   cse:eventName ?eventName ;
-                   cse:category ?category ;
-                   cse:severity ?severity .
-            OPTIONAL { ?event cse:impact ?impact }
-            FILTER(BOUND(?impact))
-        }
-        ORDER BY DESC(?severity)
-    """ .
