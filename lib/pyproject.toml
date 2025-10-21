@@ -31,7 +31,7 @@ ssh = [
 
 [project.scripts]
 abi = "abi.cli:main"
-ttl2py = "abi.utils.ttl2py.__main__:main"
+onto2py = "abi.utils.onto2py.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -134,49 +134,35 @@ SUGGESTIONS: list = [
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
-    
+) -> IntentAgent:
+    from langchain_openai import ChatOpenAI
     from src import secret
     
     # Define model based on AI_MODE
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
         from src.core.abi.models.gpt_4_1 import model as cloud_model
-        if not cloud_model:
-            logger.error("Cloud model (o3-mini) not available - missing OpenAI API key")
-            return None
         selected_model = cloud_model.model
-    elif ai_mode == "local":
+    if ai_mode == "local":
         from src.core.abi.models.qwen3_8b import model as local_model
-        if not local_model:
-            logger.error("Local model (qwen3:8b) not available - Ollama not installed or configured")
-            return None
         selected_model = local_model.model
     elif ai_mode == "airgap":
         # Gemma does not handle tool calling so we are moving to qwen3
-        from langchain_openai import ChatOpenAI
         airgap_model = ChatOpenAI(
             model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
             temperature=0.7,
             api_key=SecretStr("no needed"),  # type: ignore
             base_url="http://localhost:12434/engines/v1",
         )
-        if not airgap_model:
-            logger.error("Airgapped model (qwen3:8b) not available - Docker Model Runner not active")
-            logger.error("   Start with: docker model run ai/qwen3")
-            return None
         selected_model = airgap_model
     else:
-        logger.error("AI_MODE must be 'cloud', 'local', or 'airgap'")
-        return None
+        selected_model = cloud_model.model
 
     # Define tools
     tools: list = []
 
-    from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel
-
     # Add Knowledge Graph Explorer tool
+    @tool
     def open_knowledge_graph_explorer() -> str:
         """Open the ABI Knowledge Graph Explorer interface for semantic data exploration."""
         return """Here's our knowledge graph explorer:
@@ -184,18 +170,7 @@ def create_agent(
 [Open Explorer](http://localhost:7878/explorer/)
 
 You can browse the data and run queries there."""
-    
-    class EmptySchema(BaseModel):
-        pass
-    
-    knowledge_graph_tool = StructuredTool(
-        name="open_knowledge_graph_explorer",
-        description="Open the ABI Knowledge Graph Explorer for semantic data exploration, SPARQL queries, and ontology browsing",
-        func=open_knowledge_graph_explorer,
-        args_schema=EmptySchema
-    )
-    tools.append(knowledge_graph_tool)
-    
+    tools.append(open_knowledge_graph_explorer)
 
     # Get tools
     from src.core.templatablesparqlquery import get_tools
@@ -206,32 +181,13 @@ You can browse the data and run queries there."""
         "find_best_value_agents",
         "find_fastest_agents",
         "find_cheapest_agents",
-        # Those two seems to generate a grammar error when using qwen3 served by DMR locally.
-        # "find_agents_by_provider",
-        # "find_agents_by_process_type",
-        "list_all_agents",
-        "find_best_for_meeting",
-        "find_best_for_contract_analysis",
-        "find_best_for_customer_service",
-        "find_best_for_marketing",
-        "find_best_for_technical_writing",
-        "find_best_for_emails",
-        "find_best_for_presentations",
-        "find_best_for_reports",
-        "find_best_for_brainstorming",
-        "find_best_for_proposal_writing",
-        "find_best_for_code_review",
-        "find_best_for_debugging",
-        "find_best_for_architecture",
-        "find_best_for_testing",
-        "find_best_for_refactoring",
-        "find_best_for_database",
-        "find_best_for_api_design",
-        "find_best_for_performance",
-        "find_best_for_security",
-        "find_best_for_documentation"
     ]
     tools.extend(get_tools(agent_recommendation_tools))
+
+    shared_state = agent_shared_state or AgentSharedState(thread_id="0", supervisor_agent=NAME)
+
+    from queue import Queue
+    agent_queue: Queue = Queue()
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
@@ -243,30 +199,12 @@ You can browse the data and run queries there."""
             for agent in module.agents:
                 if agent is not None and agent.name != "Abi" and not agent.name.endswith("Research"): #exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
                     logger.debug(f"Adding agent: {agent.name}")
-                    agents.append(agent)
+                    agents.append(agent.duplicate(agent_queue, agent_shared_state=shared_state))
+                    # agents.append(agent)
     logger.debug(f"Agents: {agents}")
 
     # Define intents
     intents: list = [
-        Intent(
-            intent_value="what is your name",
-            intent_type=IntentType.RAW,
-            intent_target="My name is Abi",
-        ),
-        # Abi Agent return intents (route to call_model to return to parent)
-        Intent(intent_type=IntentType.AGENT, intent_value="call supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="talk to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to supervisor", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="ask abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="use abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="switch to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="parler à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="retour à abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="superviseur", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="demander à abi", intent_target="call_model"),
-        
         # Service opening intents - simple RAW responses
         Intent(intent_type=IntentType.RAW, intent_value="open oxigraph", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
         Intent(intent_type=IntentType.RAW, intent_value="open oxigraph server", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
@@ -296,10 +234,6 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.RAW, intent_value="sparql terminal", intent_target="💻 **SPARQL Terminal**\n\nTo launch the interactive SPARQL console:\n```\nmake sparql-terminal\n```\n\nDirect command-line SPARQL queries"),
         Intent(intent_type=IntentType.RAW, intent_value="knowledge graph admin", intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control"),
         Intent(intent_type=IntentType.RAW, intent_value="kg admin", intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control"),
-        Intent(intent_type=IntentType.AGENT, intent_value="can i talk back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="go back to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="return to abi", intent_target="call_model"),
-        Intent(intent_type=IntentType.AGENT, intent_value="back to supervisor", intent_target="call_model"),
         
         # Knowledge Graph Explorer intents
         Intent(intent_type=IntentType.TOOL, intent_value="show knowledge graph explorer", intent_target="open_knowledge_graph_explorer"),
@@ -316,9 +250,15 @@ You can browse the data and run queries there."""
         Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
         Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
 
+        # Time tool
         Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
-    
     ]
+    
+    # Set configuration
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(
+            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
+        )
 
     # Add intents for each agent (using agent names directly to avoid recursion)
     for agent in agents:
@@ -343,26 +283,6 @@ You can browse the data and run queries there."""
                 intents.append(new_intent)
     logger.debug(f"Intents: {intents}")
 
-    # Set configuration
-    if agent_configuration is None:
-        agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
-        )
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState(thread_id="0")
-
-    # Uncomment this to randomize the thread id. Usefull for local debugging.
-    # import uuid
-    # agent_shared_state = AgentSharedState(thread_id=str(uuid.uuid4()))
-
-    @tool
-    def get_time(current_time: bool = False) -> str:
-        """Get the current time."""
-        from datetime import datetime
-        return datetime.now().strftime("%H:%M:%S")
-
-    tools.append(get_time)
-
     return AbiAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -370,11 +290,9 @@ You can browse the data and run queries there."""
         tools=tools,
         agents=agents,
         intents=intents,
-        state=agent_shared_state,
+        state=shared_state,
         configuration=agent_configuration,
         memory=None,
-        threshold=0.7,  # Lower threshold for better intent matching
-        threshold_neighbor=0.5,  # Allow more similar intents
     )
 
 

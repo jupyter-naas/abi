@@ -17,6 +17,7 @@ ADD --chown=abi:abi ./src/ /app/src
 ADD --chown=abi:abi ./uv.lock /app/uv.lock
 ADD --chown=abi:abi ./pyproject.toml /app/pyproject.toml
 ADD --chown=abi:abi ./README.md /app/README.md
+ADD --chown=abi:abi ./.python-version /app/.python-version
 # Marketplace is now in src/marketplace/ - no separate copy needed
 ADD --chown=abi:abi ./.git /app/.git
 
@@ -58,6 +59,7 @@ COPY --from=builder --chown=abi:abi /app/.local /app/.local
 # Removing marketplace from the final image to save space and improve security
 # COPY --from=builder --chown=abi:abi /app/marketplace /app/marketplace
 COPY --from=builder --chown=abi:abi /app/.venv /app/.venv
+COPY --from=builder --chown=abi:abi /app/.python-version /app/.python-version
 
 # Copy the remaining files
 ADD --chown=abi:abi ./assets/ /app/assets

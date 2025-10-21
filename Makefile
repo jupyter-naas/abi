@@ -12,8 +12,9 @@
 .DEFAULT_GOAL := default
 
 # Default target with help display
+log_level=ERROR
 default: deps local-up airgap
-	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
 
 # Main help documentation - displays all available commands organized by category
 help:
@@ -34,6 +35,14 @@ help:
 	@echo "  install                  Install all dependencies (alternative to .venv)"
 	@echo "  lock                     Update dependency lock files"
 	@echo "  local-build              Build all Docker containers defined in docker-compose.yml"
+	@echo ""
+	@echo "MODULE AND COMPONENT CREATION:"
+	@echo "  create-module            Create a new module from template with guided setup"
+	@echo "  create-agent             Create a new agent from template with path validation"
+	@echo "  create-integration       Create a new integration from template"
+	@echo "  create-workflow          Create a new workflow from template"
+	@echo "  create-pipeline          Create a new pipeline from template"
+	@echo "  create-ontology          Create a new ontology from template"
 	@echo ""
 	@echo "CHAT WITH CORE AGENTS:"
 	@echo "  chat-abi-agent           Start the main ABI agent (default target)"
@@ -218,44 +227,72 @@ local-build: deps
 # CORE AGENTS
 # =============================================================================
 
-# Generic chat command - allows specifying agent via agent=AgentName parameter
 agent=AbiAgent
+# Generic chat command - allows specifying agent via agent=AgentName parameter
 chat: deps
-	@ LOG_LEVEL=DEBUG uv run python -m src.cli $(agent)
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli $(agent)
 
 # Main ABI agent - the primary conversational AI interface
 chat-abi-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli AbiAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli AbiAgent
 
 chat-chatgpt-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli ChatGPTAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ChatGPTAgent
 
 chat-claude-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli ClaudeAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ClaudeAgent
 
 chat-deepseek-agent: deps 
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
 
 chat-gemini-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli GeminiAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli GeminiAgent
 
 chat-gemma-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli GemmaAgent
 
 chat-grok-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli GrokAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli GrokAgent
 
 chat-llama-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli LlamaAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli LlamaAgent
 
 chat-mistral-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli MistralAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli MistralAgent
 
 chat-perplexity-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli PerplexityAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli PerplexityAgent
 
 chat-qwen-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli QwenAgent
+
+# =============================================================================
+# MODULE AND COMPONENT CREATION
+# =============================================================================
+
+# Create a new module from template
+create-module: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-module
+
+# Create a new agent from template
+create-agent: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-agent
+
+# Create a new integration from template
+create-integration: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-integration
+
+# Create a new workflow from template
+create-workflow: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-workflow
+
+# Create a new pipeline from template
+create-pipeline: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-pipeline
+
+# Create a new ontology from template
+create-ontology: deps
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-ontology 
 
 # =============================================================================
 # CHAT WITH MARKETPLACE AGENTS
@@ -263,15 +300,15 @@ chat-qwen-agent: deps
 
 # Generate pull request description using AI agent
 pull-request-description: deps
-	@ echo "generate the pull request description please." | LOG_LEVEL=ERROR uv run python -m src.cli PullRequestDescriptionAgent
+	@ echo "generate the pull request description please." | LOG_LEVEL=$(log_level) uv run python -m src.cli PullRequestDescriptionAgent
 
 # Naas platform integration agent
 chat-naas-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli NaasAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli NaasAgent
 
 # Customer support specialized agent
 chat-support-agent: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.cli SupportAgent
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli SupportAgent
 
 # =============================================================================
 # DEVELOPMENT SERVERS & TOOLS
@@ -380,6 +417,27 @@ dtest: deps
 
 frun: deps
 	@ uv run $(shell find lib src tests -name '*.py' -type f | fzf -q $(q)) $(args)
+
+# TTL_FILES := $(wildcard src/*/*/ontologies/*.ttl src/marketplace/*/*/ontologies/*.ttl)
+TTL_FILES := $(shell find src -name '*.ttl')
+PY_FILES := $(patsubst %.ttl, %.py, $(TTL_FILES))
+
+onto2py-force: onto2py-clean $(PY_FILES) onto2py-ruff-fix
+
+onto2py-ruff-fix: $(PY_FILES)
+	@uv run ruff check --fix $(PY_FILES)
+
+onto2py-clean:
+	@rm -f $(PY_FILES)
+
+onto2py-list:
+	@echo $(PY_FILES)
+
+onto2py: $(PY_FILES)
+
+%.py: %.ttl
+	@printf "📦 Converting ttl to py for $< ... "
+	@uv run python -m lib.abi.utils.onto2py '$<' '$@'
 
 # Test command for debugging
 hello:
@@ -550,27 +608,27 @@ docker-cleanup: check-docker
 
 # Start Oxigraph knowledge graph database
 oxigraph-up: check-docker
-	@docker compose -f docker-compose.yml --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
+	@docker compose --profile local up -d oxigraph || (echo "❌ Failed to start Oxigraph. Try: make docker-cleanup"; exit 1)
 	@echo "✓ Oxigraph started on http://localhost:7878"
 
 # Stop Oxigraph database
 oxigraph-down: check-docker
-	@docker compose -f docker-compose.yml --profile local stop oxigraph || true
+	@docker compose --profile local stop oxigraph || true
 	@echo "✓ Oxigraph stopped"
 
 # Check Oxigraph container status
 oxigraph-status: check-docker
 	@echo "Oxigraph status:"
-	@docker compose -f docker-compose.yml --profile local ps oxigraph
+	@docker compose --profile local ps oxigraph
 
 # Start all local development services
 local-up: check-docker
 	@echo "🚀 Starting local services..."
-	@if ! docker compose -f docker-compose.yml --profile local up -d --timeout 60; then \
+	@if ! docker compose --profile local up -d --timeout 60; then \
 		echo "❌ Failed to start services. Running cleanup..."; \
 		./docker/scripts/cleanup.sh; \
 		echo "🔄 Retrying..."; \
-		docker compose -f docker-compose.yml --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
+		docker compose --profile local up -d --timeout 60 || (echo "❌ Still failing. Check Docker Desktop status."; exit 1); \
 	fi
 	@echo "✓ Local containers started"
 	@echo ""
@@ -584,20 +642,20 @@ local-up: check-docker
 
 # View logs from all local services
 local-logs: check-docker
-	@docker compose -f docker-compose.yml --profile local logs -f
+	@docker compose --profile local logs -f
 
 # Stop all local services without removing containers
 local-stop: check-docker
-	@docker compose -f docker-compose.yml --profile local stop
+	@docker compose --profile local stop
 	@echo "✓ All local services stopped"
 
 # Stop and remove all local service containers
 local-down: check-docker
-	@docker compose -f docker-compose.yml --profile local down --timeout 10 || true
+	@docker compose --profile local down --timeout 10 || true
 	@echo "✓ All local services stopped"
 
 local-clean: check-docker
-	@docker compose -f docker-compose.yml --profile local down -v --timeout 10 || true
+	@docker compose --profile local down -v --timeout 10 || true
 	@echo "✓ All local services stopped and volumes removed"
 
 local-reload: check-docker
@@ -607,12 +665,12 @@ local-reload: check-docker
 
 # Start ABI in container mode
 container-up:
-	@docker compose -f docker-compose.yml --profile container up -d
+	@docker compose --profile container up -d
 	@echo "✓ ABI container started"
 
 # Stop ABI container
 container-down:
-	@docker compose -f docker-compose.yml --profile container down
+	@docker compose --profile container down
 	@echo "✓ ABI container stopped"
 
 # Docker AI models are managed by Compose specification
@@ -642,42 +700,42 @@ model-status: check-docker
 # Start Dagster development server in foreground
 dagster-dev:
 	@echo "🚀 Starting Dagster development server..."
-	@docker compose -f docker-compose.yml --profile local up dagster
+	@docker compose --profile local up dagster
 
 # Start Dagster in background mode
 dagster-up:
 	@echo "🚀 Starting Dagster in background..."
-	@docker compose -f docker-compose.yml --profile local up -d dagster
+	@docker compose --profile local up -d dagster
 	@echo "✓ Dagster started on http://localhost:3001"
 	@echo "📝 Logs: make dagster-logs"
 
 # Stop Dagster background service
 dagster-down:
 	@echo "🛑 Stopping Dagster..."
-	@docker compose -f docker-compose.yml --profile local down dagster
+	@docker compose --profile local down dagster
 	@echo "✓ Dagster stopped"
 
 # View Dagster service logs
 dagster-logs:
 	@echo "📄 Showing Dagster logs..."
-	@docker compose -f docker-compose.yml --profile local logs -f dagster
+	@docker compose --profile local logs -f dagster
 
 # Open Dagster web interface
 dagster-ui:
 	@echo "🌐 Opening Dagster web interface..."
 	@echo "📍 Visit: http://localhost:3001"
 	@command -v open >/dev/null 2>&1 && open "http://localhost:3001" || echo "Open the URL manually in your browser"
-	@docker compose -f docker-compose.yml --profile local up dagster
+	@docker compose --profile local up dagster
 
 # Check status of Dagster assets
 dagster-status:
 	@echo "📊 Checking Dagster asset status..."
-	@docker compose -f docker-compose.yml --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
+	@docker compose --profile local exec dagster uv run dagster asset list -m src.marketplace.__demo__.orchestration.definitions
 
 # Materialize all Dagster assets
 dagster-materialize:
 	@echo "⚙️ Materializing all Dagster assets..."
-	@docker compose -f docker-compose.yml --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
+	@docker compose --profile local exec dagster uv run dagster asset materialize --select "*" -m src.marketplace.__demo__.orchestration.definitions
 
 # =============================================================================
 # DATA MANAGEMENT & OPERATIONS
@@ -758,9 +816,9 @@ publish-remote-agents-dry-run: deps
 # Clean up build artifacts, caches, and Docker containers
 clean:
 	@echo "Cleaning up build artifacts..."
-	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv
-	find . -name "*.pyc" -delete
-	find . -name "__pycache__" -delete
+	rm -rf __pycache__ .pytest_cache build dist *.egg-info lib/.venv .venv .mypy_cache
+	sudo find . -name "*.pyc" -delete
+	sudo find . -name "__pycache__" -delete
 	docker compose down
 	docker compose rm -f
 	rm -f dagster.pid dagster.log
@@ -770,4 +828,4 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize
+.PHONY: test chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-down container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology

@@ -1,5 +1,5 @@
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict
+from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict, cast
 import os
 
 # LangChain Core imports for base components
@@ -17,7 +17,7 @@ from langchain_core.runnables import Runnable
 # LangGraph imports for workflow and state management
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import START, StateGraph
+from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.graph.state import CompiledStateGraph
 
@@ -41,7 +41,6 @@ from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
 import pydash as pd
-# import base64
 import re
 
 
@@ -108,12 +107,16 @@ def create_checkpointer() -> BaseCheckpointSaver:
 class AgentSharedState:
     _thread_id: str
     _current_active_agent: Optional[str]
+    _supervisor_agent: Optional[str]
+    _requesting_help: bool
 
-    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None):
+    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None, supervisor_agent: Optional[str] = None):
         assert isinstance(thread_id, str)
         
         self._thread_id = thread_id
         self._current_active_agent = current_active_agent
+        self._supervisor_agent = supervisor_agent
+        self._requesting_help = False
 
     @property
     def thread_id(self) -> str:
@@ -129,6 +132,19 @@ class AgentSharedState:
     def set_current_active_agent(self, agent_name: Optional[str]):
         self._current_active_agent = agent_name
 
+    @property
+    def supervisor_agent(self) -> Optional[str]:
+        return self._supervisor_agent
+
+    def set_supervisor_agent(self, agent_name: Optional[str]):
+        self._supervisor_agent = agent_name
+        
+    @property
+    def requesting_help(self) -> bool:
+        return self._requesting_help
+    
+    def set_requesting_help(self, requesting_help: bool):
+        self._requesting_help = requesting_help
 
 @dataclass
 class Event:
@@ -195,117 +211,6 @@ class Agent(Expose):
         _configuration (AgentConfiguration): Configuration settings for agent behavior
         _event_queue (Queue): Event queue for real-time event streaming
         _chat_model_output_version (str|None): Version identifier for model output format
-
-    Methods:
-        Core Conversation:
-            invoke(prompt: str) -> str: Process a single conversation turn
-            stream(prompt: str) -> Generator: Stream conversation responses in real-time
-            reset(): Reset conversation state to start fresh
-
-        Tool and Agent Management:
-            prepare_tools(tools, agents) -> tuple: Process and validate tools and agents
-            as_tools(parent_graph: bool) -> list[BaseTool]: Convert agent to tool
-            validate_tool_name(tool: BaseTool) -> BaseTool: Ensure tool name compliance
-
-        Workflow Management:
-            build_graph(patcher: Optional[Callable]): Construct the conversation workflow
-            call_model(state: MessagesState) -> Command: Process messages with language model
-            call_tools(state: MessagesState) -> list[Command]: Execute tool calls
-
-        Event Handling:
-            on_tool_usage(callback): Register tool usage event handler
-            on_tool_response(callback): Register tool response event handler  
-            on_ai_message(callback): Register AI message event handler
-
-        API Integration:
-            as_api(router: APIRouter, ...): Add REST endpoints to FastAPI router
-            stream_invoke(prompt: str): Generator for SSE-compatible streaming
-
-        State Management:
-            duplicate(queue: Queue|None) -> Agent: Create independent agent copy
-
-    Usage Examples:
-        Basic Agent Setup:
-            ```python
-            from langchain_openai import ChatOpenAI
-            
-            agent = Agent(
-                name="assistant",
-                description="A helpful AI assistant",
-                chat_model=ChatOpenAI(model="gpt-4"),
-                tools=[calculator_tool, web_search_tool]
-            )
-            
-            response = agent.invoke("What's 15 * 23 + 45?")
-            ```
-
-        Multi-Agent System:
-            ```python
-            # Create specialized agents
-            calculator = Agent(
-                name="calculator",
-                description="Mathematical calculations",
-                chat_model=ChatOpenAI(model="gpt-4"),
-                tools=[math_tools]
-            )
-            
-            researcher = Agent(
-                name="researcher", 
-                description="Web research and information gathering",
-                chat_model=ChatOpenAI(model="gpt-4"),
-                tools=[web_search, wikipedia]
-            )
-            
-            # Create supervisor agent
-            supervisor = Agent(
-                name="supervisor",
-                description="Coordinates specialized agents",
-                chat_model=ChatOpenAI(model="gpt-4"),
-                agents=[calculator, researcher]
-            )
-            ```
-
-        Real-time Streaming:
-            ```python
-            for chunk in agent.stream("Tell me about recent AI developments"):
-                if chunk[1] and 'messages' in chunk[1]:
-                    message = chunk[1]['messages'][-1]
-                    if hasattr(message, 'content'):
-                        print(message.content, end='')
-            ```
-
-        API Integration:
-            ```python
-            from fastapi import FastAPI, APIRouter
-            
-            app = FastAPI()
-            router = APIRouter()
-            
-            agent.as_api(router, route_name="assistant")
-            app.include_router(router)
-            
-            # Now available at:
-            # POST /assistant/completion
-            # POST /assistant/stream-completion
-            ```
-
-    Error Handling:
-        The Agent class implements comprehensive error handling with:
-        • Graceful degradation when tools fail
-        • Automatic retry mechanisms for transient failures
-        • Detailed error logging for debugging
-        • Fallback responses when critical components fail
-        • Validation of all inputs and configurations
-
-    Thread Safety:
-        The Agent is designed for concurrent use with proper thread isolation.
-        Each conversation thread maintains independent state, allowing safe
-        concurrent operation across multiple users and conversations.
-
-    See Also:
-        IntentAgent: Specialized agent with intent recognition capabilities
-        AgentConfiguration: Configuration options for agent behavior
-        AgentSharedState: State management for conversation threads
     """
 
     _name: str
@@ -319,7 +224,8 @@ class Agent(Expose):
         | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
         BaseMessage,
     ]
-    _tools: list[Union[Tool, "Agent"]]
+    _tools: list[Union[Tool, BaseTool, "Agent"]]
+    _original_tools: list[Union[Tool, BaseTool, "Agent"]]
     _tools_by_name: dict[str, Union[Tool, BaseTool]]
     _native_tools: list[dict]
 
@@ -348,7 +254,7 @@ class Agent(Expose):
         name: str,
         description: str,
         chat_model: BaseChatModel,
-        tools: list[Union[Tool, "Agent"]] = [],
+        tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver | None = None,
         state: AgentSharedState = AgentSharedState(),
@@ -369,6 +275,15 @@ class Agent(Expose):
         self._description = description
         self._system_prompt = configuration.system_prompt
 
+        self._state = state
+        self._state.set_current_active_agent(name)
+
+        self._original_tools = tools
+        self._original_agents = agents
+
+        # # We inject defailt tools.
+        tools += self.default_tools()
+
         # We store the original list of provided tools. This will be usefull for duplication.
         self._tools = tools
         self._native_tools = native_tools
@@ -383,7 +298,7 @@ class Agent(Expose):
 
         # We store the provided tools in __structured_tools because we will need to know which ones are provided by the user and which one are agents.
         # This is needed when we duplicate the agent.
-        _structured_tools, _agents = self.prepare_tools(tools, agents)
+        _structured_tools, _agents = self.prepare_tools(cast(list[Union[Tool, BaseTool, "Agent"]], tools), agents)
         self._structured_tools = _structured_tools
         self._agents = _agents
 
@@ -403,27 +318,34 @@ class Agent(Expose):
         self._chat_model = chat_model
         if hasattr(chat_model, "output_version"):
             self._chat_model_output_version = chat_model.output_version
+            
         self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
-            self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
+            
+            # Test if the chat model can bind tools by trying with a default tool first
+            if self._can_bind_tools(chat_model):
+                self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
+            else:
+                logger.warning(f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
+                # Keep the original model without tools
+                self._chat_model_with_tools = chat_model
         
         # Use provided memory or create based on environment
         if memory is None:
             self._checkpointer = create_checkpointer()
         else:
             self._checkpointer = memory
-            
-        self._state = state
         
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
-        #import uuid
-        #self._state.set_thread_id(str(uuid.uuid4()))
+        import uuid
+        if os.getenv("ENV") == "dev":
+            self._state.set_thread_id(str(uuid.uuid4()))
 
+        # We set the configuration.
         self._configuration = configuration
-
         self._on_tool_usage = configuration.on_tool_usage
         self._on_tool_response = configuration.on_tool_response
         self._on_ai_message = configuration.on_ai_message
@@ -434,9 +356,163 @@ class Agent(Expose):
         else:
             self._event_queue = event_queue
 
-        # self._setup_workflow()
-
+        # We build the graph.
         self.build_graph()
+
+    def _can_bind_tools(self, chat_model: BaseChatModel) -> bool:
+        """Test if the chat model can bind tools by attempting to bind the get_time_date default tool.
+        
+        Args:
+            chat_model (BaseChatModel): The chat model to test
+            
+        Returns:
+            bool: True if the model can bind tools, False otherwise
+        """
+        try:
+            # Create the get_time_date tool that's used in default_tools()
+            @tool(return_direct=True)
+            def get_time_date(timezone: str = 'Europe/Paris') -> str:
+                """Get the current time and date."""
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+            
+            # Try to bind this single tool to test if the model supports tool binding
+            chat_model.bind_tools([get_time_date])
+            
+            # If we get here without an exception, the model supports tool binding
+            # logger.debug(f"Chat model {type(chat_model).__name__} supports tool calling.")
+            return True
+            
+        except Exception as e:
+            # If binding tools raises an exception, the model doesn't support tools
+            logger.debug(f"Chat model {type(chat_model).__name__} does not support tool calling: {e}")
+            return False
+
+    def default_tools(self) -> list[Tool | BaseTool]:
+        @tool(return_direct=True)
+        def request_help(
+            reason: str
+        ):
+            """
+            Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
+
+            Use this tool if:
+            - You are unsure how to proceed.
+            - You lack the necessary knowledge or ability to complete the task.
+            - The user's request is outside your capabilities or unclear.
+
+            Args:
+                reason (str): A brief explanation of why you are requesting help (e.g., "I am uncertain about the next step", "I do not have the required capability", "The user's request is unclear").
+
+            The supervisor agent will review your reason and provide assistance or take over the conversation.
+            """
+            logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
+            return "Requesting help from the supervisor agent."
+        
+        @tool(return_direct=False)
+        def get_time_date(timezone: str = 'Europe/Paris') -> str:
+            """Returns the current date and time for a given timezone."""
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+        
+        @tool(return_direct=True)
+        def list_tools_available() -> str:
+            """Displays a formatted list of all available tools."""
+            if not hasattr(self, "_structured_tools") or len(self._structured_tools) == 0:
+                return "I don't have any tools available to help you at the moment."
+            
+            tools_text = "Here are the tools I can use to help you:\n\n"
+            for t in self._structured_tools:
+                if not t.name.startswith("transfer_to"):
+                    tools_text += f"- `{t.name}`: {t.description.splitlines()[0]}\n"
+            return tools_text.rstrip()
+
+        @tool(return_direct=True)
+        def list_subagents_available() -> str:
+            """Displays a formatted list of all available sub-agents."""
+            if not hasattr(self, "_agents") or len(self._agents) == 0:
+                return "I don't have any sub-agents that can assist me at the moment."
+                
+            agents_text = "I can collaborate with these sub-agents:\n"
+            for agent in self._agents:
+                agents_text += f"- `{agent.name}`: {agent.description}\n"
+            return agents_text.rstrip()
+        
+        @tool(return_direct=True)
+        def list_intents_available() -> str:
+            """Displays a formatted list of all available intents."""
+            if not hasattr(self, "_intents") or len(self._intents) == 0:
+                return "I haven't been configured with any specific intents yet."
+            
+            from abi.services.agent.IntentAgent import Intent, IntentType, IntentScope
+            
+            # Group intents by scope and type
+            intents_by_scope: dict[Optional[IntentScope], dict[IntentType, list[Intent]]] = {}
+            for intent in self._intents:
+                if intent.intent_scope not in intents_by_scope:
+                    intents_by_scope[intent.intent_scope] = {}
+                if intent.intent_type not in intents_by_scope[intent.intent_scope]:
+                    intents_by_scope[intent.intent_scope][intent.intent_type] = []
+                intents_by_scope[intent.intent_scope][intent.intent_type].append(intent)
+            
+            intents_text = "Here are all the intents I'm configured with:\n\n"
+            for scope, types_dict in intents_by_scope.items():
+                intents_text += f"### Intents for {str(scope)}\n\n"
+                for intent_type, intents in types_dict.items():
+                    intents_text += f"#### {str(intent_type)}\n\n"
+                    intents_text += "| Intent | Target |\n"
+                    intents_text += "|--------|--------|\n"
+                    for intent in intents:
+                        if intent.intent_scope == IntentType.RAW:
+                            intents_text += f"| {intent.intent_value} | {intent.intent_target} |\n"
+                        else:
+                            intents_text += f"| {intent.intent_value} | `{intent.intent_target}` |\n"
+                    intents_text += "\n"
+            return intents_text.rstrip()
+        
+        @tool(return_direct=False)
+        def read_makefile() -> str:
+            """Read the Makefile and return the content."""
+            try:
+                with open("Makefile", "r") as f:
+                    makefile_content = f.read()
+                
+                return "Here are the make commands available:\n\n" + makefile_content
+
+            except FileNotFoundError:
+                return "Could not find Makefile in the root directory."
+            except Exception as e:
+                return f"Error reading Makefile: {str(e)}"
+
+        tools: list[Tool | BaseTool] = [
+            get_time_date, 
+            list_tools_available, 
+            list_subagents_available, 
+            list_intents_available,
+        ]
+        if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
+            tools.append(request_help)
+            
+        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev":
+            tools.append(read_makefile)
+        return tools
+
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt
+    
+    def set_system_prompt(self, system_prompt: str):
+        self._system_prompt = system_prompt
+
+    @property
+    def structured_tools(self) -> list[Tool | BaseTool]:
+        return self._structured_tools
+
+    @property
+    def state(self) -> AgentSharedState:
+        return self._state
 
     def validate_tool_name(self, tool: BaseTool) -> BaseTool:
         if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
@@ -448,7 +524,7 @@ class Agent(Expose):
 
     def prepare_tools(
         self, 
-        tools: list[Union[Tool, "Agent"]], 
+        tools: list[Union[Tool, BaseTool, "Agent"]], 
         agents: list
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
@@ -476,9 +552,11 @@ class Agent(Expose):
                             _tools.append(tool)
                             _tool_names.add(tool.name)
             else:
-                if t.name not in _tool_names:
-                    _tools.append(t)
-                    _tool_names.add(t.name)
+                # Accept both Tool and BaseTool
+                if hasattr(t, "name"):
+                    if t.name not in _tool_names:
+                        _tools.append(t)
+                        _tool_names.add(t.name)
 
         # We process agents that are not provided in tools.
         for agent in agents:
@@ -496,24 +574,20 @@ class Agent(Expose):
     def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
         return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
 
-    @property
-    def state(self) -> AgentSharedState:
-        return self._state
-
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(MessagesState)
+
+        graph.add_node(self.current_active_agent)
+        graph.add_edge(START, "current_active_agent")
+
+        graph.add_node(self.continue_conversation)
+
         graph.add_node(self.call_model)
-        graph.add_edge(START, "call_model")
         
         graph.add_node(self.call_tools)
-        # This is not needed because the call_tools is generating the proper Command to go to the right node after each tool call.
-        # graph.add_edge("call_tools", "call_model")
 
         for agent in self._agents:
-            # logger.debug(f"Adding node {agent.name} in graph")
             graph.add_node(agent.name, agent.graph)
-            # This makes sure that after calling an agent in a graph, we call the main model of the graph.
-            #graph.add_edge(agent.name, "call_model")
 
         # Patcher is callable that can be passed and that will impact the graph before we compile it.
         # This is used to be able to give more flexibility about how the graph is being built.
@@ -521,6 +595,123 @@ class Agent(Expose):
             graph = patcher(graph)
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
+
+
+    def get_last_human_message(self, state: MessagesState) -> Any | None:
+        """Get the appropriate human message based on AI message context.
+
+        Args:
+            state (MessagesState): Current conversation state
+            
+        Returns:
+            Any | None: The relevant human message
+        """
+        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
+        if last_ai_message is not None and last_ai_message.additional_kwargs.get("owner") == self.name:
+            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        elif last_ai_message is not None and hasattr(last_ai_message, "additional_kwargs") and last_ai_message.additional_kwargs is not None and "owner" in last_ai_message.additional_kwargs:
+            return pd.filter_(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))[1]
+        else:
+            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
+        
+
+    def current_active_agent(self, state: MessagesState) -> Command:
+        """Goto the current active agent.
+        
+        Args:
+            state (MessagesState): Current conversation state
+            
+        Returns:
+            Command: Command to goto the current active agent
+        """
+        # Log the current active agent
+        logger.debug(f"😏 Supervisor agent: '{self.state.supervisor_agent}'")
+        logger.debug(f"🟢 Active agent: '{self.state.current_active_agent}'")
+        logger.debug(f"🤖 Current Agent: '{self.name}'")
+
+        # Get the last human message
+        last_human_message = self.get_last_human_message(state)
+
+        # Handle agent routing via @mention
+        if (
+            last_human_message is not None and 
+            isinstance(last_human_message.content, str) and 
+            last_human_message.content.startswith("@") and 
+            last_human_message.content.split(" ")[0].split("@")[1] != self.name
+        ):
+            at_mention = last_human_message.content.split(" ")[0].split("@")[1]
+            logger.debug(f"🔀 Handle agent routing via @mention to '{at_mention}'")
+
+            # Check if we have an agent with this name.
+            agent = pd.find(self._agents, lambda a: a.name.lower() == at_mention.lower())
+            
+            #Remove mention from the last human message with re.sub
+            import re
+            last_human_message.content = re.sub(r"^@[^ ]* ", "", last_human_message.content)
+            
+            if agent is not None:
+                self._state.set_current_active_agent(agent.name)
+                return Command(goto=agent.name, update={"messages": state["messages"]})
+            else:
+                logger.debug(f"❌ Agent '{at_mention}' not found")
+
+        if self._state.current_active_agent is not None and self._state.current_active_agent != self.name:
+            logger.debug(f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'")
+            self._state.set_current_active_agent(self._state.current_active_agent)
+            return Command(goto=self._state.current_active_agent)
+        
+        # self._state.set_current_active_agent(self.name)
+        logger.debug(f"💬 Starting chatting with agent '{self.name}'")
+        if self.state.supervisor_agent != self.name and "SUPERVISOR SYSTEM PROMPT" not in self._system_prompt:
+            # This agent is a subagent with a supervisor
+            subagent_prompt = f"""
+SUPERVISOR SYSTEM PROMPT:
+
+Remember, you are a specialized agent working under the supervision of {self.state.supervisor_agent}.
+
+1. Stay focused on your specialized role and core capabilities
+2. Follow your system prompt instructions precisely
+3. For EVERY user message, first evaluate if you can handle it within your core capabilities
+4. If you encounter ANY of these situations:
+   - You are uncertain about how to proceed
+   - The task seems outside your core capabilities 
+   - You need clarification about requirements
+   - You want to confirm a critical action
+   - You are not 100% confident in your ability to handle the task
+   Then you MUST use the `request_help` tool to ask your supervisor for help.
+5. Do not attempt tasks beyond your defined role
+6. Always maintain consistency with your system prompt rules
+7. When in doubt, ALWAYS request help rather than risk mistakes
+
+Your supervisor will help ensure you operate effectively within your role while providing guidance for complex scenarios.
+
+--------------------------------
+
+SUBAGENT SYSTEM PROMPT:
+
+{self._system_prompt}
+"""
+            self.set_system_prompt(subagent_prompt)
+
+        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev" and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt:
+            dev_prompt = f"""
+DEVELOPPER SYSTEM PROMPT:
+
+For any questions/commands related to the project, use tool: `read_makefile` to get the information you need.
+
+--------------------------------
+
+AGENT SYSTEM PROMPT:
+
+{self._system_prompt}
+"""
+
+            self.set_system_prompt(dev_prompt)
+        logger.debug(f"System prompt: {self._system_prompt}")
+        return Command(goto="continue_conversation")
+    
+    def continue_conversation(self, state: MessagesState) -> Command:
+        return Command(goto="call_model")
 
     def handle_openai_response_v1(self, response: BaseMessage) -> Command:
         content_str: str = ""
@@ -555,16 +746,6 @@ class Agent(Expose):
                             id=item.get("id"),
                             type="tool_call"
                         ))
-
-                        
-                    # # Handle image generation output
-                    # if item.get("type") == "image_generation_call":
-                    #     image_data = base64.b64decode(item["result"])
-                    #     dir_path = "storage/datastore/chatgpt/image_generation_call"
-                    #     os.makedirs(dir_path, exist_ok=True)
-                    #     file_name = "generated_cat.png"
-                    #     with open(f"{dir_path}/{file_name}", "wb") as f:
-                    #         f.write(image_data)
         
         # Create AIMessage with the content
         usage_metadata = None
@@ -586,22 +767,28 @@ class Agent(Expose):
         
         return Command(goto="__end__", update={"messages": [ai_message]})
 
+
     def call_model(
         self,
         state: MessagesState,
     ) -> Command[Literal["call_tools", "__end__"]]:
-        logger.info(f"call_model on: {self.name}")
+        self._state.set_current_active_agent(self.name)
+        
+        logger.debug(f"call_model on: {self.name}")
+        # logger.debug(f"tools: {self._structured_tools}")
         messages = state["messages"]
         if self._system_prompt:
             messages = [
                 SystemMessage(content=self._system_prompt),
             ] + messages
-
+        # logger.info(f"system prompt: {self._system_prompt}")
         # logger.info(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
         # logger.info(f"response: {response}")
         # logger.info(f"response type: {type(response)}")
+        # if isinstance(response, AIMessage):
+        #     response.additional_kwargs["agent"] = self.name
         if (
             isinstance(response, AIMessage)
             and hasattr(response, "tool_calls")
@@ -620,11 +807,9 @@ class Agent(Expose):
             self._chat_model_output_version == "responses/v1"
         ):
             return self.handle_openai_response_v1(response)
-            
-        # else:
-        #     self._configuration._noti((self._name, response))
 
         return Command(goto="__end__", update={"messages": [response]})
+
 
     def call_tools(self, state: MessagesState) -> list[Command]:
         last_message: AnyMessage = state["messages"][-1]
@@ -636,7 +821,7 @@ class Agent(Expose):
 
         tool_calls: list[ToolCall] = last_message.tool_calls
 
-        assert len(tool_calls) > 0, state["messages"][-1]
+        # assert len(tool_calls) > 0, state["messages"][-1]
 
         results: list[Command] = []
         called_tools: list[BaseTool] = []
@@ -655,12 +840,20 @@ class Agent(Expose):
             if "state" in tool_input_fields:
                 # inject state
                 args = {**tool_call, "state": state}
+                # args["args"]["state"] = state
+
+            # if "tool_call" in tool_input_fields:
+            #     args["args"]["tool_call"] = tool_call
 
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
                 
             try:
+                            
+                logger.debug(f"tool_call: {tool_call}")
+                logger.debug(f"tool_input_fields: {tool_input_fields}")
+                logger.debug(f"args: {args}")
                 tool_response = tool_.invoke(args)
                 called_tools.append(tool_)
 
@@ -703,6 +896,16 @@ class Agent(Expose):
                 last_message = pd.get(results[-1], 'update.messages[-1]', None)
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
 
+        if (
+            tool_response is not None and 
+            hasattr(tool_response, "name") and 
+            tool_response.name.startswith("request_help") and 
+            self._state.supervisor_agent != self.name
+        ):
+            # self._state.set_requesting_help(True)
+            self._state.set_current_active_agent(self._state.supervisor_agent)
+            self._state.set_requesting_help(True)
+            results.append(Command(goto="current_active_agent", graph=Command.PARENT))
         return results
 
     @property
@@ -732,6 +935,9 @@ class Agent(Expose):
                 containing the tool call
         """
         self._on_tool_usage = callback
+        # # Also set the callback on all sub-agents to ensure they notify properly
+        # for agent in self._agents:
+        #     agent.on_tool_usage(callback)
 
     def on_tool_response(self, callback: Callable[[AnyMessage], None]):
         """Register a callback to be called when a tool response is received.
@@ -744,11 +950,17 @@ class Agent(Expose):
                 containing the tool response
         """
         self._on_tool_response = callback
+        # # Also set the callback on all sub-agents to ensure they notify properly
+        # for agent in self._agents:
+        #     agent.on_tool_response(callback)
         
     def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
         """Register a callback to be called when an AI message is received.
         """
         self._on_ai_message = callback
+        # Also set the callback on all sub-agents to ensure they notify properly
+        for agent in self._agents:
+            agent.on_ai_message(callback)
 
     @property
     def app(self):
@@ -793,12 +1005,10 @@ class Agent(Expose):
                     else:
                         continue
                 else:
-                    logger.debug(f"v: {v}")
                     last_messages = [e["messages"][-1] for e in v]
 
 
                 for last_message in last_messages:
-
                     if isinstance(last_message, AIMessage):
                         if pd.get(last_message, "additional_kwargs.tool_calls"):
                             # This is a tool call.
@@ -811,9 +1021,7 @@ class Agent(Expose):
                             # If you need another method to be able to return an AIMessage or a Command(..., update={"messages": [AIMessage(...)]}) we either need to add it to the list or have this specific method calling self._notify_ai_message directly.
                             
                             allowed_sources_of_ai_message = ['call_model', 'call_tools']
-                            
                             if any(source in payload for source in allowed_sources_of_ai_message):
-                                logger.debug(f"Payload: {payload}")
                                 self._notify_ai_message(last_message, agent_name)
 
                     elif isinstance(last_message, ToolMessage):
@@ -875,7 +1083,7 @@ class Agent(Expose):
 
         return response
 
-    def duplicate(self, queue: Queue | None = None) -> "Agent":
+    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -884,32 +1092,57 @@ class Agent(Expose):
 
         Returns:
             Agent: A new Agent instance with the same configuration
-        """
+        """        
+        shared_state = agent_shared_state or AgentSharedState()
+        
+        logger.debug(f"agent_shared_state: {agent_shared_state}")
+        
         # Initialize the tools list with the original list of tools.
         # tools = [tool for tool in self._structured_tools]
-        tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
+        # tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
 
         if queue is None:
             queue = Queue()
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[Agent] = [agent.duplicate(queue) for agent in self._agents]
+        agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
         new_agent = Agent(
             name=self._name,
             description=self._description,
             chat_model=self._chat_model,
-            tools=tools + agents,
+            tools=self._original_tools,
+            agents=agents,
             memory=self._checkpointer,
-            # TODO: Make sure that this is the behaviour we want.
-            state=AgentSharedState(),  # Create new state instance
+            state=shared_state,  # Create new state instance
             configuration=self._configuration,
             event_queue=queue,
         )
 
         return new_agent
 
+    def light_duplicate(self, queue: Queue | None = None) -> "Agent":
+        if queue is None:
+            queue = Queue()
+            
+        
+        agents: list[Agent] = [agent.light_duplicate(queue) for agent in self._agents]
+        
+        tools = self._tools + agents
+        
+        return Agent(
+            name=self._name,
+            description=self._description,
+            chat_model=self._chat_model,
+            tools=tools,
+            memory=self._checkpointer,
+            # TODO: Make sure that this is the behaviour we want.
+            state=AgentSharedState(),  # Create new state instance
+            configuration=self._configuration,
+            event_queue=queue,
+        )
+    
     def as_api(
         self,
         router: APIRouter,
@@ -948,10 +1181,13 @@ class Agent(Expose):
             tags=tags,
         )
         def completion(query: CompletionQuery):
+            # new_agent = self.duplicate()
+            # new_agent = self
+            # new_agent = self.light_duplicate()
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
 
-            new_agent = self.duplicate()
+            new_agent = self.light_duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return new_agent.invoke(query.prompt)
 
@@ -962,10 +1198,13 @@ class Agent(Expose):
             tags=tags,
         )
         async def stream_completion(query: CompletionQuery):
+            # new_agent = self.duplicate()
+            # new_agent = self
+            # new_agent = self.light_duplicate()
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
 
-            new_agent = self.duplicate()
+            new_agent = self.light_duplicate()
             new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
                 new_agent.stream_invoke(query.prompt),
@@ -1004,7 +1243,7 @@ class Agent(Expose):
                 elif isinstance(message, ToolResponseEvent):
                     yield {
                         "event": "tool_response",
-                        "data": str(message.payload.content),
+                        "data": str(pd.get(message, "payload.content", "NULL")),
                     }
                 elif isinstance(message, AIMessageEvent):
                     yield {
@@ -1118,8 +1357,10 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
         tool_message = ToolMessage(
             content=f"Conversation transferred to {agent_label}",
             name=tool_name,
-            tool_call_id=tool_call["id"],   
+            tool_call_id=tool_call["id"],
         )
+
+        agent.state.set_current_active_agent(agent.name)
 
         return Command(
             # navigate to another agent node in the PARENT graph

@@ -237,7 +237,7 @@ elif view_mode == "Resource View":
         else:
             return 'background-color: lightgreen'
     
-    styled_capacity = capacity_data.style.applymap(color_utilization, subset=['Utilization'])
+    styled_capacity = capacity_data.style.apply(color_utilization, subset=['Utilization'])
     st.dataframe(styled_capacity, use_container_width=True)
 
 elif view_mode == "Sprint View":

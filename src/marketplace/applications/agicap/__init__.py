@@ -1,0 +1,12 @@
+from src import secret
+
+def requirements():
+    AGICAP_USERNAME = secret.get('AGICAP_USERNAME')
+    AGICAP_PASSWORD = secret.get('AGICAP_PASSWORD')
+    AGICAP_CLIENT_ID = secret.get('AGICAP_CLIENT_ID')
+    AGICAP_CLIENT_SECRET = secret.get('AGICAP_CLIENT_SECRET')
+    AGICAP_BEARER_TOKEN = secret.get('AGICAP_BEARER_TOKEN')
+    AGICAP_API_TOKEN = secret.get('AGICAP_API_TOKEN')
+    if AGICAP_USERNAME and AGICAP_PASSWORD and AGICAP_CLIENT_ID and AGICAP_CLIENT_SECRET and AGICAP_BEARER_TOKEN and AGICAP_API_TOKEN:
+        return True
+    return False
