@@ -209,7 +209,7 @@ git-deps: .git/hooks/pre-commit
 # Create symbolic link to allow importing lib.abi from the virtual environment
 python_version=$(shell cat .python-version)
 .venv/lib/python$(python_version)/site-packages/abi: deps
-	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi 
+	@[ -L .venv/lib/python$(python_version)/site-packages/abi ] || ln -s `pwd`/lib/abi .venv/lib/python$(python_version)/site-packages/abi
 
 # Install dependencies (alternative to .venv)
 install: dep
@@ -242,7 +242,7 @@ chat-chatgpt-agent: deps
 chat-claude-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run python -m src.cli ClaudeAgent
 
-chat-deepseek-agent: deps 
+chat-deepseek-agent: deps
 	@ LOG_LEVEL=DEBUG uv run python -m src.cli DeepSeekAgent
 
 chat-gemini-agent: deps
@@ -292,7 +292,7 @@ create-pipeline: deps
 
 # Create a new ontology from template
 create-ontology: deps
-	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-ontology 
+	@ LOG_LEVEL=ERROR uv run python -m src.core.abi.cli create-ontology
 
 # =============================================================================
 # CHAT WITH MARKETPLACE AGENTS
@@ -305,6 +305,10 @@ pull-request-description: deps
 # Naas platform integration agent
 chat-naas-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run python -m src.cli NaasAgent
+
+# Bodo data analysis agent
+chat-bodo-agent: deps
+	@ LOG_LEVEL=$(log_level) uv run python -m src.cli BodoAgent
 
 # Customer support specialized agent
 chat-support-agent: deps
@@ -345,7 +349,7 @@ mcp-test: deps
 
 # Interactive SPARQL terminal for querying the knowledge graph
 sparql-terminal: deps
-	@ uv run python -m src.core.abi.apps.sparql_terminal.main	
+	@ uv run python -m src.core.abi.apps.sparql_terminal.main
 
 # Oxigraph administrative interface for database management
 oxigraph-admin: deps
@@ -376,7 +380,7 @@ test-coverage: deps
 	@ uv run coverage-badge -f -o coverage.svg
 	@ echo "📊 Coverage report generated:"
 	@ echo "  - HTML: htmlcov/index.html"
-	@ echo "  - XML: coverage.xml" 
+	@ echo "  - XML: coverage.xml"
 	@ echo "  - Badge: coverage.svg"
 
 # Run basic tests for CI (no external dependencies)
@@ -550,7 +554,7 @@ build: build.linux.x86_64
 # Build Docker image for Linux x86_64 architecture with size reporting
 build.linux.x86_64: deps
 	DOCKER_BUILDKIT=1 docker build . -t abi -f docker/images/Dockerfile.linux.x86_64 --platform linux/amd64
-	
+
 	@# Show container size
 	@docker image ls abi
 
