@@ -6,13 +6,6 @@
 
 The Nebari Module provides comprehensive expertise on the Nebari open-source data science platform, specializing in cloud infrastructure, Kubernetes orchestration, and collaborative data science workflows.
 
-This module enables:
-- Expert guidance on Nebari deployment and architecture
-- Data science infrastructure best practices
-- Cloud-agnostic scaling and cost optimization
-- Security, governance, and compliance guidance
-- Community support and ecosystem integration
-
 ### Requirements
 
 **Cloud Mode (Recommended):**
@@ -32,7 +25,7 @@ To get started with the Nebari module:
 
 Start chatting using this command:
 ```bash
-make chat agent=Nebari
+make chat agent=NebariAgent
 ```
 
 ### Structure
@@ -78,48 +71,6 @@ Expert Nebari platform agent specializing in data science infrastructure, deploy
 ```bash
 uv run python -m pytest src/marketplace/applications/nebari/agents/NebariAgent_test.py
 ```
-
-**Test Coverage:**
-- Agent name and identity verification
-- Intent matching for core Q&A scenarios
-- Model integration (cloud/local modes)
-- Tool functionality validation
-
-### Models
-
-#### GPT-4.1 (Cloud Mode)
-- **Model ID:** gpt-4.1
-- **Context Window:** 1,047,576 tokens
-- **Owner:** OpenAI
-- **Description:** Excels at instruction following and tool calling with broad domain knowledge
-
-#### Qwen3:8b (Local Mode)
-- **Model ID:** qwen3:8b
-- **Context Window:** 32,768 tokens
-- **Owner:** Alibaba
-- **Description:** Privacy-focused local model for multi-agent orchestration
-
-### Ontologies
-
-#### Nebari Ontology
-Turtle ontology defining Nebari-specific classes and properties for semantic knowledge representation.
-
-#### Nebari SPARQL Queries
-Turtle file containing templatable SPARQL queries for ontology-based class searching and knowledge retrieval.
-
-## Dependencies
-
-### Python Libraries
-- `abi.services.agent`: Agent framework and intent handling
-- `langchain_core`: Tool integration for AI agents
-- `langchain_openai`: LangChain OpenAI integration (cloud mode)
-- `langchain_ollama`: LangChain Ollama integration (local mode)
-- `pydantic`: Data validation and serialization
-
-### Core Dependencies
-- `src.core.templatablesparqlquery`: SPARQL query templating system
-- `src.secret`: Configuration and secret management
-- `typing`: Type hints and optional parameters
 
 ### External Services
 - **OpenAI API** (cloud mode): GPT-4.1 model access
