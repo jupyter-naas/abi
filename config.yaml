@@ -52,4 +52,4 @@ modules:
   - path: src/marketplace/applications/pubmed
     enabled: false
   - path: src/marketplace/applications/bodo
-    enabled: true
+    enabled: false
