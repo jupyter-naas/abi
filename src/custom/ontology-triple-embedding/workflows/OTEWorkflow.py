@@ -7,7 +7,6 @@ import os
 import rdflib
 from dataclasses import dataclass
 from langchain_core.tools import BaseTool
-import hashlib
 
 # We initialize a cache for the workflow.
 cache = CacheFactory.CacheFS_find_storage(subpath="ontology-triple-embedding")
