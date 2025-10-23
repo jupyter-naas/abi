@@ -1,0 +1,123 @@
+@prefix d3f: <http://d3fend.mitre.org/ontologies/d3fend.owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Minimal D3FEND subset containing only techniques used in events.yaml
+# This subset includes 11 defensive techniques extracted from the full D3FEND ontology
+
+<http://d3fend.mitre.org/ontologies/d3fend-subset.owl> a owl:Ontology ;
+    rdfs:label "D3FEND Subset for Cyber Security Events" ;
+    rdfs:comment "Minimal D3FEND ontology containing only techniques referenced in the 2025 cyber security events dataset" .
+
+# Core classes
+d3f:DefensiveTechnique a owl:Class ;
+    rdfs:label "Defensive Technique" ;
+    rdfs:comment "A defensive countermeasure technique defined by D3FEND" .
+
+d3f:AttackVector a owl:Class ;
+    rdfs:label "Attack Vector" ;
+    rdfs:comment "A method or pathway used by attackers" .
+
+# D3-SWID: Software Installation Discovery
+d3f:D3-SWID a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Software Installation Discovery" ;
+    rdfs:comment "Detecting and inventorying installed software to identify unauthorized or malicious programs" .
+
+# D3-HBPI: Hardware-based Process Isolation  
+d3f:D3-HBPI a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Hardware-based Process Isolation" ;
+    rdfs:comment "Using hardware features to isolate processes and prevent unauthorized access" .
+
+# D3-CSPP: Credential Strength Policy
+d3f:D3-CSPP a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Credential Strength Policy" ;
+    rdfs:comment "Enforcing strong credential requirements and authentication policies" .
+
+# D3-ANCI: Authentication Cache Invalidation
+d3f:D3-ANCI a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Authentication Cache Invalidation" ;
+    rdfs:comment "Invalidating cached authentication credentials to prevent unauthorized access" .
+
+# D3-MFA: Multi-Factor Authentication
+d3f:D3-MFA a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Multi-Factor Authentication" ;
+    rdfs:comment "Requiring multiple forms of authentication to verify user identity" .
+
+# D3-BDI: Backup and Data Recovery
+d3f:D3-BDI a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Backup and Data Recovery" ;
+    rdfs:comment "Creating and maintaining backups to enable recovery from attacks" .
+
+# D3-DNSL: DNS Allowlisting/Denylisting
+d3f:D3-DNSL a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "DNS Allowlisting" ;
+    rdfs:comment "Controlling DNS queries using allowlists and denylists" .
+
+# D3-FBA: File-based Behavioral Analysis
+d3f:D3-FBA a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "File-based Behavioral Analysis" ;
+    rdfs:comment "Analyzing file behavior to detect malicious activity" .
+
+# D3-NTF: Network Traffic Filtering
+d3f:D3-NTF a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Network Traffic Filtering" ;
+    rdfs:comment "Filtering network traffic to block malicious communications" .
+
+# D3-RTSD: Real-time Security Detection
+d3f:D3-RTSD a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Real-time Security Detection" ;
+    rdfs:comment "Detecting security threats in real-time using monitoring systems" .
+
+# D3-EMAC: Email Analysis and Content Filtering
+d3f:D3-EMAC a owl:Class ;
+    rdfs:subClassOf d3f:DefensiveTechnique ;
+    rdfs:label "Email Analysis" ;
+    rdfs:comment "Analyzing email content and attachments to detect phishing and malware" .
+
+# Attack vectors referenced in events
+d3f:SupplyChainCompromise a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Supply Chain Compromise" .
+
+d3f:CredentialStuffing a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Credential Stuffing" .
+
+d3f:Phishing a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Phishing" .
+
+d3f:LateralMovement a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Lateral Movement" .
+
+d3f:PrivilegeEscalation a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Privilege Escalation" .
+
+d3f:APIExploitation a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "API Exploitation" .
+
+d3f:VolumetricDDoS a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Volumetric DDoS" .
+
+d3f:SpearPhishing a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Spear Phishing" .
+
+d3f:ZeroDayExploitation a owl:Class ;
+    rdfs:subClassOf d3f:AttackVector ;
+    rdfs:label "Zero-Day Exploitation" .

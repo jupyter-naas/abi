@@ -1,0 +1,74 @@
+competency_questions:
+  - id: CQ1
+    category: Digital Events
+    question: "What digital artifacts participated in a given cyber event?"
+    ontology_elements: [d3f:DigitalEvent, CCO:Artifact, CCO:InformationBearingEntity, d3f:Artifact, d3f:DigitalArtifact]
+
+  - id: CQ2
+    category: Digital Events
+    question: "Which processes or events resulted in the creation of a specific file, payload, or executable?"
+    ontology_elements: [d3f:produces, d3f:produced-by, cco:hasOutput, cco:isOutputOf BFO:process]
+
+  - id: CQ3
+    category: Digital Events
+    question: "Which artifacts or processes generated other artifacts (e.g., scripts producing payloads)?"
+    ontology_elements: [d3f:Artifact, d3f:produces, BFO:participatesin, d3f:produced-by, CCO:Artifact]
+
+  - id: CQ4
+    category: Temporal Ordering
+    question: "What is the temporal sequence of events in an attack chain?"
+    ontology_elements: [BFO:precedes, BFO:precededby, BFO:process, d3f:DigitalEvent]
+
+ - id: CQ5
+    category: Temporal Ordering
+    question: "Temporal Ordering: Which processes or events are temporally simultaneous with others?"
+    ontology_elements: [BFO:precedes, BFO:precededby, BFO:process, d3f:DigitalEvent, BFO:hasOccurrentPart, BFO:occurrentPartOf d3f:contains, d3f:contained-by]
+
+  - id: CQ6
+    category: Agent Participation
+    question: "Which agents executed or triggered a digital event?"
+    ontology_elements: [CCO:Agent, d3f:Agent, d3f:Action, d3f:DigitalEvent]
+
+  - id: CQ7
+    category: Artifact Lineage
+    question: "Which artifacts where the output of specific digital events?"
+    ontology_elements: [cco:hasOutput, d3f:produces, CCO:Artifact]
+
+  - id: CQ10
+    category: Infrastructure
+    question: "Which network events were correlated with malicious artifacts or payloads?"
+    ontology_elements: [d3f:NetworkEvent, d3f:Artifact, BFO:process]
+
+  - id: CQ21
+    category: Cross-Domain Context
+    question: "Can we correlate digital events with physical-world entities besides the information bearers (e.g., systems, personnel, missions)?"
+    ontology_elements: [BFO:process, CCO:PhysicalSystem, CCO:Agent]
+
+  - id: CQ23
+    category: High-level D3F
+    question: "What are the high-level goals that an attacker is trying to achieve with this lower-level tactic?"
+    ontology_elements: [BFO:process, CCO:PhysicalSystem, CCO:Agent]
+
+
+These specifically to be worked on in the future with more complex means than simple SPARQL SELECT
+
+  - id: CQ16
+    category: Data Quality
+    question: "Can we detect inconsistencies between reported events and expected temporal or causal relations?"
+    ontology_elements: [Reasoner, BFO:precedes, d3f:produces]
+
+  - id: CQ17
+    category: Data Enrichment
+    question: "Can we automatically enrich incomplete threat data with inferred processes or entities?"
+    ontology_elements: [SPARQL:insert, BFO:process, cco:hasParticipant]
+
+  - id: CQ18
+    category: Data Validation
+    question: "Which data sources (AI-generated or analyst-curated) contain contradictions or gaps?"
+    ontology_elements: [Reasoner, Provenance, DataQualityAssessment]
+
+  - id: CQ19
+    category: Temporal Validation
+    question: "How can inferred temporal orderings help validate or refute observed attack narratives?"
+    ontology_elements: [BFO:precedes, CCO:Event, d3f:DigitalEvent]
+

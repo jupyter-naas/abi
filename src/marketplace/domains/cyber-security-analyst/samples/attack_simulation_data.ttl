@@ -1,0 +1,667 @@
+@prefix : <http://d3fend.mitre.org/ontologies/d3fend.owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix cco: <http://www.ontologyrepository.com/CommonCoreOntologies/> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/cyber-attacks#> .
+
+# =============================================================================
+# ATTACK SIMULATION DATA - Realistic Cyber Attack Scenarios
+# =============================================================================
+# This file contains instances representing real-world cyber attacks including:
+# - Stuxnet (Industrial Control System attack)
+# - SolarStorm (Supply Chain attack) 
+# - HeartBleed (OpenSSL vulnerability)
+# - APT29 (Russian state-sponsored group)
+# - Lazarus Group (North Korean state-sponsored group)
+# =============================================================================
+
+# =============================================================================
+# AGENTS (Attackers, Systems, Users)
+# =============================================================================
+
+# Human Agents
+ex:stuxnet_operator a :Agent ;
+    rdfs:label "Stuxnet Operator" ;
+    :hasRole "Malicious Actor" .
+
+ex:solarstorm_operator a :Agent ;
+    rdfs:label "SolarStorm Operator" ;
+    :hasRole "Supply Chain Attacker" .
+
+ex:apt29_operator a :Agent ;
+    rdfs:label "APT29 Operator" ;
+    :hasRole "State-Sponsored Attacker" .
+
+ex:lazarus_operator a :Agent ;
+    rdfs:label "Lazarus Group Operator" ;
+    :hasRole "Financial Crime Attacker" .
+
+ex:system_admin a :Agent ;
+    rdfs:label "System Administrator" ;
+    :hasRole "Privileged User" .
+
+ex:regular_user a :Agent ;
+    rdfs:label "Regular User" ;
+    :hasRole "Standard User" .
+
+# System Agents
+ex:stuxnet_worm a :Agent ;
+    rdfs:label "Stuxnet Worm" ;
+    :hasRole "Malicious Software" .
+
+ex:solarstorm_malware a :Agent ;
+    rdfs:label "SolarStorm Malware" ;
+    :hasRole "Supply Chain Malware" .
+
+ex:heartbleed_exploit a :Agent ;
+    rdfs:label "HeartBleed Exploit" ;
+    :hasRole "Vulnerability Exploit" .
+
+ex:apt29_toolkit a :Agent ;
+    rdfs:label "APT29 Toolkit" ;
+    :hasRole "Advanced Persistent Threat" .
+
+ex:lazarus_ransomware a :Agent ;
+    rdfs:label "Lazarus Ransomware" ;
+    :hasRole "Ransomware" .
+
+# =============================================================================
+# ARTIFACTS (Files, Payloads, Executables, Data)
+# =============================================================================
+
+# Stuxnet Artifacts
+ex:stuxnet_payload a :DigitalArtifact ;
+    rdfs:label "Stuxnet Main Payload" ;
+    :hasFileExtension ".exe" ;
+    :hasHash "a1b2c3d4e5f6789012345678901234567890abcd" .
+
+ex:stuxnet_driver a :DigitalArtifact ;
+    rdfs:label "Stuxnet Rootkit Driver" ;
+    :hasFileExtension ".sys" ;
+    :hasHash "b2c3d4e5f6789012345678901234567890abcdef" .
+
+ex:stuxnet_config a :DigitalArtifact ;
+    rdfs:label "Stuxnet Configuration File" ;
+    :hasFileExtension ".dat" ;
+    :hasHash "c3d4e5f6789012345678901234567890abcdef12" .
+
+ex:stuxnet_log a :DigitalArtifact ;
+    rdfs:label "Stuxnet Activity Log" ;
+    :hasFileExtension ".log" ;
+    :hasHash "d4e5f6789012345678901234567890abcdef1234" .
+
+# SolarStorm Artifacts
+ex:solarstorm_backdoor a :DigitalArtifact ;
+    rdfs:label "SolarStorm Backdoor" ;
+    :hasFileExtension ".dll" ;
+    :hasHash "e5f6789012345678901234567890abcdef123456" .
+
+ex:solarstorm_config a :DigitalArtifact ;
+    rdfs:label "SolarStorm Configuration" ;
+    :hasFileExtension ".xml" ;
+    :hasHash "f6789012345678901234567890abcdef12345678" .
+
+ex:solarstorm_credentials a :DigitalArtifact ;
+    rdfs:label "Stolen Credentials" ;
+    :hasFileExtension ".txt" ;
+    :hasHash "789012345678901234567890abcdef1234567890" .
+
+# HeartBleed Artifacts
+ex:heartbleed_exploit_code a :DigitalArtifact ;
+    rdfs:label "HeartBleed Exploit Code" ;
+    :hasFileExtension ".c" ;
+    :hasHash "89012345678901234567890abcdef12345678901" .
+
+ex:stolen_private_key a :DigitalArtifact ;
+    rdfs:label "Stolen Private Key" ;
+    :hasFileExtension ".key" ;
+    :hasHash "9012345678901234567890abcdef123456789012" .
+
+ex:stolen_certificate a :DigitalArtifact ;
+    rdfs:label "Stolen Certificate" ;
+    :hasFileExtension ".crt" ;
+    :hasHash "012345678901234567890abcdef1234567890123" .
+
+# APT29 Artifacts
+ex:apt29_phishing_email a :DigitalArtifact ;
+    rdfs:label "APT29 Phishing Email" ;
+    :hasFileExtension ".eml" ;
+    :hasHash "12345678901234567890abcdef12345678901234" .
+
+ex:apt29_macro_doc a :DigitalArtifact ;
+    rdfs:label "APT29 Macro Document" ;
+    :hasFileExtension ".doc" ;
+    :hasHash "2345678901234567890abcdef123456789012345" .
+
+ex:apt29_powershell_script a :DigitalArtifact ;
+    rdfs:label "APT29 PowerShell Script" ;
+    :hasFileExtension ".ps1" ;
+    :hasHash "345678901234567890abcdef1234567890123456" .
+
+# Lazarus Group Artifacts
+ex:lazarus_ransomware_binary a :DigitalArtifact ;
+    rdfs:label "Lazarus Ransomware Binary" ;
+    :hasFileExtension ".exe" ;
+    :hasHash "45678901234567890abcdef12345678901234567" .
+
+ex:lazarus_encrypted_files a :DigitalArtifact ;
+    rdfs:label "Encrypted Victim Files" ;
+    :hasFileExtension ".encrypted" ;
+    :hasHash "5678901234567890abcdef123456789012345678" .
+
+ex:lazarus_ransom_note a :DigitalArtifact ;
+    rdfs:label "Ransom Note" ;
+    :hasFileExtension ".txt" ;
+    :hasHash "678901234567890abcdef1234567890123456789" .
+
+# System Artifacts
+ex:system_logs a :DigitalArtifact ;
+    rdfs:label "System Event Logs" ;
+    :hasFileExtension ".evt" ;
+    :hasHash "78901234567890abcdef12345678901234567890" .
+
+ex:network_packets a :DigitalArtifact ;
+    rdfs:label "Network Packet Capture" ;
+    :hasFileExtension ".pcap" ;
+    :hasHash "8901234567890abcdef123456789012345678901" .
+
+ex:memory_dump a :DigitalArtifact ;
+    rdfs:label "Memory Dump" ;
+    :hasFileExtension ".dmp" ;
+    :hasHash "901234567890abcdef1234567890123456789012" .
+
+# =============================================================================
+# OFFENSIVE TECHNIQUES AND TACTICS
+# =============================================================================
+
+# Techniques
+ex:spear_phishing a :OffensiveTechnique ;
+    rdfs:label "Spear Phishing" ;
+    :definition "Targeted phishing attacks against specific individuals" .
+
+ex:supply_chain_compromise a :OffensiveTechnique ;
+    rdfs:label "Supply Chain Compromise" ;
+    :definition "Compromising software supply chain to distribute malware" .
+
+ex:buffer_overflow a :OffensiveTechnique ;
+    rdfs:label "Buffer Overflow" ;
+    :definition "Exploiting buffer overflow vulnerabilities" .
+
+ex:privilege_escalation a :OffensiveTechnique ;
+    rdfs:label "Privilege Escalation" ;
+    :definition "Gaining higher privileges on a system" .
+
+ex:lateral_movement a :OffensiveTechnique ;
+    rdfs:label "Lateral Movement" ;
+    :definition "Moving through network after initial compromise" .
+
+ex:data_exfiltration a :OffensiveTechnique ;
+    rdfs:label "Data Exfiltration" ;
+    :definition "Stealing sensitive data from target systems" .
+
+ex:ransomware_deployment a :OffensiveTechnique ;
+    rdfs:label "Ransomware Deployment" ;
+    :definition "Deploying ransomware to encrypt victim files" .
+
+# Tactics
+ex:initial_access a :OffensiveTactic ;
+    rdfs:label "Initial Access" ;
+    :definition "Gaining initial foothold in target environment" .
+
+ex:persistence a :OffensiveTactic ;
+    rdfs:label "Persistence" ;
+    :definition "Maintaining access to compromised systems" .
+
+ex:defense_evasion a :OffensiveTactic ;
+    rdfs:label "Defense Evasion" ;
+    :definition "Avoiding detection by security systems" .
+
+ex:credential_access a :OffensiveTactic ;
+    rdfs:label "Credential Access" ;
+    :definition "Stealing or compromising user credentials" .
+
+ex:impact a :OffensiveTactic ;
+    rdfs:label "Impact" ;
+    :definition "Causing damage to target systems or data" .
+
+# Technique-Tactic Relationships
+ex:spear_phishing :enables ex:initial_access .
+ex:supply_chain_compromise :enables ex:initial_access .
+ex:buffer_overflow :enables ex:initial_access .
+ex:privilege_escalation :enables ex:persistence .
+ex:lateral_movement :enables ex:credential_access .
+ex:data_exfiltration :enables ex:impact .
+ex:ransomware_deployment :enables ex:impact .
+
+# =============================================================================
+# OFFENSIVE ACTIONS (Attack Stages)
+# =============================================================================
+
+# Stuxnet Attack Actions
+ex:stuxnet_initial_infection a :OffensiveAction ;
+    rdfs:label "Stuxnet Initial Infection" ;
+    :implements ex:supply_chain_compromise ;
+    :hasParticipant ex:stuxnet_operator ;
+    :hasParticipant ex:stuxnet_payload ;
+    :produces ex:stuxnet_driver ;
+    :causes ex:stuxnet_file_creation_event .
+
+ex:stuxnet_persistence a :OffensiveAction ;
+    rdfs:label "Stuxnet Persistence" ;
+    :implements ex:privilege_escalation ;
+    :hasParticipant ex:stuxnet_worm ;
+    :hasParticipant ex:stuxnet_driver ;
+    :produces ex:stuxnet_config ;
+    :causes ex:stuxnet_registry_modification_event .
+
+ex:stuxnet_ics_attack a :OffensiveAction ;
+    rdfs:label "Stuxnet ICS Attack" ;
+    :implements ex:data_exfiltration ;
+    :hasParticipant ex:stuxnet_worm ;
+    :hasParticipant ex:stuxnet_config ;
+    :produces ex:stuxnet_log ;
+    :causes ex:stuxnet_network_communication_event .
+
+# SolarStorm Attack Actions
+ex:solarstorm_initial_compromise a :OffensiveAction ;
+    rdfs:label "SolarStorm Initial Compromise" ;
+    :implements ex:supply_chain_compromise ;
+    :hasParticipant ex:solarstorm_operator ;
+    :hasParticipant ex:solarstorm_backdoor ;
+    :produces ex:solarstorm_config ;
+    :causes ex:solarstorm_file_creation_event .
+
+ex:solarstorm_credential_theft a :OffensiveAction ;
+    rdfs:label "SolarStorm Credential Theft" ;
+    :implements ex:credential_access ;
+    :hasParticipant ex:solarstorm_malware ;
+    :hasParticipant ex:solarstorm_config ;
+    :produces ex:solarstorm_credentials ;
+    :causes ex:solarstorm_network_communication_event .
+
+# HeartBleed Attack Actions
+ex:heartbleed_exploitation a :OffensiveAction ;
+    rdfs:label "HeartBleed Exploitation" ;
+    :implements ex:buffer_overflow ;
+    :hasParticipant ex:heartbleed_exploit ;
+    :hasParticipant ex:heartbleed_exploit_code ;
+    :produces ex:stolen_private_key ;
+    :causes ex:heartbleed_network_communication_event .
+
+ex:heartbleed_certificate_theft a :OffensiveAction ;
+    rdfs:label "HeartBleed Certificate Theft" ;
+    :implements ex:data_exfiltration ;
+    :hasParticipant ex:heartbleed_exploit ;
+    :hasParticipant ex:stolen_private_key ;
+    :produces ex:stolen_certificate ;
+    :causes ex:heartbleed_file_access_event .
+
+# APT29 Attack Actions
+ex:apt29_phishing_campaign a :OffensiveAction ;
+    rdfs:label "APT29 Phishing Campaign" ;
+    :implements ex:spear_phishing ;
+    :hasParticipant ex:apt29_operator ;
+    :hasParticipant ex:apt29_phishing_email ;
+    :produces ex:apt29_macro_doc ;
+    :causes ex:apt29_email_send_event .
+
+ex:apt29_lateral_movement a :OffensiveAction ;
+    rdfs:label "APT29 Lateral Movement" ;
+    :implements ex:lateral_movement ;
+    :hasParticipant ex:apt29_toolkit ;
+    :hasParticipant ex:apt29_powershell_script ;
+    :produces ex:system_logs ;
+    :causes ex:apt29_network_connection_event .
+
+# Lazarus Group Attack Actions
+ex:lazarus_ransomware_deployment a :OffensiveAction ;
+    rdfs:label "Lazarus Ransomware Deployment" ;
+    :implements ex:ransomware_deployment ;
+    :hasParticipant ex:lazarus_operator ;
+    :hasParticipant ex:lazarus_ransomware_binary ;
+    :produces ex:lazarus_encrypted_files ;
+    :causes ex:lazarus_file_encryption_event .
+
+ex:lazarus_ransom_demand a :OffensiveAction ;
+    rdfs:label "Lazarus Ransom Demand" ;
+    :implements ex:impact ;
+    :hasParticipant ex:lazarus_ransomware ;
+    :hasParticipant ex:lazarus_encrypted_files ;
+    :produces ex:lazarus_ransom_note ;
+    :causes ex:lazarus_file_creation_event .
+
+# =============================================================================
+# DIGITAL EVENTS (Timeline of Attack Activities)
+# =============================================================================
+
+# Stuxnet Events
+ex:stuxnet_file_creation_event a :FileCreationEvent ;
+    rdfs:label "Stuxnet File Creation" ;
+    :hasParticipant ex:stuxnet_payload ;
+    :hasParticipant ex:stuxnet_driver ;
+    :timestamp "2010-06-01T10:30:00Z"^^xsd:dateTime .
+
+ex:stuxnet_registry_modification_event a :FileUpdateEvent ;
+    rdfs:label "Stuxnet Registry Modification" ;
+    :hasParticipant ex:stuxnet_worm ;
+    :hasParticipant ex:stuxnet_config ;
+    :timestamp "2010-06-01T10:35:00Z"^^xsd:dateTime .
+
+ex:stuxnet_network_communication_event a :NetworkConnectionOpenEvent ;
+    rdfs:label "Stuxnet Network Communication" ;
+    :hasParticipant ex:stuxnet_worm ;
+    :hasParticipant ex:stuxnet_log ;
+    :timestamp "2010-06-01T10:40:00Z"^^xsd:dateTime .
+
+# SolarStorm Events
+ex:solarstorm_file_creation_event a :FileCreationEvent ;
+    rdfs:label "SolarStorm File Creation" ;
+    :hasParticipant ex:solarstorm_backdoor ;
+    :hasParticipant ex:solarstorm_config ;
+    :timestamp "2020-03-15T14:20:00Z"^^xsd:dateTime .
+
+ex:solarstorm_network_communication_event a :NetworkConnectionOpenEvent ;
+    rdfs:label "SolarStorm Network Communication" ;
+    :hasParticipant ex:solarstorm_malware ;
+    :hasParticipant ex:solarstorm_credentials ;
+    :timestamp "2020-03-15T14:25:00Z"^^xsd:dateTime .
+
+# HeartBleed Events
+ex:heartbleed_network_communication_event a :NetworkConnectionOpenEvent ;
+    rdfs:label "HeartBleed Network Communication" ;
+    :hasParticipant ex:heartbleed_exploit ;
+    :hasParticipant ex:heartbleed_exploit_code ;
+    :timestamp "2014-04-07T09:15:00Z"^^xsd:dateTime .
+
+ex:heartbleed_file_access_event a :FileAccessEvent ;
+    rdfs:label "HeartBleed File Access" ;
+    :hasParticipant ex:heartbleed_exploit ;
+    :hasParticipant ex:stolen_private_key ;
+    :timestamp "2014-04-07T09:20:00Z"^^xsd:dateTime .
+
+# APT29 Events
+ex:apt29_email_send_event a :EmailSendEvent ;
+    rdfs:label "APT29 Email Send" ;
+    :hasParticipant ex:apt29_operator ;
+    :hasParticipant ex:apt29_phishing_email ;
+    :timestamp "2021-01-15T08:30:00Z"^^xsd:dateTime .
+
+ex:apt29_network_connection_event a :NetworkConnectionOpenEvent ;
+    rdfs:label "APT29 Network Connection" ;
+    :hasParticipant ex:apt29_toolkit ;
+    :hasParticipant ex:apt29_powershell_script ;
+    :timestamp "2021-01-15T08:45:00Z"^^xsd:dateTime .
+
+# Lazarus Group Events
+ex:lazarus_file_encryption_event a :FileEncryptionEvent ;
+    rdfs:label "Lazarus File Encryption" ;
+    :hasParticipant ex:lazarus_ransomware ;
+    :hasParticipant ex:lazarus_ransomware_binary ;
+    :timestamp "2022-03-10T16:00:00Z"^^xsd:dateTime .
+
+ex:lazarus_file_creation_event a :FileCreationEvent ;
+    rdfs:label "Lazarus Ransom Note Creation" ;
+    :hasParticipant ex:lazarus_ransomware ;
+    :hasParticipant ex:lazarus_ransom_note ;
+    :timestamp "2022-03-10T16:05:00Z"^^xsd:dateTime .
+
+# =============================================================================
+# TEMPORAL RELATIONSHIPS (Attack Chain Sequences)
+# =============================================================================
+
+# Stuxnet Attack Chain
+ex:stuxnet_initial_infection bfo:precedes ex:stuxnet_persistence .
+ex:stuxnet_persistence bfo:precedes ex:stuxnet_ics_attack .
+
+ex:stuxnet_file_creation_event bfo:precedes ex:stuxnet_registry_modification_event .
+ex:stuxnet_registry_modification_event bfo:precedes ex:stuxnet_network_communication_event .
+
+# SolarStorm Attack Chain
+ex:solarstorm_initial_compromise bfo:precedes ex:solarstorm_credential_theft .
+
+ex:solarstorm_file_creation_event bfo:precedes ex:solarstorm_network_communication_event .
+
+# HeartBleed Attack Chain
+ex:heartbleed_exploitation bfo:precedes ex:heartbleed_certificate_theft .
+
+ex:heartbleed_network_communication_event bfo:precedes ex:heartbleed_file_access_event .
+
+# APT29 Attack Chain
+ex:apt29_phishing_campaign bfo:precedes ex:apt29_lateral_movement .
+
+ex:apt29_email_send_event bfo:precedes ex:apt29_network_connection_event .
+
+# Lazarus Group Attack Chain
+ex:lazarus_ransomware_deployment bfo:precedes ex:lazarus_ransom_demand .
+
+ex:lazarus_file_encryption_event bfo:precedes ex:lazarus_file_creation_event .
+
+# =============================================================================
+# PROCESS CONTAINMENT RELATIONSHIPS
+# =============================================================================
+
+# Attack campaigns as super-processes
+ex:stuxnet_campaign a :OffensiveAction ;
+    rdfs:label "Stuxnet Campaign" ;
+    :contains ex:stuxnet_initial_infection ;
+    :contains ex:stuxnet_persistence ;
+    :contains ex:stuxnet_ics_attack .
+
+ex:solarstorm_campaign a :OffensiveAction ;
+    rdfs:label "SolarStorm Campaign" ;
+    :contains ex:solarstorm_initial_compromise ;
+    :contains ex:solarstorm_credential_theft .
+
+ex:heartbleed_campaign a :OffensiveAction ;
+    rdfs:label "HeartBleed Campaign" ;
+    :contains ex:heartbleed_exploitation ;
+    :contains ex:heartbleed_certificate_theft .
+
+ex:apt29_campaign a :OffensiveAction ;
+    rdfs:label "APT29 Campaign" ;
+    :contains ex:apt29_phishing_campaign ;
+    :contains ex:apt29_lateral_movement .
+
+ex:lazarus_campaign a :OffensiveAction ;
+    rdfs:label "Lazarus Campaign" ;
+    :contains ex:lazarus_ransomware_deployment ;
+    :contains ex:lazarus_ransom_demand .
+
+# =============================================================================
+# NETWORK EVENTS WITH MALICIOUS ARTIFACTS
+# =============================================================================
+
+# Network events that correlate with malicious artifacts
+ex:stuxnet_network_communication_event :hasParticipant ex:stuxnet_payload .
+ex:stuxnet_network_communication_event :produces ex:stuxnet_log .
+
+ex:solarstorm_network_communication_event :hasParticipant ex:solarstorm_backdoor .
+ex:solarstorm_network_communication_event :produces ex:solarstorm_credentials .
+
+ex:heartbleed_network_communication_event :hasParticipant ex:heartbleed_exploit_code .
+ex:heartbleed_network_communication_event :produces ex:stolen_private_key .
+
+ex:apt29_network_connection_event :hasParticipant ex:apt29_powershell_script .
+ex:apt29_network_connection_event :produces ex:system_logs .
+
+# =============================================================================
+# PHYSICAL-WORLD CORRELATIONS
+# =============================================================================
+
+# Correlating digital events with physical entities
+ex:stuxnet_operator bfo:participatesIn ex:stuxnet_file_creation_event .
+ex:solarstorm_operator bfo:participatesIn ex:solarstorm_file_creation_event .
+ex:apt29_operator bfo:participatesIn ex:apt29_email_send_event .
+ex:lazarus_operator bfo:participatesIn ex:lazarus_file_encryption_event .
+
+# System administrators as participants in defensive events
+ex:system_admin bfo:participatesIn ex:stuxnet_network_communication_event .
+ex:system_admin bfo:participatesIn ex:solarstorm_network_communication_event .
+ex:system_admin bfo:participatesIn ex:heartbleed_network_communication_event .
+
+# Regular users as targets
+ex:regular_user bfo:participatesIn ex:apt29_email_send_event .
+ex:regular_user bfo:participatesIn ex:lazarus_file_encryption_event .
+
+# =============================================================================
+# ADDITIONAL ARTIFACT RELATIONSHIPS FOR COMPREHENSIVE COVERAGE
+# =============================================================================
+
+# Artifact generation relationships
+ex:stuxnet_worm :agent_in ex:stuxnet_initial_infection .
+ex:stuxnet_initial_infection :produces ex:stuxnet_driver .
+
+ex:solarstorm_malware :agent_in ex:solarstorm_initial_compromise .
+ex:solarstorm_initial_compromise :produces ex:solarstorm_config .
+
+ex:heartbleed_exploit :agent_in ex:heartbleed_exploitation .
+ex:heartbleed_exploitation :produces ex:stolen_private_key .
+
+ex:apt29_toolkit :agent_in ex:apt29_lateral_movement .
+ex:apt29_lateral_movement :produces ex:system_logs .
+
+ex:lazarus_ransomware :agent_in ex:lazarus_ransomware_deployment .
+ex:lazarus_ransomware_deployment :produces ex:lazarus_encrypted_files .
+
+# Artifact lineage relationships
+ex:stuxnet_payload :participatesIn ex:stuxnet_initial_infection .
+ex:stuxnet_driver :participatesIn ex:stuxnet_persistence .
+ex:stuxnet_config :participatesIn ex:stuxnet_ics_attack .
+
+ex:solarstorm_backdoor :participatesIn ex:solarstorm_initial_compromise .
+ex:solarstorm_config :participatesIn ex:solarstorm_credential_theft .
+
+ex:heartbleed_exploit_code :participatesIn ex:heartbleed_exploitation .
+ex:stolen_private_key :participatesIn ex:heartbleed_certificate_theft .
+
+ex:apt29_phishing_email :participatesIn ex:apt29_phishing_campaign .
+ex:apt29_powershell_script :participatesIn ex:apt29_lateral_movement .
+
+ex:lazarus_ransomware_binary :participatesIn ex:lazarus_ransomware_deployment .
+ex:lazarus_encrypted_files :participatesIn ex:lazarus_ransom_demand .
+
+# =============================================================================
+# MEMORY AND STORAGE ARTIFACTS
+# =============================================================================
+
+ex:stuxnet_memory_dump a :DigitalArtifact ;
+    rdfs:label "Stuxnet Memory Dump" ;
+    :hasFileExtension ".dmp" ;
+    :hasHash "stuxnet_memory_1234567890abcdef" .
+
+ex:solarstorm_memory_dump a :DigitalArtifact ;
+    rdfs:label "SolarStorm Memory Dump" ;
+    :hasFileExtension ".dmp" ;
+    :hasHash "solarstorm_memory_1234567890abcdef" .
+
+ex:heartbleed_memory_dump a :DigitalArtifact ;
+    rdfs:label "HeartBleed Memory Dump" ;
+    :hasFileExtension ".dmp" ;
+    :hasHash "heartbleed_memory_1234567890abcdef" .
+
+ex:apt29_memory_dump a :DigitalArtifact ;
+    rdfs:label "APT29 Memory Dump" ;
+    :hasFileExtension ".dmp" ;
+    :hasHash "apt29_memory_1234567890abcdef" .
+
+ex:lazarus_memory_dump a :DigitalArtifact ;
+    rdfs:label "Lazarus Memory Dump" ;
+    :hasFileExtension ".dmp" ;
+    :hasHash "lazarus_memory_1234567890abcdef" .
+
+# Memory dump creation events
+ex:stuxnet_memory_dump_event a :FileCreationEvent ;
+    rdfs:label "Stuxnet Memory Dump Creation" ;
+    :hasParticipant ex:stuxnet_worm ;
+    :hasParticipant ex:stuxnet_memory_dump ;
+    :timestamp "2010-06-01T11:00:00Z"^^xsd:dateTime .
+
+ex:solarstorm_memory_dump_event a :FileCreationEvent ;
+    rdfs:label "SolarStorm Memory Dump Creation" ;
+    :hasParticipant ex:solarstorm_malware ;
+    :hasParticipant ex:solarstorm_memory_dump ;
+    :timestamp "2020-03-15T15:00:00Z"^^xsd:dateTime .
+
+ex:heartbleed_memory_dump_event a :FileCreationEvent ;
+    rdfs:label "HeartBleed Memory Dump Creation" ;
+    :hasParticipant ex:heartbleed_exploit ;
+    :hasParticipant ex:heartbleed_memory_dump ;
+    :timestamp "2014-04-07T10:00:00Z"^^xsd:dateTime .
+
+ex:apt29_memory_dump_event a :FileCreationEvent ;
+    rdfs:label "APT29 Memory Dump Creation" ;
+    :hasParticipant ex:apt29_toolkit ;
+    :hasParticipant ex:apt29_memory_dump ;
+    :timestamp "2021-01-15T09:00:00Z"^^xsd:dateTime .
+
+ex:lazarus_memory_dump_event a :FileCreationEvent ;
+    rdfs:label "Lazarus Memory Dump Creation" ;
+    :hasParticipant ex:lazarus_ransomware ;
+    :hasParticipant ex:lazarus_memory_dump ;
+    :timestamp "2022-03-10T17:00:00Z"^^xsd:dateTime .
+
+# =============================================================================
+# NETWORK PACKET CAPTURES
+# =============================================================================
+
+ex:stuxnet_pcap a :DigitalArtifact ;
+    rdfs:label "Stuxnet Network Capture" ;
+    :hasFileExtension ".pcap" ;
+    :hasHash "stuxnet_pcap_1234567890abcdef" .
+
+ex:solarstorm_pcap a :DigitalArtifact ;
+    rdfs:label "SolarStorm Network Capture" ;
+    :hasFileExtension ".pcap" ;
+    :hasHash "solarstorm_pcap_1234567890abcdef" .
+
+ex:heartbleed_pcap a :DigitalArtifact ;
+    rdfs:label "HeartBleed Network Capture" ;
+    :hasFileExtension ".pcap" ;
+    :hasHash "heartbleed_pcap_1234567890abcdef" .
+
+ex:apt29_pcap a :DigitalArtifact ;
+    rdfs:label "APT29 Network Capture" ;
+    :hasFileExtension ".pcap" ;
+    :hasHash "apt29_pcap_1234567890abcdef" .
+
+ex:lazarus_pcap a :DigitalArtifact ;
+    rdfs:label "Lazarus Network Capture" ;
+    :hasFileExtension ".pcap" ;
+    :hasHash "lazarus_pcap_1234567890abcdef" .
+
+# Network capture creation events
+ex:stuxnet_pcap_event a :FileCreationEvent ;
+    rdfs:label "Stuxnet Network Capture Creation" ;
+    :hasParticipant ex:stuxnet_network_communication_event ;
+    :hasParticipant ex:stuxnet_pcap ;
+    :timestamp "2010-06-01T10:45:00Z"^^xsd:dateTime .
+
+ex:solarstorm_pcap_event a :FileCreationEvent ;
+    rdfs:label "SolarStorm Network Capture Creation" ;
+    :hasParticipant ex:solarstorm_network_communication_event ;
+    :hasParticipant ex:solarstorm_pcap ;
+    :timestamp "2020-03-15T14:30:00Z"^^xsd:dateTime .
+
+ex:heartbleed_pcap_event a :FileCreationEvent ;
+    rdfs:label "HeartBleed Network Capture Creation" ;
+    :hasParticipant ex:heartbleed_network_communication_event ;
+    :hasParticipant ex:heartbleed_pcap ;
+    :timestamp "2014-04-07T09:25:00Z"^^xsd:dateTime .
+
+ex:apt29_pcap_event a :FileCreationEvent ;
+    rdfs:label "APT29 Network Capture Creation" ;
+    :hasParticipant ex:apt29_network_connection_event ;
+    :hasParticipant ex:apt29_pcap ;
+    :timestamp "2021-01-15T08:50:00Z"^^xsd:dateTime .
+
+ex:lazarus_pcap_event a :FileCreationEvent ;
+    rdfs:label "Lazarus Network Capture Creation" ;
+    :hasParticipant ex:lazarus_file_encryption_event ;
+    :hasParticipant ex:lazarus_pcap ;
+    :timestamp "2022-03-10T16:10:00Z"^^xsd:dateTime .
+
+# =============================================================================
+# END OF ATTACK SIMULATION DATA
+# =============================================================================

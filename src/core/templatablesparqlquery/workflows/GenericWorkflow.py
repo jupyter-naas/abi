@@ -1,10 +1,12 @@
-from typing import TypeVar, Generic, Type
+from typing import TypeVar, Generic, Type, Optional
 from langchain_core.tools import StructuredTool, BaseTool
 from abi.utils.SPARQL import results_to_list
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
+class NoArgumentsModel(BaseModel):
+    pass
 
 class GenericWorkflow(Generic[T]):
     def __init__(
@@ -12,7 +14,7 @@ class GenericWorkflow(Generic[T]):
         name: str,
         description: str,
         sparql_template: str,
-        arguments_model: Type[T],
+        arguments_model: Optional[Type[T]] = None,
     ):
         self.name = name
         self.description = description
@@ -25,7 +27,7 @@ class GenericWorkflow(Generic[T]):
             from jinja2 import Template
 
             template = Template(self.sparql_template)
-            sparql_query = template.render(parameters.model_dump())
+            sparql_query = template.render(parameters.model_dump() if parameters else {})
             # print(sparql_query)
             from src import services
 
@@ -34,12 +36,12 @@ class GenericWorkflow(Generic[T]):
         except Exception as e:
             return [{'error': str(e)}]
 
-    def as_tools(self) -> list[BaseTool]:
+    def as_tools(self) -> list[BaseTool]:        
         return [
             StructuredTool(
                 name=self.name,
                 description=self.description,
-                func=lambda **kwargs: self.run(self.arguments_model(**kwargs)),
-                args_schema=self.arguments_model,
+                func=lambda **kwargs: self.run(self.arguments_model(**kwargs)) if self.arguments_model else self.run(None),
+                args_schema=self.arguments_model if self.arguments_model else NoArgumentsModel,
             )
         ]

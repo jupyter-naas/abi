@@ -49,6 +49,8 @@ modules:
     enabled: false
   - path: src/marketplace/domains/support
     enabled: true
+  - path: src/marketplace/domains/cyber-security-analyst
+    enabled: true
   - path: src/marketplace/applications/pubmed
     enabled: false
   - path: src/marketplace/applications/bodo
