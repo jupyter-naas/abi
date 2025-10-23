@@ -99,9 +99,6 @@ def create_agent(
         )
         logger.info("Using OpenAI model: gpt-4o")
     
-    if agent_shared_state is None:
-        agent_shared_state = AgentSharedState()
-    
     # Load all 22 competency question tools from CyberSecurityQueries.ttl
     # The TTL is auto-loaded from /ontologies directory into triplestore
     from src.core.templatablesparqlquery import get_tools
@@ -139,9 +136,9 @@ def create_agent(
     # Create intents - map all CQ tools to TOOL intent type
     intents = [
         Intent(
-            name=tool_name,
-            type=IntentType.TOOL,
-            description=f"Answer competency question {tool_name}",
+            intent_value=tool_name,
+            intent_type=IntentType.TOOL,
+            intent_target=tool_name,
         )
         for tool_name in cq_tools
     ]

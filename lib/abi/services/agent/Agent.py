@@ -424,9 +424,12 @@ class Agent(Expose):
                 return "I don't have any tools available to help you at the moment."
             
             tools_text = "Here are the tools I can use to help you:\n\n"
-            for t in self._structured_tools:
-                if not t.name.startswith("transfer_to"):
-                    tools_text += f"- `{t.name}`: {t.description.splitlines()[0]}\n"
+            # Filter out tools that start with "transfer_to"
+            filtered_tools = [t for t in self._structured_tools if not t.name.startswith("transfer_to")]
+            # Sort tools alphabetically by name
+            filtered_tools_sorted = sorted(filtered_tools, key=lambda t: t.name)
+            for t in filtered_tools_sorted:
+                tools_text += f"- `{t.name}`: {t.description.splitlines()[0]}\n"
             return tools_text.rstrip()
 
         @tool(return_direct=True)

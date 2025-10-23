@@ -21,16 +21,16 @@ def templatable_queries():
     from src import services
 
     results = services.triple_store_service.query("""
-        PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT ?query ?label ?description ?sparqlTemplate ?hasArgument
-        WHERE {
-            ?query a intentMapping:TemplatableSparqlQuery ;
-                intentMapping:intentDescription ?description ;
-                intentMapping:sparqlTemplate ?sparqlTemplate ;
-                intentMapping:hasArgument ?hasArgument ;
-                rdfs:label ?label .
-        }
+PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?query ?label ?description ?sparqlTemplate ?hasArgument
+WHERE {
+  ?query a intentMapping:TemplatableSparqlQuery ;
+         intentMapping:intentDescription ?description ;
+         intentMapping:sparqlTemplate ?sparqlTemplate ;
+         rdfs:label ?label ;
+         OPTIONAL {?query intentMapping:hasArgument ?hasArgument } .
+}
     """)
 
     queries = {}
@@ -121,32 +121,38 @@ def load_workflows():
         try:
             query = queries[_query]
 
-            # Arguments Model with validation patterns
-            arguments_model = create_model(
-                f"{str(query['label']).capitalize()}Arguments",
-                **{
-                    str(arguments[argument]["name"]): (
-                        str,
-                        Field(
-                            ...,
-                            description=str(arguments[argument]["description"]),
-                            pattern=str(arguments[argument]["validationPattern"]),
-                            # You could also add additional metadata from validationFormat if needed
-                            example=str(arguments[argument]["validationFormat"]),
-                        ),
-                    )
-                    for argument in query.get("hasArgument")
-                },
-            )
+            arguments_model = None
+            if query.get("hasArgument") and len(query.get("hasArgument")) > 0 and all(query.get("hasArgument")):
+                logger.debug(f"Arguments: {query.get('hasArgument')}")
+                # Arguments Model with validation patterns
+                arguments_model = create_model(
+                    f"{str(query['label']).capitalize()}Arguments",
+                    **{
+                        str(arguments[argument]["name"]): (
+                            str,
+                            Field(
+                                ...,
+                                description=str(arguments[argument]["description"]),
+                                pattern=str(arguments[argument]["validationPattern"]),
+                                # You could also add additional metadata from validationFormat if needed
+                                example=str(arguments[argument]["validationFormat"]),
+                            ),
+                        )
+                        for argument in query.get("hasArgument")
+                    },
+                )
 
             p = GenericWorkflow[arguments_model](
                 str(query["label"]),
                 str(query["description"]),
                 str(query["sparqlTemplate"]),
-                arguments_model,
+                arguments_model if arguments_model else None,
             )
             workflows.append(p)
+            
         except Exception as e:
             logger.error(f"Error loading workflow: {e}")
+            import traceback
+            traceback.print_exc()
 
     return workflows
