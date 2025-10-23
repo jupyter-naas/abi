@@ -59,6 +59,12 @@ def create_agent(
 ) -> Optional[IntentAgent]:
     """Create Cyber Security Agent with all 22 competency question tools."""
     
+    if agent_shared_state is None:
+        agent_shared_state = AgentSharedState()
+    
+    if agent_configuration is None:
+        agent_configuration = AgentConfiguration(system_prompt=SYSTEM_PROMPT)
+    
     # Load model based on AI_MODE
     from src import secret
     from langchain_openai import ChatOpenAI
@@ -149,6 +155,5 @@ def create_agent(
         intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=None,
-        system_prompt=SYSTEM_PROMPT,
+        memory=None
     )
