@@ -388,7 +388,8 @@ Input:
 
 Instructions:
 1. Understand the shapes structure from template_json.
-2. Map the text in markdown content to corresponding shape by updating the "text" field of the shape. If unable to find a match, try to fill it with your knowledge of the content and shape.
+2. Map the text in markdown content to corresponding shape by updating the "text" field of the shape. 
+    If unable to find a match but you have 'text' or 'shape_alt_text' with value, try to fill it with your knowledge of the content and shape or return empty string "".
 3. Maintain all other shape properties from template (shape_id, shape_type, etc.)
 4. Return the extact same JSON format.
 
@@ -522,7 +523,7 @@ Template shapes to reference:
         # Get presentation data
         presentation_data = state.get("presentation_data", {})
         slides_data = presentation_data.get("slides_data", [])
-        presentation_name = presentation_data.get("presentation_title", "Presentation").replace(" ", "_") + ".pptx"
+        presentation_name = presentation_data.get("presentation_title", "Presentation").replace(" ", "") + ".pptx"
         
         # Create presentation from template
         presentation = self.__powerpoint_integration.create_presentation()
