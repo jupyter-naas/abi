@@ -841,7 +841,7 @@ class PowerPointIntegration(Integration):
             shape_id = s.shape_id
             shape_type = s.shape_type
             shape_text = s.text if hasattr(s, "text") else ""
-            print(f"Shape ID: {shape_id}, Shape Type: {shape_type}, Text: {shape_text}")
+            # print(f"Shape ID: {shape_id}, Shape Type: {shape_type}, Text: {shape_text}")
             try:                    
                 if s.shape_type == MSO_SHAPE_TYPE.PICTURE or (s.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER and shape_text == ""):
                     # Copy pictures at same position/size
@@ -903,6 +903,9 @@ class PowerPointIntegration(Integration):
         Returns:
             Presentation with updated notes
         """
+        if len(sources) == 0:
+            return presentation
+        
         try:
             if not hasattr(presentation, "slides") or presentation.slides is None:
                 return presentation
