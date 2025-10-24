@@ -110,20 +110,44 @@ class PowerPointIntegration(Integration):
                 shapes.append(data)
             slides.append({"slide_number": i, "shapes": shapes})
         return slides
+    
+    def get_shapes_from_slide(self, slide_number: int) -> list:
+        """Get the shapes of the presentation.
+        """
+        presentation = self.create_presentation()
+        shapes: list = []
+        for shape in presentation.slides[slide_number].shapes:
+            data = {
+                "slide_number": slide_number,
+                "shape_id": shape.shape_id,
+                "shape_type": shape.shape_type,
+                "shape_alt_text": shape._element._nvXxPr.cNvPr.attrib.get(
+                    "descr", ""
+                ),
+                "text": shape.text if hasattr(shape, "text") else "",
+                "left": shape.left.cm if hasattr(shape, "left") else None,
+                "top": shape.top.cm if hasattr(shape, "top") else None,
+                "width": shape.width.cm if hasattr(shape, "width") else None,
+                "height": shape.height.cm if hasattr(shape, "height") else None,
+                "rotation": shape.rotation if hasattr(shape, "rotation") else None,
+            }
+            shapes.append(data)
+        return shapes
 
-    def get_structure(self, presentation: PresentationType) -> List[Dict[str, Any]]:
+    def get_structure(self) -> List[Dict[str, Any]]:
         """Get the structure of the presentation.
 
         Args:
             presentation (Presentation): PowerPoint presentation object
         """
+        presentation = self.create_presentation()
         slides = []
         for i, slide in enumerate(presentation.slides):
             shapes = []
             for shape in slide.shapes:
                 alt_text = shape._element._nvXxPr.cNvPr.attrib.get("descr", "")
-                if alt_text == "":
-                    continue
+                # if alt_text == "":
+                #     continue
                 data = {
                     "slide_number": i,
                     "shape_id": shape.shape_id,
@@ -143,7 +167,9 @@ class PowerPointIntegration(Integration):
         return slides
 
     def add_slide(
-        self, presentation: PresentationType, layout_index: int = 6
+        self, 
+        presentation: Optional[PresentationType] = None,
+        layout_index: Optional[int] = 6
     ) -> Tuple[PresentationType, int]:
         """Add a new slide to the presentation.
 
@@ -157,6 +183,7 @@ class PowerPointIntegration(Integration):
         Example:
             >>> ppt, slide_idx = integration.add_slide(ppt, layout_index=6)
         """
+        presentation = self.create_presentation() if presentation is None else presentation
         slide_layout = presentation.slide_layouts[layout_index]
         presentation.slides.add_slide(slide_layout)
         return presentation, len(presentation.slides) - 1
@@ -738,6 +765,188 @@ class PowerPointIntegration(Integration):
 
         return presentation
 
+    def _get_layout_in_dst(self, dst_prs, src_layout_name: str):
+        """
+        Return a slide layout from *dst_prs* that best matches the *src_layout_name*.
+        Using a layout object from a different Presentation triggers duplicate ZIP part names.
+        """
+        # Try exact layout name across all masters
+        for m in dst_prs.slide_masters:
+            for lyt in m.slide_layouts:
+                if lyt.name == src_layout_name:
+                    return lyt
+                    
+        # Fallback to a common layout name
+        common_names = [
+            "Title and Content", 
+            "Title Slide", 
+            "Section Header", 
+            "Two Content",
+            "Comparison", 
+            "Title Only", 
+            "Blank", 
+            "Content with Caption",
+            "Picture with Caption",
+        ]
+        for name in common_names:
+            for m in dst_prs.slide_masters:
+                for lyt in m.slide_layouts:
+                    if lyt.name == name:
+                        return lyt
+                        
+        # Final fallback
+        return dst_prs.slide_layouts[0]
+
+    def duplicate_slide(
+        self,
+        source_presentation: PresentationType,
+        source_slide_number: int,
+        presentation: PresentationType
+    ) -> Tuple[PresentationType, int]:
+        """Duplicate a slide while keeping the same layout and content.
+
+        Args:
+            source_presentation (Presentation): Source PowerPoint presentation object
+            source_slide_number (int): Index of the slide to duplicate (0-based)
+            presentation (Presentation): Target PowerPoint presentation object to add the duplicated slide to
+
+        Returns:
+            Tuple[Presentation, int]: Updated presentation and index of the duplicated slide
+
+        Raises:
+            ValueError: If source_slide_number is invalid
+
+        Example:
+            >>> ppt, new_slide_idx = integration.duplicate_slide(source_ppt, 0, target_ppt)
+            >>> ppt, new_slide_idx = integration.duplicate_slide(source_ppt, 2, target_ppt)
+        """
+        src_slide = source_presentation.slides[source_slide_number]
+
+        # Keep the same layout
+        src_layout_name = src_slide.slide_layout.name
+        layout = self._get_layout_in_dst(presentation, src_layout_name)
+        new = presentation.slides.add_slide(layout)
+
+        # Clear any shapes that might exist (from layout) - more robust approach
+        shapes_to_remove = list(new.shapes)
+        for shape in shapes_to_remove:
+            try:
+                sp = shape._element
+                new.shapes._spTree.remove(sp)
+            except Exception as e:
+                logger.warning(f"Could not remove shape: {e}")
+
+        # Copy all shapes and pictures
+        for s in src_slide.shapes:
+            shape_id = s.shape_id
+            shape_type = s.shape_type
+            shape_text = s.text if hasattr(s, "text") else ""
+            # print(f"Shape ID: {shape_id}, Shape Type: {shape_type}, Text: {shape_text}")
+            try:                    
+                if s.shape_type == MSO_SHAPE_TYPE.PICTURE or (s.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER and shape_text == ""):
+                    # Copy pictures at same position/size
+                    try:
+                        blob = s.image.blob  # Get the blob directly
+                        stream = io.BytesIO(blob)
+                        stream.seek(0)
+                        new.shapes.add_picture(stream, s.left, s.top, s.width, s.height)
+                    except Exception as e:
+                        logger.warning(f"Warning: Could not copy picture: {e}")
+                        try:
+                            from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
+                            rect = new.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, s.left, s.top, s.width, s.height)
+                            rect.text_frame.text = "Image could not be copied"
+                        except Exception:
+                            pass
+                else:
+                    # Copy other shapes using deep copy
+                    new.shapes._spTree.insert_element_before(deepcopy(s._element), 'p:extLst')
+
+            except Exception as e:
+                logger.warning(f"Skipping shape due to error: {e}")
+
+        # Copy notes
+        if src_slide.has_notes_slide:
+            new.notes_slide.notes_text_frame.text = src_slide.notes_slide.notes_text_frame.text
+
+        # Return the index of the newly created slide (always at the end)
+        duplicated_slide_index = len(presentation.slides) - 1
+        return presentation, duplicated_slide_index
+    
+
+    def remove_all_slides(self, presentation: PresentationType) -> PresentationType:
+        """Remove all slides from the presentation.
+
+        Args:
+            presentation (Presentation): PowerPoint presentation object
+
+        Returns:
+            Presentation: Updated presentation with no slides
+
+        Example:
+            >>> ppt = integration.remove_all_slides(ppt)
+        """
+        for _ in range(len(presentation.slides)):
+            rId = presentation.slides._sldIdLst[0].rId
+            presentation.part.drop_rel(rId)
+            presentation.slides._sldIdLst.remove(presentation.slides._sldIdLst[0])
+        return presentation
+    
+
+    def update_notes(self, presentation: PresentationType, slide_number: int, sources: List[str]) -> PresentationType:
+        """
+        Add sources as formatted bullet lists to slide notes.
+        Args:
+            presentation: Presentation to update
+            slide_number: Slide number to update
+            sources: List of sources
+        Returns:
+            Presentation with updated notes
+        """
+        if len(sources) == 0:
+            return presentation
+        
+        try:
+            if not hasattr(presentation, "slides") or presentation.slides is None:
+                return presentation
+            
+            slide = presentation.slides[slide_number]
+            notes_slide = slide.notes_slide
+            text_frame = notes_slide.notes_text_frame
+
+            # Get or create sources section
+            sources_header = "Sources:"
+            sources_found = False
+
+            # Check existing paragraphs
+            for paragraph in text_frame.paragraphs:
+                if sources_header in paragraph.text:
+                    sources_found = True
+                    # Clear existing source items
+                    while len(paragraph._element.getnext()) is not None:
+                        next_para = paragraph._element.getnext()
+                        paragraph._element.getparent().remove(next_para)
+                    break
+
+            if not sources_found:
+                # Add sources header if not found
+                header_para = text_frame.add_paragraph()
+                header_para.text = sources_header
+                header_para.font.bold = True
+
+            seen = set()
+            for source in sources:
+                clean_url = source.strip()
+                if clean_url in seen:
+                    continue
+                seen.add(clean_url)
+                bullet_para = text_frame.add_paragraph()
+                bullet_para.text = f"• {clean_url}"  # Simulated bullet (as notes section does not support bullet list formatting)
+                bullet_para.level = 0
+        except Exception as e:
+            logger.error(f"Failed processing slide {slide_number}: {str(e)}")
+        return presentation
+
 
 def as_tools(configuration: PowerPointIntegrationConfiguration):
     """Convert PowerPoint integration into LangChain tools."""
@@ -746,23 +955,14 @@ def as_tools(configuration: PowerPointIntegrationConfiguration):
 
     integration = PowerPointIntegration(configuration)
 
-    class CreatePresentationSchema(BaseModel):
-        pass
-
-    class ListSlidesSchema(BaseModel):
+    class GetStructureSchema(BaseModel):
         pass
 
     return [
         StructuredTool(
-            name="powerpoint_create_presentation",
-            description="Create a new presentation",
-            func=lambda **kwargs: integration.create_presentation(**kwargs),
-            args_schema=CreatePresentationSchema,
-        ),
-        StructuredTool(
-            name="powerpoint_list_slides",
-            description="List all slides in the presentation",
-            func=lambda **kwargs: integration.list_slides(**kwargs),
-            args_schema=ListSlidesSchema,
+            name="powerpoint_get_structure",
+            description="Get the structure of the presentation",
+            func=lambda **kwargs: integration.get_structure(**kwargs),
+            args_schema=GetStructureSchema,
         ),
     ]

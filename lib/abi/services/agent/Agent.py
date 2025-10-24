@@ -707,7 +707,13 @@ AGENT SYSTEM PROMPT:
 """
 
             self.set_system_prompt(dev_prompt)
-        logger.debug(f"System prompt: {self._system_prompt}")
+            
+        if "CURRENT_DATE" not in self._system_prompt:
+            from datetime import datetime
+            self._system_prompt += f"\nCURRENT_DATE: {datetime.now().strftime('%Y-%m-%d')}"
+            self.set_system_prompt(self._system_prompt)
+
+        # logger.debug(f"System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:
