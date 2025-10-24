@@ -18,7 +18,7 @@ from abi import logger
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
-MODEL = "gpt-4.1-mini"
+MODEL = "gpt-4.1"
 TEMPERATURE = 0
 AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
 SYSTEM_PROMPT = """
@@ -44,10 +44,6 @@ You will be provided with a template structure and user brief.
 - Generate final presentation from slides content.
 </tasks>
 
-<tools>
-[TOOLS]
-</tools>
-
 <operating_guidelines>
 - First, carefully analyze the user brief to identify any provided information about:
 1. number of slides (mandatory)
@@ -65,9 +61,9 @@ Example:
     - Slide 1 - Title: Description
     - Slide 2 - Title: Description
 
-- Populate each slides with detailed content and template slide to use and return result in markdown format. 
+- Populate each slides with detailed content and template slide to use with alt text guidance if provided and return result in markdown format. 
 Example:
-\n**PresentationTitle: Title**\n
+\n**PresentationTitle: [Title]**\n
 ```markdown
 ### Slide 1: Presentation Overview
 TemplateSlideUri: ppt:Slide0
@@ -201,6 +197,8 @@ class PowerPointAgent(Agent):
 
         graph.add_node(self.call_model)
 
+        graph.add_node(self.convert_markdown_to_shapes)
+
         graph.add_node(self.convert_markdown_to_json)
 
         graph.add_node(self.convert_json_to_ppt)
@@ -297,8 +295,6 @@ class PowerPointAgent(Agent):
             """
             system_prompt = self._system_prompt.replace("[TEMPLATE_STRUCTURE]", turtle)
             self.set_system_prompt(system_prompt)
-        else:
-            logger.debug("✅ Template structure already injected")
         return Command(goto="validate_presentation_draft")
     
     def validate_presentation_draft(
@@ -374,14 +370,45 @@ class PowerPointAgent(Agent):
 
         return Command(update={"messages": [response]})
 
-    # def web_search(
-    #     self,
-    #     state: PowerPointState
-    # ) -> Command:
-    #     """
-    #     This node performs a web search using the web_search tool.
-    #     """
-    #     return Command(goto="call_model")
+    def convert_markdown_to_shapes(
+        self,
+        markdown_blocks: str,
+        template_shapes: list[dict]
+    ) -> dict:
+        """
+        This function converts markdown slide structure to shapes format.
+        It parses the markdown content and extracts shapes data from template JSON.
+        """
+        messages: list[BaseMessage] = [SystemMessage(content=f"""
+You are a precise JSON transformer. Your task is to convert markdown content into a shapes-based JSON format.
+
+Input:
+1. Markdown blocks containing slide content
+2. Template JSON showing the shape structure for each slide
+
+Instructions:
+1. Understand the shapes structure from template_json.
+2. Map the text in markdown content to corresponding shape by updating the "text" field of the shape. If unable to find a match, try to fill it with your knowledge of the content and shape.
+3. Maintain all other shape properties from template (shape_id, shape_type, etc.)
+4. Return the extact same JSON format.
+
+⚠️ Very Important:
+- You must output the JSON format only. No explanations. No other words.
+- Your answer will be parsed by a test function and must strictly match the JSON format.
+
+Markdown content to transform:
+```markdown
+{markdown_blocks}
+```
+
+Template shapes to reference:
+```json
+{template_shapes}
+```
+""")]
+        # Get validation response
+        response = self._chat_model.invoke(messages)
+        return response.content
     
     def convert_markdown_to_json(
         self, 
@@ -392,9 +419,9 @@ class PowerPointAgent(Agent):
         It parses the markdown content from the last message and extracts slide data.
         """
         import pydash as _
-        import os
+        from abi.utils.JSON import extract_json_from_completion
         from src.utils.Storage import save_text, save_json
-        
+        import json
 
         logger.debug("📝 Converting markdown to JSON")
         # Get last messages
@@ -427,17 +454,16 @@ class PowerPointAgent(Agent):
             
             # Extract markdown content between ```markdown tags
             markdown_blocks = content.split("```markdown")[1].split("```")[0].strip()
-            # print("markdown_blocks:", markdown_blocks)
             save_text(markdown_blocks, self.__datastore_path, "markdown_blocks.txt", copy=False)
             slides = markdown_blocks.split("###")
-            print("slides:", slides)
-            
+
             # Process each slide
             for slide_number, slide in enumerate(slides):
                 if "Slide" not in slide:
                     continue
-                print("slide:", slide)
+                
                 slide = slide.strip()
+                logger.debug(f"Slide {slide_number}: {slide}")
                 # Extract template slide URI if present
                 template_slide_uri = None
                 if "TemplateSlideUri:" in slide:
@@ -451,16 +477,27 @@ class PowerPointAgent(Agent):
 
                 # Get shapes from template slide
                 template_slide_number = int(template_slide_uri.split("ppt:Slide")[1])
-                shapes = self.__powerpoint_integration.get_shapes_from_slide(template_slide_number)
-                sources = slide.split("Sources:")[1].split("\n")[0].strip() if "Sources:" in slide else ""
-                sources_list = sources.split("-").replace("\n", "").strip() if sources else []
+                template_shapes = self.__powerpoint_integration.get_shapes_from_slide(template_slide_number)
+                try:
+                    shapes = extract_json_from_completion(self.convert_markdown_to_shapes(slide, template_shapes))
+                    logger.debug(f"Shapes for slide {slide_number}: {json.dumps(shapes, indent=4)}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to convert markdown to shapes for slide {slide_number}: {str(e)}")
+                    shapes = []
+                # Extract sources section if present
+                sources = []
+                if "Sources:" in slide:
+                    sources_section = slide.split("Sources:")[1].strip()
+                    # Split on newlines, filter empty strings and remove leading dash
+                    sources = [s.strip().lstrip('-') for s in sources_section.split("\n") if s.strip()]
+                logger.debug(f"Sources for slide {slide_number}: {sources}")
 
                 # Parse slide data and add to slides_data list
                 slide_data = {
                     "slide_number": slide_number,
                     "template_slide_number": template_slide_number,
                     "shapes": shapes,
-                    "sources": sources_list
+                    "sources": sources
                 }
                 slides_data.append(slide_data)
 
@@ -478,6 +515,7 @@ class PowerPointAgent(Agent):
         It uses the PowerPointIntegration to create and populate the presentation.
         """
         from io import BytesIO
+        from src.utils.Storage import save_powerpoint_presentation
 
         logger.debug("📊 Converting JSON to Powerpoint")
 
@@ -514,6 +552,9 @@ class PowerPointAgent(Agent):
             except Exception as e:
                 logger.error(f"❌ Failed to update notes on slide {new_slide_idx}: {str(e)}")
                 continue
+
+        # Save presentation to storage
+        save_powerpoint_presentation(presentation, self.__datastore_path, presentation_name, copy=False)
 
         # Save presentation to byte stream
         byte_stream = BytesIO() 
