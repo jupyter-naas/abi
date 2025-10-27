@@ -152,7 +152,7 @@ class PowerPointIntegration(Integration):
     def add_slide(
         self, 
         presentation: Optional[PresentationType] = None,
-        layout_index: Optional[int] = 6
+        layout_index: int = 6
     ) -> Tuple[PresentationType, int]:
         """Add a new slide to the presentation.
 

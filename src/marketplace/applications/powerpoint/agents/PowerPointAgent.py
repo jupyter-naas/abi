@@ -29,7 +29,7 @@ You never invent facts; you structure, adapt, and clearly label content from the
 
 <objective>
 Create a clear, audience-aligned presentation that:
-- Follows the template's structure.
+- Uses the template's structure as a guide
 - Honors the brief's objectives and constraints
 </objective>
 
@@ -133,7 +133,7 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
-    template_path = "src/marketplace/applications/powerpoint/templates/TemplateSlides.pptx"
+    template_path = "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx"
     return PowerPointAgent(
         name=NAME,
         description=DESCRIPTION,
@@ -143,6 +143,7 @@ def create_agent(
         configuration=agent_configuration,
         template_path=template_path,
     ) 
+
 
 class PowerPointAgent(Agent):
     def __init__(
@@ -172,8 +173,8 @@ class PowerPointAgent(Agent):
         self.__workspace_id = config.workspace_id
         self.__storage_name = config.storage_name
         self.__template_path = template_path
-        self.__template_name = os.path.basename(self.__template_path).lower().replace(".pptx", "")
-        self.__datastore_path = f"datastore/powerpoint/presentations/{self.__template_name}/{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        self.__template_name: str = os.path.basename(self.__template_path).lower().replace(".pptx", "") if self.__template_path else "TemplatePresentation"
+        self.__datastore_path: str = f"datastore/powerpoint/presentations/{self.__template_name}/{datetime.now().strftime('%Y%m%d%H%M%S')}" or "datastore/powerpoint/presentations/TemplatePresentation/20251027100000"
         
 
         from src.marketplace.applications.powerpoint.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration
@@ -197,8 +198,6 @@ class PowerPointAgent(Agent):
 
         graph.add_node(self.call_model)
 
-        graph.add_node(self.convert_markdown_to_shapes)
-
         graph.add_node(self.convert_markdown_to_json)
 
         graph.add_node(self.convert_json_to_ppt)
@@ -207,7 +206,7 @@ class PowerPointAgent(Agent):
 
     def continue_conversation(
         self, 
-        state: PowerPointState
+        state: MessagesState
     ) -> Command:
         """
         This node continues the conversation by injecting the template structure into the system prompt.
@@ -221,76 +220,70 @@ class PowerPointAgent(Agent):
         """
         This node injects the template structure into the system prompt.
         """
+        from rdflib import Graph
+        from rdflib.namespace import RDF, RDFS, OWL, Namespace, XSD
+        from rdflib.term import URIRef, Literal
+        from abi.utils.Graph import ABI
+        # import uuid
+        
         if "[TEMPLATE_STRUCTURE]" in self._system_prompt:
             logger.debug("🔧 Injecting template structure")
-            turtle = """
+
+            # Create graph
+            ABI = Namespace("http://ontology.naas.ai/abi/")
+            graph = Graph()
+            graph.bind("ppt", "http://ontology.naas.ai/abi/powerpoint/")
+            graph.bind("abi", ABI)
+            
+            # Add presentation triples
+            ppt_class = URIRef("http://ontology.naas.ai/abi/powerpoint/Presentation")
+            # presentation_uri = ABI[str(uuid.uuid4())]
+            presentation_uri = ABI[Literal(self.__template_name.lower().replace(" ", ""))]
+            graph.add((presentation_uri, RDF.type, OWL.NamedIndividual))
+            graph.add((presentation_uri, RDF.type, ppt_class))
+            graph.add((presentation_uri, RDFS.label, Literal(self.__template_name)))
+
+            # Get all shapes and slides from template
+            all_shapes_and_slides = self.__powerpoint_integration.get_all_shapes_and_slides()
+            for slide in all_shapes_and_slides:
+                slide_number = slide.get("slide_number")
+                shapes = slide.get("shapes", [])
+                # slide_uri = ABI[str(uuid.uuid4())]
+                slide_uri = ABI[Literal(f"Slide{slide_number}")]
+
+                # Add slide triples
+                graph.add((slide_uri, RDF.type, OWL.NamedIndividual))
+                graph.add((slide_uri, RDF.type, ppt_class))
+                # graph.add((slide_uri, RDFS.label, Literal(f"Slide {slide_number}")))
+                graph.add((slide_uri, ABI.slide_number, Literal(slide_number, datatype=XSD.integer)))
+                graph.add((presentation_uri, ABI.hasSlide, slide_uri))
+                graph.add((slide_uri, ABI.isSlideOf, presentation_uri))
+
+                # Add shapes triples
+                for shape in shapes:
+                    shape_id = shape.get("shape_id")
+                    shape_type = shape.get("shape_type")
+                    shape_text = shape.get("text")
+                    shape_alt_text = shape.get("shape_alt_text")
+                    if shape_type not in [14, 17] and shape_text == "":
+                        continue
+
+                    # shape_uri = ABI[str(uuid.uuid4())]
+                    shape_uri = ABI[Literal(f"Shape{slide_number}_{shape_id}")]
+                    graph.add((shape_uri, RDF.type, OWL.NamedIndividual))
+                    graph.add((shape_uri, RDF.type, ppt_class))
+                    # graph.add((shape_uri, RDFS.label, Literal(shape_text)))
+                    graph.add((shape_uri, ABI.shape_id, Literal(shape_id, datatype=XSD.integer)))
+                    graph.add((shape_uri, ABI.shape_type, Literal(shape_type, datatype=XSD.integer)))
+                    graph.add((shape_uri, ABI.shape_alt_text, Literal(shape_alt_text)))
+                    graph.add((shape_uri, ABI.shape_text, Literal(shape_text)))
+                    graph.add((shape_uri, ABI.isShapeOf, slide_uri))
+                    graph.add((slide_uri, ABI.hasShape, shape_uri))
+
+            print(graph.serialize(format="turtle"))
+            turtle = f"""
             ```turtle
-            @prefix ppt: <http://ontology.naas.ai/abi/powerpoint/> .
-            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-
-            # Presentation Overview
-            ppt:Presentation a ppt:Presentation ;
-                rdfs:label "Template Presentation" ;
-                ppt:hasSlide ppt:Slide0, ppt:Slide1 .
-
-            ppt:Slide0 a ppt:Slide ;
-                ppt:slide_number 0 ;
-                ppt:isSlideOf ppt:Presentation ;
-                ppt:hasShape ppt:Shape0_6, ppt:Shape0_7, ppt:Shape0_8 .
-
-            ppt:Shape0_6 a ppt:Shape ;
-                ppt:shape_id 6 ;
-                ppt:shape_type 14 ;
-                ppt:shape_alt_text "Title of the presentation" ;
-                ppt:shape_text "TITLE" ;
-                ppt:isShapeOf ppt:Slide0 .
-
-            ppt:Shape0_7 a ppt:Shape ;
-                ppt:shape_id 7 ;
-                ppt:shape_type 14 ;
-                ppt:shape_alt_text "Market Intelligence and Opportunity Discovery" ;
-                ppt:shape_text "Subtitle" ;
-                ppt:isShapeOf ppt:Slide0 .
-
-            ppt:Shape0_8 a ppt:Shape ;
-                ppt:shape_id 8 ;
-                ppt:shape_type 14 ;
-                ppt:shape_alt_text "last_update_date" ;
-                ppt:shape_text "YYYY-MM-DD" ;
-                ppt:isShapeOf ppt:Slide0 .
-
-            ppt:Slide1 a ppt:Slide ;
-                ppt:slide_number 1 ;
-                ppt:isSlideOf ppt:Presentation ;
-                ppt:hasShape ppt:Shape1_2, ppt:Shape1_6, ppt:Shape1_8, ppt:Shape1_10 .
-
-            ppt:Shape1_2 a ppt:Shape ;
-                ppt:shape_id 2 ;
-                ppt:shape_type 14 ;
-                ppt:shape_alt_text "" ;
-                ppt:shape_text "Title" ;
-                ppt:isShapeOf ppt:Slide1 .
-
-            ppt:Shape1_6 a ppt:Shape ;
-                ppt:shape_id 6 ;
-                ppt:shape_type 14 ;
-                ppt:shape_alt_text "" ;
-                ppt:shape_text "Subtitle" ;
-                ppt:isShapeOf ppt:Slide1 .
-
-            ppt:Shape1_8 a ppt:Shape ;
-                ppt:shape_id 8 ;
-                ppt:shape_type 14 ;
-                ppt:shape_alt_text "<description>\nProduce a bullet-point list that answers the question: {{ question }}.\n</description>\n\n<constraints>\n• Output 4–6 bullet points.\n• Each bullet starts with a **short title**, followed by a colon and the explanation.\n• Separate bullets with a single `\\n` (line break).\n• Total output length must be 1 600–2 000 characters (including bullets and line breaks).\n• Example:\n-Technological transition: xxxxx\n-Balance between sustainability and performance: xxxx\n</constraints>" ;
-                ppt:shape_text "Technological transition: The development and commercialization of new technologies, such as airless tires (Uptis), require substantial investments, large-scale production, and market adoption, representing a major challenge for Michelin.\nBalance between sustainability and performance: Michelin's \"All Sustainable\" approach requires finding a delicate balance between reducing carbon footprint and maintaining product performance, while remaining competitive in the market.\nDiversification of activities: Expansion into new areas, such as connected solutions and polymer composites, demands rapid adaptation and efficient integration of new skills and processes.\nSupply chain adaptation: The transition to more sustainable materials and the development of new technologies require a significant overhaul of the supply chain and production processes.\nCompetition and rapid market evolution: Faced with increased competition and rapidly evolving mobility technologies, Michelin must remain agile and innovative to maintain its leadership position.\nCost management and restructuring: The closure of factories in France, such as those in Cholet and Vannes, illustrates the challenges related to cost management and adaptation to market fluctuations, while minimizing the social impact of such decisions." ;
-                ppt:isShapeOf ppt:Slide1 .
-
-            ppt:Shape1_10 a ppt:Shape ;
-                ppt:shape_id 10 ;
-                ppt:shape_type 17 ;
-                ppt:shape_alt_text "question" ;
-                ppt:shape_text "Question" ;
-                ppt:isShapeOf ppt:Slide1 .
+            {graph.serialize(format="turtle")}
             ```
             """
             system_prompt = self._system_prompt.replace("[TEMPLATE_STRUCTURE]", turtle)
@@ -352,7 +345,7 @@ class PowerPointAgent(Agent):
         
     def call_model(
         self, 
-        state: PowerPointState
+        state: MessagesState
     ) -> Command:
         """
         This node handles the initial user interaction and presentation planning.
@@ -374,7 +367,7 @@ class PowerPointAgent(Agent):
         self,
         markdown_blocks: str,
         template_shapes: list[dict]
-    ) -> dict:
+    ) -> str:
         """
         This function converts markdown slide structure to shapes format.
         It parses the markdown content and extracts shapes data from template JSON.
@@ -389,7 +382,7 @@ Input:
 Instructions:
 1. Understand the shapes structure from template_json.
 2. Map the text in markdown content to corresponding shape by updating the "text" field of the shape. 
-    If unable to find a match but you have 'text' or 'shape_alt_text' with value, try to fill it with your knowledge of the content and shape or return empty string "".
+    If unable to find a match but you have 'text' or 'shape_alt_text' with value, try to fill it with your knowledge of the content and shape or return empty string '" "'.
 3. Maintain all other shape properties from template (shape_id, shape_type, etc.)
 4. Return the extact same JSON format.
 
@@ -409,7 +402,7 @@ Template shapes to reference:
 """)]
         # Get validation response
         response = self._chat_model.invoke(messages)
-        return response.content
+        return response.content if hasattr(response, 'content') and isinstance(response.content, str) else ""
     
     def convert_markdown_to_json(
         self, 
@@ -477,16 +470,25 @@ Template shapes to reference:
                     return Command(goto="__end__", update={"messages": [ai_message]})
 
                 # Get shapes from template slide
-                template_slide_number = int(template_slide_uri.split("ppt:Slide")[1])
-                template_shapes = self.__powerpoint_integration.get_shapes_from_slide(template_slide_number)
+                template_shapes: list = []
+                try:
+                    template_slide_number = int(template_slide_uri.split("ppt:Slide")[1])
+                    template_shapes = self.__powerpoint_integration.get_shapes_from_slide(template_slide_number)
+                except Exception as e:
+                    logger.error(f"❌ Failed to get shapes from template slide {template_slide_uri}: {str(e)}")
+                
+                if len(template_shapes) == 0:
+                    continue    
+            
+                shapes: list | dict = {}
                 try:
                     shapes = extract_json_from_completion(self.convert_markdown_to_shapes(slide, template_shapes))
                     logger.debug(f"Shapes for slide {slide_number}: {json.dumps(shapes, indent=4)}")
                 except Exception as e:
                     logger.error(f"❌ Failed to convert markdown to shapes for slide {slide_number}: {str(e)}")
-                    shapes = []
+
                 # Extract sources section if present
-                sources = []
+                sources: list = []
                 if "Sources:" in slide:
                     sources_section = slide.split("Sources:")[1].strip()
                     # Split on newlines, filter empty strings and remove leading dash
