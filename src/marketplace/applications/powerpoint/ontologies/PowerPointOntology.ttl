@@ -90,6 +90,18 @@ ppt:isShapeOf a owl:ObjectProperty ;
 #    Data Properties
 #################################################################
 
+ppt:download_url a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:string ;
+    rdfs:label "download url" ;
+    skos:definition "The URL of the PowerPoint Presentation."@en .
+
+ppt:storage_path a owl:DatatypeProperty ;
+    rdfs:domain ppt:Presentation ;
+    rdfs:range xsd:string ;
+    rdfs:label "storage path" ;
+    skos:definition "The storage path of the PowerPoint Presentation."@en .
+
 ppt:shape_id a owl:DatatypeProperty ;
     rdfs:domain ppt:Shape ;
     rdfs:range xsd:integer ;
@@ -143,3 +155,9 @@ ppt:shape_rotation_angle a owl:DatatypeProperty ;
     rdfs:range xsd:decimal ;
     rdfs:label "shape rotation angle" ;
     skos:definition "The rotation angle of the shape in degrees."@en .
+
+ppt:shape_table_data a owl:DatatypeProperty ;   
+    rdfs:domain ppt:Shape ;
+    rdfs:range xsd:string ;
+    rdfs:label "shape table data" ;
+    skos:definition "The data of the shape as a table."@en .
