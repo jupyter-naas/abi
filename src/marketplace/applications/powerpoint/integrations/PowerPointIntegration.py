@@ -111,10 +111,16 @@ class PowerPointIntegration(Integration):
             slides.append({"slide_number": i, "shapes": shapes})
         return slides
     
-    def get_shapes_from_slide(self, slide_number: int) -> list:
+    def get_shapes_from_slide(self, slide_number: int, presentation: Optional[PresentationType] = None) -> List[Dict[str, Any]]:
         """Get the shapes of the presentation.
+
+        Args:
+            slide_number (int): Index of the slide to get shapes from
+
+        Returns:
+            list: List of shapes on the slide
         """
-        presentation = self.create_presentation()
+        presentation = self.create_presentation() if presentation is None else presentation
         shapes: list = []
         for shape in presentation.slides[slide_number].shapes:
             data = {
@@ -134,35 +140,12 @@ class PowerPointIntegration(Integration):
             shapes.append(data)
         return shapes
 
-    def get_structure(self) -> List[Dict[str, Any]]:
-        """Get the structure of the presentation.
-
-        Args:
-            presentation (Presentation): PowerPoint presentation object
-        """
-        presentation = self.create_presentation()
+    def get_all_shapes_and_slides(self, presentation: Optional[PresentationType] = None) -> List[Dict[str, Any]]:
+        """Get all shapes and slides from the presentation."""
+        presentation = self.create_presentation() if presentation is None else presentation
         slides = []
-        for i, slide in enumerate(presentation.slides):
-            shapes = []
-            for shape in slide.shapes:
-                alt_text = shape._element._nvXxPr.cNvPr.attrib.get("descr", "")
-                # if alt_text == "":
-                #     continue
-                data = {
-                    "slide_number": i,
-                    "shape_id": shape.shape_id,
-                    "shape_type": shape.shape_type,
-                    "shape_alt_text": shape._element._nvXxPr.cNvPr.attrib.get(
-                        "descr", ""
-                    ),
-                    "text": shape.text if hasattr(shape, "text") else "",
-                    "left": shape.left.cm if hasattr(shape, "left") else None,
-                    "top": shape.top.cm if hasattr(shape, "top") else None,
-                    "width": shape.width.cm if hasattr(shape, "width") else None,
-                    "height": shape.height.cm if hasattr(shape, "height") else None,
-                    "rotation": shape.rotation if hasattr(shape, "rotation") else None,
-                }
-                shapes.append(data)
+        for i in range(len(presentation.slides)):
+            shapes = self.get_shapes_from_slide(i)
             slides.append({"slide_number": i, "shapes": shapes})
         return slides
 
@@ -838,10 +821,7 @@ class PowerPointIntegration(Integration):
 
         # Copy all shapes and pictures
         for s in src_slide.shapes:
-            shape_id = s.shape_id
-            shape_type = s.shape_type
             shape_text = s.text if hasattr(s, "text") else ""
-            # print(f"Shape ID: {shape_id}, Shape Type: {shape_type}, Text: {shape_text}")
             try:                    
                 if s.shape_type == MSO_SHAPE_TYPE.PICTURE or (s.shape_type == MSO_SHAPE_TYPE.PLACEHOLDER and shape_text == ""):
                     # Copy pictures at same position/size
@@ -951,18 +931,27 @@ class PowerPointIntegration(Integration):
 def as_tools(configuration: PowerPointIntegrationConfiguration):
     """Convert PowerPoint integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
 
     integration = PowerPointIntegration(configuration)
 
-    class GetStructureSchema(BaseModel):
+    class GetShapesFromSlideSchema(BaseModel):
+        slide_number: int = Field(..., description="Index of the slide to get shapes from")
+
+    class GetAllShapesAndSlidesSchema(BaseModel):
         pass
 
     return [
         StructuredTool(
-            name="powerpoint_get_structure",
-            description="Get the structure of the presentation",
-            func=lambda **kwargs: integration.get_structure(**kwargs),
-            args_schema=GetStructureSchema,
+            name="powerpoint_get_shapes_from_slide",
+            description="Get shapes from a specific slide",
+            func=lambda slide_number: integration.get_shapes_from_slide(slide_number),
+            args_schema=GetShapesFromSlideSchema,
+        ),
+        StructuredTool(
+            name="powerpoint_get_all_shapes_and_slides",
+            description="Get all shapes and slides from the presentation",
+            func=lambda **kwargs: integration.get_all_shapes_and_slides(**kwargs),
+            args_schema=GetAllShapesAndSlidesSchema,
         ),
     ]
