@@ -4,23 +4,37 @@ from langchain_core.tools import Tool, BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Callable, Optional, Union, Any
-from langchain_openai import ChatOpenAI  # noqa: F401
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from langgraph.types import Command
 from pydantic import SecretStr
-from src import secret, config
+from src import secret, config, services
 from datetime import datetime
 import os
 from abi import logger
+from src.marketplace.applications.powerpoint.integrations.PowerPointIntegration import (
+    PowerPointIntegration, 
+    PowerPointIntegrationConfiguration
+)
+from src.marketplace.applications.powerpoint.pipelines.AddPowerPointPresentationPipeline import (
+    AddPowerPointPresentationPipeline,
+    AddPowerPointPresentationPipelineConfiguration,
+    AddPowerPointPresentationPipelineParameters,
+)
+from src.marketplace.applications.naas.integrations.NaasIntegration import (
+    NaasIntegration, 
+    NaasIntegrationConfiguration
+)
+from src.utils.Storage import save_powerpoint_presentation
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
 MODEL = "gpt-4.1"
 TEMPERATURE = 0
-AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg/2203px-Microsoft_Office_PowerPoint_%282019%E2%80%93present%29.svg.png"
+AVATAR_URL = "https://static.vecteezy.com/system/resources/thumbnails/017/396/831/small/microsoft-power-point-mobile-apps-logo-free-png.png"
 SYSTEM_PROMPT = """
 <role>
 You are PowerPoint, an agent that converts a user brief into a fully structured PowerPoint presentation using slides structure from template. 
@@ -42,7 +56,12 @@ You will be provided with a template structure and user brief.
 - Generate draft slides content with sources for each slide.
 - Interact with user to validate the draft, ask for missing information if needed
 - Generate final presentation from slides content.
+- Search presentation in knowledge graph if it already exists.
 </tasks>
+
+<tools>
+[TOOLS]
+</tools>
 
 <operating_guidelines>
 - First, carefully analyze the user brief to identify any provided information about:
@@ -61,7 +80,7 @@ Example:
     - Slide 1 - Title: Description
     - Slide 2 - Title: Description
 
-- Populate each slides with detailed content and template slide to use with alt text guidance if provided and return result in markdown format. 
+- Populate each slides with detailed content and template slide to use with 'shape_alt_text' guidance if provided and return result in markdown format. 
 Example:
 \n**PresentationTitle: [Title]**\n
 ```markdown
@@ -123,10 +142,21 @@ def create_agent(
         api_key=SecretStr(secret.get('OPENAI_API_KEY'))
     )
 
+    from src.core.templatablesparqlquery import get_tools
+    tools: list = []
+    templates_tools = [
+        "powerpoint_search_presentation_by_name",
+        "powerpoint_get_slide_by_uri",
+        "powerpoint_get_shape_by_uri",
+        "powerpoint_get_all_text_content_by_presentation",
+    ]
+    tools += get_tools(templates_tools)
+
     # Set configuration
+    system_prompt = SYSTEM_PROMPT.replace("[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]))
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT
+            system_prompt=system_prompt
         )
     
     # Set shared state
@@ -138,6 +168,7 @@ def create_agent(
         name=NAME,
         description=DESCRIPTION,
         chat_model=model,
+        tools=tools,
         memory=MemorySaver(),
         state=agent_shared_state, 
         configuration=agent_configuration,
@@ -174,15 +205,18 @@ class PowerPointAgent(Agent):
         self.__storage_name = config.storage_name
         self.__template_path = template_path
         self.__template_name: str = os.path.basename(self.__template_path).lower().replace(".pptx", "") if self.__template_path else "TemplatePresentation"
-        self.__datastore_path: str = f"datastore/powerpoint/presentations/{self.__template_name}/{datetime.now().strftime('%Y%m%d%H%M%S')}" or "datastore/powerpoint/presentations/TemplatePresentation/20251027100000"
-        
+        self.__datastore_path: str = f"datastore/powerpoint/presentations/{self.__template_name}/{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-        from src.marketplace.applications.powerpoint.integrations.PowerPointIntegration import PowerPointIntegration, PowerPointIntegrationConfiguration
-        self.__powerpoint_integration = PowerPointIntegration(PowerPointIntegrationConfiguration(template_path=self.__template_path))
+        self.__powerpoint_configuration = PowerPointIntegrationConfiguration(template_path=self.__template_path)
+        self.__powerpoint_integration = PowerPointIntegration(self.__powerpoint_configuration)
+        self.__powerpoint_pipeline_configuration = AddPowerPointPresentationPipelineConfiguration(powerpoint_configuration=self.__powerpoint_configuration, triple_store=services.triple_store_service)
+        self.__powerpoint_pipeline = AddPowerPointPresentationPipeline(self.__powerpoint_pipeline_configuration)
+        self.__naas_configuration = NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
+        self.__naas_integration = NaasIntegration(self.__naas_configuration)
+
         self.__presentation = self.__powerpoint_integration.create_presentation()
-
-        from src.marketplace.applications.naas.integrations.NaasIntegration import NaasIntegration, NaasIntegrationConfiguration
-        self.__naas_integration = NaasIntegration(NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY")))
+        save_powerpoint_presentation(self.__presentation, self.__datastore_path, self.__template_name + ".pptx", copy=False)
+        self.__template_path = os.path.join(self.__datastore_path, self.__template_name + ".pptx")
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(PowerPointState)
@@ -197,6 +231,8 @@ class PowerPointAgent(Agent):
         graph.add_node(self.validate_presentation_draft)
 
         graph.add_node(self.call_model)
+
+        graph.add_node(self.call_tools)
 
         graph.add_node(self.convert_markdown_to_json)
 
@@ -228,11 +264,11 @@ class PowerPointAgent(Agent):
         
         if "[TEMPLATE_STRUCTURE]" in self._system_prompt:
             logger.debug("🔧 Injecting template structure")
-
             # Create graph
             ABI = Namespace("http://ontology.naas.ai/abi/")
+            PPT = Namespace("http://ontology.naas.ai/abi/powerpoint/")
             graph = Graph()
-            graph.bind("ppt", "http://ontology.naas.ai/abi/powerpoint/")
+            graph.bind("ppt", PPT)
             graph.bind("abi", ABI)
             
             # Add presentation triples
@@ -255,9 +291,9 @@ class PowerPointAgent(Agent):
                 graph.add((slide_uri, RDF.type, OWL.NamedIndividual))
                 graph.add((slide_uri, RDF.type, ppt_class))
                 # graph.add((slide_uri, RDFS.label, Literal(f"Slide {slide_number}")))
-                graph.add((slide_uri, ABI.slide_number, Literal(slide_number, datatype=XSD.integer)))
-                graph.add((presentation_uri, ABI.hasSlide, slide_uri))
-                graph.add((slide_uri, ABI.isSlideOf, presentation_uri))
+                graph.add((slide_uri, PPT.slide_number, Literal(slide_number, datatype=XSD.integer)))
+                graph.add((presentation_uri, PPT.hasSlide, slide_uri))
+                graph.add((slide_uri, PPT.isSlideOf, presentation_uri))
 
                 # Add shapes triples
                 for shape in shapes:
@@ -273,14 +309,13 @@ class PowerPointAgent(Agent):
                     graph.add((shape_uri, RDF.type, OWL.NamedIndividual))
                     graph.add((shape_uri, RDF.type, ppt_class))
                     # graph.add((shape_uri, RDFS.label, Literal(shape_text)))
-                    graph.add((shape_uri, ABI.shape_id, Literal(shape_id, datatype=XSD.integer)))
-                    graph.add((shape_uri, ABI.shape_type, Literal(shape_type, datatype=XSD.integer)))
-                    graph.add((shape_uri, ABI.shape_alt_text, Literal(shape_alt_text)))
-                    graph.add((shape_uri, ABI.shape_text, Literal(shape_text)))
-                    graph.add((shape_uri, ABI.isShapeOf, slide_uri))
-                    graph.add((slide_uri, ABI.hasShape, shape_uri))
+                    graph.add((shape_uri, PPT.shape_id, Literal(shape_id, datatype=XSD.integer)))
+                    graph.add((shape_uri, PPT.shape_type, Literal(shape_type, datatype=XSD.integer)))
+                    graph.add((shape_uri, PPT.shape_alt_text, Literal(shape_alt_text)))
+                    graph.add((shape_uri, PPT.shape_text, Literal(shape_text)))
+                    graph.add((shape_uri, PPT.isShapeOf, slide_uri))
+                    graph.add((slide_uri, PPT.hasShape, shape_uri))
 
-            print(graph.serialize(format="turtle"))
             turtle = f"""
             ```turtle
             {graph.serialize(format="turtle")}
@@ -343,25 +378,6 @@ class PowerPointAgent(Agent):
                 logger.debug(f"❌ Reponse content '{response.content}'. Going back to conversation.")
         return Command(goto="call_model")
         
-    def call_model(
-        self, 
-        state: MessagesState
-    ) -> Command:
-        """
-        This node handles the initial user interaction and presentation planning.
-        It processes user requests and generates slide structure in markdown format.
-        """
-        logger.debug("🤖 Calling model")
-
-        messages = state["messages"]
-        if self._system_prompt:
-            messages = [
-                SystemMessage(content=self._system_prompt),
-            ] + messages
-
-        response: BaseMessage = self._chat_model_with_tools.invoke(messages)
-
-        return Command(update={"messages": [response]})
 
     def convert_markdown_to_shapes(
         self,
@@ -420,7 +436,6 @@ Template shapes to reference:
         logger.debug("📝 Converting markdown to JSON")
         # Get last messages
         last_ai_message : Any | None = _.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
-        print("last_ai_message:", last_ai_message)
         
         # Initialize slides data list
         presentation_data: dict = {}
@@ -492,7 +507,7 @@ Template shapes to reference:
                 if "Sources:" in slide:
                     sources_section = slide.split("Sources:")[1].strip()
                     # Split on newlines, filter empty strings and remove leading dash
-                    sources = [s.strip().lstrip('-') for s in sources_section.split("\n") if s.strip()]
+                    sources = [s.strip().lstrip('-').strip() for s in sources_section.split("\n") if s.strip()]
                 logger.debug(f"Sources for slide {slide_number}: {sources}")
 
                 # Parse slide data and add to slides_data list
@@ -518,7 +533,7 @@ Template shapes to reference:
         It uses the PowerPointIntegration to create and populate the presentation.
         """
         from io import BytesIO
-        from src.utils.Storage import save_powerpoint_presentation
+        from rdflib import RDF, OWL
 
         logger.debug("📊 Converting JSON to Powerpoint")
 
@@ -575,10 +590,52 @@ Template shapes to reference:
             return_url=True
         )
         download_url = asset.get("asset_url")
+
+        # Add presentation to triple store
+        template_graph = self.__powerpoint_pipeline.run(AddPowerPointPresentationPipelineParameters(
+            presentation_name=self.__template_name,
+            storage_path=self.__template_path,
+        ))
+        template_uri = template_graph.value(subject=None, predicate=RDF.type, object=OWL.NamedIndividual)
+        logger.debug(f"🧩 Template presentation URI: {template_uri}")
+
+        presentation_graph = self.__powerpoint_pipeline.run(AddPowerPointPresentationPipelineParameters(
+            presentation_name=presentation_name,
+            storage_path=os.path.join(self.__datastore_path, presentation_name),
+            download_url=download_url,
+            template_uri=template_uri
+        ))
+        presentation_uri = presentation_graph.value(subject=None, predicate=RDF.type, object=OWL.NamedIndividual)
+        logger.debug(f"📽️ Presentation URI: {presentation_uri}")
+        
         if not download_url:
-            logger.error("❌ Failed to create asset in Naas.")
-            ai_message = AIMessage(content=f"Presentation created successfully in: {self.__datastore_path}/{presentation_name}, but failed to create asset in Naas.")
+            logger.warning("❌ Failed to download URL from Naas.")
+            content = f"""
+            ✨ Your presentation has been successfully created in: {self.__datastore_path}/{presentation_name} and added to your knowledge graph (URI: {presentation_uri});
+            But we were unable to download URL from Naas. Please contact your support team with the following information:
+
+            ```markdown
+            ## Bug Repor
+            ### Title: 
+            Failed to get download URL after presentation creation
+
+            ### Description:
+            We were unable to get the download URL after creating the presentation:
+            - Presentation name: {presentation_name}
+            - Storage path: {self.__datastore_path}
+            - Presentation URI: {presentation_uri}
+
+            ### Priority: 
+            High
+            ```
+            """
+            ai_message = AIMessage(content=content)
         else:
-            ai_message = AIMessage(content=f"✨ Your presentation has been successfully created!\n\n📎 Download link: [{presentation_name}]({download_url})\n\nLet me know if you need any changes or have questions about the presentation.")
+            content = f"""
+            ✨ Your presentation has been successfully created and added to your knowledge graph (URI: {presentation_uri})!\n
+            You can access it with the following public download link: [{presentation_name}]({download_url})\n
+            Please, let me know if you need to create another presentation.
+            """
+            ai_message = AIMessage(content=content)
         self._notify_ai_message(ai_message, self.name)
         return Command(goto="__end__", update={"messages": [ai_message]})

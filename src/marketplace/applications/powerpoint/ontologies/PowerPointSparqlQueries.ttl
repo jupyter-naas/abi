@@ -1,0 +1,149 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix bfo: <http://purl.obolibrary.org/obo/> .
+@prefix cco: <https://www.commoncoreontologies.org/> .
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+########################################################
+# PowerPoint Queries
+########################################################
+
+# Search presentation by name (calculate and return slide count and slide URIs)
+intentMapping:PowerPointSearchPresentationByName a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "powerpoint_search_presentation_by_name"@en ;
+    intentMapping:intentDescription "Search for PowerPoint presentations by name. Returns metadata, total number of slides, and slide URIs for each presentation." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX ppt: <http://ontology.naas.ai/abi/powerpoint/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?presentation ?presentationName ?author ?createdDate ?modifiedDate ?storagePath ?downloadUrl (COUNT(?slide) AS ?slideCount) (GROUP_CONCAT(STR(?slide);separator=",") AS ?slideUris)
+        WHERE {
+          ?presentation a ppt:Presentation ;
+                       rdfs:label ?presentationName .
+
+          OPTIONAL { ?presentation ppt:author ?author . }
+          OPTIONAL { ?presentation ppt:created_date ?createdDate . }
+          OPTIONAL { ?presentation ppt:modified_date ?modifiedDate . }
+          OPTIONAL { ?presentation ppt:storage_path ?storagePath . }
+          OPTIONAL { ?presentation ppt:download_url ?downloadUrl . }
+          OPTIONAL { ?presentation ppt:hasSlide ?slide . }
+
+          FILTER(CONTAINS(LCASE(STR(?presentationName)), LCASE("{{ presentation_name }}")))
+        }
+        GROUP BY ?presentation ?presentationName ?author ?createdDate ?modifiedDate ?storagePath ?downloadUrl
+        ORDER BY ?presentationName
+    """ ;
+    intentMapping:hasArgument intentMapping:presentationNameArg .
+
+# Get slide by slide URI
+intentMapping:PowerPointGetSlideByUri a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "powerpoint_get_slide_by_uri"@en ;
+    intentMapping:intentDescription "Get detailed information about a specific slide, return slide URI, slide number, shape URIs, and the total number of shapes on the slide." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX ppt: <http://ontology.naas.ai/abi/powerpoint/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?slide ?slideNumber (GROUP_CONCAT(STR(?shapes);separator=",") AS ?shapeUris) (COUNT(?shapes) AS ?shapeCount)
+        WHERE {
+          <{{ slide_uri }}> a ppt:Slide ;
+                           ppt:slide_number ?slideNumber ;
+                           ppt:hasShape ?shapes .
+          BIND(<{{ slide_uri }}> AS ?slide)
+        }
+        GROUP BY ?slide ?slideNumber
+    """ ;
+    intentMapping:hasArgument intentMapping:slideUriArg .
+
+# Get shape by shape URI
+intentMapping:PowerPointGetShapeByUri a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "powerpoint_get_shape_by_uri"@en ;
+    intentMapping:intentDescription "Get detailed information about a specific shape and return shape URI, shape ID, shape type, shape text, shape alt text, shape position left, shape position top, shape size width, shape size height, shape rotation and slide URI and slide number." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX ppt: <http://ontology.naas.ai/abi/powerpoint/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?shape ?shapeId ?shapeType ?shapeText ?shapeAltText 
+                        ?shapePositionLeft ?shapePositionTop ?shapeSizeWidth ?shapeSizeHeight ?shapeRotation ?slide ?slideNumber
+        WHERE {
+          <{{ shape_uri }}> a ppt:Shape ;
+                           ppt:shape_id ?shapeId ;
+                           ppt:shape_type ?shapeType ;
+                           ppt:shape_text ?shapeText ;
+                           ppt:shape_alt_text ?shapeAltText ;
+                           ppt:shape_position_left ?shapePositionLeft ;
+                           ppt:shape_position_top ?shapePositionTop ;
+                           ppt:shape_size_width ?shapeSizeWidth ;
+                           ppt:shape_size_height ?shapeSizeHeight ;
+                           ppt:shape_rotation ?shapeRotation ;
+                           ppt:isShapeOf ?slide .
+          ?slide a ppt:Slide ;
+                 ppt:slide_number ?slideNumber .
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:shapeUriArg .
+
+# Get all text content in a presentation ordered by slide_number, filtering by text shapes only
+intentMapping:PowerPointGetAllTextContentByPresentation a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "powerpoint_get_all_text_content_by_presentation"@en ;
+    intentMapping:intentDescription "Get all text content (from shape_text, only for text shapes) in a presentation, ordered by slide number." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        PREFIX ppt: <http://ontology.naas.ai/abi/powerpoint/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT DISTINCT ?slide ?slideNumber ?shape ?shapeId ?shapeType ?shapeText
+        WHERE {
+          <{{ presentation_uri }}> ppt:hasSlide ?slide .
+          ?slide a ppt:Slide ;
+                 ppt:slide_number ?slideNumber ;
+                 ppt:hasShape ?shape .
+          ?shape a ppt:Shape ;
+                 ppt:shape_id ?shapeId ;
+                 ppt:shape_type ?shapeType ;
+                 ppt:shape_text ?shapeText .
+          FILTER (?shapeType = 14 || ?shapeType = 17)
+        }
+        ORDER BY ?slideNumber
+    """ ;
+    intentMapping:hasArgument intentMapping:presentationUriArg .
+
+########################################################
+# PowerPoint Arguments
+########################################################
+
+intentMapping:presentationNameArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "presentation_name" ;
+    intentMapping:argumentDescription "Name of the presentation to search for" ;
+    intentMapping:validationPattern "." ;
+    intentMapping:validationFormat "presentation_name" .
+
+intentMapping:presentationUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "presentation_uri" ;
+    intentMapping:argumentDescription "URI of the presentation" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "presentation_uri" .
+
+intentMapping:slideUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "slide_uri" ;
+    intentMapping:argumentDescription "URI of the slide" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "slide_uri" .
+
+intentMapping:shapeUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "shape_uri" ;
+    intentMapping:argumentDescription "URI of the shape" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationFormat "shape_uri" .
