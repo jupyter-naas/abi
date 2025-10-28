@@ -148,7 +148,7 @@ class AddPowerPointPresentationPipeline(Pipeline):
         shapes_and_slides = self.__powerpoint_integration.get_all_shapes_and_slides(presentation)
         for shape_and_slide in shapes_and_slides:
             slide_number = shape_and_slide.get("slide_number")
-            shapes = shape_and_slide.get("shapes")
+            shapes = shape_and_slide.get("shapes", [])
             slide_uri = ABI[str(uuid.uuid4())]
             graph.add((slide_uri, RDF.type, OWL.NamedIndividual))
             graph.add((slide_uri, RDF.type, class_slide))
