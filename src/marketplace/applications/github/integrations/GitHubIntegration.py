@@ -96,7 +96,7 @@ class GitHubIntegration(Integration):
         """Get a repository by full name (format: 'owner/repo')."""
         return self._make_request("GET", f"/repos/{repo_name}")
 
-    def list_organization_repositories(self, org: str) -> Dict:
+    def list_organization_repositories(self, org: str, return_list: bool = False) -> list:
         """Get all repositories for a given owner.
 
         Args:
@@ -105,7 +105,11 @@ class GitHubIntegration(Integration):
         Returns:
             List[Dict]: List of repository details owned by the specified owner
         """
-        return self._make_request("GET", f"/users/{org}/repos")
+        params = {"page": 1, "per_page": 100, "sort": "full_name"}
+        response = self._make_request("GET", f"/orgs/{org}/repos", params=params)
+        if return_list:
+            return [{repo["name"], repo["full_name"]} for repo in response]
+        return response
 
     def create_organization_repository(
         self, org: str, name: str, private: bool = True, description: str = ""
@@ -1124,7 +1128,7 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         StructuredTool(
             name="github_list_organization_repositories",
             description="Lists repositories for the specified organization in GitHub",
-            func=lambda org: integration.list_organization_repositories(org),
+            func=lambda org: integration.list_organization_repositories(org, return_list=True),
             args_schema=ListOrganizationRepositoriesSchema,
         ),
         StructuredTool(
