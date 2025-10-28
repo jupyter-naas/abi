@@ -188,7 +188,7 @@ class PowerPointAgent(Agent):
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
-        template_path: str | None = None,
+        template_path: str = "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx",
     ):
         super().__init__(
             name, 
@@ -596,7 +596,8 @@ Template shapes to reference:
             presentation_name=self.__template_name,
             storage_path=self.__template_path,
         ))
-        template_uri = template_graph.value(subject=None, predicate=RDF.type, object=OWL.NamedIndividual)
+        template_subjects = list(template_graph.subjects(predicate=RDF.type, object=OWL.NamedIndividual))
+        template_uri = str(template_subjects[0]) if len(template_subjects) > 0 else None
         logger.debug(f"🧩 Template presentation URI: {template_uri}")
 
         presentation_graph = self.__powerpoint_pipeline.run(AddPowerPointPresentationPipelineParameters(
@@ -605,7 +606,8 @@ Template shapes to reference:
             download_url=download_url,
             template_uri=template_uri
         ))
-        presentation_uri = presentation_graph.value(subject=None, predicate=RDF.type, object=OWL.NamedIndividual)
+        presentation_subjects = list(presentation_graph.subjects(predicate=RDF.type, object=OWL.NamedIndividual))
+        presentation_uri = str(presentation_subjects[0]) if len(presentation_subjects) > 0 else None
         logger.debug(f"📽️ Presentation URI: {presentation_uri}")
         
         if not download_url:

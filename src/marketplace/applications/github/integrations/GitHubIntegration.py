@@ -46,7 +46,7 @@ class GitHubIntegration(Integration):
         data: Optional[Dict] = None, 
         params: Optional[Dict] = None,
         headers: Optional[Dict] = None
-    ) -> Dict | List:
+    ) -> Any:
         """Make HTTP request to Github API."""
         url = f"{self.__configuration.base_url}{endpoint}"
         request_headers = self.headers.copy()
@@ -61,18 +61,18 @@ class GitHubIntegration(Integration):
                 params=params
             )
             response.raise_for_status()
-            return response.json() if response.content else {}
+            return response.json() if response.content else []
         except requests.exceptions.RequestException as e:
             raise IntegrationConnectionError(f"Github API request failed: {str(e)}")
 
-    def get_user_details(self, username: str) -> Dict:
+    def get_user_details(self, username: str) -> List | Dict:
         """Get detailed information about a specific GitHub user.
 
         Args:
             username (str): The GitHub username of the user
 
         Returns:
-            Dict: Detailed user information including:
+            List | Dict: Detailed user information including:
                 - Name
                 - Bio
                 - Location
@@ -87,16 +87,16 @@ class GitHubIntegration(Integration):
 
     def create_user_repository(
         self, name: str, private: bool = False, description: str = ""
-    ) -> Dict:
+    ) -> List | Dict:
         """Create a new repository."""
         data = {"name": name, "private": private, "description": description}
         return self._make_request("POST", "/user/repos", data)
 
-    def get_repository_details(self, repo_name: str) -> Dict:
+    def get_repository_details(self, repo_name: str) -> List | Dict:
         """Get a repository by full name (format: 'owner/repo')."""
         return self._make_request("GET", f"/repos/{repo_name}")
 
-    def list_organization_repositories(self, org: str, return_list: bool = False) -> list:
+    def list_organization_repositories(self, org: str, return_list: bool = False) -> List | Dict:
         """Get all repositories for a given owner.
 
         Args:
@@ -113,7 +113,7 @@ class GitHubIntegration(Integration):
 
     def create_organization_repository(
         self, org: str, name: str, private: bool = True, description: str = ""
-    ) -> Dict:
+    ) -> List | Dict:
         """Create a new repository for an organization."""
         data = {"name": name, "private": private, "description": description}
         return self._make_request("POST", f"/orgs/{org}/repos", data)
@@ -148,7 +148,7 @@ class GitHubIntegration(Integration):
         allow_forking: Optional[bool] = None,
         web_commit_signoff_required: Optional[bool] = None,
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> List | Dict:
         """Updates a repository for an organization.
 
         Args:
@@ -182,7 +182,7 @@ class GitHubIntegration(Integration):
             accept (str, optional): Media type. Defaults to "application/vnd.github+json"
 
         Returns:
-            Dict: Updated repository information
+            List | Dict: Updated repository information
 
         Note:
             - Requires admin permissions or owner/security manager role
@@ -272,7 +272,7 @@ class GitHubIntegration(Integration):
         time_period: Optional[str] = None,
         activity_type: Optional[str] = None,
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> List | Dict:
         """Lists a detailed history of changes to a repository.
 
         Args:
@@ -289,7 +289,7 @@ class GitHubIntegration(Integration):
             accept (str, optional): Media type for response format. Defaults to "application/vnd.github+json"
 
         Returns:
-            Dict: Repository activity data
+            List | Dict: Repository activity data
 
         Note:
             - Works without authentication for public repositories
@@ -316,7 +316,7 @@ class GitHubIntegration(Integration):
             "GET", f"/repos/{repo_name}/activity", headers=headers, params=params
         )
 
-    def get_repository_contributors(self, repo_name: str) -> Dict:
+    def get_repository_contributors(self, repo_name: str) -> List | Dict:
         """Get a list of contributors for the specified repository.
 
         Args:
@@ -424,7 +424,7 @@ class GitHubIntegration(Integration):
         since: Optional[str] = None,
         per_page: int = 30,
         page: int = 1,
-    ) -> Dict:
+    ) -> List | Dict:
         """List comments on issues and pull requests for a repository.
 
         Args:
@@ -472,7 +472,7 @@ class GitHubIntegration(Integration):
                 - application/vnd.github.full+json: Returns raw, text and HTML representations
 
         Returns:
-            Dict: The issue comment data
+            List | Dict: The issue comment data
         """
         headers = {"Accept": accept}
         return self._make_request(
@@ -500,7 +500,7 @@ class GitHubIntegration(Integration):
                 - application/vnd.github.full+json: Returns raw, text and HTML representations
 
         Returns:
-            Dict: The updated issue comment data
+            List | Dict: The updated issue comment data
         """
         headers = {"Accept": accept}
         data = {"body": body}
@@ -555,7 +555,7 @@ class GitHubIntegration(Integration):
                 - application/vnd.github.full+json: Returns raw, text and HTML representations
 
         Returns:
-            Dict: The created issue comment data
+            List | Dict: The created issue comment data
         """
         headers = {"Accept": accept}
         data = {"body": body}
@@ -581,7 +581,7 @@ class GitHubIntegration(Integration):
         direction: str = "desc", 
         per_page: int = 30, 
         page: int = 1,
-    ) -> Dict:
+    ) -> List:
         """List pull requests for a repository."""
         params = {"state": state, "sort": sort, "direction": direction, "per_page": per_page, "page": page}
         return self._make_request("GET", f"/repos/{repo_name}/pulls", params=params)
@@ -592,7 +592,7 @@ class GitHubIntegration(Integration):
         per_page: int = 30,
         page: int = 1,
         accept: str = "application/vnd.github+json",
-    ) -> Dict:
+    ) -> List:
         """Lists the available assignees for issues in a repository.
 
         Args:
@@ -602,7 +602,7 @@ class GitHubIntegration(Integration):
             accept (str, optional): Media type for the response format. Defaults to "application/vnd.github+json"
 
         Returns:
-            Dict: List of available assignees for the repository
+            List | Dict: List of available assignees for the repository
         """
         headers = {"Accept": accept}
         params = {"per_page": per_page, "page": page}
@@ -648,7 +648,7 @@ class GitHubIntegration(Integration):
             accept (str, optional): Media type for the response format. Defaults to "application/vnd.github+json"
 
         Returns:
-            Dict: Updated issue information
+            List | Dict: Updated issue information
 
         Note:
             Only users with push access can add assignees to an issue.
@@ -679,7 +679,7 @@ class GitHubIntegration(Integration):
             accept (str, optional): Media type for the response format. Defaults to "application/vnd.github+json"
 
         Returns:
-            Dict: Updated issue information
+            List | Dict: Updated issue information
 
         Note:
             Only users with push access can remove assignees from an issue.
@@ -738,7 +738,7 @@ class GitHubIntegration(Integration):
             repo_name (str): Repository name in 'owner/repo' format
 
         Returns:
-            Dict: Response containing:
+            List | Dict: Response containing:
                 - key_id (str): The identifier for the key
                 - key (str): The Base64 encoded public key
 
@@ -754,14 +754,14 @@ class GitHubIntegration(Integration):
     def list_repository_secrets(
         self,
         repo_name: str,
-    ) -> Dict:
+    ) -> List:
         """Lists all secrets available in a repository without revealing their encrypted values.
 
         Args:
             repo_name (str): Repository name in 'owner/repo' format
 
         Returns:
-            Dict: Response containing:
+            List | Dict: Response containing:
                 - total_count (int): Total number of secrets
                 - secrets (List[Dict]): List of secrets with name, created_at and updated_at
 
@@ -796,7 +796,7 @@ class GitHubIntegration(Integration):
             value (str): Plain text value that will be encrypted with LibSodium using the repository public key
 
         Returns:
-            Dict: Response data from creating/updating the secret
+            List | Dict: Response data from creating/updating the secret
 
         Note:
             - Requires collaborator access to repository
@@ -809,8 +809,8 @@ class GitHubIntegration(Integration):
 
         # Get repository public key
         public_key_response = self.get_repository_public_key(repo_name)
-        public_key = public_key_response["key"]
-        key_id = public_key_response["key_id"]
+        public_key: str = public_key_response.get("key", "") if isinstance(public_key_response, dict) else ""
+        key_id: str = public_key_response.get("key_id", "") if isinstance(public_key_response, dict) else ""
 
         # Encrypt value using LibSodium
         public_key_bytes = b64decode(public_key)
@@ -854,7 +854,7 @@ class GitHubIntegration(Integration):
         page: int = 1,
         per_page: int = 30,
         return_login: bool = False,
-    ) -> List | Dict:
+    ) -> List:
         """Lists contributors to a repository.
 
         Args:
@@ -866,7 +866,7 @@ class GitHubIntegration(Integration):
             accept (str, optional): Media type for response format. Defaults to "application/vnd.github+json"
 
         Returns:
-            Dict: List of contributors to the repository, including:
+            List | Dict: List of contributors to the repository, including:
                 - Login
                 - ID
                 - Node ID
