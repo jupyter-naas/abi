@@ -46,7 +46,7 @@ class GitHubIntegration(Integration):
         data: Optional[Dict] = None, 
         params: Optional[Dict] = None,
         headers: Optional[Dict] = None
-    ) -> Dict:
+    ) -> Dict | List:
         """Make HTTP request to Github API."""
         url = f"{self.__configuration.base_url}{endpoint}"
         request_headers = self.headers.copy()
