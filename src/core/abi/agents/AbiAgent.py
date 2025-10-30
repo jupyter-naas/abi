@@ -281,7 +281,6 @@ You can browse the data and run queries there."""
                     intent_target=agent.name
                 )
                 intents.append(new_intent)
-    logger.debug(f"Intents: {intents}")
 
     return AbiAgent(
         name=NAME,
