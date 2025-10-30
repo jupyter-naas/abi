@@ -237,9 +237,7 @@ class Oxigraph(ITripleStorePort):
                 continue
             delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
         delete_query += "}"
-        
-        print(delete_query)
-        
+                
         response = requests.post(
             self.update_endpoint,
             headers={
@@ -248,10 +246,7 @@ class Oxigraph(ITripleStorePort):
             data=delete_query.encode("utf-8"),
             timeout=self.timeout
         )
-        
-        if response.status_code != 200:
-            print(response.text)
-        
+                
         response.raise_for_status()
         logger.debug(f"Removed {len(triples)} triples from Oxigraph")
 
