@@ -114,8 +114,8 @@ services:
   # Supports SPARQL queries for complex knowledge graph operations
   oxigraph:
     image: oxigraph/oxigraph:latest
-    expose:
-      - 7878  # Internal port (accessed via proxy)
+    ports:
+      - 7878:7878 # Internal port (accessed via proxy)
     volumes:
       - oxigraph_data:/data  # Persistent RDF triple storage
     command: ["serve", "--location", "/data", "--bind", "0.0.0.0:7878"]
@@ -139,7 +139,7 @@ services:
   oxigraph-proxy:
     image: nginx:alpine
     ports:
-      - 7878:80  # Oxigraph web interface - http://localhost:7878
+      - 7879:80  # Oxigraph web interface - http://localhost:7878
     volumes:
       - ./src/core/abi/apps/oxigraph_admin/nginx-oxigraph.conf:/etc/nginx/conf.d/default.conf:ro
       - ./src/core/abi/apps/oxigraph_admin/web:/usr/share/nginx/html/web:ro
@@ -162,7 +162,7 @@ services:
     ports:
       - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
     environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://oxigraph:7878/query  # Points to Oxigraph via Docker network
+      - DEFAULT_SPARQL_ENDPOINT=http://oxigraph:7879/query  # Points to Oxigraph via Docker network
     depends_on:
       - oxigraph
     networks:
