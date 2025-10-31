@@ -20,15 +20,16 @@ from src.marketplace.applications.powerpoint.integrations.PowerPointIntegration 
     PowerPointIntegrationConfiguration
 )
 from src.marketplace.applications.powerpoint.pipelines.AddPowerPointPresentationPipeline import (
-    AddPowerPointPresentationPipeline,
     AddPowerPointPresentationPipelineConfiguration,
-    AddPowerPointPresentationPipelineParameters,
 )
 from src.marketplace.applications.naas.integrations.NaasIntegration import (
-    NaasIntegration, 
     NaasIntegrationConfiguration
 )
-from src.utils.Storage import save_powerpoint_presentation
+from src.marketplace.applications.powerpoint.workflows.CreatePresentationFromTemplateWorkflow import (
+    CreatePresentationFromTemplateWorkflow,
+    CreatePresentationFromTemplateWorkflowConfiguration,
+    CreatePresentationFromTemplateWorkflowParameters,
+)
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
@@ -134,7 +135,7 @@ class PowerPointState(MessagesState):
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[Agent]:
+) -> Agent:
     # Set model
     model = ChatOpenAI(
         model=MODEL,
@@ -163,6 +164,8 @@ def create_agent(
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
 
+    # Set default datastore and template paths
+    datastore_path = "datastore/powerpoint/presentations"
     template_path = "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx"
     return PowerPointAgent(
         name=NAME,
@@ -172,6 +175,7 @@ def create_agent(
         memory=MemorySaver(),
         state=agent_shared_state, 
         configuration=agent_configuration,
+        datastore_path=datastore_path,
         template_path=template_path,
     ) 
 
@@ -188,6 +192,7 @@ class PowerPointAgent(Agent):
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
+        datastore_path: str = "datastore/powerpoint/presentations",
         template_path: str = "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx",
     ):
         super().__init__(
@@ -201,22 +206,24 @@ class PowerPointAgent(Agent):
             configuration, 
             event_queue
           )
-        self.__workspace_id = config.workspace_id
-        self.__storage_name = config.storage_name
         self.__template_path = template_path
         self.__template_name: str = os.path.basename(self.__template_path).lower().replace(".pptx", "") if self.__template_path else "TemplatePresentation"
-        self.__datastore_path: str = f"datastore/powerpoint/presentations/{self.__template_name}/{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        self.__datastore_path: str = os.path.join(datastore_path, self.__template_name, datetime.now().strftime('%Y%m%d%H%M%S'))
 
         self.__powerpoint_configuration = PowerPointIntegrationConfiguration(template_path=self.__template_path)
         self.__powerpoint_integration = PowerPointIntegration(self.__powerpoint_configuration)
         self.__powerpoint_pipeline_configuration = AddPowerPointPresentationPipelineConfiguration(powerpoint_configuration=self.__powerpoint_configuration, triple_store=services.triple_store_service)
-        self.__powerpoint_pipeline = AddPowerPointPresentationPipeline(self.__powerpoint_pipeline_configuration)
         self.__naas_configuration = NaasIntegrationConfiguration(api_key=secret.get("NAAS_API_KEY"))
-        self.__naas_integration = NaasIntegration(self.__naas_configuration)
 
-        self.__presentation = self.__powerpoint_integration.create_presentation()
-        save_powerpoint_presentation(self.__presentation, self.__datastore_path, self.__template_name + ".pptx", copy=False)
-        self.__template_path = os.path.join(self.__datastore_path, self.__template_name + ".pptx")
+        self.__create_presentation_from_template_workflow = CreatePresentationFromTemplateWorkflow(CreatePresentationFromTemplateWorkflowConfiguration(
+            triple_store=services.triple_store_service,
+            powerpoint_configuration=self.__powerpoint_configuration,
+            naas_configuration=self.__naas_configuration,
+            pipeline_configuration=self.__powerpoint_pipeline_configuration,
+            datastore_path=self.__datastore_path,
+            workspace_id=config.workspace_id,
+            storage_name=config.storage_name
+        ))
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(PowerPointState)
@@ -532,9 +539,6 @@ Template shapes to reference:
         This node converts the JSON slide data into an actual PowerPoint presentation.
         It uses the PowerPointIntegration to create and populate the presentation.
         """
-        from io import BytesIO
-        from rdflib import RDF, OWL
-
         logger.debug("📊 Converting JSON to Powerpoint")
 
         # Get presentation data
@@ -543,101 +547,44 @@ Template shapes to reference:
         presentation_name = presentation_data.get("presentation_title", "Presentation").replace(" ", "") + ".pptx"
         
         # Create presentation from template
-        presentation = self.__powerpoint_integration.create_presentation()
-
-        # Clear existing slides and create new ones based on template
-        presentation = self.__powerpoint_integration.remove_all_slides(presentation)
-
-        # Create slides based on the data
-        for slide_data in slides_data:
-            # Duplicate template slide
-            template_slide_number = slide_data.get("template_slide_number")
-            presentation, new_slide_idx = self.__powerpoint_integration.duplicate_slide(self.__presentation, template_slide_number, presentation)
-
-            # Add shapes to slide
-            for shape in slide_data.get("shapes"):
-                shape_id = shape.get("shape_id")
-                text = shape.get("text")
-                try:
-                    presentation = self.__powerpoint_integration.update_shape(presentation, new_slide_idx, shape_id, text)
-                except Exception as e:
-                    logger.error(f"❌ Failed to update shape {shape_id} on slide {new_slide_idx}: {str(e)}")
-                    continue
-
-            sources = slide_data.get("sources")
-            try:
-                presentation = self.__powerpoint_integration.update_notes(presentation, new_slide_idx, sources)
-            except Exception as e:
-                logger.error(f"❌ Failed to update notes on slide {new_slide_idx}: {str(e)}")
-                continue
-
-        # Save presentation to storage
-        save_powerpoint_presentation(presentation, self.__datastore_path, presentation_name, copy=False)
-
-        # Save presentation to byte stream
-        byte_stream = BytesIO() 
-        presentation.save(byte_stream)
-        byte_stream.seek(0)
-
-        # Create asset in Naas
-        asset = self.__naas_integration.upload_asset(
-            data=byte_stream.getvalue(),  # Use the original turtle string
-            workspace_id=self.__workspace_id,
-            storage_name=self.__storage_name,
-            prefix="assets",
-            object_name=presentation_name,
-            visibility="public",
-            return_url=True
-        )
-        download_url = asset.get("asset_url")
-
-        # Add presentation to triple store
-        template_graph = self.__powerpoint_pipeline.run(AddPowerPointPresentationPipelineParameters(
-            presentation_name=self.__template_name,
-            storage_path=self.__template_path,
-        ))
-        template_subjects = list(template_graph.subjects(predicate=RDF.type, object=OWL.NamedIndividual))
-        template_uri = str(template_subjects[0]) if len(template_subjects) > 0 else None
-        logger.debug(f"🧩 Template presentation URI: {template_uri}")
-
-        presentation_graph = self.__powerpoint_pipeline.run(AddPowerPointPresentationPipelineParameters(
+        presentation = self.__create_presentation_from_template_workflow.create_presentation(
+            CreatePresentationFromTemplateWorkflowParameters(
             presentation_name=presentation_name,
-            storage_path=os.path.join(self.__datastore_path, presentation_name),
-            download_url=download_url,
-            template_uri=template_uri
-        ))
-        presentation_subjects = list(presentation_graph.subjects(predicate=RDF.type, object=OWL.NamedIndividual))
-        presentation_uri = str(presentation_subjects[0]) if len(presentation_subjects) > 0 else None
-        logger.debug(f"📽️ Presentation URI: {presentation_uri}")
+            slides_data=slides_data,
+            template_path=self.__template_path
+            )
+        )
+        download_url = presentation.get("download_url")
+        presentation_uri = presentation.get("presentation_uri")
         
         if not download_url:
             logger.warning("❌ Failed to download URL from Naas.")
             content = f"""
-            ✨ Your presentation has been successfully created in: {self.__datastore_path}/{presentation_name} and added to your knowledge graph (URI: {presentation_uri});
-            But we were unable to download URL from Naas. Please contact your support team with the following information:
+✨ Your presentation has been successfully created in: {self.__datastore_path}/{presentation_name} and added to your knowledge graph (URI: {presentation_uri});
+But we were unable to download URL from Naas. Please contact your support team with the following information:
 
-            ```markdown
-            ## Bug Repor
-            ### Title: 
-            Failed to get download URL after presentation creation
+```markdown
+## Bug Report
+### Title: 
+Failed to get download URL after presentation creation
 
-            ### Description:
-            We were unable to get the download URL after creating the presentation:
-            - Presentation name: {presentation_name}
-            - Storage path: {self.__datastore_path}
-            - Presentation URI: {presentation_uri}
+### Description:
+We were unable to get the download URL after creating the presentation:
+- Presentation name: {presentation_name}
+- Storage path: {self.__datastore_path}
+- Presentation URI: {presentation_uri}
 
-            ### Priority: 
-            High
-            ```
-            """
+### Priority: 
+High
+```
+"""
             ai_message = AIMessage(content=content)
         else:
             content = f"""
-            ✨ Your presentation has been successfully created and added to your knowledge graph (URI: {presentation_uri})!\n
-            You can access it with the following public download link: [{presentation_name}]({download_url})\n
-            Please, let me know if you need to create another presentation.
-            """
+✨ Your presentation has been successfully created and added to your knowledge graph (URI: {presentation_uri})!
+\nYou can access it with the following public download link: [{presentation_name}]({download_url})
+\n\nPlease, let me know if you need to create another presentation.
+"""
             ai_message = AIMessage(content=content)
         self._notify_ai_message(ai_message, self.name)
         return Command(goto="__end__", update={"messages": [ai_message]})
