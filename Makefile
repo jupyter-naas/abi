@@ -414,7 +414,8 @@ test-api-init-container: build
 # Interactive test selector using fzf (fuzzy finder)
 q=''
 ftest: deps
-	@ uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
+	@ clear
+	LOG_LEVEL=DEBUG uv run python -m pytest $(shell find lib src tests -name '*_test.py' -type f | fzf -q $(q)) $(args)
 
 dtest: deps
 	@ uv run python -m pytest $(shell find lib src tests -type d | fzf -q $(q)) $(args)
