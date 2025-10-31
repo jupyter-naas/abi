@@ -47,6 +47,8 @@ modules:
     enabled: false
   - path: src/marketplace/applications/naas
     enabled: false
+  - path: src/marketplace/applications/powerpoint
+    enabled: true
   - path: src/marketplace/domains/support
     enabled: true
   - path: src/marketplace/applications/pubmed
