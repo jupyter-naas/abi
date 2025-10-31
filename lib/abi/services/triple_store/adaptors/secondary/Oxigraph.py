@@ -34,7 +34,7 @@ License: MIT
 """
 
 from abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent
-from rdflib import Graph, URIRef
+from rdflib import Graph, URIRef, BNode
 import rdflib
 from typing import Tuple, Union
 import requests
@@ -137,6 +137,42 @@ class Oxigraph(ITripleStorePort):
             logger.error(f"Failed to connect to Oxigraph at {self.oxigraph_url}: {e}")
             raise
 
+    def __remove_blank_nodes(self, triples: Graph) -> Graph:
+        """
+        Sanitize a graph by removing blank nodes.
+        
+        Args:
+            triples (Graph): RDFLib Graph to sanitize
+        """
+        clean_graph = Graph()
+        for s, p, o in triples:
+            if not isinstance(s, BNode) and not isinstance(p, BNode) and not isinstance(o, BNode):
+                clean_graph.add((s, p, o))
+        
+        for prefix, namespace in triples.namespaces():
+            clean_graph.bind(prefix, namespace)
+            
+        return clean_graph
+
+    def __insert_large_graph(self, triples: Graph):
+        """
+        Insert a large graph into Oxigraph.
+        
+        Args:
+            triples (Graph): RDFLib Graph containing triples to insert
+        """
+
+        
+        serialized = self.__remove_blank_nodes(triples).serialize(format="ntriples")
+        response = requests.post(
+            f"{self.store_endpoint}?default",
+            headers={"Content-Type": "application/n-triples"},
+            data=serialized.encode("utf-8"),
+            timeout=self.timeout
+        )
+        response.raise_for_status()
+        logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
+
     def insert(self, triples: Graph):
         """
         Insert RDF triples into Oxigraph.
@@ -153,24 +189,33 @@ class Oxigraph(ITripleStorePort):
         """
         if len(triples) == 0:
             return
+        elif len(triples) > 100000:
+            self.__insert_large_graph(triples)
+        else:
+            # Build INSERT DATA query
+            insert_query = "INSERT DATA {\n"
+            for s, p, o in triples:
+                if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
+                    continue
+                insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
+            insert_query += "}"
             
-        # Build INSERT DATA query
-        insert_query = "INSERT DATA {\n"
-        for s, p, o in triples:
-            insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-        insert_query += "}"
+            response = requests.post(
+                self.update_endpoint,
+                headers={
+                    "Content-Type": "application/sparql-update"
+                },
+                data=insert_query.encode("utf-8"),
+                timeout=self.timeout
+            )
         
-        response = requests.post(
-            self.update_endpoint,
-            headers={
-                "Content-Type": "application/sparql-update"
-            },
-            data=insert_query.encode("utf-8"),
-            timeout=self.timeout
-        )
+            if response.status_code == 413:
+                self.__insert_large_graph(triples)
+            else:
+                response.raise_for_status()
+                logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
         
-        response.raise_for_status()
-        logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
+        
 
     def remove(self, triples: Graph):
         """
@@ -188,9 +233,11 @@ class Oxigraph(ITripleStorePort):
         # Build DELETE DATA query
         delete_query = "DELETE DATA {\n"
         for s, p, o in triples:
+            if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
+                continue
             delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
         delete_query += "}"
-        
+                
         response = requests.post(
             self.update_endpoint,
             headers={
@@ -199,7 +246,7 @@ class Oxigraph(ITripleStorePort):
             data=delete_query.encode("utf-8"),
             timeout=self.timeout
         )
-        
+                
         response.raise_for_status()
         logger.debug(f"Removed {len(triples)} triples from Oxigraph")
 
