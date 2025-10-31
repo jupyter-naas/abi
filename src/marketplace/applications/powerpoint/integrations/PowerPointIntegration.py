@@ -145,7 +145,7 @@ class PowerPointIntegration(Integration):
         presentation = self.create_presentation() if presentation is None else presentation
         slides = []
         for i in range(len(presentation.slides)):
-            shapes = self.get_shapes_from_slide(i)
+            shapes = self.get_shapes_from_slide(i, presentation)
             slides.append({"slide_number": i, "shapes": shapes})
         return slides
 
