@@ -34,7 +34,7 @@ License: MIT
 """
 
 from abi.services.triple_store.TripleStorePorts import ITripleStorePort, OntologyEvent
-from rdflib import Graph, URIRef
+from rdflib import Graph, URIRef, BNode
 import rdflib
 from typing import Tuple, Union
 import requests
@@ -137,47 +137,43 @@ class Oxigraph(ITripleStorePort):
             logger.error(f"Failed to connect to Oxigraph at {self.oxigraph_url}: {e}")
             raise
 
-    def _batched_graphs_by_bytes(self, triples: Graph, max_bytes: int, header: str, footer: str):
+    def __remove_blank_nodes(self, triples: Graph) -> Graph:
         """
-        Yield subgraphs whose serialized SPARQL payload size (including header/footer) is <= max_bytes.
-
-        The payload size is approximated as the UTF-8 byte length of the SPARQL UPDATE text:
-        header + sum("  s p o .\n") + footer
+        Sanitize a graph by removing blank nodes.
+        
+        Args:
+            triples (Graph): RDFLib Graph to sanitize
         """
-        from rdflib import Graph
-
-        header_bytes = len(header.encode("utf-8"))
-        footer_bytes = len(footer.encode("utf-8"))
-        current_bytes = header_bytes + footer_bytes
-        chunk_graph = Graph()
-
+        clean_graph = Graph()
         for s, p, o in triples:
-            line = f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-            line_bytes = len(line.encode("utf-8"))
+            if not isinstance(s, BNode) and not isinstance(p, BNode) and not isinstance(o, BNode):
+                clean_graph.add((s, p, o))
+        
+        for prefix, namespace in triples.namespaces():
+            clean_graph.bind(prefix, namespace)
+            
+        return clean_graph
 
-            # If adding this line would exceed the max, yield current chunk (if not empty)
-            if len(chunk_graph) > 0 and (current_bytes + line_bytes) > max_bytes:
-                yield chunk_graph
-                chunk_graph = Graph()
-                current_bytes = header_bytes + footer_bytes
+    def __insert_large_graph(self, triples: Graph):
+        """
+        Insert a large graph into Oxigraph.
+        
+        Args:
+            triples (Graph): RDFLib Graph containing triples to insert
+        """
 
-            # If a single triple itself exceeds the max size (with header/footer),
-            # yield it alone to avoid infinite loop and proceed.
-            if (header_bytes + footer_bytes + line_bytes) > max_bytes and len(chunk_graph) == 0:
-                oversized_graph = Graph()
-                oversized_graph.add((s, p, o))
-                yield oversized_graph
-                # keep current chunk empty for next iterations
-                current_bytes = header_bytes + footer_bytes
-                continue
+        
+        serialized = self.__remove_blank_nodes(triples).serialize(format="ntriples")
+        response = requests.post(
+            f"{self.store_endpoint}?default",
+            headers={"Content-Type": "application/n-triples"},
+            data=serialized.encode("utf-8"),
+            timeout=self.timeout
+        )
+        response.raise_for_status()
+        logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
 
-            chunk_graph.add((s, p, o))
-            current_bytes += line_bytes
-
-        if len(chunk_graph) > 0:
-            yield chunk_graph
-
-    def insert(self, triples: Graph, chunk_size: int = 1_000_000):
+    def insert(self, triples: Graph):
         """
         Insert RDF triples into Oxigraph.
 
@@ -196,48 +192,33 @@ class Oxigraph(ITripleStorePort):
         """
         if len(triples) == 0:
             return
-
-        # Byte-size batching
-        header = "INSERT DATA {\n"
-        footer = "}"
-
-        # Build batches by bytes and recursively insert each batch if needed
-        batches = list(self._batched_graphs_by_bytes(triples, chunk_size, header, footer))
-        if len(batches) > 1:
-            total_triples = sum(len(b) for b in batches)
-            remaining = total_triples
-            # print(f"Inserting {total_triples} triples into Oxigraph in byte-size batches (<= {chunk_size} bytes)")
-            for i, chunk_graph in enumerate(batches, start=1):
-                self.insert(chunk_graph, chunk_size=chunk_size)
-                remaining -= len(chunk_graph)
-                # print(f"Batched insert: Inserted batch {i} of size {len(chunk_graph)}; {remaining} triples remaining")
-            return
-
-        # # Single batch path
-        # print(f"Inserting {len(triples)} triples into Oxigraph")
-
-        # Process as a single query if under or equal to chunk_size
-        insert_query = header
-        for s, p, o in triples:
-            insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-        insert_query += footer
-        # print(f"Insert query: {insert_query}")
-        # payload_size_bytes = len(insert_query.encode("utf-8"))
-        # payload_size_mb = payload_size_bytes / (1024 * 1024)
-        # print("HTTP payload size (utf-8 bytes):", payload_size_bytes, "bytes")
-        # print("HTTP payload size (utf-8 bytes):", payload_size_mb, "MB")
-
-        response = requests.post(
-            self.update_endpoint,
-            headers={
-                "Content-Type": "application/sparql-update"
-            },
-            data=insert_query.encode("utf-8"),
-            timeout=self.timeout
-        )
-
-        response.raise_for_status()
-        # print(f"Inserted {len(triples)} triples into Oxigraph")
+        elif len(triples) > 100000:
+            self.__insert_large_graph(triples)
+        else:
+            # Build INSERT DATA query
+            insert_query = "INSERT DATA {\n"
+            for s, p, o in triples:
+                if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
+                    continue
+                insert_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
+            insert_query += "}"
+            
+            response = requests.post(
+                self.update_endpoint,
+                headers={
+                    "Content-Type": "application/sparql-update"
+                },
+                data=insert_query.encode("utf-8"),
+                timeout=self.timeout
+            )
+        
+            if response.status_code == 413:
+                self.__insert_large_graph(triples)
+            else:
+                response.raise_for_status()
+                logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
+        
+        
 
     def remove(self, triples: Graph, chunk_size: int = 1_000_000):
         """
@@ -275,15 +256,11 @@ class Oxigraph(ITripleStorePort):
         # Build DELETE DATA query
         delete_query = header
         for s, p, o in triples:
+            if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
+                continue
             delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-        delete_query += footer
-
-        # print(f"Delete query: {delete_query}")
-        # payload_size_bytes = len(delete_query.encode("utf-8"))
-        # payload_size_mb = payload_size_bytes / (1024 * 1024)
-        # print("HTTP payload size (utf-8 bytes):", payload_size_bytes, "bytes")
-        # print("HTTP payload size (utf-8 bytes):", payload_size_mb, "MB")
-
+        delete_query += "}"
+                
         response = requests.post(
             self.update_endpoint,
             headers={
@@ -292,7 +269,7 @@ class Oxigraph(ITripleStorePort):
             data=delete_query.encode("utf-8"),
             timeout=self.timeout
         )
-
+                
         response.raise_for_status()
         # print(f"Removed {len(triples)} triples from Oxigraph")
 
