@@ -9,8 +9,6 @@ from langgraph.types import Command
 from langchain_core.messages import ToolMessage
 from typing import Union, Optional, Any
 import sys
-import tty
-import termios
 import re
 import time
 import threading
@@ -71,7 +69,11 @@ def save_to_conversation(line: str):
 
 
 def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for help)"):
-    """Get user input with a placeholder that disappears when typing starts"""
+    """Get user input with a placeholder that disappears when typing starts
+    
+    Supports pasting large text and multiline input.
+    Press Enter twice (empty line) to submit multiline input.
+    """
     
     # Check if input is piped (not interactive terminal)
     if not sys.stdin.isatty():
@@ -82,7 +84,7 @@ def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for 
         except: # noqa: E722
             return "/bye"
     
-    # Interactive terminal - use fancy placeholder logic
+    # Show prompt with placeholder
     print(f"\n{prompt}", end="", flush=True)
     
     # Show placeholder in grey
@@ -91,51 +93,43 @@ def get_input_with_placeholder(prompt="> ", placeholder="Send a message (/? for 
     # Move cursor back to start of placeholder
     print(f"\033[{len(placeholder)}D", end="", flush=True)
     
-    user_input = ""
-    placeholder_cleared = False
-    
-    old_settings = termios.tcgetattr(sys.stdin)
-
+    lines = []
+    first_line = True
     
     try:
-        tty.setraw(sys.stdin.fileno())
-        
         while True:
-            char = sys.stdin.read(1)
-            
-            # Handle Enter key
-            if ord(char) == 13:  # Enter
-                # Clear the current line before returning
-                print("\r\033[2K", end="", flush=True)
+            try:
+                if first_line:
+                    # First line - use the placeholder display
+                    line = input()
+                    # Clear the placeholder line
+                    print(f"\033[A\033[2K{prompt}{line}", flush=True)
+                    first_line = False
+                else:
+                    # Continuation lines
+                    line = input("... ")
+                
+                # If line is empty and we have previous content, submit
+                if not line.strip() and lines:
+                    break
+                # If line is not empty, add it
+                elif line.strip():
+                    lines.append(line)
+                # If first line is empty, return empty (single enter)
+                elif not lines:
+                    return ""
+                    
+            except EOFError:
+                # Ctrl+D pressed
                 break
                 
-            # Handle Backspace
-            elif ord(char) == 127:  # Backspace
-                if user_input:
-                    user_input = user_input[:-1]
-                    print("\b \b", end="", flush=True)
-                    
-            # Handle Ctrl+C
-            elif ord(char) == 3:  # Ctrl+C
-                print("^C")
-                raise KeyboardInterrupt
-                
-            # Handle printable characters
-            elif ord(char) >= 32 and ord(char) <= 126:
-                # Clear placeholder on first character
-                if not placeholder_cleared:
-                    # Clear the placeholder text
-                    print(f"\033[2K\r{prompt}", end="", flush=True)
-                    placeholder_cleared = True
-                    
-                user_input += char
-                print(char, end="", flush=True)
-                
-    finally:
-        # Restore terminal settings
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    except KeyboardInterrupt:
+        print()
+        raise
     
-    return user_input
+    # Join all lines with newlines
+    result = "\n".join(lines)
+    return result
 
 
 def on_tool_response(message: Union[str, Command, dict[str, Any], ToolMessage]) -> None:
@@ -334,6 +328,10 @@ def run_agent(agent: Agent):
             print("  /? - Show this help")
             print("  /reset - Start fresh conversation") 
             print("  /bye or /exit - End conversation")
+            print("\n📝 Input Tips:")
+            print("  • Paste large text directly - it will be captured properly")
+            print("  • For multiline input: keep typing on new lines, press Enter twice to submit")
+            print("  • Single Enter on first line submits immediately (for quick messages)")
             print("\n🤖 Available AI Agents:")
             print("  Cloud Agents:")
             cloud_agents = ["@gemini", "@claude", "@mistral", "@chatgpt", "@perplexity", "@llama"]
