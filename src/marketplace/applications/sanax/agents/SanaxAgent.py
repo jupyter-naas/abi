@@ -109,7 +109,7 @@ def create_agent(
 
     class CountSchema(BaseModel):
         function_name: str = Field(description="The name of the function to call")
-        function_args: Optional[Dict[str, Any]] = Field(default=None, description="Arguments to pass to the target function")
+        function_args: Optional[Dict[str, Any]] = Field(description="Arguments to pass to the target function")
 
     def count_items(function_name: str, function_args: Optional[Dict[str, Any]] = None) -> int:
         """Count the number of results returned by another tool.

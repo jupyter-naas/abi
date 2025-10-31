@@ -161,8 +161,6 @@ class Oxigraph(ITripleStorePort):
         Args:
             triples (Graph): RDFLib Graph containing triples to insert
         """
-
-        
         serialized = self.__remove_blank_nodes(triples).serialize(format="ntriples")
         response = requests.post(
             f"{self.store_endpoint}?default",
@@ -173,15 +171,37 @@ class Oxigraph(ITripleStorePort):
         response.raise_for_status()
         logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
 
+    def __remove_large_graph(self, triples: Graph):
+        """
+        Remove a large graph from Oxigraph.
+        
+        Args:
+            triples (Graph): RDFLib Graph containing triples to remove
+        """
+        # Serialize as N-Triples
+        serialized = self.__remove_blank_nodes(triples).serialize(format="ntriples")
+        # Use the store endpoint with DELETE method to remove all these triples
+        response = requests.delete(
+            f"{self.store_endpoint}?default",
+            headers={"Content-Type": "application/n-triples"},
+            data=serialized,
+            timeout=self.timeout
+        )
+        response.raise_for_status()
+        logger.debug(f"Removed {len(triples)} triples from Oxigraph via store endpoint (large remove)")
+
     def insert(self, triples: Graph):
         """
         Insert RDF triples into Oxigraph.
 
-        This method converts an RDFLib Graph into a SPARQL INSERT DATA query
-        and sends it to Oxigraph via the update endpoint.
+        This method converts an RDFLib Graph into SPARQL INSERT DATA queries
+        and sends them to Oxigraph via the update endpoint. Batching is
+        performed based on the serialized UTF-8 byte size of the SPARQL
+        payload, targeting batches up to `chunk_size` bytes.
 
         Args:
             triples (Graph): RDFLib Graph containing triples to insert
+            chunk_size (int): Maximum payload size per request in bytes. Defaults to 1,000,000
 
         Raises:
             requests.exceptions.HTTPError: If the insert operation fails
@@ -215,40 +235,49 @@ class Oxigraph(ITripleStorePort):
                 response.raise_for_status()
                 logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
         
-        
 
-    def remove(self, triples: Graph):
+    def remove(self, triples: Graph, chunk_size: int = 1_000_000):
         """
         Remove RDF triples from Oxigraph.
 
-        This method constructs a SPARQL DELETE DATA query from the provided
-        graph and executes it against Oxigraph.
+        This method constructs SPARQL DELETE DATA queries from the provided
+        graph and executes them against Oxigraph. For large graphs, it uses
+        the Oxigraph store endpoint with the DELETE method, similarly to how
+        insert handles large graphs.
 
         Args:
             triples (Graph): RDFLib Graph containing triples to remove
+            chunk_size (int): Maximum payload size per request in bytes. Defaults to 1,000,000
 
         Raises:
             requests.exceptions.HTTPError: If the remove operation fails
         """
-        # Build DELETE DATA query
-        delete_query = "DELETE DATA {\n"
-        for s, p, o in triples:
-            if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
-                continue
-            delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
-        delete_query += "}"
-                
-        response = requests.post(
-            self.update_endpoint,
-            headers={
-                "Content-Type": "application/sparql-update"
-            },
-            data=delete_query.encode("utf-8"),
-            timeout=self.timeout
-        )
-                
-        response.raise_for_status()
-        logger.debug(f"Removed {len(triples)} triples from Oxigraph")
+        if len(triples) == 0:
+            return
+        elif len(triples) > 100000:
+            self.__remove_large_graph(triples)
+        else:
+            # Build DELETE DATA query
+            delete_query = "DELETE DATA {\n"
+            for s, p, o in triples:
+                if isinstance(s, BNode) or isinstance(p, BNode) or isinstance(o, BNode):
+                    continue
+                delete_query += f"  {s.n3()} {p.n3()} {o.n3()} .\n"
+            delete_query += "}"
+                    
+            response = requests.post(
+                self.update_endpoint,
+                headers={
+                    "Content-Type": "application/sparql-update"
+                },
+                data=delete_query.encode("utf-8"),
+                timeout=self.timeout
+            )
+            if response.status_code == 413:
+                self.__insert_large_graph(triples)
+            else:
+                response.raise_for_status()
+                logger.debug(f"Inserted {len(triples)} triples into Oxigraph")
 
     def get(self) -> Graph:
         """

@@ -74,7 +74,7 @@ class ReportBugWorkflow(Workflow):
         save_json(issue, os.path.join(self.__configuration.data_store_path, issue_path, "issues"), f"{issue.get('number')}.json")
         
         # Add the issue to project using direct project_node_id
-        issue_node_id = issue['node_id']
+        issue_node_id = issue.get('node_id', "")
         logger.debug(f"Issue node ID: {issue_node_id}")
         issue_graphql = self.__github_graphql_integration.add_issue_to_project(
             project_node_id=self.__configuration.project_node_id,

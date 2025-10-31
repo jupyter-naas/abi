@@ -861,7 +861,6 @@ def as_tools(configuration: LinkedInIntegrationConfiguration):
             pattern=r"^ACoAA.+"
         )]
         current_company_id: Annotated[str, Field(
-            default="",  # 👈 enforce default
             description=(
                 "LinkedIn company ID to filter the mutual connections. "
                 "If you don't have the company ID, use the linkedin_get_organization_id tool to get it."

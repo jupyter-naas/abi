@@ -166,7 +166,7 @@ def as_tools(configuration: PostgresIntegrationConfiguration):
     class QuerySchema(BaseModel):
         query: str = Field(..., description="SQL query")
         params: Optional[Union[Tuple, Dict]] = Field(None, description="Query parameters to be used in the query if needed.")
-        fetch: bool = Field(default=True, description="Whether to fetch results")
+        fetch: bool = Field(description="Whether to fetch results")
 
     class ListTablesSchema(BaseModel):
         pass

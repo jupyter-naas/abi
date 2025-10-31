@@ -3,7 +3,7 @@ from abi import logger
 import re
 
 
-def extract_json_from_completion(completion_text: str) -> dict:
+def extract_json_from_completion(completion_text: str) -> list | dict:
     """Extract JSON object from completion text that contains markdown formatting.
 
     Args:
