@@ -105,8 +105,6 @@ class PowerPointIntegration(Integration):
                     "height": shape.height.cm if hasattr(shape, "height") else None,
                     "rotation": shape.rotation if hasattr(shape, "rotation") else None,
                 }
-                if text and data["text"] == "":
-                    continue
                 shapes.append(data)
             slides.append({"slide_number": i, "shapes": shapes})
         return slides
@@ -363,12 +361,23 @@ class PowerPointIntegration(Integration):
             saved_formatting = None
             if text_frame.paragraphs and text_frame.paragraphs[0].runs:
                 src_run = text_frame.paragraphs[0].runs[0]
+                color = src_run.font.color
+                font_color = None
+                if color.type == 1:  # MSO_COLOR_TYPE.RGB
+                    font_color = color.rgb
+                elif color.type == 2:  # MSO_COLOR_TYPE.THEME
+                    font_color = color.theme_color
+                elif color.type == 3:  # MSO_COLOR_TYPE.SCHEME (older files)
+                    font_color = color.theme_color
+
                 saved_formatting = {
                     "name": src_run.font.name,
                     "size": src_run.font.size,
                     "bold": src_run.font.bold,
                     "italic": src_run.font.italic,
                     "underline": src_run.font.underline,
+                    "color_type": color.type,
+                    "color": font_color,
                 }
 
             # If there is at least one paragraph, clear its content.
@@ -464,89 +473,67 @@ class PowerPointIntegration(Integration):
             saved_formatting (dict): Saved font formatting settings
         """
         pattern_href = r'\[.*?\]\(.*?\)'
+
+        def _set_font(run, bold_override=None):
+            if saved_formatting:
+                run.font.name = saved_formatting.get("name")
+                run.font.size = saved_formatting.get("size")
+                run.font.bold = saved_formatting.get("bold") if bold_override is None else bold_override
+                run.font.italic = saved_formatting.get("italic")
+                run.font.underline = saved_formatting.get("underline")
+                if saved_formatting.get("color") is not None:
+                    if saved_formatting.get("color_type") == 1:
+                        run.font.color.rgb = saved_formatting.get("color")
+                    else:
+                        run.font.color.theme_color = saved_formatting.get("color")
+
         if ":" in text and "Source:" not in text:
             prefix, rest = text.split(":", 1)
             # Add prefix in bold
             run = paragraph.add_run()
             run.text = prefix.strip() + ": "
-            if saved_formatting:
-                run.font.name = saved_formatting.get("name")
-                run.font.size = saved_formatting.get("size")
-                run.font.bold = True  # Force bold for prefix
-                run.font.italic = saved_formatting.get("italic")
-                run.font.underline = saved_formatting.get("underline")
-            
-            # Add rest of text without bold
-            run = paragraph.add_run()
+            _set_font(run, bold_override=True)
 
-            # Apply hyperlink   
-            if re.findall(pattern_href, rest):
-                matches = re.findall(pattern_href, rest)
+            # Check for hyperlinks in rest
+            matches = re.findall(pattern_href, rest)
+            if matches:
                 for match in matches:
-                    # Extract text and URL from markdown link format
                     link_text, url = self.__extract_source_text_and_url(deepcopy(match))
-                    
                     # Remove the markdown link from text
-                    rest = rest.replace(match, "").replace("()", "")
-                    
+                    rest_display = rest.replace(match, "").replace("()", "")
                     # Add text without hyperlink
                     run = paragraph.add_run()
-                    run.text = rest.strip() + " "
-                    if saved_formatting:
-                        run.font.name = saved_formatting.get("name")
-                        run.font.size = saved_formatting.get("size")
-                        run.font.bold = saved_formatting.get("bold")
-                        run.font.italic = saved_formatting.get("italic")
-                        run.font.underline = saved_formatting.get("underline")
-
+                    run.text = rest_display.strip() + " "
+                    _set_font(run)
                     # Add hyperlink at the end of the text
                     run = paragraph.add_run()
-                    run.text = "(" + link_text + ")"
-                    hlink = run.hyperlink
-                    hlink.address = url
+                    run.text = f"({link_text})"
+                    run.hyperlink.address = url
                     if saved_formatting:
                         run.font.size = saved_formatting.get("size")
-
             else:
+                run = paragraph.add_run()
                 run.text = rest
-                if saved_formatting:
-                    run.font.name = saved_formatting.get("name")
-                    run.font.size = saved_formatting.get("size")
-                    run.font.bold = saved_formatting.get("bold")
-                    run.font.italic = saved_formatting.get("italic")
-                    run.font.underline = saved_formatting.get("underline")
-        
+                _set_font(run)
+
         elif re.findall(pattern_href, text):
             matches = re.findall(pattern_href, text)
             for match in matches:
-                # Extract text and URL from markdown link format
                 link_text, url = self.__extract_source_text_and_url(deepcopy(match))
-                
-                # Remove the markdown link from text
-                text = text.replace(match, "").replace("()", "")
-                
-                # Add text without hyperlink
+                text_display = text.replace(match, "").replace("()", "")
                 run = paragraph.add_run()
-                run.text = text.strip() + " "
-
-                # Add hyperlink at the end of the text
+                run.text = text_display.strip() + " "
                 run = paragraph.add_run()
-                run.text = "(" + link_text + ")"
-                hlink = run.hyperlink
-                hlink.address = url
+                run.text = f"({link_text})"
+                run.hyperlink.address = url
                 if saved_formatting:
                     run.font.size = saved_formatting.get("size")
         else:
-            # Handle normal lines
             paragraph.text = text
             if saved_formatting and paragraph.runs:
                 run = paragraph.runs[0]
-                run.font.name = saved_formatting.get("name")
-                run.font.size = saved_formatting.get("size")
-                run.font.bold = saved_formatting.get("bold")
-                run.font.italic = saved_formatting.get("italic")
-                run.font.underline = saved_formatting.get("underline")
-        
+                _set_font(run)
+                
         return paragraph
 
     def add_image(
