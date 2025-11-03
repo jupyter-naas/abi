@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pydantic import Field
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
-from typing import Any, Dict, Set
+from typing import Any, Dict, Set, Annotated
 from enum import Enum
 import requests
 import json
@@ -32,9 +32,9 @@ class ArtificialAnalysisWorkflowParameters(WorkflowParameters):
         include_categories (bool): Include category breakdowns for media endpoints
         validate_agents_only (bool): Only generate ontology for modules with active agents
     """
-    endpoint: str = Field(default="llms", description="API endpoint to fetch (llms, text-to-image, etc.)")
-    include_categories: bool = Field(default=False, description="Include category breakdowns for media endpoints")
-    validate_agents_only: bool = Field(default=True, description="Only generate ontology for modules with active agents")
+    endpoint: Annotated[str, Field(description="API endpoint to fetch (llms, text-to-image, etc.)")] = "llms"
+    include_categories: Annotated[bool, Field(description="Include category breakdowns for media endpoints")] = False
+    validate_agents_only: Annotated[bool, Field(description="Only generate ontology for modules with active agents")] = True
 
 
 class ArtificialAnalysisWorkflow(Workflow):
