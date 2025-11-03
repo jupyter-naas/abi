@@ -28,7 +28,7 @@ from langgraph.types import Command
 from enum import Enum
 
 # Pydantic imports for schema validation
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field
 
 from abi.utils.Expose import Expose
 
@@ -411,7 +411,7 @@ class Agent(Expose):
             
             # Check if already using ChatOpenRouter
             if isinstance(self._chat_model, ChatOpenRouter):
-                logger.debug(f"Chat model is already using ChatOpenRouter")
+                logger.debug("Chat model is already using ChatOpenRouter")
                 return
             
             # Check if it's a ChatOpenAI that we can replace with ChatOpenRouter
@@ -441,7 +441,7 @@ class Agent(Expose):
                 # Create new ChatOpenRouter instance
                 try:
                     self._chat_model = ChatOpenRouter(model_name=model_name, **kwargs)
-                    logger.debug(f"Successfully replaced chat model with ChatOpenRouter")
+                    logger.debug("Successfully replaced chat model with ChatOpenRouter")
                 except Exception as e:
                     logger.error(f"Failed to create ChatOpenRouter instance: {e}")
                     # Keep the original model
