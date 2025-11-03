@@ -28,7 +28,7 @@ from langgraph.types import Command
 from enum import Enum
 
 # Pydantic imports for schema validation
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from abi.utils.Expose import Expose
 
@@ -43,6 +43,7 @@ from queue import Queue, Empty
 import pydash as pd
 import re
 
+from abi.services.agent.OpenRouter import ChatOpenRouter
 
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
@@ -314,24 +315,31 @@ class Agent(Expose):
             tool.name: tool for tool in self._structured_tools
         }
 
-        # TODO: Make sure the Agent does not call the version without tools.
         self._chat_model = chat_model
+        # Update the output version for the chat model.
         if hasattr(chat_model, "output_version"):
             self._chat_model_output_version = chat_model.output_version
+
+        # Configure OpenRouter API key if available
+        self._enforce_openrouter_api_key()
+        
+        # Update output version again in case chat model was replaced
+        if hasattr(self._chat_model, "output_version"):
+            self._chat_model_output_version = self._chat_model.output_version
             
-        self._chat_model_with_tools = chat_model
+        self._chat_model_with_tools = self._chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
             
             # Test if the chat model can bind tools by trying with a default tool first
-            if self._can_bind_tools(chat_model):
-                self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
+            if self._can_bind_tools(self._chat_model):
+                self._chat_model_with_tools = self._chat_model.bind_tools(tools_to_bind)
             else:
-                logger.warning(f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
+                logger.warning(f"Chat model {type(self._chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
                 # Keep the original model without tools
-                self._chat_model_with_tools = chat_model
+                self._chat_model_with_tools = self._chat_model
         
         # Use provided memory or create based on environment
         if memory is None:
@@ -388,6 +396,61 @@ class Agent(Expose):
             # If binding tools raises an exception, the model doesn't support tools
             logger.debug(f"Chat model {type(chat_model).__name__} does not support tool calling: {e}")
             return False
+
+    def _enforce_openrouter_api_key(self) -> None:
+        """Configure the chat model to use OpenRouter API if OPENROUTER_API_KEY is set.
+        
+        This method replaces ChatOpenAI instances with ChatOpenRouter instances
+        when OPENROUTER_API_KEY is available. Errors are logged but do not
+        prevent agent initialization.
+        """
+        try:
+            api_key = os.environ.get("OPENROUTER_API_KEY")
+            if not api_key:
+                return
+            
+            # Check if already using ChatOpenRouter
+            if isinstance(self._chat_model, ChatOpenRouter):
+                logger.debug(f"Chat model is already using ChatOpenRouter")
+                return
+            
+            # Check if it's a ChatOpenAI that we can replace with ChatOpenRouter
+            from langchain_openai import ChatOpenAI
+            
+            if isinstance(self._chat_model, ChatOpenAI):
+                logger.debug(f"🚪🔑 Replacing ChatOpenAI with ChatOpenRouter for {type(self._chat_model).__name__}")
+                
+                # Extract model name from the chat model
+                # ChatOpenAI uses 'model' attribute, but we need to pass it as 'model_name' to ChatOpenRouter
+                model_name = getattr(self._chat_model, "model", None) or getattr(self._chat_model, "model_name", None)
+                
+                if not model_name:
+                    logger.warning("Could not determine model name from chat model, skipping OpenRouter conversion")
+                    return
+                
+                # Extract other relevant kwargs from the original model
+                kwargs = {}
+                
+                # Preserve chat model parameters
+                for attr in ["temperature", "max_tokens", "timeout", "max_retries", "streaming"]:
+                    if hasattr(self._chat_model, attr):
+                        value = getattr(self._chat_model, attr)
+                        if value is not None:
+                            kwargs[attr] = value
+                
+                # Create new ChatOpenRouter instance
+                try:
+                    self._chat_model = ChatOpenRouter(model_name=model_name, **kwargs)
+                    logger.debug(f"Successfully replaced chat model with ChatOpenRouter")
+                except Exception as e:
+                    logger.error(f"Failed to create ChatOpenRouter instance: {e}")
+                    # Keep the original model
+                    return
+            else:
+                logger.debug(f"Chat model {type(self._chat_model).__name__} is not ChatOpenAI, skipping OpenRouter conversion")
+                
+        except Exception as outer_e:
+            logger.error(f"Openrouter chat model setup failed: {outer_e}")
 
     def default_tools(self) -> list[Tool | BaseTool]:
         @tool(return_direct=True)
