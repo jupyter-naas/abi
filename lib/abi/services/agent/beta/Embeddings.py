@@ -11,7 +11,7 @@ load_dotenv()
 
 cache = CacheFactory.CacheFS_find_storage(subpath="intent_mapping")
 
-EMBEDDINGS_MODELS_DIMENSIONS_MAP = {
+EMBEDDINGS_MODELS_DIMENSIONS_MAP: dict[str, int] = {
     "ai/embeddinggemma": 768,
     "text-embedding-ada-002": 1536,
     "text-embedding-3-small": 1536,
