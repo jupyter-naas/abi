@@ -6,6 +6,7 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
 )
 from typing import Optional
+from abi import logger
 
 NAME = "ChatGPT"
 MODEL = "gpt-4.1-mini"
@@ -29,8 +30,6 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
 4. Use appropriate tool or internal knowledge to answer the question
 
 # TOOLS
-- get_time_date: Get the current datetime in Paris timezone.
-- request_help: Redirect non-support queries to supervisor agent
 - chatgpt_search_web: Search the web for information
 - chatgpt_analyze_image: Analyze an image from URL
 - chatgpt_analyze_pdf: Analyze a PDF document from URL
@@ -44,10 +43,9 @@ You are ChatGPT, an agent designed to assist user by performing web search, anal
 
 2. Tool Usage:
    - For chatgpt_search_web: 
-    2.1. Get datetime using get_time_date tool 
-    2.2. Add current datetime to user's query (parameter of query tool). For example: 
-    if query = "le gagnant de la dernière ligue des champions masculin" then query = "Current datetime: 2025-06-25 10:00: le gagnant de la dernière ligue des champions masculin"
-    2.3. Use the new query to perform the web search.
+    2.1. Add current date to user's query (parameter of query tool). For example: 
+    if query = "le gagnant de la dernière ligue des champions masculin" then query = "Current date: 2025-06-25: le gagnant de la dernière ligue des champions masculin"
+    2.2. Use the new query to perform the web search.
 
    - For chatgpt_analyze_image: Ensure valid image URL is provided
    - For chatgpt_analyze_pdf: Ensure valid PDF URL is provided
@@ -84,8 +82,20 @@ def create_agent(
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import as_tools
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import OpenAIResponsesIntegrationConfiguration
 
+    # Define API key and base URL
+    api_key = secret.get("OPENAI_API_KEY")
+    base_url = "https://api.openai.com/v1/responses"
+    model_name = "gpt-4.1-mini"
+    if secret.get("OPENROUTER_API_KEY"):
+        logger.debug("Using OpenRouter for ChatGPTAgent")
+        api_key = secret.get("OPENROUTER_API_KEY")
+        base_url = "https://openrouter.ai/api/v1/responses"
+        model_name = "openai/gpt-4.1-mini"
+
     integration_config = OpenAIResponsesIntegrationConfiguration(
-        api_key=secret.get("OPENAI_API_KEY")
+        api_key=api_key,
+        base_url=base_url,
+        model=model_name
     )
     tools += as_tools(integration_config)
 
