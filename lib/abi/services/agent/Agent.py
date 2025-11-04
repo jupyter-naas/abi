@@ -1114,7 +1114,7 @@ AGENT SYSTEM PROMPT:
         # This will be recursively done for each sub agents.
         agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
-        new_agent = Agent(
+        new_agent = self.__class__(
             name=self._name,
             description=self._description,
             chat_model=self._chat_model,
@@ -1137,7 +1137,7 @@ AGENT SYSTEM PROMPT:
         
         tools = self._tools + agents
         
-        return Agent(
+        return self.__class__(
             name=self._name,
             description=self._description,
             chat_model=self._chat_model,
