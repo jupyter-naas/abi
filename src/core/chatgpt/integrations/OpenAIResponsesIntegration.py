@@ -95,13 +95,15 @@ class OpenAIResponsesIntegration(Integration):
                         return text_content
                         
                     # Format annotations section
-                    annotation_text = "\n\n\n\n*Annotations:*\n"
-                    for annotation in annotations:
-                        if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
-                            continue
-                        title = annotation.get('title', '')
-                        url = annotation.get('url', '')
-                        annotation_text += f"- [{title}]({url})\n"
+                    annotation_text = ""
+                    # if len(annotations) > 0:
+                    #     annotation_text = "\n\n\n\n*Annotations:*\n"
+                    #     for annotation in annotations:
+                    #         if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
+                    #             continue
+                    #         title = annotation.get('title', '')
+                    #         url = annotation.get('url', '')
+                    #         annotation_text += f"- [{title}]({url})\n"
                         
                     return text_content + annotation_text
                     
