@@ -1,6 +1,6 @@
 import os
 import hashlib
-
+import requests
 from lib.abi.services.cache.CacheFactory import CacheFactory
 from lib.abi.services.cache.CachePort import DataType
 from tqdm import tqdm
@@ -103,19 +103,21 @@ def _sha1(model: str):
 
     return func
 
+_model_name: str | None = None
+
 if os.environ.get("AI_MODE") == "airgap":
-    import requests
+    _model_name = "ai/embeddinggemma"
         
-    @cache(_sha1("ai/embeddinggemma"), cache_type=DataType.PICKLE)
+    @cache(_sha1(_model_name), cache_type=DataType.PICKLE)
     def embeddings(text) -> list[float]:
         res = requests.post("http://localhost:12434/engines/llama.cpp/v1/embeddings", json={
-            "model": "ai/embeddinggemma",
+            "model": _model_name,
             "input": text 
         })
         res.raise_for_status()
         return res.json()["data"][0]["embedding"]
         
-    @cache(_sha1s("ai/embeddinggemma"), cache_type=DataType.PICKLE)
+    @cache(_sha1s(_model_name), cache_type=DataType.PICKLE)
     def embeddings_batch(texts) -> list[list[float]]:
         ret = []
         

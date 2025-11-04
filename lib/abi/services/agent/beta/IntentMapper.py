@@ -1,5 +1,10 @@
 from .VectorStore import VectorStore
-from .Embeddings import embeddings_batch, embeddings as embeddings
+from .Embeddings import (
+    embeddings_batch, 
+    embeddings as embeddings, 
+    _model_name as embeddings_model_name, 
+    EMBEDDINGS_MODELS_DIMENSIONS_MAP
+)
 from langchain_openai import ChatOpenAI
 from typing import Tuple, Any, Optional
 from enum import Enum
@@ -35,7 +40,7 @@ class IntentMapper:
         self.intents = intents
         
         # Use environment-based detection for consistent embedding source
-        dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+        dimension = EMBEDDINGS_MODELS_DIMENSIONS_MAP[embeddings_model_name]
             
         self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
@@ -45,7 +50,7 @@ class IntentMapper:
         api_key = SecretStr(os.environ["OPENROUTER_API_KEY"])
 
         # Detect if we're using local embeddings (768 dim = airgap mode)
-        if dimension == 768 or os.getenv("AI_MODE") == "airgap":
+        if os.getenv("AI_MODE") == "airgap":
             from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
             self.model = AirgapChatOpenAI(
                 model="ai/gemma3",
