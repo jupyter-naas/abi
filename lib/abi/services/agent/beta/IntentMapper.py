@@ -5,6 +5,9 @@ from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 import os
+from dotenv import load_dotenv
+from pydantic import SecretStr
+load_dotenv()
 
 class IntentScope(Enum):
     DIRECT = "direct"
@@ -38,7 +41,9 @@ class IntentMapper:
         intents_values = [intent.intent_value for intent in intents]
         metadatas = [{"index": index} for index in range(len(intents_values))]
         self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
-        
+
+        api_key = SecretStr(os.environ["OPENROUTER_API_KEY"])
+
         # Detect if we're using local embeddings (768 dim = airgap mode)
         if dimension == 768 or os.getenv("AI_MODE") == "airgap":
             from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
@@ -48,8 +53,14 @@ class IntentMapper:
                 base_url="http://localhost:12434/engines/v1",
                 api_key="ignored",
             )
+        # Detect if we're using OpenRouter
+        elif api_key:
+            self.model = ChatOpenAI(model="gpt-4.1-mini", api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        # Fallback to OpenAI
         else:
-            self.model = ChatOpenAI(model="gpt-4o-mini")
+            self.model = ChatOpenAI(model="gpt-4.1-mini")
+
+        # Set the system prompt
         self.system_prompt = """
 You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
 
