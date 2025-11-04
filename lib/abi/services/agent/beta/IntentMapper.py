@@ -40,7 +40,10 @@ class IntentMapper:
         self.intents = intents
         
         # Use environment-based detection for consistent embedding source
-        dimension = EMBEDDINGS_MODELS_DIMENSIONS_MAP[embeddings_model_name]
+        if embeddings_model_name is not None:
+            dimension: int = EMBEDDINGS_MODELS_DIMENSIONS_MAP.get(embeddings_model_name, 1536)
+        else:
+            raise ValueError("Embeddings model name is not set")
             
         self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
