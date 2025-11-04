@@ -101,7 +101,7 @@ def create_agent(
 
     Examples:
     ```
-    **Sources:**
+    \n\n**Sources:**
     - [1](https://www.lesechos.fr/entreprises-et-marches/actualites/2025-06-25/)
     - [2](https://www.lemonde.fr/economie/article)
     - [3](https://www.leparisien.fr/economie/article)
