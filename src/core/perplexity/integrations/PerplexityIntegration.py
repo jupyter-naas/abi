@@ -3,6 +3,7 @@ import requests
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
+from typing import Annotated
 
 @dataclass
 class PerplexityIntegrationConfiguration(IntegrationConfiguration):
@@ -75,6 +76,11 @@ class PerplexityIntegration(Integration):
         """Search the web for information."""
         if system_prompt is None:
             system_prompt = self.__configuration.system_prompt
+
+        # Handble model name in case of OpenRouter model
+        if self.__configuration.base_url.startswith("https://openrouter.ai/api/v1"):
+            model = f"perplexity/{model}"
+
         payload = {
             "model": model,
             "messages": [
@@ -119,26 +125,28 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
 
     class AskQuestionSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
+        user_location: Annotated[str, Field(..., description="The user location to use for the search")] = "FR"
+        search_context_size: Annotated[str, Field(..., description="The search context size to use for the search")] = "medium"
 
     return [
         StructuredTool(
             name="perplexity_quick_search",
             description="A lightweight, cost-effective search model optimized for quick, grounded answers with real-time web search.",
-            func=lambda question: integration.search_web(question=question, model="sonar"),
+            func=lambda question, user_location, search_context_size: integration.search_web(question=question, user_location=user_location, search_context_size=search_context_size, model="sonar"),
             args_schema=AskQuestionSchema,
             return_direct=True
         ),
         StructuredTool(
             name="perplexity_search",
             description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar.",
-            func=lambda question: integration.search_web(question=question, model="sonar-pro"),
+            func=lambda question, user_location, search_context_size: integration.search_web(question=question, user_location=user_location, search_context_size=search_context_size, model="sonar-pro"),
             args_schema=AskQuestionSchema,
             return_direct=True
         ),
         StructuredTool(
             name="perplexity_advanced_search",
             description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size",
-            func=lambda question: integration.search_web(question=question, search_context_size="high", model="sonar-pro"),
+            func=lambda question, user_location, search_context_size: integration.search_web(question=question, user_location=user_location, search_context_size="high", model="sonar-pro-search"),
             args_schema=AskQuestionSchema,
             return_direct=True
         ),
