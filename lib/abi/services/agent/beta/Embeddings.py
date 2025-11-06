@@ -128,13 +128,14 @@ if os.environ.get("AI_MODE") == "airgap":
 
 else:
     from langchain_openai import OpenAIEmbeddings
-    
+
     # Lazy initialization to avoid import-time API key requirement
     _embeddings_model = None
     _model_name = "text-embedding-ada-002"
 
-    api_key = SecretStr(os.environ["OPENROUTER_API_KEY"])
-    if api_key:
+    api_key_value = os.getenv("OPENROUTER_API_KEY")
+    api_key = SecretStr(api_key_value) if api_key_value else None
+    if api_key_value:
         _model_name = "openai/text-embedding-3-large"
 
     def _get_embeddings_model():

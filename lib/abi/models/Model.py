@@ -1,17 +1,21 @@
 from langchain_core.language_models.chat_models import BaseChatModel
-from typing import Any, Optional, Annotated, Dict
+from typing import Optional, Annotated, Dict
 from pydantic import Field
 from enum import Enum
 import os
-from lib.abi.models.OpenRouter import ChatOpenRouter
+from abi.models.OpenRouter import ChatOpenRouter
 from datetime import datetime
 
 
 OPENROUTER_MODEL_MAPPING: Dict[str, str] = {
     "gpt-5": "openai/gpt-5",
     "gpt-5-mini": "openai/gpt-5-mini",
+    "gpt-5-nano": "openai/gpt-5-nano",
     "gpt-4.1": "openai/gpt-4.1",
     "gpt-4.1-mini": "openai/gpt-4.1-mini",
+    "o3-deep-research": "openai/o3-deep-research",
+    "o4-mini-deep-research": "openai/o4-mini-deep-research",
+    "o3-mini": "openai/o3-mini",
     "sonar-pro-search": "perplexity/sonar-pro-search",
     "sonar-reasoning-pro": "perplexity/sonar-reasoning-pro",
     "sonar-pro": "perplexity/sonar-pro",
@@ -24,6 +28,12 @@ OPENROUTER_MODEL_MAPPING: Dict[str, str] = {
     "claude-opus-4-20250514": "anthropic/claude-opus-4",
     "claude-sonnet-4-20250514": "anthropic/claude-sonnet-4",
     "claude-3-7-sonnet-20250219": "anthropic/claude-3.7-sonnet",
+    "qwen3:8b": "qwen/qwen3-8b",
+    "mistral-large-2411": "mistralai/mistral-large-2411",
+    "mistral-medium-2508": "mistralai/mistral-medium-3.1",
+    "mistral-small-2506": "mistralai/mistral-small",
+    "grok-4": "x-ai/grok-4",
+    "gemini-2.5-flash": "google/gemini-2.5-flash",
 }
 
 
@@ -34,7 +44,7 @@ class ModelType(Enum):
 class Model:
     model_id: Annotated[str, Field(description="Unique identifier for the model")]
     provider: Annotated[str, Field(description="The provider of the model (e.g. 'openai', 'anthropic', 'openrouter', 'aws bedrock', etc.)")]
-    model: Annotated[Any, Field(description="The base model chat from Langchain")]
+    model: Annotated[BaseChatModel, Field(description="The base model chat from Langchain")]
     name: Annotated[Optional[str], Field(description="Display name of the model (e.g. 'GPT-4.1', 'Claude Sonnet 4.5', 'Grok 4', 'Mistral Large', 'Gemini 2.5 Flash', etc.)")]
     owner: Annotated[Optional[str], Field(description="The owner/creator of the model")]
     description: Annotated[Optional[str], Field(description="The description of the model (e.g. 'GPT-4.1 is OpenAI's most advanced model with superior performance across text, code, and reasoning tasks.', 'Claude Sonnet 4.5 is Anthropic's most advanced Sonnet model to date, optimized for real-world agents and coding workflows.', 'Grok 4 is xAI's latest multimodal model with SOTA cost-efficiency and a 2M token context window. It comes in two flavors: non-reasoning and reasoning. Read more about the model on xAI's [news post](http://x.ai/news/grok-4-fast). Reasoning can be enabled using the `reasoning` `enabled` parameter in the API. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#controlling-reasoning-tokens)', 'Mistral Large is Mistral's latest large model with superior performance across text, code, and reasoning tasks.', 'Gemini 2.5 Flash is Google's latest multimodal model with superior performance across text, code, and reasoning tasks.', etc.)")]
@@ -72,7 +82,7 @@ class Model:
         self.provider = provider
 
         # If OPENROUTER_API_KEY is set, use ChatOpenRouter as BaseChatModel
-        if os.getenv("OPENROUTER_API_KEY"):
+        if os.getenv("OPENROUTER_API_KEY") and os.getenv("AI_MODE") == "cloud":
             if model_id in OPENROUTER_MODEL_MAPPING:
                 self.model = ChatOpenRouter(model_name=OPENROUTER_MODEL_MAPPING[model_id])
             else:
