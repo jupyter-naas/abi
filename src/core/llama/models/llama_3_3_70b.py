@@ -1,4 +1,4 @@
-from abi.models.Model import ChatModel
+from lib.abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
 
 ID = "meta-llama/Llama-3.3-70B-Instruct"

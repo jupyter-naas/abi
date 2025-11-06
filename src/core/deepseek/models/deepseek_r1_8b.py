@@ -1,4 +1,4 @@
-from abi.models.Model import ChatModel
+from lib.abi.models.Model import ChatModel
 from langchain_ollama import ChatOllama
 
 MODEL_ID = "deepseek-r1:8b"

@@ -4,7 +4,6 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
 from typing import Optional
 
