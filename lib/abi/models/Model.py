@@ -82,7 +82,7 @@ class Model:
         self.provider = provider
 
         # If OPENROUTER_API_KEY is set, use ChatOpenRouter as BaseChatModel
-        if os.getenv("OPENROUTER_API_KEY") and os.getenv("AI_MODE") == "cloud":
+        if os.getenv("OPENROUTER_API_KEY") and os.getenv("AI_MODE") == "cloud" and isinstance(model, BaseChatModel) and not isinstance(model, ChatOpenRouter):
             if model_id in OPENROUTER_MODEL_MAPPING:
                 self.model = ChatOpenRouter(model_name=OPENROUTER_MODEL_MAPPING[model_id])
             else:
