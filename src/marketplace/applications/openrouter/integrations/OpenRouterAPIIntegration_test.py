@@ -12,7 +12,7 @@ def integration() -> OpenRouterAPIIntegration:
     return OpenRouterAPIIntegration(configuration)
 
 def test_create_response(integration: OpenRouterAPIIntegration):
-    result = integration.create_response({})
+    result = integration.create_response(input_prompt="What is the capital of France?", tools=[], model="openai/gpt-4.1-mini", temperature=0.7, top_p=0.9)
     assert isinstance(result, dict)
 
 def test_get_user_activity(integration: OpenRouterAPIIntegration):
