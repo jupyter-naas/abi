@@ -7,7 +7,6 @@ from abi.services.agent.IntentAgent import (
 )
 from typing import Optional
 from abi import logger
-from lib.abi.models.Model import OPENROUTER_MODEL_MAPPING
 
 NAME = "ChatGPT"
 DESCRIPTION = "ChatGPT Agent that answers questions, generates text, provides real-time answers, analyzes images and PDFs."
