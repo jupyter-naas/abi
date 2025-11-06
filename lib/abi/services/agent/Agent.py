@@ -31,6 +31,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from abi.utils.Expose import Expose
+from lib.abi.models.Model import Model
 
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
@@ -43,7 +44,6 @@ from queue import Queue, Empty
 import pydash as pd
 import re
 
-from abi.services.agent.OpenRouter import ChatOpenRouter
 
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
@@ -218,7 +218,7 @@ class Agent(Expose):
     _description: str
     _system_prompt: str
 
-    _chat_model: BaseChatModel
+    _chat_model: BaseChatModel | Model
     _chat_model_with_tools: Runnable[
         Any
         | str
@@ -254,7 +254,7 @@ class Agent(Expose):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel,
+        chat_model: BaseChatModel | Model,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver | None = None,
@@ -272,17 +272,29 @@ class Agent(Expose):
             memory (BaseCheckpointSaver, optional): Component to save conversation state.
                 If None, will use PostgreSQL if POSTGRES_URL env var is set, otherwise in-memory.
         """
+        logger.debug(f"Initializing agent: {name}")
         self._name = name
         self._description = description
         self._system_prompt = configuration.system_prompt
-
         self._state = state
-        self._state.set_current_active_agent(name)
-
         self._original_tools = tools
         self._original_agents = agents
 
-        # # We inject defailt tools.
+        # We set the supervisor agent and current active agent before the default tools are injected.
+        if self._state.supervisor_agent is not None:
+            self._state.set_supervisor_agent(self._state.supervisor_agent)
+        else:
+            self._state.set_supervisor_agent(None)
+        logger.debug(f"Supervisor agent: {self._state.supervisor_agent}")
+
+        agent_names = [a.name for a in self._original_agents] + [name]
+        if self._state.current_active_agent is not None and self._state.current_active_agent in agent_names:
+            self._state.set_current_active_agent(self._state.current_active_agent)
+        else:
+            self._state.set_current_active_agent(None)
+        logger.debug(f"Current active agent: {self._state.current_active_agent}")
+
+        # We inject default tools.
         tools += self.default_tools()
 
         # We store the original list of provided tools. This will be usefull for duplication.
@@ -315,31 +327,24 @@ class Agent(Expose):
             tool.name: tool for tool in self._structured_tools
         }
 
+        # TODO: Make sure the Agent does not call the version without tools.
         self._chat_model = chat_model
-        # Update the output version for the chat model.
         if hasattr(chat_model, "output_version"):
             self._chat_model_output_version = chat_model.output_version
-
-        # Configure OpenRouter API key if available
-        self._enforce_openrouter_api_key()
-        
-        # Update output version again in case chat model was replaced
-        if hasattr(self._chat_model, "output_version"):
-            self._chat_model_output_version = self._chat_model.output_version
             
-        self._chat_model_with_tools = self._chat_model
+        self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
             
             # Test if the chat model can bind tools by trying with a default tool first
-            if self._can_bind_tools(self._chat_model):
-                self._chat_model_with_tools = self._chat_model.bind_tools(tools_to_bind)
+            if self._can_bind_tools(chat_model):
+                self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
             else:
-                logger.warning(f"Chat model {type(self._chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
+                logger.warning(f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
                 # Keep the original model without tools
-                self._chat_model_with_tools = self._chat_model
+                self._chat_model_with_tools = chat_model
         
         # Use provided memory or create based on environment
         if memory is None:
@@ -397,61 +402,6 @@ class Agent(Expose):
             logger.debug(f"Chat model {type(chat_model).__name__} does not support tool calling: {e}")
             return False
 
-    def _enforce_openrouter_api_key(self) -> None:
-        """Configure the chat model to use OpenRouter API if OPENROUTER_API_KEY is set.
-        
-        This method replaces ChatOpenAI instances with ChatOpenRouter instances
-        when OPENROUTER_API_KEY is available. Errors are logged but do not
-        prevent agent initialization.
-        """
-        try:
-            api_key = os.environ.get("OPENROUTER_API_KEY")
-            if not api_key:
-                return
-            
-            # Check if already using ChatOpenRouter
-            if isinstance(self._chat_model, ChatOpenRouter):
-                logger.debug("Chat model is already using ChatOpenRouter")
-                return
-            
-            # Check if it's a ChatOpenAI that we can replace with ChatOpenRouter
-            from langchain_openai import ChatOpenAI
-            
-            if isinstance(self._chat_model, ChatOpenAI):
-                logger.debug(f"🚪🔑 Replacing ChatOpenAI with ChatOpenRouter for {type(self._chat_model).__name__}")
-                
-                # Extract model name from the chat model
-                # ChatOpenAI uses 'model' attribute, but we need to pass it as 'model_name' to ChatOpenRouter
-                model_name = getattr(self._chat_model, "model", None) or getattr(self._chat_model, "model_name", None)
-                
-                if not model_name:
-                    logger.warning("Could not determine model name from chat model, skipping OpenRouter conversion")
-                    return
-                
-                # Extract other relevant kwargs from the original model
-                kwargs = {}
-                
-                # Preserve chat model parameters
-                for attr in ["temperature", "max_tokens", "timeout", "max_retries", "streaming"]:
-                    if hasattr(self._chat_model, attr):
-                        value = getattr(self._chat_model, attr)
-                        if value is not None:
-                            kwargs[attr] = value
-                
-                # Create new ChatOpenRouter instance
-                try:
-                    self._chat_model = ChatOpenRouter(model_name=model_name, **kwargs)
-                    logger.debug("Successfully replaced chat model with ChatOpenRouter")
-                except Exception as e:
-                    logger.error(f"Failed to create ChatOpenRouter instance: {e}")
-                    # Keep the original model
-                    return
-            else:
-                logger.debug(f"Chat model {type(self._chat_model).__name__} is not ChatOpenAI, skipping OpenRouter conversion")
-                
-        except Exception as outer_e:
-            logger.error(f"Openrouter chat model setup failed: {outer_e}")
-
     def default_tools(self) -> list[Tool | BaseTool]:
         @tool(return_direct=True)
         def request_help(
@@ -479,6 +429,18 @@ class Agent(Expose):
             from datetime import datetime
             from zoneinfo import ZoneInfo
             return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
+        
+        @tool(return_direct=True)
+        def get_current_active_agent() -> str:
+            """Returns the current active agent."""
+            return "The current active agent is: " + (self._state.current_active_agent or self.name)
+        
+        @tool(return_direct=True)
+        def get_supervisor_agent() -> str:
+            """Returns the supervisor agent."""
+            if self._state.supervisor_agent is None:
+                return "I don't have a supervisor agent."
+            return "The supervisor agent is: " + self._state.supervisor_agent
         
         @tool(return_direct=True)
         def list_tools_available() -> str:
@@ -554,6 +516,8 @@ class Agent(Expose):
             list_tools_available, 
             list_subagents_available, 
             list_intents_available,
+            get_current_active_agent,
+            get_supervisor_agent,
         ]
         if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
@@ -968,10 +932,9 @@ AGENT SYSTEM PROMPT:
         if (
             tool_response is not None and 
             hasattr(tool_response, "name") and 
-            tool_response.name.startswith("request_help") and 
+            tool_response.name == "request_help" and 
             self._state.supervisor_agent != self.name
         ):
-            # self._state.set_requesting_help(True)
             self._state.set_current_active_agent(self._state.supervisor_agent)
             self._state.set_requesting_help(True)
             results.append(Command(goto="current_active_agent", graph=Command.PARENT))
@@ -1163,12 +1126,6 @@ AGENT SYSTEM PROMPT:
             Agent: A new Agent instance with the same configuration
         """        
         shared_state = agent_shared_state or AgentSharedState()
-        
-        logger.debug(f"agent_shared_state: {agent_shared_state}")
-        
-        # Initialize the tools list with the original list of tools.
-        # tools = [tool for tool in self._structured_tools]
-        # tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
 
         if queue is None:
             queue = Queue()
@@ -1177,7 +1134,7 @@ AGENT SYSTEM PROMPT:
         # This will be recursively done for each sub agents.
         agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
-        new_agent = Agent(
+        new_agent = self.__class__(
             name=self._name,
             description=self._description,
             chat_model=self._chat_model,
@@ -1190,27 +1147,6 @@ AGENT SYSTEM PROMPT:
         )
 
         return new_agent
-
-    def light_duplicate(self, queue: Queue | None = None) -> "Agent":
-        if queue is None:
-            queue = Queue()
-            
-        
-        agents: list[Agent] = [agent.light_duplicate(queue) for agent in self._agents]
-        
-        tools = self._tools + agents
-        
-        return Agent(
-            name=self._name,
-            description=self._description,
-            chat_model=self._chat_model,
-            tools=tools,
-            memory=self._checkpointer,
-            # TODO: Make sure that this is the behaviour we want.
-            state=AgentSharedState(),  # Create new state instance
-            configuration=self._configuration,
-            event_queue=queue,
-        )
     
     def as_api(
         self,
@@ -1250,13 +1186,12 @@ AGENT SYSTEM PROMPT:
             tags=tags,
         )
         def completion(query: CompletionQuery):
-            # new_agent = self.duplicate()
-            # new_agent = self
-            # new_agent = self.light_duplicate()
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
+            logger.debug(f"completion - current active agent: {self._state.current_active_agent}")
+            logger.debug(f"completion - supervisor agent: {self._state.supervisor_agent}")
 
-            new_agent = self.light_duplicate()
+            new_agent = self.duplicate(queue=self._event_queue, agent_shared_state=self._state)
             new_agent.state.set_thread_id(query.thread_id)
             return new_agent.invoke(query.prompt)
 
@@ -1267,13 +1202,12 @@ AGENT SYSTEM PROMPT:
             tags=tags,
         )
         async def stream_completion(query: CompletionQuery):
-            # new_agent = self.duplicate()
-            # new_agent = self
-            # new_agent = self.light_duplicate()
             if isinstance(query.thread_id, int):
                 query.thread_id = str(query.thread_id)
+            logger.debug(f"stream_completion - current active agent: {self._state.current_active_agent}")
+            logger.debug(f"stream_completion - supervisor agent: {self._state.supervisor_agent}")
 
-            new_agent = self.light_duplicate()
+            new_agent = self.duplicate(queue=self._event_queue, agent_shared_state=self._state)
             new_agent.state.set_thread_id(query.thread_id)
             return EventSourceResponse(
                 new_agent.stream_invoke(query.prompt),
@@ -1439,7 +1373,6 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
             # We're passing agent's FULL internal message history AND adding a tool message to make sure
             # the resulting chat history is valid. See the paragraph above for more information.
             update={"messages": state["messages"] + [tool_message]},
-            # update={"messages": state["messages"]},
         )
 
     assert isinstance(handoff_to_agent, BaseTool)
