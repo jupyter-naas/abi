@@ -26,8 +26,6 @@ You are Perplexity, an advanced AI research agent powered by the Perplexity AI s
 4. Use appropriate tool to answer the question
 
 # TOOLS
-- get_time_date: Get the current datetime in Paris timezone.
-- request_help: Redirect non-support queries to supervisor agent
 - perplexity_quick_search: Search the web for information
 - perplexity_search: Search the web for information
 - perplexity_advanced_search: Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size
@@ -39,10 +37,9 @@ You are Perplexity, an advanced AI research agent powered by the Perplexity AI s
    - For advanced searches: Use perplexity_advanced_search when user asks about complex queries or needs deeper analysis
 
 2. Search Tool Usage:
-    2.1. Get datetime using get_time_date tool 
-    2.2. Add current datetime to user's question (parameter of ask_question tool). For example: 
-    if question = "le gagnant de la dernière ligue des champions masculin" then question = "Current datetime: 2025-06-25 10:00: le gagnant de la dernière ligue des champions masculin"
-    2.3. Use the new question to perform the search with the tool selected in step 1.
+    2.1. Add current date to user's question before performing the search. For example: 
+    if question = "le gagnant de la dernière ligue des champions masculin" then question = "Current date: 2025-06-25: le gagnant de la dernière ligue des champions masculin"
+    2.2. Use the new question to perform the search with the tool selected in step 1.
 
 # CONSTRAINTS
 - You maintain a professional yet approachable tone, always striving for accuracy and clarity in your responses.
@@ -65,16 +62,23 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:  
     # Define model
-    from src.core.perplexity.models.gpt_4_1 import model
+    from src.core.chatgpt.models.gpt_4_1 import model
 
     # Define tools
     tools: list = []
     from src.core.perplexity.integrations.PerplexityIntegration import as_tools
     from src.core.perplexity.integrations.PerplexityIntegration import PerplexityIntegrationConfiguration
     from src import secret
+
+    base_url = "https://api.perplexity.ai"
+    api_key = secret.get("PERPLEXITY_API_KEY")
+    if secret.get("OPENROUTER_API_KEY"):
+        base_url = "https://openrouter.ai/api/v1"
+        api_key = secret.get("OPENROUTER_API_KEY")
     
     integration_config = PerplexityIntegrationConfiguration(
-        api_key=secret.get("PERPLEXITY_API_KEY"),
+        api_key=api_key,
+        base_url=base_url,
         system_prompt="""# ROLE
     You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine.
     You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge.
@@ -97,7 +101,7 @@ def create_agent(
 
     Examples:
     ```
-    **Sources:**
+    \n\n**Sources:**
     - [1](https://www.lesechos.fr/entreprises-et-marches/actualites/2025-06-25/)
     - [2](https://www.lemonde.fr/economie/article)
     - [3](https://www.leparisien.fr/economie/article)

@@ -4,13 +4,11 @@ from langchain_core.tools import Tool, BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Callable, Optional, Union, Any
-from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from langgraph.types import Command
-from pydantic import SecretStr
 from src import secret, config, services
 from datetime import datetime
 import os
@@ -30,11 +28,10 @@ from src.marketplace.applications.powerpoint.workflows.CreatePresentationFromTem
     CreatePresentationFromTemplateWorkflowConfiguration,
     CreatePresentationFromTemplateWorkflowParameters,
 )
+from lib.abi.models.Model import ChatModel
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
-MODEL = "gpt-4.1"
-TEMPERATURE = 0
 AVATAR_URL = "https://static.vecteezy.com/system/resources/thumbnails/017/396/831/small/microsoft-power-point-mobile-apps-logo-free-png.png"
 SYSTEM_PROMPT = """
 <role>
@@ -137,11 +134,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get('OPENAI_API_KEY'))
-    )
+    from src.marketplace.applications.powerpoint.models.default import model
 
     from src.core.templatablesparqlquery import get_tools
     tools: list = []
@@ -185,7 +178,7 @@ class PowerPointAgent(Agent):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel,
+        chat_model: BaseChatModel | ChatModel,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),
@@ -588,3 +581,39 @@ High
             ai_message = AIMessage(content=content)
         self._notify_ai_message(ai_message, self.name)
         return Command(goto="__end__", update={"messages": [ai_message]})
+    
+
+    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
+        """Create a new instance of the agent with the same configuration.
+
+        This method creates a deep copy of the agent with the same configuration
+        but with its own independent state. This is useful when you need to run
+        multiple instances of the same agent concurrently.
+
+        Returns:
+            PowerPointAgent: A new PowerPointAgent instance with the same configuration
+        """        
+        shared_state = agent_shared_state or AgentSharedState()
+
+        if queue is None:
+            queue = Queue()
+
+        # We duplicated each agent and add them as tools.
+        # This will be recursively done for each sub agents.
+        agents: list["Agent"] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
+
+        new_agent = self.__class__(
+            name=self._name,
+            description=self._description,
+            chat_model=self._chat_model,
+            tools=self._original_tools,
+            agents=agents,
+            memory=self._checkpointer,
+            state=shared_state,  # Create new state instance
+            configuration=self._configuration,
+            event_queue=queue,
+            datastore_path=self.__datastore_path,
+            template_path=self.__template_path,
+        )
+
+        return new_agent

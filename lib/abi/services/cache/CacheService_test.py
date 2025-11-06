@@ -1,5 +1,5 @@
-from lib.abi.services.cache.CacheService import CacheService
-from lib.abi.services.cache.CachePort import ICacheAdapter, CachedData, DataType, CacheNotFoundError
+from abi.services.cache.CacheService import CacheService
+from abi.services.cache.CachePort import ICacheAdapter, CachedData, DataType, CacheNotFoundError
 import datetime
 import time
 

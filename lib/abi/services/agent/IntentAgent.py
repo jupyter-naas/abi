@@ -14,7 +14,7 @@ from abi import logger
 import pydash as pd
 import spacy
 import os
-
+from lib.abi.models.Model import ChatModel
 
 nlp = spacy.load("en_core_web_sm")
 MULTIPLES_INTENTS_MESSAGE = "I found multiple intents that could handle your request"
@@ -139,7 +139,7 @@ class IntentAgent(Agent):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel,
+        chat_model: BaseChatModel | ChatModel,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         intents: list[Intent] = [],

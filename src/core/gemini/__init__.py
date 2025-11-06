@@ -1,7 +1,8 @@
 from src import secret
 
 def requirements():
+    ai_mode = secret.get("AI_MODE")
     google_api_key = secret.get("GOOGLE_API_KEY")
-    if google_api_key:
+    if ai_mode == "cloud" and google_api_key:
         return True
     return False
