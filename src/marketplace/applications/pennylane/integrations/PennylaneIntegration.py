@@ -6,7 +6,7 @@ import json
 from src.utils.Storage import save_json
 import os
 from abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 from datetime import timedelta
 
 cache = CacheFactory.CacheFS_find_storage(subpath="pennylane")

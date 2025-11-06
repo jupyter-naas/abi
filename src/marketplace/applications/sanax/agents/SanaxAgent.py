@@ -57,14 +57,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
     # Define model based on AI_MODE
-    from src import secret
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
-    if ai_mode == "cloud":
-        from src.marketplace.applications.sanax.models.gpt_4_1 import model as cloud_model
-        selected_model = cloud_model.model
-    else:
-        from src.marketplace.applications.sanax.models.qwen3_8b import model as local_model
-        selected_model = local_model.model
+    from src.marketplace.applications.sanax.models.module_default import model
     
     # Define tools
     from langchain_core.tools import StructuredTool
@@ -235,7 +228,7 @@ def create_agent(
     return SanaxAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=selected_model,
+        chat_model=model,
         tools=tools, 
         agents=agents,
         intents=intents,

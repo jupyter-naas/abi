@@ -6,7 +6,7 @@ from lib.abi.integration.integration import Integration, IntegrationConnectionEr
 import os
 from src.utils.Storage import get_json, save_json, save_image
 from abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 import datetime
 from typing import Union, Any, List, MutableMapping
 import json
