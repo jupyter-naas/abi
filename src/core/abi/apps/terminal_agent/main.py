@@ -195,7 +195,7 @@ def on_ai_message(message: Any, agent_name: str) -> None:
     if "abi" in agent_name.lower():
         color = "bold green"
     elif "claude" in agent_name.lower():
-        color = "bold bright_orange"  # Anthropic's orange
+        color = "bold dark_orange"  # Anthropic's orange, use rich color
     elif "chatgpt" in agent_name.lower():
         color = "bold bright_green"  # OpenAI's green
     elif "deepseek" in agent_name.lower():
@@ -209,7 +209,7 @@ def on_ai_message(message: Any, agent_name: str) -> None:
     elif "llama" in agent_name.lower():
         color = "bold bright_blue"  # Meta's blue
     elif "mistral" in agent_name.lower():
-        color = "bold orange"  # Mistral's orange
+        color = "bold dark_orange"  # Mistral's orange, use rich color
     elif "perplexity" in agent_name.lower():
         color = "bold white"  # Perplexity's white
     elif "qwen" in agent_name.lower():

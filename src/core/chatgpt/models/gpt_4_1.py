@@ -3,23 +3,15 @@ from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
 
-ID = "gpt-4.1"
-NAME = "gpt-4.1"
-DESCRIPTION = "GPT-4.1 excels at instruction following and tool calling, with broad knowledge across domains. It features a 1M token context window, and low latency without a reasoning step."
-IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-CONTEXT_WINDOW = 1047576
-OWNER = "openai"
+MODEL_ID = "gpt-4.1"
+PROVIDER = "openai"
 
 model: ChatModel = ChatModel(
-    model_id=ID,
-    name=NAME,
-    description=DESCRIPTION,
-    image=IMAGE,
-    owner=OWNER,
+    model_id=MODEL_ID,
+    provider=PROVIDER,
     model=ChatOpenAI(
-        model=ID,
+        model=MODEL_ID,
         temperature=0,
         api_key=SecretStr(secret.get("OPENAI_API_KEY")),
     ),
-    context_window=CONTEXT_WINDOW,
 )

@@ -167,21 +167,21 @@ class AirgapChatOpenAI(ChatOpenAI):
                 generation_info={"finish_reason": "error"}
             )
 
-ID = "ai/gemma3"
+MODEL_ID = "ai/gemma3"
 NAME = "gemma3-airgap"
 DESCRIPTION = "Gemma3 model running in airgap mode via Docker Model Runner with tool support."
 IMAGE = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
 CONTEXT_WINDOW = 8192
-OWNER = "google"
+PROVIDER = "google"
 
 model: ChatModel = ChatModel(
-    model_id=ID,
+    model_id=MODEL_ID,
+    provider=PROVIDER,
     name=NAME,
     description=DESCRIPTION,
     image=IMAGE,
-    owner=OWNER,
     model=AirgapChatOpenAI(
-        model=ID,
+        model=MODEL_ID,
         temperature=0.2,  # Even lower temperature for faster, more focused responses
         max_tokens=512,   # Shorter responses for speed
         openai_api_base="http://localhost:12434/engines/v1",

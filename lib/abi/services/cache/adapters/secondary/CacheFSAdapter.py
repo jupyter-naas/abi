@@ -1,4 +1,4 @@
-from lib.abi.services.cache.CachePort import ICacheAdapter, CachedData, CacheNotFoundError
+from abi.services.cache.CachePort import ICacheAdapter, CachedData, CacheNotFoundError
 import os
 import json
 import hashlib

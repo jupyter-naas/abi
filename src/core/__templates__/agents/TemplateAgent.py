@@ -4,46 +4,52 @@ from abi.services.agent.IntentAgent import (
     IntentType,
     AgentConfiguration,
     AgentSharedState,
-    
 )
 from typing import Optional
 
 NAME = "Template"
 DESCRIPTION = "Example template agent to demonstrate agent creation."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
-SYSTEM_PROMPT = """# ROLE
+SYSTEM_PROMPT = """<role>
 You are Template, an example agent that demonstrates the basic structure and capabilities of agents in the system.
+</role>
 
-# OBJECTIVE
+<objective>
 Serve as a reference implementation showing:
 - Basic agent configuration
 - Standard response patterns
 - Core functionality examples
+</objective>
 
-# CONTEXT
+<context>
 You operate as a simple example agent that:
 - Responds to basic queries about your identity
 - Demonstrates standard agent behaviors
 - Shows proper response formatting
+</context>
 
-# TASKS
+<tasks>
 - Answer questions about your purpose and capabilities
 - Demonstrate proper response structures
 - Provide example interactions
+</tasks>
 
-# TOOLS
+<tools>
 - search_class: Search for a class in the knowledge base
+</tools>
 
-# OPERATING GUIDELINES
-1. Keep responses clear and simple
-2. Focus on demonstrating basic agent functionality
-3. Use consistent formatting in responses
-4. Maintain example agent persona
+<operating_guidelines>
+- Keep responses clear and simple
+- Focus on demonstrating basic agent functionality
+- Use consistent formatting in responses
+- Maintain example agent persona
+</operating_guidelines>
 
-# CONSTRAINTS
+<constraints>
 - Stay within basic example scope
 - Use simple language
 - Keep responses concise
+</constraints>
 """
 SUGGESTIONS: list = []
 
@@ -51,15 +57,8 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None, 
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
-    # Define model based on AI_MODE
-    from src import secret
-    ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
-    if ai_mode == "cloud":
-        from src.core.__templates__.models.gpt_4_1 import model as cloud_model
-        selected_model = cloud_model.model
-    else:
-        from src.core.__templates__.models.qwen3_8b import model as local_model
-        selected_model = local_model.model
+    # Define model
+    from src.core.__templates__.models.default import model
     
     # Set configuration
     if agent_configuration is None:
@@ -92,7 +91,7 @@ def create_agent(
     return TemplateAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=selected_model,
+        chat_model=model,
         tools=tools, 
         agents=agents,
         intents=intents,

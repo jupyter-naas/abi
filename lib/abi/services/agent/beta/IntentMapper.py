@@ -1,10 +1,18 @@
 from .VectorStore import VectorStore
-from .Embeddings import embeddings_batch, embeddings as embeddings
+from .Embeddings import (
+    embeddings_batch, 
+    embeddings as embeddings, 
+    _model_name as embeddings_model_name, 
+    EMBEDDINGS_MODELS_DIMENSIONS_MAP
+)
 from langchain_openai import ChatOpenAI
 from typing import Tuple, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 import os
+from dotenv import load_dotenv
+from pydantic import SecretStr
+load_dotenv()
 
 class IntentScope(Enum):
     DIRECT = "direct"
@@ -32,15 +40,21 @@ class IntentMapper:
         self.intents = intents
         
         # Use environment-based detection for consistent embedding source
-        dimension = 768 if os.environ.get('AI_MODE') == "airgap" else 1536
+        if embeddings_model_name is not None:
+            dimension: int = EMBEDDINGS_MODELS_DIMENSIONS_MAP.get(embeddings_model_name, 1536)
+        else:
+            raise ValueError("Embeddings model name is not set")
             
         self.vector_store = VectorStore(dimension=dimension)
         intents_values = [intent.intent_value for intent in intents]
         metadatas = [{"index": index} for index in range(len(intents_values))]
         self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
-        
+
+        api_key_value = os.getenv("OPENROUTER_API_KEY")
+        api_key = SecretStr(api_key_value) if api_key_value else None
+
         # Detect if we're using local embeddings (768 dim = airgap mode)
-        if dimension == 768 or os.getenv("AI_MODE") == "airgap":
+        if os.getenv("AI_MODE") == "airgap":
             from abi.services.agent.beta.LocalModel import AirgapChatOpenAI
             self.model = AirgapChatOpenAI(
                 model="ai/gemma3",
@@ -48,8 +62,14 @@ class IntentMapper:
                 base_url="http://localhost:12434/engines/v1",
                 api_key="ignored",
             )
+        # Detect if we're using OpenRouter
+        elif api_key:
+            self.model = ChatOpenAI(model="gpt-4.1-mini", api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        # Fallback to OpenAI
         else:
-            self.model = ChatOpenAI(model="gpt-4o-mini")
+            self.model = ChatOpenAI(model="gpt-4.1-mini")
+
+        # Set the system prompt
         self.system_prompt = """
 You are an intent mapper. The user will send you a prompt and you should output the intent and the intent only. If the user references a technology, you must have the name of the technology in the intent.
 
