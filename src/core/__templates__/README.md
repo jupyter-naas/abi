@@ -53,7 +53,7 @@ src/core/__templates__/
 ├── orchestrations/
 │   └── definitions.py              # Dagster orchestration definitions
 ├── models/                         
-│   └── module_default.py         # Model configuration with airgap/cloud support
+│   └── default.py         # Model configuration with airgap/cloud support
 ├── ontologies/                     
 │   ├── TemplateOntology.ttl       # Ontology definitions
 │   └── TemplateSparqlQueries.ttl  # SPARQL query templates
@@ -250,7 +250,7 @@ Turtle file (`TemplateSparqlQueries.ttl`) that demonstrates:
 
 4. **Update configuration:**
    - Modify `__init__.py` requirements if needed
-   - Update model selection in `models/module_default.py`
+   - Update model selection in `models/default.py`
    - Configure API keys and settings
 
 5. **Write tests:**

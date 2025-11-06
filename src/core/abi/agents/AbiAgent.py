@@ -95,7 +95,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model based on AI_MODE
-    from src.core.abi.models.module_default import model
+    from src.core.abi.models.default import model
 
     # Define tools
     tools: list = []

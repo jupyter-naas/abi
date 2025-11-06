@@ -58,7 +58,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
     # Define model
-    from src.core.__templates__.models.module_default import model
+    from src.core.__templates__.models.default import model
     
     # Set configuration
     if agent_configuration is None:

@@ -57,7 +57,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
     # Define model based on AI_MODE
-    from src.marketplace.applications.sanax.models.module_default import model
+    from src.marketplace.applications.sanax.models.default import model
     
     # Define tools
     from langchain_core.tools import StructuredTool

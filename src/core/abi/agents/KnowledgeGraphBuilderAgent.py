@@ -137,7 +137,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Define model
-    from src.core.abi.models.module_default import model
+    from src.core.abi.models.default import model
 
     # Use provided configuration or create default one
     if agent_configuration is None:
