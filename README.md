@@ -35,6 +35,7 @@
 - **10GB+ disk space** - For Docker images and models
 
 **Optional (for cloud modes):**
+- OpenRouter API key
 - OpenAI API key
 - Anthropic API key  
 - Google AI API key
