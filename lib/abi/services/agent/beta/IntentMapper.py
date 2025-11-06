@@ -50,7 +50,8 @@ class IntentMapper:
         metadatas = [{"index": index} for index in range(len(intents_values))]
         self.vector_store.add_texts(intents_values, embeddings=embeddings_batch(intents_values), metadatas=metadatas)
 
-        api_key = SecretStr(os.environ["OPENROUTER_API_KEY"])
+        api_key_value = os.getenv("OPENROUTER_API_KEY")
+        api_key = SecretStr(api_key_value) if api_key_value else None
 
         # Detect if we're using local embeddings (768 dim = airgap mode)
         if os.getenv("AI_MODE") == "airgap":
