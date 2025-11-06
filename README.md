@@ -262,7 +262,7 @@ Moreover, this project is built with international standards and regulatory fram
 - **Vector Search**: Intent matching via embeddings and similarity search
 - **Object Storage**: File storage and retrieval with MinIO compatibility
 - **Memory**: Persistent context and conversation history storage
-- 
+
 <div align="left">
 <img src="assets/knowledge-management-banner-v2.png" alt="Knowledge Management & Storage Technologies" width="400">
 
