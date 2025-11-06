@@ -1,7 +1,15 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import requests
 from dataclasses import dataclass
 from abi.integration.integration import Integration, IntegrationConfiguration, IntegrationConnectionError
+from abi.services.cache.CacheFactory import CacheFactory
+from abi.services.cache.CachePort import DataType
+from src.utils.Storage import save_json
+import datetime
+import os
+
+
+cache = CacheFactory.CacheFS_find_storage(subpath="openrouter")
 
 
 @dataclass
@@ -47,6 +55,7 @@ class OpenRouterAPIIntegration(Integration):
             "Content-Type": "application/json"
         }
 
+    @cache(lambda self, method, endpoint, data, params: method + "_" + endpoint + ("_".join(f"{k}_{v}" for k,v in params.items()) if params else ""), cache_type=DataType.JSON, ttl=datetime.timedelta(days=7))
     def _make_request(
         self, 
         method: str, 
@@ -83,28 +92,60 @@ class OpenRouterAPIIntegration(Integration):
             raise IntegrationConnectionError(f"OpenRouter API request failed: {str(e)}")
     
     # Beta Responses
-    def create_response(self, data: Dict) -> Dict:
-        """Create a response (beta endpoint).
-        
+    def create_response(
+        self, 
+        input_prompt: str, 
+        tools: Optional[list[Dict]] = None, 
+        model: str = "openai/gpt-4.1-mini", 
+        temperature: float = 0.7, 
+        top_p: float = 0.9
+    ) -> Dict:
+        """Create a response.
+            
         Args:
-            data (dict): Request body for creating the response.
+            input_prompt (str): The input prompt to use for the response.
+            tools (List[Dict]): The tools to use for the response. Example: 
+            [
+                {
+                    "type": "function", 
+                    "name": "get_current_weather", 
+                    "description": "Get the current weather in a given location", 
+                    "parameters": {"type": "object", "properties": {"location": {"type": "string"}}}}
+                }
+            ]
+            model (str): The model to use for the response.
+            temperature (float): The temperature to use for the response.
+            top_p (float): The top_p to use for the response.
             
         Returns:
             dict: Response data from the API.
         """
-        return self._make_request("POST", "/beta/responses", data=data)
+        payload = {
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": input_prompt
+                }
+            ],
+            "tools": tools,
+            "model": model,
+            "temperature": temperature,
+            "top_p": top_p
+        }
+        return self._make_request("POST", "/responses", data=payload)
     
     # Analytics
-    def get_user_activity(self, params: Optional[Dict] = None) -> Dict:
+    def get_user_activity(self, date: Optional[str] = None) -> Dict:
         """Get user activity grouped by endpoint.
         
         Args:
-            params (dict, optional): Query parameters (e.g., date filters).
+            date (str): Filter by a single UTC date in the last 30 days (YYYY-MM-DD format).
             
         Returns:
             dict: User activity data grouped by endpoint.
         """
-        return self._make_request("GET", "/analytics", params=params)
+        return self._make_request("GET", "/activity", params={"date": date})
     
     # Credits
     def get_remaining_credits(self) -> Dict:
@@ -115,29 +156,6 @@ class OpenRouterAPIIntegration(Integration):
         """
         return self._make_request("GET", "/credits")
     
-    def create_coinbase_charge(self, data: Dict) -> Dict:
-        """Create a Coinbase charge for crypto payment.
-        
-        Args:
-            data (dict): Payment information for Coinbase charge.
-            
-        Returns:
-            dict: Coinbase charge creation response.
-        """
-        return self._make_request("POST", "/credits", data=data)
-    
-    # Generations
-    def get_generation_metadata(self, generation_id: str) -> Dict:
-        """Get request & usage metadata for a generation.
-        
-        Args:
-            generation_id (str): The generation ID to get metadata for.
-            
-        Returns:
-            dict: Generation metadata including request and usage information.
-        """
-        return self._make_request("GET", f"/generations/{generation_id}")
-    
     # Models
     def get_total_models_count(self) -> Dict:
         """Get total count of available models.
@@ -147,62 +165,50 @@ class OpenRouterAPIIntegration(Integration):
         """
         return self._make_request("GET", "/models/count")
     
-    def list_all_models(self, params: Optional[Dict] = None) -> Dict:
-        """List all models and their properties.
-        
+    def list_all_models(self, params: Optional[Dict] = None) -> List:
+        """
+        List all models and their properties, along with splits by provider (owner).
+
         Args:
             params (dict, optional): Query parameters for filtering models.
-            
+
         Returns:
-            dict: List of all models with their properties.
+            dict: {
+                "all": [ ...models... ],  # Flat list of all models (not wrapped in a "data" key)
+                "by_provider": { "provider1": [ ...models... ], ... }
+            }
         """
-        return self._make_request("GET", "/models", params=params)
-    
-    def list_models_by_preferences(self, params: Optional[Dict] = None) -> Dict:
-        """List models filtered by user provider preferences.
-        
-        Args:
-            params (dict, optional): Query parameters for filtering.
-            
-        Returns:
-            dict: List of models filtered by user provider preferences.
-        """
-        return self._make_request("GET", "/models/preferences", params=params)
-    
-    # Endpoints
-    def list_model_endpoints(self, model_id: str) -> Dict:
-        """List all endpoints for a model.
-        
-        Args:
-            model_id (str): The model ID to get endpoints for.
-            
-        Returns:
-            dict: List of all endpoints for the specified model.
-        """
-        return self._make_request("GET", f"/models/{model_id}/endpoints")
-    
-    def preview_zdr_impact(self, model_id: str) -> Dict:
-        """Preview the impact of ZDR (Zero Data Retention) on the available endpoints.
-        
-        Args:
-            model_id (str): The model ID to preview ZDR impact for.
-            
-        Returns:
-            dict: Preview of ZDR impact on available endpoints.
-        """
-        return self._make_request("GET", f"/models/{model_id}/endpoints/preview-zdr")
+        response = self._make_request("GET", "/models", params=params)
+        models = response.get("data", []) if isinstance(response, dict) else []
+        save_json(models, os.path.join(self.__configuration.datastore_path, "models", "_all"), "models.json")
+
+        owners: dict = {}
+
+        for model in models:
+            model_id = model.get("id", "")
+            # Only split once: e.g. "openai/gpt-4" -> "openai", "gpt-4"
+            owner = model_id.split("/")[0] if "/" in model_id else "unknown"
+            if owner not in owners:
+                owners[owner] = []
+            owners[owner].append(model)
+
+        for owner, owner_models in owners.items():
+            save_json(owner_models, os.path.join(self.__configuration.datastore_path, "models", owner), "models.json")
+
+        return models
     
     # Parameters
-    def get_model_parameters(self, model_id: str) -> Dict:
+    def get_model_parameters(self, author: str, slug: str) -> Dict:
         """Get a model's supported parameters and data about which are most popular.
         
         Args:
-            model_id (str): The model ID to get parameters for.
+            author (str): The author of the model.
+            slug (str): The slug of the model.
             
         Returns:
             dict: Model parameters and popularity data.
         """
-        return self._make_request("GET", f"/models/{model_id}/parameters")
+        return self._make_request("GET", "/parameters", params={"author": author, "slug": slug})
     
     # Providers
     def list_providers(self) -> Dict:
@@ -220,52 +226,7 @@ class OpenRouterAPIIntegration(Integration):
         Returns:
             dict: List of all API keys.
         """
-        return self._make_request("GET", "/api-keys")
-    
-    def create_api_key(self, data: Dict) -> Dict:
-        """Create a new API key.
-        
-        Args:
-            data (dict): API key creation data (name, permissions, etc.).
-            
-        Returns:
-            dict: Created API key information.
-        """
-        return self._make_request("POST", "/api-keys", data=data)
-    
-    def get_api_key(self, key_id: str) -> Dict:
-        """Get a single API key.
-        
-        Args:
-            key_id (str): The API key ID to retrieve.
-            
-        Returns:
-            dict: API key information.
-        """
-        return self._make_request("GET", f"/api-keys/{key_id}")
-    
-    def delete_api_key(self, key_id: str) -> Dict:
-        """Delete an API key.
-        
-        Args:
-            key_id (str): The API key ID to delete.
-            
-        Returns:
-            dict: Deletion confirmation.
-        """
-        return self._make_request("DELETE", f"/api-keys/{key_id}")
-    
-    def update_api_key(self, key_id: str, data: Dict) -> Dict:
-        """Update an API key.
-        
-        Args:
-            key_id (str): The API key ID to update.
-            data (dict): Update data for the API key.
-            
-        Returns:
-            dict: Updated API key information.
-        """
-        return self._make_request("PATCH", f"/api-keys/{key_id}", data=data)
+        return self._make_request("GET", "/keys")
     
     def get_current_api_key(self) -> Dict:
         """Get current API key.
@@ -273,85 +234,25 @@ class OpenRouterAPIIntegration(Integration):
         Returns:
             dict: Current API key information.
         """
-        return self._make_request("GET", "/api-keys/current")
-    
-    # OAuth
-    def exchange_auth_code(self, data: Dict) -> Dict:
-        """Exchange authorization code for API key.
-        
-        Args:
-            data (dict): Authorization code and related data.
-            
-        Returns:
-            dict: API key from authorization code exchange.
-        """
-        return self._make_request("POST", "/oauth/token", data=data)
-    
-    def create_auth_code(self, data: Dict) -> Dict:
-        """Create authorization code.
-        
-        Args:
-            data (dict): Data for creating authorization code.
-            
-        Returns:
-            dict: Authorization code information.
-        """
-        return self._make_request("POST", "/oauth/authorize", data=data)
-    
-    # Chat
-    def create_chat_completion(self, data: Dict) -> Dict:
-        """Create a chat completion.
-        
-        Args:
-            data (dict): Chat completion request data (model, messages, etc.).
-            
-        Returns:
-            dict: Chat completion response.
-        """
-        return self._make_request("POST", "/chat/completions", data=data)
-    
-    # Completions
-    def create_completion(self, data: Dict) -> Dict:
-        """Create a completion.
-        
-        Args:
-            data (dict): Completion request data (model, prompt, etc.).
-            
-        Returns:
-            dict: Completion response.
-        """
-        return self._make_request("POST", "/completions", data=data)
+        return self._make_request("GET", "/key")
 
 
 def as_tools(configuration: OpenRouterAPIIntegrationConfiguration):
     """Convert OpenRouterAPIIntegration into LangChain tools."""
     from langchain_core.tools import StructuredTool
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel
     
     integration = OpenRouterAPIIntegration(configuration)
-
-    class CreateChatCompletionSchema(BaseModel):
-        model: str = Field(..., description="The model to use for chat completion")
-        messages: list = Field(..., description="List of messages for the chat")
-
-    class ListModelsSchema(BaseModel):
-        provider: Optional[str] = Field(None, description="Filter models by provider")
 
     class EmptySchema(BaseModel):
         pass
 
     return [
         StructuredTool(
-            name="openrouter_create_chat_completion",
-            description="Create a chat completion using OpenRouter API",
-            func=lambda data: integration.create_chat_completion(data),
-            args_schema=CreateChatCompletionSchema
-        ),
-        StructuredTool(
             name="openrouter_list_models",
             description="List all available models from OpenRouter",
-            func=lambda **kwargs: integration.list_all_models(**kwargs),
-            args_schema=ListModelsSchema
+            func=lambda: integration.list_all_models(),
+            args_schema=EmptySchema
         ),
         StructuredTool(
             name="openrouter_list_providers",
