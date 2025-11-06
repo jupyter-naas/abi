@@ -327,8 +327,7 @@ class Agent(Expose):
             tool.name: tool for tool in self._structured_tools
         }
 
-        # TODO: Make sure the Agent does not call the version without tools.
-        self._chat_model = chat_model
+        self._chat_model = chat_model if isinstance(chat_model, BaseChatModel) else chat_model.model
         if hasattr(chat_model, "output_version"):
             self._chat_model_output_version = chat_model.output_version
             
