@@ -1,4 +1,4 @@
-from lib.abi.services.agent.OpenRouter import ChatOpenRouter
+from lib.abi.models.OpenRouter import ChatOpenRouter
 
 def test_openai():
     llm = ChatOpenRouter(model_name="openai/gpt-4.1")
