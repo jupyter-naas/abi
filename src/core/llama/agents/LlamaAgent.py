@@ -73,7 +73,7 @@ def create_agent(
     return LlamaAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         tools=tools,
         agents=agents,
         intents=intents,

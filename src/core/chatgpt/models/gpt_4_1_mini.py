@@ -3,7 +3,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from src import secret
 
-MODEL_ID = "gpt-4.1"
+MODEL_ID = "gpt-4.1-mini"
 PROVIDER = "openai"
 
 model: ChatModel = ChatModel(
@@ -15,3 +15,4 @@ model: ChatModel = ChatModel(
         api_key=SecretStr(secret.get("OPENAI_API_KEY")),
     ),
 )
+

@@ -62,7 +62,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:  
     # Define model
-    from src.core.perplexity.models.gpt_4_1 import model
+    from src.core.chatgpt.models.gpt_4_1 import model
 
     # Define tools
     tools: list = []

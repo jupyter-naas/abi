@@ -7,9 +7,9 @@ from abi.services.agent.IntentAgent import (
 )
 from typing import Optional
 from abi import logger
+from lib.abi.models.Model import OPENROUTER_MODEL_MAPPING
 
 NAME = "ChatGPT"
-MODEL = "gpt-4.1-mini"
 DESCRIPTION = "ChatGPT Agent that answers questions, generates text, provides real-time answers, analyzes images and PDFs."
 AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi/assets/chatgpt.jpg"
 SYSTEM_PROMPT = """# ROLE
@@ -68,14 +68,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None
 ) -> IntentAgent:
     # Define model
-    from langchain_openai import ChatOpenAI
-    from pydantic import SecretStr
-    from src import secret
-
-    model = ChatOpenAI(
-        model=MODEL,
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    from src.core.chatgpt.models.gpt_4_1_mini import model
     
     # Define tools
     tools: list = []
@@ -83,19 +76,17 @@ def create_agent(
     from src.core.chatgpt.integrations.OpenAIResponsesIntegration import OpenAIResponsesIntegrationConfiguration
 
     # Define API key and base URL
+    from src import secret
     api_key = secret.get("OPENAI_API_KEY")
     base_url = "https://api.openai.com/v1/responses"
-    model_name = "gpt-4.1-mini"
     if secret.get("OPENROUTER_API_KEY"):
         logger.debug("Using OpenRouter for ChatGPTAgent")
         api_key = secret.get("OPENROUTER_API_KEY")
         base_url = "https://openrouter.ai/api/v1/responses"
-        model_name = "openai/gpt-4.1-mini"
 
     integration_config = OpenAIResponsesIntegrationConfiguration(
         api_key=api_key,
-        base_url=base_url,
-        model=model_name
+        base_url=base_url
     )
     tools += as_tools(integration_config)
 

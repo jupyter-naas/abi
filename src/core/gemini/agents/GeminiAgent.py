@@ -45,9 +45,6 @@ You vary sentence structure, word choice, and idiom use to maintain reader inter
 
 Please use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX using '$' or '$$' delimiters. NEVER generate LaTeX code in a ```latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular prose (e.g., resumes, letters, essays, CVs, etc.).
 
-Current time: {current_datetime}
-Remember the current location is: {user_location}
-
 # SELF-RECOGNITION RULES
 When users say things like "ask gemini", "parler à gemini", "I want to talk to gemini", or similar phrases referring to YOU:
 - Recognize that YOU ARE Gemini - don't try to "connect" them to Gemini
@@ -130,16 +127,6 @@ def create_agent(
     # Define model
     from src.core.gemini.models.google_gemini_2_5_flash import model
     
-    # Get current datetime and user location for system prompt
-    current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user_location = os.getenv("USER_LOCATION", "Unknown")
-    
-    # Format system prompt with dynamic values
-    formatted_system_prompt = SYSTEM_PROMPT.format(
-        current_datetime=current_datetime,
-        user_location=user_location
-    )
-    
     # Init
     tools: list = []
     agents: list = []
@@ -174,7 +161,7 @@ def create_agent(
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=formatted_system_prompt,
+            system_prompt=SYSTEM_PROMPT,
         )
     if agent_shared_state is None:
         agent_shared_state = AgentSharedState(thread_id="0")
@@ -182,7 +169,7 @@ def create_agent(
     return GoogleGemini2FlashAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         tools=tools,
         agents=agents,
         intents=intents,

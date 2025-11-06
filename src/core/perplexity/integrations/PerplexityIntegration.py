@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from lib.abi.integration.integration import Integration, IntegrationConnectionError, IntegrationConfiguration
 from typing import Annotated
+from lib.abi.models.Model import OPENROUTER_MODEL_MAPPING
 
 @dataclass
 class PerplexityIntegrationConfiguration(IntegrationConfiguration):
@@ -79,7 +80,7 @@ class PerplexityIntegration(Integration):
 
         # Handble model name in case of OpenRouter model
         if self.__configuration.base_url.startswith("https://openrouter.ai/api/v1"):
-            model = f"perplexity/{model}"
+            model = OPENROUTER_MODEL_MAPPING[model]
 
         payload = {
             "model": model,

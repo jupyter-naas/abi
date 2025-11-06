@@ -186,7 +186,7 @@ User: "superviseur"                      → Returns to Abi
 **Configuration:**
 ```python
 ID = "o3-mini"
-OWNER = "openai"
+PROVIDER = "openai"
 TEMPERATURE = 1.0          # Creative orchestration
 CONTEXT_WINDOW = 128000    # 128K tokens
 ```
@@ -202,7 +202,7 @@ CONTEXT_WINDOW = 128000    # 128K tokens
 **Configuration:**
 ```python
 ID = "qwen3:8b"
-OWNER = "alibaba"
+PROVIDER = "alibaba"
 TEMPERATURE = 0.7          # Stable performance
 CONTEXT_WINDOW = 32768     # 32K tokens
 ```
