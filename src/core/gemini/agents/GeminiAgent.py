@@ -9,8 +9,6 @@ from abi.services.agent.IntentAgent import (
 from fastapi import APIRouter
 from typing import Optional
 from enum import Enum
-import os
-from datetime import datetime
 
 NAME = "Gemini"
 DESCRIPTION = "Google's multimodal AI model with image generation capabilities, thinking capabilities, and well-rounded performance."

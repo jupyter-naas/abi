@@ -7,7 +7,6 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
 )
 from typing import Optional
-from abi import logger
 from langchain_core.tools import tool
 
 NAME = "Abi"

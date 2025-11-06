@@ -15,7 +15,7 @@ class OpenRouterAPIIntegrationConfiguration(IntegrationConfiguration):
     """
     api_key: str
     base_url: str = "https://openrouter.ai/api/v1"
-    datastore_path: str = "datastore/__openrouterapis__"
+    datastore_path: str = "datastore/openrouter"
 
 
 class OpenRouterAPIIntegration(Integration):
