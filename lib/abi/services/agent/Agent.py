@@ -31,13 +31,13 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from abi.utils.Expose import Expose
-from lib.abi.models.Model import Model
+from lib.abi.models.Model import ChatModel
 
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
 
 from fastapi import APIRouter
-from abi.utils.Logger import logger
+from abi import logger
 from sse_starlette.sse import EventSourceResponse
 
 from queue import Queue, Empty
@@ -218,7 +218,7 @@ class Agent(Expose):
     _description: str
     _system_prompt: str
 
-    _chat_model: BaseChatModel | Model
+    _chat_model: BaseChatModel
     _chat_model_with_tools: Runnable[
         Any
         | str
@@ -254,7 +254,7 @@ class Agent(Expose):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel | Model,
+        chat_model: BaseChatModel | ChatModel,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver | None = None,
@@ -304,6 +304,7 @@ class Agent(Expose):
         # Assertions
         assert isinstance(name, str)
         assert isinstance(description, str)
+        assert isinstance(chat_model, BaseChatModel | ChatModel)
 
         # We assert agents
         for agent in agents:
@@ -327,23 +328,26 @@ class Agent(Expose):
             tool.name: tool for tool in self._structured_tools
         }
 
-        self._chat_model = chat_model if isinstance(chat_model, BaseChatModel) else chat_model.model
-        if hasattr(chat_model, "output_version"):
-            self._chat_model_output_version = chat_model.output_version
+        base_chat_model: BaseChatModel = chat_model if isinstance(chat_model, BaseChatModel) else chat_model.model
+        assert isinstance(base_chat_model, BaseChatModel)
+
+        self._chat_model = base_chat_model
+        if hasattr(base_chat_model, "output_version"):
+            self._chat_model_output_version = base_chat_model.output_version
             
-        self._chat_model_with_tools = chat_model
+        self._chat_model_with_tools = base_chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
             
             # Test if the chat model can bind tools by trying with a default tool first
-            if self._can_bind_tools(chat_model):
-                self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
+            if self._can_bind_tools(base_chat_model):
+                self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
             else:
-                logger.warning(f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
+                logger.warning(f"Chat model {type(base_chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
                 # Keep the original model without tools
-                self._chat_model_with_tools = chat_model
+                self._chat_model_with_tools = base_chat_model
         
         # Use provided memory or create based on environment
         if memory is None:
@@ -1324,6 +1328,8 @@ AGENT SYSTEM PROMPT:
         Returns:
             BaseChatModel: The agent's chat model
         """
+        if isinstance(self._chat_model, ChatModel):
+            return self._chat_model.model
         return self._chat_model
 
     @property
