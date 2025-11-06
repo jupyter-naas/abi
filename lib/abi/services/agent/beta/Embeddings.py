@@ -1,8 +1,8 @@
 import os
 import hashlib
 import requests
-from lib.abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CacheFactory import CacheFactory
+from abi.services.cache.CachePort import DataType
 from tqdm import tqdm
 from pydantic import SecretStr
 from dotenv import load_dotenv
