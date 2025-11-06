@@ -5,7 +5,7 @@ from openai import OpenAI
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 from abi.services.cache.CacheFactory import CacheFactory
-from lib.abi.services.cache.CachePort import DataType
+from abi.services.cache.CachePort import DataType
 from datetime import timedelta
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai")

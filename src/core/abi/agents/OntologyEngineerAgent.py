@@ -1,14 +1,9 @@
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from typing import Optional
-from langchain_openai import ChatOpenAI  # noqa: F401
-from pydantic import SecretStr
 from src import secret
-from abi import logger
 
 NAME = "Ontology_Engineer_Agent"
 DESCRIPTION = "A agent that helps users understand BFO Ontology and transform text into ontologies."
-MODEL = "o3-mini"
-TEMPERATURE = None
 SYSTEM_PROMPT = """
 # ROLE: 
 You are a BFO (Basic Formal Ontology) Expert and Ontology Engineering Specialist.
@@ -66,27 +61,10 @@ def create_agent(
 ) -> Optional[Agent]:
     # Set model based on AI_MODE
     ai_mode = secret.get("AI_MODE")
-    
     if ai_mode == "airgap":
-        # Use airgap model (Docker Model Runner)
-        model = ChatOpenAI(
-            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
-            temperature=TEMPERATURE,
-            api_key="no needed",  # type: ignore
-            base_url="http://localhost:12434/engines/v1",
-        )
+        from src.core.abi.models.module_default import airgap_model as model
     else:
-        # Use cloud model for cloud/local modes
-        openai_api_key = secret.get("OPENAI_API_KEY")
-        if not openai_api_key:
-            logger.error("OpenAI API key not available for OntologyEngineerAgent")
-            logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
-            return None
-        model = ChatOpenAI(
-            model=MODEL, 
-            temperature=TEMPERATURE, 
-            api_key=SecretStr(openai_api_key)
-        )
+        from src.core.chatgpt.models.o3_mini import model
 
     # Use provided configuration or create default one
     if agent_configuration is None:

@@ -3,7 +3,7 @@ from langchain_perplexity import ChatPerplexity
 from src import secret
 from pydantic import SecretStr
 
-MODEL_ID = "sonar-pro"
+MODEL_ID = "sonar-deep-research"
 PROVIDER = "perplexity"
 
 model: ChatModel = ChatModel(
@@ -16,3 +16,4 @@ model: ChatModel = ChatModel(
         timeout=120,
     ),
 )
+

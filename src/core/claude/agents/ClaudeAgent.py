@@ -42,7 +42,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:  
     # Define model
-    from src.core.claude.models.claude_4_5_sonnet import model
+    from src.core.claude.models.claude_sonnet_4_5 import model
     
     # Init
     tools: list = []
@@ -67,13 +67,12 @@ def create_agent(
     return ClaudeAgent(
         name=NAME,
         description=DESCRIPTION,
-        chat_model=model.model,
+        chat_model=model,
         tools=tools,
         agents=agents,
         intents=intents,
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=None,
     ) 
 
 class ClaudeAgent(IntentAgent):

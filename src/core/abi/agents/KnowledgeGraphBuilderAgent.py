@@ -4,18 +4,10 @@ from abi.services.agent.Agent import (
     AgentSharedState,
     
 )
-from src import secret
 from typing import Optional
-from langchain_openai import ChatOpenAI  # noqa: F401
-from pydantic import SecretStr
-from abi import logger
 
 NAME: str = "Knowledge_Graph_Builder"
-MODEL: str = "gpt-4o"
-TEMPERATURE: float = 0
-AVATAR_URL: str = (
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
-)
+AVATAR_URL: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
 DESCRIPTION: str = "A Knowledge Graph Builder Agent that helps users to build Knowledge Graphs."
 SYSTEM_PROMPT: str = """
 # ROLE:
@@ -144,29 +136,8 @@ def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
-    # Set model based on AI_MODE
-    ai_mode = secret.get("AI_MODE")
-    
-    if ai_mode == "airgap":
-        # Use airgap model (Docker Model Runner)
-        model = ChatOpenAI(
-            model="ai/qwen3",  # Qwen3 8B - better performance with 16GB RAM
-            temperature=TEMPERATURE,
-            api_key="no needed",  # type: ignore
-            base_url="http://localhost:12434/engines/v1",
-        )
-    else:
-        # Use cloud model for cloud/local modes
-        openai_api_key = secret.get("OPENAI_API_KEY")
-        if not openai_api_key:
-            logger.error("OpenAI API key not available for KnowledgeGraphBuilderAgent")
-            logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
-            return None
-        model = ChatOpenAI(
-            model=MODEL, 
-            temperature=TEMPERATURE, 
-            api_key=SecretStr(openai_api_key)
-        )
+    # Define model
+    from src.core.abi.models.module_default import model
 
     # Use provided configuration or create default one
     if agent_configuration is None:
@@ -319,7 +290,6 @@ def create_agent(
         agents=[],
         state=agent_shared_state,
         configuration=agent_configuration,
-        memory=None,
     )
 
 
