@@ -359,17 +359,33 @@ def check_modules_requirements():
             module_display_name = module_path.split("/")[-1]
             
             if hasattr(module, "requirements"):
-                # Extract all required keys from the module
+                # First, check if module already works with current configuration
+                try:
+                    # Reload environment to get latest values
+                    dv = dotenv_values()
+                    for key, value in dv.items():
+                        os.environ[key] = value
+                    # Reload module to get latest secret values
+                    importlib.reload(module)
+                    if module.requirements():
+                        console.print(f"✅ '{module_display_name}' module requirements satisfied", style="green")
+                        continue  # Skip key collection, move to next module
+                except Exception as e:
+                    console.print(f"⚠️ Could not check requirements for '{module_display_name}': {e}", style="yellow")
+                    # Continue to key collection in case it helps
+                
+                # Module doesn't work yet, extract keys and prompt for them
                 required_keys = extract_required_keys_from_module(module_name)
                 
                 if not required_keys:
-                    console.print(f"✅ '{module_display_name}' module requirements satisfied (no secret keys required)", style="green")
+                    # No keys to extract, but requirements() already failed, so disable
+                    modules_to_disable.append(module_path)
+                    console.print(f"❌ '{module_display_name}' module will be disabled - requirements not satisfied", style="red")
                     continue
                 
                 console.print(f"🔑 '{module_display_name}' module requires the following keys: {', '.join(required_keys)}", style="cyan")
                 
                 # Ask user for each missing key
-                all_keys_provided = True
                 for key in required_keys:
                     current_value = dv.get(key)
                     if not current_value:
@@ -383,17 +399,23 @@ def check_modules_requirements():
                             console.print(f"✅ {key} added", style="green")
                         else:
                             console.print(f"⏭️  {key} skipped", style="yellow")
-                            all_keys_provided = False
-                            # Module will be disabled due to missing keys
-                            modules_to_disable.append(module_path)
-                            break  # Exit loop early since module will be disabled
                 
-                # If any key was skipped, disable the module
-                if not all_keys_provided:
+                # After collecting keys, check the requirements() function again
+                try:
+                    # Reload environment to get latest values
+                    dv = dotenv_values()
+                    for key, value in dv.items():
+                        os.environ[key] = value
+                    # Reload module to get latest secret values
+                    importlib.reload(module)
+                    if module.requirements():
+                        console.print(f"✅ '{module_display_name}' module requirements satisfied", style="green")
+                    else:
+                        modules_to_disable.append(module_path)
+                        console.print(f"❌ '{module_display_name}' module will be disabled - requirements not satisfied", style="red")
+                except Exception as e:
+                    console.print(f"⚠️ Could not check requirements for '{module_display_name}': {e}", style="yellow")
                     modules_to_disable.append(module_path)
-                    console.print(f"❌ '{module_display_name}' module will be disabled due to missing required keys", style="red")
-                else:
-                    console.print(f"✅ '{module_display_name}' module requirements satisfied", style="green")
             else:
                 console.print(f"✅ '{module_display_name}' module requirements satisfied.", style="green")
         except ImportError:
