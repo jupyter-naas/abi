@@ -4,7 +4,7 @@ from langchain_core.tools import Tool, BaseTool
 from lib.abi.models.Model import ChatModel
 from src.marketplace.applications.pubmed.pipelines.PubMedPipeline import PubMedPipeline, PubMedPipelineConfiguration
 
-from src.core.abi.models.gpt_4_1 import model
+from src.core.chatgpt.models.gpt_4_1 import model
 
 NAME = "PubMedAgent"
 DESCRIPTION = "PubMedAgent is an agent that can search for papers in PubMed."

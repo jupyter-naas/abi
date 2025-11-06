@@ -28,6 +28,7 @@ from src.marketplace.applications.powerpoint.workflows.CreatePresentationFromTem
     CreatePresentationFromTemplateWorkflowConfiguration,
     CreatePresentationFromTemplateWorkflowParameters,
 )
+from lib.abi.models.Model import ChatModel
 
 NAME = "PowerPoint"
 DESCRIPTION = "An agent specialized in creating PowerPoint presentations."
@@ -133,7 +134,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Agent:
     # Set model
-    from src.marketplace.applications.powerpoint.models.module_default import model
+    from src.marketplace.applications.powerpoint.models.default import model
 
     from src.core.templatablesparqlquery import get_tools
     tools: list = []
@@ -177,7 +178,7 @@ class PowerPointAgent(Agent):
         self,
         name: str,
         description: str,
-        chat_model: BaseChatModel,
+        chat_model: BaseChatModel | ChatModel,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),
@@ -599,7 +600,7 @@ High
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list["Agent", "PowerPointAgent"] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
+        agents: list["Agent"] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
 
         new_agent = self.__class__(
             name=self._name,
