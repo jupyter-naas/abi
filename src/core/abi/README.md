@@ -35,20 +35,22 @@ src/core/abi/
 │   ├── sparql_terminal/    # SPARQL query interface
 │   └── terminal_agent/     # Main terminal chat interface
 ├── models/                  # Model configurations
-│   ├── o3_mini.py          # OpenAI o3-mini (cloud, temp=1.0)
-│   └── qwen3_8b.py         # Qwen3 8B (local/Ollama, temp=0.7)
-├── workflows/               # Business logic workflows (15 implementations)
+│   ├── default.py          # Model selection (airgap/cloud mode)
+│   ├── airgap_qwen.py      # Qwen3 airgap model (temp=0.7)
+│   └── airgap_gemma.py     # Gemma3 airgap model (temp=0.2)
+├── workflows/               # Business logic workflows (9 implementations)
 │   ├── AgentRecommendationWorkflow.py     # AI agent recommendation engine
+│   ├── ArtificialAnalysisWorkflow.py      # AI model analysis
 │   ├── ConvertOntologyGraphToYamlWorkflow.py # Graph to YAML conversion
 │   ├── CreateClassOntologyYamlWorkflow.py    # Class ontology publishing
 │   ├── CreateIndividualOntologyYamlWorkflow.py # Individual ontology publishing
 │   ├── ExportGraphInstancesToExcelWorkflow.py # Data export capabilities
 │   ├── GetObjectPropertiesFromClassWorkflow.py # Property retrieval
 │   ├── GetSubjectGraphWorkflow.py            # Entity graph exploration
-│   ├── SearchIndividualWorkflow.py           # Semantic search
-│   └── TemplatableSparqlQuery.py            # SPARQL query templating
-├── pipelines/               # Data processing pipelines (18 implementations)
+│   └── SearchIndividualWorkflow.py           # Semantic search
+├── pipelines/               # Data processing pipelines (13 implementations)
 │   ├── AddIndividualPipeline.py        # Entity creation
+│   ├── AIAgentOntologyGenerationPipeline.py # AI agent ontology generation
 │   ├── InsertDataSPARQLPipeline.py     # SPARQL data insertion
 │   ├── MergeIndividualsPipeline.py     # Entity merging
 │   ├── RemoveIndividualPipeline.py     # Entity deletion
@@ -59,6 +61,10 @@ src/core/abi/
 │   ├── mid-level/          # Common Core Ontologies
 │   ├── domain-level/       # Domain-specific ontologies
 │   └── application-level/  # Use-case specific ontologies
+├── sandbox/                 # Development and experimentation
+│   ├── get_agents.py       # Agent discovery utilities
+│   └── streamlit_agent/    # Streamlit-based agent interfaces
+├── cli.py                   # CLI commands for module/agent creation
 ├── triggers.py              # Production event-driven triggers
 ├── mappings.py              # Knowledge graph visualization colors
 └── __init__.py              # Module initialization
@@ -90,8 +96,8 @@ graph TD
 
 | Variable | Values | Default | Description |
 |----------|--------|---------|-------------|
-| `AI_MODE` | `cloud` \| `local` | `cloud` | Model deployment mode |
-| `OPENAI_API_KEY` | API key | Required | For cloud models (o3-mini, gpt-4o) |
+| `AI_MODE` | `cloud` \| `airgap` | `cloud` | Model deployment mode |
+| `OPENAI_API_KEY` | API key | Required | For cloud models (gpt-4.1-mini) |
 | `NAAS_API_KEY` | API key | Optional | For production ontology triggers & YAML publishing |
 | `ENV` | `dev` \| `prod` | `dev` | Environment mode (affects trigger activation) |
 
@@ -100,21 +106,21 @@ graph TD
 The agent automatically selects models based on `AI_MODE`:
 
 ```python
-# Cloud Mode (default) - Creative orchestration
-AI_MODE=cloud  # Uses OpenAI o3-mini with temperature=1.0
+# Cloud Mode (default) - Precise orchestration
+AI_MODE=cloud  # Uses gpt-4.1-mini with temperature=0
 
-# Local Mode - Privacy-focused with stable performance
-AI_MODE=local  # Uses Ollama qwen3:8b with temperature=0.7
+# Airgap Mode - Privacy-focused with stable performance
+AI_MODE=airgap  # Uses qwen3 (temp=0.7) or gemma3 (temp=0.2) via Docker Model Runner
 
 # Model Selection Logic:
-# - AbiAgent: Uses AI_MODE selection (o3-mini vs qwen3:8b)
-# - EntitytoSPARQLAgent: Uses o3-mini (cloud only)
-# - KnowledgeGraphBuilderAgent: Uses gpt-4o (cloud only)
-# - OntologyEngineerAgent: Uses o3-mini (cloud only)
+# - AbiAgent: Uses AI_MODE selection (gpt-4.1-mini vs airgap models)
+# - EntitytoSPARQLAgent: Uses cloud models (cloud only)
+# - KnowledgeGraphBuilderAgent: Uses cloud models (cloud only)
+# - OntologyEngineerAgent: Uses cloud models (cloud only)
 
 # Error Handling:
 # Missing OPENAI_API_KEY in cloud mode → Agent creation fails
-# Missing Ollama in local mode → AbiAgent creation fails
+# Missing Docker Model Runner in airgap mode → AbiAgent creation fails
 # Specialized agents require cloud mode and OpenAI API key
 ```
 
@@ -181,37 +187,64 @@ User: "superviseur"                      → Returns to Abi
 
 ## 🧠 Models
 
-### Cloud Model: o3-mini
+### Cloud Model: gpt-4.1-mini
 
 **Configuration:**
 ```python
-ID = "o3-mini"
+ID = "gpt-4.1-mini"
 PROVIDER = "openai"
-TEMPERATURE = 1.0          # Creative orchestration
-CONTEXT_WINDOW = 128000    # 128K tokens
+TEMPERATURE = 0            # Precise orchestration
 ```
 
 **Capabilities:**
 - High-speed reasoning for routing decisions
-- Large context window for complex workflows
-- Creative orchestration (temperature=1.0)
+- Precise orchestration (temperature=0)
+- Reliable multi-agent coordination
 - Requires `OPENAI_API_KEY`
 
-### Local Model: qwen3:8b
+**Source:** `src/core/chatgpt/models/gpt_4_1_mini.py`
+
+### Airgap Models
+
+The module supports two airgap model options:
+
+#### Qwen3 (Default Airgap)
 
 **Configuration:**
 ```python
-ID = "qwen3:8b"
-PROVIDER = "alibaba"
+ID = "ai/qwen3"
+PROVIDER = "qwen"
 TEMPERATURE = 0.7          # Stable performance
-CONTEXT_WINDOW = 32768     # 32K tokens
+CONTEXT_WINDOW = 8192      # 8K tokens
 ```
 
 **Capabilities:**
-- Privacy-focused local deployment
+- Privacy-focused local deployment via Docker Model Runner
 - No API costs or external dependencies
 - Multilingual support (Chinese/English)
-- Requires Ollama installation
+- Requires Docker Model Runner on `localhost:12434`
+
+**Source:** `src/core/abi/models/airgap_qwen.py`
+
+#### Gemma3 (Alternative Airgap)
+
+**Configuration:**
+```python
+ID = "ai/gemma3"
+PROVIDER = "google"
+TEMPERATURE = 0.2          # Fast, focused responses
+CONTEXT_WINDOW = 8192      # 8K tokens
+```
+
+**Capabilities:**
+- Faster responses with lower temperature
+- Privacy-focused local deployment via Docker Model Runner
+- Optimized for quick routing decisions
+- Requires Docker Model Runner on `localhost:12434`
+
+**Source:** `src/core/abi/models/airgap_gemma.py`
+
+**Model Selection:** The `default.py` model configuration automatically selects the appropriate model based on `AI_MODE` environment variable.
 
 ## 🎛️ Routing Intelligence
 
@@ -279,7 +312,7 @@ pytest src/core/abi/agents/AbiAgent_test.py::test_french_greeting_and_typos -v
 ### Module Components
 
 **Agents:** Core orchestrator and specialized knowledge agents
-**Models:** Cloud (o3-mini) and local (qwen3:8b) configurations  
+**Models:** Cloud (gpt-4.1-mini) and airgap (qwen3/gemma3) configurations  
 **Workflows:** Business logic for agent recommendations and analysis
 **Pipelines:** Data processing for ontology management
 **Triggers:** Event-driven ontology synchronization (production mode)
@@ -321,7 +354,7 @@ Sophisticated hierarchy for optimal agent selection based on request type
 Direct access to SPARQL querying and semantic data exploration
 
 ### 🔒 **Deployment Flexibility**
-Choice between cloud (OpenAI o3-mini) and local (Ollama qwen3:8b) models
+Choice between cloud (OpenAI gpt-4.1-mini) and airgap (Docker Model Runner: qwen3/gemma3) models
 
 ### 📊 **Strategic Advisory**
 Direct consultation capabilities for business and technical guidance
@@ -335,24 +368,30 @@ Event-driven triggers, comprehensive testing, and error resilience
 ```python
 abi.services.agent.IntentAgent    # Base agent framework
 langchain_openai                  # Cloud model support
-langchain_ollama                  # Local model support
+langchain_core                    # Core LangChain functionality
+requests                          # HTTP client for Docker Model Runner (airgap)
 ```
 
 ### Environment Setup
 ```bash
 # Cloud mode
 OPENAI_API_KEY=your_key_here
+AI_MODE=cloud
 
-# Local mode (requires Ollama)
-ollama pull qwen3:8b
+# Airgap mode (requires Docker Model Runner)
+AI_MODE=airgap
+# Ensure Docker Model Runner is running on localhost:12434
+# Models available: qwen3, gemma3
 
 # Production triggers (optional)
 NAAS_API_KEY=your_key_here
+ENV=prod
 ```
 
 ### Supported Models
-- **OpenAI o3-mini** - Cloud deployment with 128K context
-- **Qwen3 8B** - Local deployment via Ollama with 32K context
+- **gpt-4.1-mini** - Cloud deployment (temperature=0) via OpenAI API
+- **Qwen3** - Airgap deployment (temperature=0.7) via Docker Model Runner
+- **Gemma3** - Airgap deployment (temperature=0.2) via Docker Model Runner
 
 ---
 
