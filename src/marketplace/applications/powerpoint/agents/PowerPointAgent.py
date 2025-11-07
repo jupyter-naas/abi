@@ -179,14 +179,14 @@ class PowerPointAgent(Agent):
         name: str,
         description: str,
         chat_model: BaseChatModel | ChatModel,
+        datastore_path: str,
+        template_path: str,
         tools: list[Union[Tool, BaseTool, "Agent"]] = [],
         agents: list["Agent"] = [],
         memory: BaseCheckpointSaver = MemorySaver(),
         state: AgentSharedState = AgentSharedState(),
         configuration: AgentConfiguration = AgentConfiguration(),
         event_queue: Queue | None = None,
-        datastore_path: str = "datastore/powerpoint/presentations",
-        template_path: str = "src/marketplace/applications/powerpoint/templates/TemplateNaasPPT.pptx",
     ):
         super().__init__(
             name, 
