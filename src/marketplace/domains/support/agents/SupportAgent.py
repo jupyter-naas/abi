@@ -101,11 +101,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    from src.core.chatgpt.models.gpt_4_1_mini import model
 
     # Define tools
     tools: list = []
