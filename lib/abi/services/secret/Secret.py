@@ -19,7 +19,7 @@ Example:
 """
 
 from abi.services.secret.SecretPorts import ISecretAdapter, ISecretService
-from typing import Any, List, Dict
+from typing import List, Dict
 
 
 class Secret(ISecretService):
