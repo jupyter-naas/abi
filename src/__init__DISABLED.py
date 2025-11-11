@@ -1,26 +1,28 @@
 from dotenv import load_dotenv
+
 load_dotenv()
-from dotenv import dotenv_values
-from abi.services.secret.Secret import Secret
-from abi.services.secret.adaptors.secondary import (
-    dotenv_secret_secondaryadaptor,
-    NaasSecret,
-    Base64Secret,
-)
-from abi.services.secret.SecretPorts import ISecretAdapter
-from src.services import init_services
-from src.__modules__ import get_modules
-import yaml
+import atexit
+import os
 from dataclasses import dataclass
 from typing import List
+
+import yaml
 from abi import logger
 from abi.services.object_storage.ObjectStorageFactory import (
     ObjectStorageFactory as ObjectStorageFactory,
 )
+from abi.services.secret.adaptors.secondary import (
+    Base64Secret,
+    NaasSecret,
+    dotenv_secret_secondaryadaptor,
+)
+from abi.services.secret.Secret import Secret
+from abi.services.secret.SecretPorts import ISecretAdapter
 from abi.utils.LazyLoader import LazyLoader
-import atexit
-import os
+from dotenv import dotenv_values
 
+from src.__modules__ import get_modules
+from src.services import init_services
 
 env = os.getenv("ENV")
 config_path = f"config.{env}.yaml"
@@ -63,9 +65,7 @@ class Config:
                 data = yaml.safe_load(file)
                 config_data = data["config"]
                 module_configs = [
-                    ModuleConfig(
-                        path=m["path"], enabled=m["enabled"]
-                    )
+                    ModuleConfig(path=m["path"], enabled=m["enabled"])
                     for m in data["modules"]
                 ]
                 return cls(
@@ -132,7 +132,9 @@ if naas_api_key is not None and ai_mode != "airgap":
 
     secrets_adapters.append(NaasSecret.NaasSecret(naas_api_key, naas_api_url))
 elif ai_mode == "airgap":
-    logger.debug("Airgapped mode: Skipping cloud service initialization for complete offline operation")
+    logger.debug(
+        "Airgapped mode: Skipping cloud service initialization for complete offline operation"
+    )
 
 logger.debug("Loading Secrets from .env file")
 envfile_values = dotenv_values()
@@ -155,14 +157,15 @@ config = Config.from_yaml()
 
 modules_loaded = False
 
+
 def load_modules():
     global services
-    
+
     # Skip verbose logging in airgap mode for faster startup
     ai_mode = os.getenv("AI_MODE")
     if ai_mode != "airgap":
         logger.debug("Loading modules")
-    
+
     _modules = get_modules(config)
 
     if ai_mode != "airgap":
@@ -172,7 +175,7 @@ def load_modules():
     for module in _modules:
         for ontology in module.ontologies:
             ontology_filepaths.append(ontology)
-            
+
     services.triple_store_service.load_schemas(ontology_filepaths)
 
     if ai_mode != "airgap":
@@ -208,7 +211,6 @@ def load_modules():
 
     return _modules
 
+
 services = LazyLoader(lambda: init_services(config, secret))
 modules = LazyLoader(lambda: load_modules())
-
-

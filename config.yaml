@@ -1,53 +1,48 @@
-config:
-  workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
-  github_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
-  github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
-  triple_store_path: "storage/triplestore" # Path to the ontology store
-  api_title: "ABI API" # API title
-  api_description: "API for ABI, your Artifical Business Intelligence" # API description
-  logo_path: "assets/logo.png" # Path to the logo
-  favicon_path: "assets/favicon.ico" # Path to the favicon
-  storage_name: "abi" # Name of the storage
-  space_name: "abi" # Name of the space
-  cors_origins:
-    - "http://localhost:9879"
-  auto_publish:
-    enabled: true # Enable automatic publishing of agents to workspace
-    exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
-    default_agent: "Abi" # Which agent to set as default in workspace
+
+workspace_id: "96ce7ee7-e5f5-4bca-acf9-9d5d41317f81" # Naas workspace ID
+github_repository: "jupyter-naas/abi" # Github repository name (e.g. jupyter-naas/abi)
+github_project_id: 12 # Github project number stored in Github URL (e.g. https://github.com/jupyter-naas/abi/projects/1)
+triple_store_path: "storage/triplestore" # Path to the ontology store
+api_title: "ABI API" # API title
+api_description: "API for ABI, your Artifical Business Intelligence" # API description
+logo_path: "assets/logo.png" # Path to the logo
+favicon_path: "assets/favicon.ico" # Path to the favicon
+storage_name: "abi" # Name of the storage
+space_name: "abi" # Name of the space
+cors_origins:
+  - "http://localhost:9879"
+auto_publish:
+  enabled: true # Enable automatic publishing of agents to workspace
+  exclude_agents: [] # Agents to exclude from auto-publishing (empty list means publish all enabled agents)
+  default_agent: "Abi" # Which agent to set as default in workspace
 
 modules:
-  - path: src/core/abi
+  - module: alice
     enabled: true
-  - path: src/core/chatgpt
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+  - module: bob
     enabled: true
-  - path: src/core/claude
+  - module: chatgpt
     enabled: true
-  - path: src/core/deepseek
-    enabled: false
-  - path: src/core/gemini
-    enabled: true
-  - path: src/core/gemma
-    enabled: false
-  - path: src/core/grok
-    enabled: true
-  - path: src/core/llama
-    enabled: false
-  - path: src/core/mistral
-    enabled: true
-  - path: src/core/perplexity
-    enabled: true
-  - path: src/core/qwen
-    enabled: false
-  - path: src/core/templatablesparqlquery
-    enabled: true
-  - path: src/marketplace/applications/git
-    enabled: false
-  - path: src/marketplace/applications/github
-    enabled: false
-  - path: src/marketplace/applications/naas
-    enabled: false
-  - path: src/marketplace/domains/support
-    enabled: true
-  - path: src/marketplace/applications/pubmed
-    enabled: false
+    config:
+      openai_api_key: "{{ secret.OPENAI_API_KEY }}"
+
+services:
+  secret:
+    secret_adapters:
+      - adapter: "dotenv"
+        config: {}
+  object_storage: &object_storage
+    object_storage_adapter:
+      adapter: "fs"
+      config:
+        base_path: "storage/object_store"
+  triple_store:
+    ontology_adapter:
+      adapter: "oxigraph"
+      config: {}
+  vector_store:
+    vector_store_adapter:
+      adapter: "qdrant"
+      config: {}

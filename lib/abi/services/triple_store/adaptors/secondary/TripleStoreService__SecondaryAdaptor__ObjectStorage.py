@@ -1,26 +1,27 @@
-from abi.services.triple_store.TripleStorePorts import (
-    ITripleStorePort,
-    OntologyEvent,
-    Exceptions,
-)
-from abi.services.object_storage.ObjectStorageService import ObjectStorageService
+import queue
+import time
+from threading import Lock, Thread
+from typing import Any, Dict, List, Tuple
+
+import rdflib
 from abi.services.object_storage.ObjectStoragePort import (
     Exceptions as ObjectStorageExceptions,
 )
+from abi.services.object_storage.ObjectStorageService import ObjectStorageService
 from abi.services.triple_store.adaptors.secondary.base.TripleStoreService__SecondaryAdaptor__FileBase import (
     TripleStoreService__SecondaryAdaptor__FileBase,
 )
-from rdflib import Graph, query, Node, URIRef
-import rdflib
-from typing import List, Dict, Tuple, Any
+from abi.services.triple_store.TripleStorePorts import (
+    Exceptions,
+    ITripleStorePort,
+    OntologyEvent,
+)
 from abi.utils.Logger import logger
-from abi.utils.Workers import WorkerPool, Job
-import queue
-from threading import Thread, Lock
-import time
+from abi.utils.Workers import Job, WorkerPool
+from rdflib import Graph, Node, URIRef, query
 
 
-class TripleStoreService__SecondaryAdaptor__NaasStorage(
+class TripleStoreService__SecondaryAdaptor__ObjectStorage(
     ITripleStorePort, TripleStoreService__SecondaryAdaptor__FileBase
 ):
     __object_storage_service: ObjectStorageService
@@ -36,7 +37,7 @@ class TripleStoreService__SecondaryAdaptor__NaasStorage(
         object_storage_service: ObjectStorageService,
         triples_prefix: str = "triples",
     ):
-        logger.debug("Initializing TripleStoreService__SecondaryAdaptor__NaasStorage")
+        logger.debug("Initializing TripleStoreService__SecondaryAdaptor__ObjectStorage")
         self.__object_storage_service = object_storage_service
         self.__triples_prefix = triples_prefix
 
