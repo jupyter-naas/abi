@@ -19,9 +19,23 @@ from src.marketplace.applications.linkedin.integrations.LinkedInExportIntegratio
     LinkedInExportIntegration,
     LinkedInExportIntegrationConfiguration
 )
+from src.marketplace.applications.linkedin.pipelines.LinkedInExportProfilePipeline import (
+    LinkedInExportProfilePipeline,
+    LinkedInExportProfilePipelineConfiguration,
+    LinkedInExportProfilePipelineParameters,
+)
 
 
 LINKEDIN = Namespace("http://ontology.naas.ai/abi/linkedin/")
+DATA_SOURCE = ABI["DataSource"]
+DATA_SOURCE_COMPONENT = ABI["DataSourceComponent"]
+PERSON = CCO["ont00001262"]
+LINKEDIN_PROFILE_PAGE = LINKEDIN["ProfilePage"]
+POSITION = BFO["BFO_0000023"]
+ORGANIZATION = CCO["ont00001180"]
+ACT_OF_ASSOCIATION = CCO["ont00000433"]
+ACT_OF_CONNECTION = LINKEDIN["ActOfConnection"]
+EMAIL_ADDRESS = ABI["EmailAddress"]
 
 
 @dataclass
@@ -35,6 +49,7 @@ class LinkedInExportConnectionsPipelineConfiguration(PipelineConfiguration):
     """
     triple_store: ITripleStoreService
     linkedin_export_configuration: LinkedInExportIntegrationConfiguration
+    linkedin_export_profile_pipeline_configuration: LinkedInExportProfilePipelineConfiguration
     limit: int | None = None
 
 
@@ -44,6 +59,9 @@ class LinkedInExportConnectionsPipelineParameters(PipelineParameters):
     Attributes:
         file_name (str): Name of the CSV file to process
     """
+    linkedin_public_url: Annotated[str, Field(
+        description="LinkedIn public URL of the profile to process",
+    )]
     file_name: Annotated[str, Field(
         description="Name of the CSV file to process from the LinkedIn export",
     )] = "Connections.csv"
@@ -58,6 +76,37 @@ class LinkedInExportConnectionsPipeline(Pipeline):
         super().__init__(configuration)
         self.__configuration = configuration
         self.__linkedin_export_integration = LinkedInExportIntegration(configuration.linkedin_export_configuration)
+        self.__linkedin_export_profile_pipeline = LinkedInExportProfilePipeline(configuration.linkedin_export_profile_pipeline_configuration)
+
+    def get_person_uri_and_name_from_linkedin_profile_page_public_url(
+        self,
+        linkedin_profile_page_public_url: str
+    ) -> tuple[URIRef, str] | tuple[None, None]:
+        """
+        Get person URI and name using the public_url property from LinkedInProfilePage.
+        """
+        sparql_query = f"""
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+        SELECT ?personUri ?personName
+        WHERE {{
+            ?profilePage a linkedin:ProfilePage ;
+                         linkedin:public_url "{linkedin_profile_page_public_url}" ;
+                         abi:isLinkedInPageOf ?personUri .
+            ?personUri rdfs:label ?personName .
+        }}
+        """
+        results = list(self.__configuration.triple_store.query(sparql_query))
+        if results:
+            val = results[0]
+            # Defensive: flatten any types (row could be tuple, list, or a dict-like)
+            if isinstance(val, (list, tuple)) and len(val) >= 2:
+                return val[0], val[1]
+            elif hasattr(val, "__getitem__") and 0 in val and 1 in val:
+                return val[0], val[1]
+        return None, None
 
     def generate_graph_date(self, date: datetime | str, date_format: str = "%Y-%m-%dT%H:%M:%S.%fZ") -> tuple[URIRef, Graph]:
         """Generates a URI for a date based on the given datetime object."""
@@ -66,6 +115,7 @@ class LinkedInExportConnectionsPipeline(Pipeline):
             date_epoch = int(date.timestamp() * 1000)
             date_uri = ABI[str(date_epoch)]  # Create URI using timestamp
         elif isinstance(date, str):
+            date_str = date  # Fix: Ensure date_str is defined
             date_uri = ABI[date]
         graph = Graph()
         graph.add((date_uri, RDF.type, OWL.NamedIndividual))
@@ -76,10 +126,19 @@ class LinkedInExportConnectionsPipeline(Pipeline):
     def run(self, parameters: PipelineParameters) -> Graph:
         if not isinstance(parameters, LinkedInExportConnectionsPipelineParameters):
             raise ValueError("Parameters must be of type LinkedInExportConnectionsPipelineParameters")
+        
+        # Step 0: Run LinkedInExportProfilePipeline to get person URI and name
+        logger.debug("Step 0: Running LinkedInExportProfilePipeline to get person URI and name")
+        graph = self.__linkedin_export_profile_pipeline.run(LinkedInExportProfilePipelineParameters(linkedin_public_url=parameters.linkedin_public_url))
+        res = self.get_person_uri_and_name_from_linkedin_profile_page_public_url(parameters.linkedin_public_url)
+        if res is not None:
+            initial_person_uri, initial_person_name = res
+        else:
+            initial_person_uri, initial_person_name = None, None
 
         # Step 1: Read CSV file
         logger.debug(f"Step 1: Reading CSV file '{parameters.file_name}'")
-        df = self.__linkedin_export_integration.read_csv(parameters.file_name)
+        df = self.__linkedin_export_integration.read_csv(parameters.file_name).fillna('UNKNOWN')
         if len(df) == 0:
             logger.warning(f"❌ No rows to process in CSV file '{parameters.file_name}'")
             return Graph()
@@ -95,39 +154,22 @@ class LinkedInExportConnectionsPipeline(Pipeline):
         graph.bind("rdf", RDF)
         graph.bind("owl", OWL)
         graph.bind("xsd", XSD)
-
-        # Define Class URIs
-        DATA_SOURCE = ABI["DataSource"]
-        DATA_SOURCE_COMPONENT = ABI["DataSourceComponent"]
-        PERSON = CCO["ont00001262"]
-        LINKEDIN_PROFILE_PAGE = LINKEDIN["ProfilePage"]
-        POSITION = BFO["BFO_0000023"]
-        ORGANIZATION = CCO["ont00001180"]
-        ACT_OF_ASSOCIATION = CCO["ont00000433"]
-        ACT_OF_CONNECTION = LINKEDIN["ActOfConnection"]
-        EMAIL_ADDRESS = ABI["EmailAddress"]
+        graph.bind("linkedin", LINKEDIN)
 
         # Get file metadata
         export_directory = self.__linkedin_export_integration.unzip_export()["extracted_directory"]
         file_path = os.path.join(export_directory, parameters.file_name)
-        file_timestamp = os.path.getmtime(file_path)
-        file_datetime = datetime.fromtimestamp(file_timestamp)
-        logger.debug(f"File modified at: {file_datetime}")
+        file_modified_at = self.__linkedin_export_integration.unzip_export()["file_modified_at"]
+        file_created_at = self.__linkedin_export_integration.unzip_export()["file_created_at"]
 
         # Create backing datasource
-        data_source_hash = create_hash_from_string(f"{file_timestamp}_{file_path}")
-        existing_data_sources: dict[str, URIRef] = get_identifiers(class_uri=DATA_SOURCE)
-        logger.debug(f"Existing data sources: {len(existing_data_sources)}")
-        data_source_uri = existing_data_sources.get(data_source_hash)
-        if data_source_uri is None:
-            data_source_uri = ABI[str(uuid.uuid4())]
-            graph.add((data_source_uri, RDF.type, OWL.NamedIndividual))
-            graph.add((data_source_uri, RDF.type, DATA_SOURCE))
-            graph.add((data_source_uri, ABI.filename, Literal(parameters.file_name)))
-            graph.add((data_source_uri, ABI.unique_id, Literal(data_source_hash)))
-            graph.add((data_source_uri, ABI.extracted_at, Literal(file_datetime.strftime("%Y-%m-%dT%H:%M:%S"), datatype=XSD.dateTime)))
-            graph.add((data_source_uri, ABI.source_path, Literal(file_path)))
-            graph.add((data_source_uri, ABI.source_type, Literal("CSV_FILE")))
+        graph, data_source_uri = self.__linkedin_export_profile_pipeline.add_backing_datasource(
+            graph=graph,
+            file_path=file_path,
+            file_modified_at=file_modified_at,
+            file_created_at=file_created_at,
+            df=df
+        )
         
         # Step 3: Processing rows from CSV file
         logger.debug("Step 3: Processing rows")
@@ -138,91 +180,55 @@ class LinkedInExportConnectionsPipeline(Pipeline):
         for i, row in df.iterrows():
             count_row += 1
             logger.debug(f"🔄 Processing row {count_row}/{len(df)}")
-            row_hash = create_hash_from_string(str(tuple(row)))
-            existing_data_source_components: dict[str, URIRef] = get_identifiers(class_uri=DATA_SOURCE_COMPONENT)
-            logger.debug(f"- Existing Data Source Components: {len(existing_data_source_components)}")
-            row_uri = existing_data_source_components.get(row_hash)
-            if row_uri is None:
-                logger.debug("Step 3.1: Adding backing datasource component for row")
-                row_uri = ABI[str(uuid.uuid4())]
-                existing_data_source_components[row_hash] = row_uri
-                # Add backing datasource component
-                graph.add((row_uri, RDF.type, OWL.NamedIndividual))
-                graph.add((row_uri, RDF.type, DATA_SOURCE_COMPONENT))
-                graph.add((row_uri, ABI.unique_id, Literal(row_hash)))
-                graph.add((row_uri, ABI.isComponentOf, data_source_uri))
-                graph.add((data_source_uri, ABI.hasComponent, row_uri))
-            else:
-                logger.warning("Row already processed!")
-                continue
+            graph, row_uri = self.__linkedin_export_profile_pipeline.add_backing_datasource_component(
+                graph=graph,
+                data_source_uri=data_source_uri,
+                row=row
+            )
 
             # Add LinkedIn profile page
             linkedin_public_url = row.get("URL", "").strip()
-            linkedin_public_id = linkedin_public_url.split("/in/")[1].split("?")[0]
-            logger.debug(f"Step 3.2: Adding LinkedIn profile page: '{linkedin_public_url}' (ID: '{linkedin_public_id}')")
-            linkedin_profile_page_uris: dict[str, URIRef] = get_identifiers(property_uri=LINKEDIN.public_url, class_uri=LINKEDIN_PROFILE_PAGE)
-            logger.debug(f"- Existing LinkedIn profile page: {len(linkedin_profile_page_uris)}")
-            linkedin_profile_page_uri = linkedin_profile_page_uris.get(linkedin_public_url)
-
-            # Create linkedin profile page if it doesn't exist
-            if linkedin_profile_page_uri is None:
-                linkedin_profile_page_uri = ABI[str(uuid.uuid4())]
-                linkedin_profile_page_uris[linkedin_public_url] = linkedin_profile_page_uri
-                graph.add((linkedin_profile_page_uri, RDF.type, OWL.NamedIndividual))
-                graph.add((linkedin_profile_page_uri, RDF.type, LINKEDIN_PROFILE_PAGE))
-                graph.add((linkedin_profile_page_uri, RDFS.label, Literal(linkedin_public_url)))
-                graph.add((linkedin_profile_page_uri, LINKEDIN.public_url, Literal(linkedin_public_url)))
-                graph.add((linkedin_profile_page_uri, LINKEDIN.public_id, Literal(linkedin_public_id)))
-                graph.add((linkedin_profile_page_uri, ABI.hasBackingDataSource, row_uri))
-            else:
-                logger.warning("LinkedIn profile page already processed!")
-                continue
+            logger.debug(f"Step 3.1: Adding LinkedIn profile page: '{linkedin_public_url}'")
+            graph, linkedin_profile_page_uri = self.__linkedin_export_profile_pipeline.add_linkedin_profile_page(
+                graph=graph,
+                linkedin_public_url=linkedin_public_url,
+                backing_datasource_component_uri=row_uri,
+            )
 
             # Add person to the graph
-            first_name = row.get("First Name", "").strip()
-            last_name = row.get("Last Name", "").strip()
-            person_name = f"{first_name} {last_name}"
-            logger.debug(f"Step 3.3: Adding person '{person_name}'")
-            person_uri = ABI[str(uuid.uuid4())]
-            graph.add((person_uri, RDF.type, OWL.NamedIndividual))
-            graph.add((person_uri, RDF.type, PERSON))
-            graph.add((person_uri, RDFS.label, Literal(person_name)))
-            graph.add((person_uri, ABI.first_name, Literal(first_name)))
-            graph.add((person_uri, ABI.last_name, Literal(last_name)))
-            graph.add((person_uri, ABI.hasBackingDataSource, row_uri))
-            graph.add((linkedin_profile_page_uri, ABI.isLinkedInPageOf, person_uri))
-            graph.add((person_uri, ABI.hasLinkedInPage, linkedin_profile_page_uri))
+            logger.debug(f"Step 3.2: Adding person to the graph")
+            person_name = f"{row.get('First Name', 'UNKNOWN').strip()} {row.get('Last Name', 'UNKNOWN').strip()}"
+            graph, person_uri = self.__linkedin_export_profile_pipeline.add_person(
+                graph=graph, 
+                linkedin_profile_page_uri=linkedin_profile_page_uri, 
+                backing_datasource_component_uri=row_uri, 
+                first_name=row.get("First Name", "UNKNOWN").strip(), 
+                last_name=row.get("Last Name", "UNKNOWN").strip(),
+            )
 
             # Add email address to the graph
-            email_address = row.get("Email Address", "").strip()
-            logger.debug(f"Step 3.4: Adding email address: '{email_address}'")
-            if email_address != "":
-                email_address_hash = create_hash_from_string(email_address)
-                existing_email_addresses: dict[str, URIRef] = get_identifiers(class_uri=EMAIL_ADDRESS)
-                logger.debug(f"- Existing Email Addresses: {len(existing_email_addresses)}")
-                email_address_uri = existing_email_addresses.get(email_address_hash)
-                if email_address_uri is None and email_address != "":
-                    email_address_uri = ABI[str(uuid.uuid4())]
-                    existing_email_addresses[email_address_hash] = email_address_uri
-                    graph.add((email_address_uri, RDF.type, OWL.NamedIndividual))
-                    graph.add((email_address_uri, RDF.type, EMAIL_ADDRESS))
-                    graph.add((email_address_uri, RDFS.label, Literal(email_address)))
-                    graph.add((email_address_uri, ABI.unique_id, Literal(email_address_hash)))
-                    graph.add((email_address_uri, ABI.hasBackingDataSource, row_uri))
+            email_address = row.get("Email Address", "UNKNOWN").strip()
+            logger.debug(f"Step 3.3: Adding email address: '{email_address}'")
+            email_address_hash = create_hash_from_string(email_address)
+            existing_email_addresses: dict[str, URIRef] = get_identifiers(class_uri=EMAIL_ADDRESS)
+            email_address_uri = existing_email_addresses.get(email_address_hash)
+            if email_address_uri is None:
+                email_address_uri = ABI[str(uuid.uuid4())]
+                existing_email_addresses[email_address_hash] = email_address_uri
+                graph.add((email_address_uri, RDF.type, OWL.NamedIndividual))
+                graph.add((email_address_uri, RDF.type, EMAIL_ADDRESS))
+                graph.add((email_address_uri, RDFS.label, Literal(email_address)))
+                graph.add((email_address_uri, ABI.unique_id, Literal(email_address_hash)))
+                graph.add((email_address_uri, ABI.hasBackingDataSource, row_uri))
                 graph.add((person_uri, ABI.hasEmailAddress, email_address_uri))
                 graph.add((email_address_uri, ABI.isEmailAddressOf, person_uri))
-            else:
-                logger.debug("Email address is empty!")
 
             # Add position
-            position = row.get("Job Title", "").strip()
-            logger.debug(f"Step 3.5: Adding position: '{position}'")
+            position = row.get("Position", "UNKNOWN").strip()
+            logger.debug(f"Step 3.4: Adding position: '{position}'")
             position_hash = create_hash_from_string(position)
             position_uris: dict[str, URIRef] = get_identifiers(class_uri=POSITION)
-            logger.debug(f"- Existing Positions: {len(position_uris)}")
-            position_uri = position_uris.get(position_hash) if position != "" else None
-            
-            # Create position if it doesn't exist
+            position_uri = position_uris.get(position_hash) if position_hash != "" else None
             if position_uri is None:
                 position_uri = ABI[str(uuid.uuid4())]
                 position_uris[position_hash] = position_uri
@@ -231,16 +237,15 @@ class LinkedInExportConnectionsPipeline(Pipeline):
                 graph.add((position_uri, RDFS.label, Literal(position)))
                 graph.add((position_uri, ABI.unique_id, Literal(position_hash)))
                 graph.add((position_uri, ABI.hasBackingDataSource, row_uri))
-            graph.add((person_uri, ABI.holdsPosition, position_uri))
+                graph.add((person_uri, ABI.holdsPosition, position_uri))
 
             # Add organization & linkedin company page
-            organization = row.get("Company", "").strip()
-            logger.debug(f"Step 3.6: Adding organization: '{organization}'")
+            organization = row.get("Company", "UNKNOWN").strip()
+            logger.debug(f"Step 3.5: Adding organization: '{organization}'")
             organization_uris: dict[str, URIRef] = get_identifiers(RDFS.label, class_uri=ORGANIZATION)
-            logger.debug(f"- Existing Organizations: {len(organization_uris)}")
             organization_uri = organization_uris.get(organization) if organization != "" else None
             # Create organization if it doesn't exist
-            if organization_uri is None and organization != "":
+            if organization_uri is None:
                 organization_uri = ABI[str(uuid.uuid4())]
                 organization_uris[organization] = organization_uri
                 graph.add((organization_uri, RDF.type, OWL.NamedIndividual))
@@ -251,51 +256,55 @@ class LinkedInExportConnectionsPipeline(Pipeline):
             # Create act of association with person, organization and position
             act_of_association_label = f"{person_name} working at {organization} as {position}"
             act_of_association_hash = create_hash_from_string(act_of_association_label)
-            logger.debug(f"Step 3.7: Adding act of association with organization and role: '{act_of_association_label}'")
-            act_of_association_uri = ABI[str(uuid.uuid4())]
-            graph.add((act_of_association_uri, RDF.type, OWL.NamedIndividual))
-            graph.add((act_of_association_uri, RDF.type, OWL.NamedIndividual))
-            graph.add((act_of_association_uri, RDF.type, ACT_OF_ASSOCIATION))
-            graph.add((act_of_association_uri, RDFS.label, Literal(act_of_association_label)))
-            graph.add((act_of_association_uri, ABI.unique_id, Literal(act_of_association_hash)))
-            graph.add((act_of_association_uri, ABI.hasBackingDataSource, row_uri))
+            logger.debug(f"Step 3.6: Adding act of association with organization and role: '{act_of_association_label}'")
+            act_of_association_uris: dict[str, URIRef] = get_identifiers(class_uri=ACT_OF_ASSOCIATION)
+            act_of_association_uri = act_of_association_uris.get(act_of_association_hash) if act_of_association_hash != "" else None
+            if act_of_association_uri is None:
+                act_of_association_uri = ABI[str(uuid.uuid4())]
+                act_of_association_uris[act_of_association_hash] = act_of_association_uri
+                graph.add((act_of_association_uri, RDF.type, OWL.NamedIndividual))
+                graph.add((act_of_association_uri, RDF.type, OWL.NamedIndividual))
+                graph.add((act_of_association_uri, RDF.type, ACT_OF_ASSOCIATION))
+                graph.add((act_of_association_uri, RDFS.label, Literal(act_of_association_label)))
+                graph.add((act_of_association_uri, ABI.unique_id, Literal(act_of_association_hash)))
+                graph.add((act_of_association_uri, ABI.hasBackingDataSource, row_uri))
+                
+                if organization_uri is not None:
+                    graph.add((act_of_association_uri, BFO.BFO_0000057, organization_uri))
+                if person_uri is not None:
+                    graph.add((act_of_association_uri, BFO.BFO_0000057, person_uri))
+                if position_uri is not None:
+                    graph.add((act_of_association_uri, BFO.BFO_0000055, position_uri))
+                date_uri, graph_date = self.generate_graph_date("UNKNOWN")
+                graph.add((act_of_association_uri, ABI.startDate, date_uri)) # has start date UNKNOWN
             
-            if organization_uri is not None:
-                graph.add((act_of_association_uri, BFO.BFO_0000057, organization_uri))
-            if person_uri is not None:
-                graph.add((act_of_association_uri, BFO.BFO_0000057, person_uri))
-            if position_uri is not None:
-                graph.add((act_of_association_uri, BFO.BFO_0000055, position_uri))
-            date_uri, graph_date = self.generate_graph_date("UNKNOWN")
-            graph.add((act_of_association_uri, ABI.startDate, date_uri)) # has start date UNKNOWN
-            
-            # # Create act of connection with person and organization
-            # connected_on_str = row.get("Connected On", "").strip()
-            # try:
-            #     connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y")
-            # except Exception as e:
-            #     logger.warning(f"Could not parse 'Connected On' date '{connected_on_str}': {e}")
-            #     continue
+            # Create act of connection with person and organization
+            connected_on_str = row.get("Connected On", "").strip()
+            try:
+                connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y")
+            except Exception as e:
+                logger.warning(f"Could not parse 'Connected On' date '{connected_on_str}': {e}")
+                continue
 
-            # act_of_connection_label = f"{person_name} connected with {person_name} on LinkedIn at {connected_on_date.strftime('%d %b %Y')}"
-            # act_of_connection_hash = create_hash_from_string(act_of_connection_label)
-            # logger.debug(f"Step 3.8: Adding act of connection LinkedIn: '{act_of_connection_label}'")
-            # act_of_connection_uris: dict[str, URIRef] = get_identifiers(class_uri=ACT_OF_CONNECTION)
-            # logger.debug(f"- Existing Act of LinkedIn Connection: {len(act_of_connection_uris)}")
-            # act_of_connection_uri = act_of_connection_uris.get(act_of_connection_hash)
-            # if act_of_connection_uri is None:
-            #     logger.debug("Step 3.8: Adding act of connection with person and organization")
-            #     act_of_connection_uri = ABI[str(uuid.uuid4())]
-            #     act_of_connection_uris[act_of_connection_hash] = act_of_connection_uri
-            #     graph.add((act_of_connection_uri, RDF.type, OWL.NamedIndividual))
-            #     graph.add((act_of_connection_uri, RDF.type, OWL.NamedIndividual))
-            #     graph.add((act_of_connection_uri, RDF.type, ACT_OF_CONNECTION))
-            #     graph.add((act_of_connection_uri, RDFS.label, Literal(act_of_connection_label)))
-            #     graph.add((act_of_connection_uri, ABI.unique_id, Literal(act_of_connection_hash)))
-            #     graph.add((act_of_connection_uri, ABI.hasBackingDataSource, row_uri))
-            #     date_uri, graph_date = self.generate_graph_date(connected_on_date)
-            #     graph.add((act_of_connection_uri, ABI.connectedOn, date_uri))
-            #     graph += graph_date
+            act_of_connection_label = f"{initial_person_name} connected with {person_name} on LinkedIn the {connected_on_date.strftime('%d %b %Y')}"
+            act_of_connection_hash = create_hash_from_string(act_of_connection_label)
+            logger.debug(f"Step 3.8: Adding act of connection LinkedIn: '{act_of_connection_label}'")
+            act_of_connection_uris: dict[str, URIRef] = get_identifiers(class_uri=ACT_OF_CONNECTION)
+            act_of_connection_uri = act_of_connection_uris.get(act_of_connection_hash) if act_of_connection_hash != "" else None
+            if act_of_connection_uri is None:
+                logger.debug("Step 3.8: Adding act of connection with person and organization")
+                act_of_connection_uri = ABI[str(uuid.uuid4())]
+                act_of_connection_uris[act_of_connection_hash] = act_of_connection_uri
+                graph.add((act_of_connection_uri, RDF.type, OWL.NamedIndividual))
+                graph.add((act_of_connection_uri, RDF.type, ACT_OF_CONNECTION))
+                graph.add((act_of_connection_uri, RDFS.label, Literal(act_of_connection_label)))
+                graph.add((act_of_connection_uri, ABI.unique_id, Literal(act_of_connection_hash)))
+                graph.add((act_of_connection_uri, ABI.hasBackingDataSource, row_uri))
+                date_uri, graph_date = self.generate_graph_date(connected_on_date)
+                graph.add((act_of_connection_uri, ABI.connectedOn, date_uri))
+                graph.add((act_of_connection_uri, BFO.BFO_0000057, person_uri))
+                graph.add((act_of_connection_uri, BFO.BFO_0000057, initial_person_uri))
+                graph += graph_date
 
         # Add triples to triple store
         logger.debug("Step 4: Adding triples to triple store")
@@ -336,3 +345,28 @@ class LinkedInExportConnectionsPipeline(Pipeline):
         if tags is None:
             tags = []
         return None
+    
+
+if __name__ == "__main__":
+    from src import services
+
+    linkedin_export_configuration = LinkedInExportIntegrationConfiguration(
+        export_file_path="storage/datastore/linkedin/export/florent-ravenel/Complete_LinkedInDataExport_11-06-2025.zip (1).zip"
+    )
+    linkedin_export_profile_pipeline_configuration = LinkedInExportProfilePipelineConfiguration(
+        triple_store=services.triple_store_service,
+        linkedin_export_configuration=linkedin_export_configuration
+    )
+    linkedin_public_url = "https://www.linkedin.com/in/florent-ravenel/"
+    limit = 1
+
+    pipeline = LinkedInExportConnectionsPipeline(
+        LinkedInExportConnectionsPipelineConfiguration(
+            triple_store=services.triple_store_service,
+            linkedin_export_configuration=linkedin_export_configuration,
+            linkedin_export_profile_pipeline_configuration=linkedin_export_profile_pipeline_configuration,
+            limit=limit
+        )
+    )
+    graph = pipeline.run(LinkedInExportConnectionsPipelineParameters(linkedin_public_url=linkedin_public_url))
+    print(graph.serialize(format="turtle"))
