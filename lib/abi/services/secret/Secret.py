@@ -19,7 +19,7 @@ Example:
 """
 
 from abi.services.secret.SecretPorts import ISecretAdapter, ISecretService
-from typing import Any, List, Dict
+from typing import List, Dict
 
 
 class Secret(ISecretService):
@@ -42,7 +42,7 @@ class Secret(ISecretService):
     def __init__(self, adapters: List[ISecretAdapter]):
         self.__adapters = adapters
 
-    def get(self, key: str, default: Any = None) -> str:
+    def get(self, key: str, default: str = "default") -> str:
         """Retrieve a secret value by its key.
 
         Searches for the secret across all configured adapters in order. Returns the value
