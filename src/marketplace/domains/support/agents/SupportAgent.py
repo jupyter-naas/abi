@@ -94,8 +94,8 @@ SUGGESTIONS: list[dict[str, str]] = [
 
 
 def create_agent(
-    agent_shared_state: [AgentSharedState] = None,
-    agent_configuration: [AgentConfiguration] = None,
+    agent_shared_state: Optional[AgentSharedState] = None,
+    agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
     from src.core.chatgpt.models.gpt_4_1_mini import model
