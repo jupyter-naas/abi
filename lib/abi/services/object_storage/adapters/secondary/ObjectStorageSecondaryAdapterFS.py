@@ -1,15 +1,17 @@
-from abi.services.object_storage.ObjectStoragePort import (
-    IObjectStorageAdapter,
-    Exceptions,
-)
+import os
 from queue import Queue
 from typing import Optional
-import os
+
+from abi.services.object_storage.ObjectStoragePort import (
+    Exceptions,
+    IObjectStorageAdapter,
+)
 
 
 class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
     def __init__(self, base_path: str):
         self.base_path = base_path
+        self.__create_path(base_path)
 
     def __create_path(self, prefix: str) -> None:
         os.makedirs(os.path.join(self.base_path, prefix), exist_ok=True)

@@ -1,6 +1,12 @@
-from loguru import logger
-import sys
 import os
+import sys
 
-logger.remove()
-logger.add(sys.stderr, level=os.environ.get("LOG_LEVEL", "DEBUG"))
+from loguru import logger
+
+
+def reconfigure(level: str = "DEBUG"):
+    logger.remove()
+    logger.add(sys.stderr, level=level)
+
+
+reconfigure(os.environ.get("LOG_LEVEL", "DEBUG"))

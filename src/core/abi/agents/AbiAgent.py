@@ -12,7 +12,9 @@ from langchain_core.tools import tool
 from pydantic import SecretStr
 
 NAME = "Abi"
-AVATAR_URL = "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+AVATAR_URL = (
+    "https://naasai-public.s3.eu-west-3.amazonaws.com/abi-demo/ontology_ABI.png"
+)
 DESCRIPTION = "Coordinates and manages specialized agents."
 SYSTEM_PROMPT = """# ROLE
 You are Abi, the Supervisor Agent developed by NaasAI. 
@@ -131,20 +133,23 @@ SUGGESTIONS: list = [
     },
 ]
 
+
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     from langchain_openai import ChatOpenAI
     from src import secret
-    
+
     # Define model based on AI_MODE
     ai_mode = secret.get("AI_MODE")  # Default to cloud if not set
     if ai_mode == "cloud":
         from src.core.abi.models.gpt_4_1 import model as cloud_model
+
         selected_model = cloud_model.model
     if ai_mode == "local":
         from src.core.abi.models.qwen3_8b import model as local_model
+
         selected_model = local_model.model
     elif ai_mode == "airgap":
         # Gemma does not handle tool calling so we are moving to qwen3
@@ -170,13 +175,15 @@ def create_agent(
 [Open Explorer](http://localhost:7878/explorer/)
 
 You can browse the data and run queries there."""
+
     tools.append(open_knowledge_graph_explorer)
 
     # Get tools
     from src.core.templatablesparqlquery import get_tools
+
     agent_recommendation_tools = [
         "find_business_proposal_agents",
-        "find_coding_agents", 
+        "find_coding_agents",
         "find_math_agents",
         "find_best_value_agents",
         "find_fastest_agents",
@@ -184,101 +191,267 @@ You can browse the data and run queries there."""
     ]
     tools.extend(get_tools(agent_recommendation_tools))
 
-    shared_state = agent_shared_state or AgentSharedState(thread_id="0", supervisor_agent=NAME)
+    shared_state = agent_shared_state or AgentSharedState(
+        thread_id="0", supervisor_agent=NAME
+    )
 
     from queue import Queue
+
     agent_queue: Queue = Queue()
 
     # Define agents - all agents are now loaded automatically during module loading
     agents: list = []
     from src.__modules__ import get_modules
+
     modules = get_modules()
     for module in modules:
         logger.debug(f"Getting agents from module: {module.module_import_path}")
-        if hasattr(module, 'agents'):
+        if hasattr(module, "agents"):
             for agent in module.agents:
-                if agent is not None and agent.name != "Abi" and not agent.name.endswith("Research"): #exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
+                if (
+                    agent is not None
+                    and agent.name != "Abi"
+                    and not agent.name.endswith("Research")
+                ):  # exclude ChatGPT and Perplexity Research Agents NOT working properly with supervisor
                     logger.debug(f"Adding agent: {agent.name}")
-                    agents.append(agent.duplicate(agent_queue, agent_shared_state=shared_state))
+                    agents.append(
+                        agent.duplicate(agent_queue, agent_shared_state=shared_state)
+                    )
                     # agents.append(agent)
     logger.debug(f"Agents: {agents}")
 
     # Define intents
     intents: list = [
         # Service opening intents - simple RAW responses
-        Intent(intent_type=IntentType.RAW, intent_value="open oxigraph", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
-        Intent(intent_type=IntentType.RAW, intent_value="open oxigraph server", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
-        Intent(intent_type=IntentType.RAW, intent_value="open knowledge graph", intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates"),
-        Intent(intent_type=IntentType.RAW, intent_value="open yasgui", intent_target="🚀 **YasGUI SPARQL Editor**\n\n[Open YasGUI](http://localhost:3000)\n\nFull-featured SPARQL editor with syntax highlighting"),
-        Intent(intent_type=IntentType.RAW, intent_value="open sparql editor", intent_target="🚀 **YasGUI SPARQL Editor**\n\n[Open YasGUI](http://localhost:3000)\n\nFull-featured SPARQL editor with syntax highlighting"),
-        Intent(intent_type=IntentType.RAW, intent_value="open dagster", intent_target="🚀 **Dagster Orchestration UI**\n\n[Open Dagster](http://localhost:3001)\n\nData pipeline orchestration and monitoring"),
-        Intent(intent_type=IntentType.RAW, intent_value="open dagster ui", intent_target="🚀 **Dagster Orchestration UI**\n\n[Open Dagster](http://localhost:3001)\n\nData pipeline orchestration and monitoring"),
-        Intent(intent_type=IntentType.RAW, intent_value="open orchestration", intent_target="🚀 **Dagster Orchestration UI**\n\n[Open Dagster](http://localhost:3001)\n\nData pipeline orchestration and monitoring"),
-        Intent(intent_type=IntentType.RAW, intent_value="show services", intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console"),
-        Intent(intent_type=IntentType.RAW, intent_value="list services", intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console"),
-        
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open oxigraph",
+            intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open oxigraph server",
+            intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open knowledge graph",
+            intent_target="🚀 **Oxigraph Knowledge Graph Explorer**\n\n[Open Explorer](http://localhost:7878/explorer/)\n\nFeatures: Dashboard, SPARQL editor, query templates",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open yasgui",
+            intent_target="🚀 **YasGUI SPARQL Editor**\n\n[Open YasGUI](http://localhost:3000)\n\nFull-featured SPARQL editor with syntax highlighting",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open sparql editor",
+            intent_target="🚀 **YasGUI SPARQL Editor**\n\n[Open YasGUI](http://localhost:3000)\n\nFull-featured SPARQL editor with syntax highlighting",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open dagster",
+            intent_target="🚀 **Dagster Orchestration UI**\n\n[Open Dagster](http://localhost:3001)\n\nData pipeline orchestration and monitoring",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open dagster ui",
+            intent_target="🚀 **Dagster Orchestration UI**\n\n[Open Dagster](http://localhost:3001)\n\nData pipeline orchestration and monitoring",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open orchestration",
+            intent_target="🚀 **Dagster Orchestration UI**\n\n[Open Dagster](http://localhost:3001)\n\nData pipeline orchestration and monitoring",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="show services",
+            intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="list services",
+            intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console",
+        ),
         # Additional service opening variations
-        Intent(intent_type=IntentType.RAW, intent_value="launch oxigraph", intent_target="🚀 Opening Oxigraph Knowledge Graph Explorer at http://localhost:7878/explorer/"),
-        Intent(intent_type=IntentType.RAW, intent_value="start oxigraph", intent_target="🚀 Opening Oxigraph Knowledge Graph Explorer at http://localhost:7878/explorer/"),
-        Intent(intent_type=IntentType.RAW, intent_value="launch yasgui", intent_target="🚀 Opening YasGUI SPARQL Editor at http://localhost:3000"),
-        Intent(intent_type=IntentType.RAW, intent_value="start yasgui", intent_target="🚀 Opening YasGUI SPARQL Editor at http://localhost:3000"),
-        Intent(intent_type=IntentType.RAW, intent_value="launch dagster", intent_target="🚀 Opening Dagster Orchestration UI at http://localhost:3001"),
-        Intent(intent_type=IntentType.RAW, intent_value="start dagster", intent_target="🚀 Opening Dagster Orchestration UI at http://localhost:3001"),
-        Intent(intent_type=IntentType.RAW, intent_value="what services are running", intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console"),
-        Intent(intent_type=IntentType.RAW, intent_value="what services are available", intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console"),
-        
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="launch oxigraph",
+            intent_target="🚀 Opening Oxigraph Knowledge Graph Explorer at http://localhost:7878/explorer/",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="start oxigraph",
+            intent_target="🚀 Opening Oxigraph Knowledge Graph Explorer at http://localhost:7878/explorer/",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="launch yasgui",
+            intent_target="🚀 Opening YasGUI SPARQL Editor at http://localhost:3000",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="start yasgui",
+            intent_target="🚀 Opening YasGUI SPARQL Editor at http://localhost:3000",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="launch dagster",
+            intent_target="🚀 Opening Dagster Orchestration UI at http://localhost:3001",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="start dagster",
+            intent_target="🚀 Opening Dagster Orchestration UI at http://localhost:3001",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="what services are running",
+            intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="what services are available",
+            intent_target="✅ **ABI Services Available:**\n\n**Core Services:**\n• **Oxigraph**: http://localhost:7878\n• **YasGUI**: http://localhost:3000\n• **PostgreSQL**: localhost:5432\n• **Dagster**: http://localhost:3001\n\n**Admin Tools:**\n• `make oxigraph-admin` - Terminal KG management\n• `make sparql-terminal` - Interactive SPARQL console",
+        ),
         # Oxigraph Admin specific intents - simple RAW responses
-        Intent(intent_type=IntentType.RAW, intent_value="open oxigraph admin", intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control"),
-        Intent(intent_type=IntentType.RAW, intent_value="open sparql terminal", intent_target="💻 **SPARQL Terminal**\n\nTo launch the interactive SPARQL console:\n```\nmake sparql-terminal\n```\n\nDirect command-line SPARQL queries"),
-        Intent(intent_type=IntentType.RAW, intent_value="oxigraph admin", intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control"),
-        Intent(intent_type=IntentType.RAW, intent_value="sparql terminal", intent_target="💻 **SPARQL Terminal**\n\nTo launch the interactive SPARQL console:\n```\nmake sparql-terminal\n```\n\nDirect command-line SPARQL queries"),
-        Intent(intent_type=IntentType.RAW, intent_value="knowledge graph admin", intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control"),
-        Intent(intent_type=IntentType.RAW, intent_value="kg admin", intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control"),
-        
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open oxigraph admin",
+            intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="open sparql terminal",
+            intent_target="💻 **SPARQL Terminal**\n\nTo launch the interactive SPARQL console:\n```\nmake sparql-terminal\n```\n\nDirect command-line SPARQL queries",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="oxigraph admin",
+            intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="sparql terminal",
+            intent_target="💻 **SPARQL Terminal**\n\nTo launch the interactive SPARQL console:\n```\nmake sparql-terminal\n```\n\nDirect command-line SPARQL queries",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="knowledge graph admin",
+            intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control",
+        ),
+        Intent(
+            intent_type=IntentType.RAW,
+            intent_value="kg admin",
+            intent_target="🔧 **Oxigraph Admin**\n\nTo launch the terminal admin interface:\n```\nmake oxigraph-admin\n```\n\nFeatures: KG statistics, query templates, service control",
+        ),
         # Knowledge Graph Explorer intents
-        Intent(intent_type=IntentType.TOOL, intent_value="show knowledge graph explorer", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="semantic knowledge graph", intent_target="open_knowledge_graph_explorer"), 
-        Intent(intent_type=IntentType.TOOL, intent_value="show the data", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="make a sparql query", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explore the database", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="knowledge graph", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="sparql", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explore ontology", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="browse entities", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="voir ton kg", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="voir le graphe", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="explorer les données", intent_target="open_knowledge_graph_explorer"),
-        Intent(intent_type=IntentType.TOOL, intent_value="base de données sémantique", intent_target="open_knowledge_graph_explorer"),
-
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="show knowledge graph explorer",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="semantic knowledge graph",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="show the data",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="make a sparql query",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="explore the database",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="knowledge graph",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="sparql",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="explore ontology",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="browse entities",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="voir ton kg",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="voir le graphe",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="explorer les données",
+            intent_target="open_knowledge_graph_explorer",
+        ),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="base de données sémantique",
+            intent_target="open_knowledge_graph_explorer",
+        ),
         # Time tool
-        Intent(intent_type=IntentType.TOOL, intent_value="what time is it", intent_target="get_time"),
+        Intent(
+            intent_type=IntentType.TOOL,
+            intent_value="what time is it",
+            intent_target="get_time",
+        ),
     ]
-    
+
     # Set configuration
     if agent_configuration is None:
         agent_configuration = AgentConfiguration(
-            system_prompt=SYSTEM_PROMPT.replace("[AGENTS_LIST]", "\n".join([f"- {agent.name}: {agent.description}" for agent in agents])),
+            system_prompt=SYSTEM_PROMPT.replace(
+                "[AGENTS_LIST]",
+                "\n".join([f"- {agent.name}: {agent.description}" for agent in agents]),
+            ),
         )
 
     # Add intents for each agent (using agent names directly to avoid recursion)
     for agent in agents:
         logger.debug(f"Adding intents for agent: {agent.name}")
         # Add default intents to chat with any agent
-        intents.append(Intent(
-            intent_type=IntentType.AGENT,
-            intent_value=f"Chat with {agent.name} Agent",
-            intent_target=agent.name
-        ))
-                
-        if hasattr(agent, 'intents'):
+        intents.append(
+            Intent(
+                intent_type=IntentType.AGENT,
+                intent_value=f"Chat with {agent.name} Agent",
+                intent_target=agent.name,
+            )
+        )
+
+        if hasattr(agent, "intents"):
             for intent in agent.intents:
-                if intent.intent_scope is not None and intent.intent_scope == IntentScope.DIRECT:
+                if (
+                    intent.intent_scope is not None
+                    and intent.intent_scope == IntentScope.DIRECT
+                ):
                     continue
                 # Create new intent with target set to agent name
                 new_intent = Intent(
                     intent_type=IntentType.AGENT,
                     intent_value=intent.intent_value,
-                    intent_target=agent.name
+                    intent_target=agent.name,
                 )
                 intents.append(new_intent)
     logger.debug(f"Intents: {intents}")

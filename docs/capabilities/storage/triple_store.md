@@ -202,7 +202,7 @@ Adapter for local file system storage of RDF triples.
 
 - **Initialization**: `TripleStoreFactory.TripleStoreServiceFilesystem(store_path: str)`
 
-#### Naas Adapter (`TripleStoreService__SecondaryAdaptor__NaasStorage`)
+#### Naas Adapter (`TripleStoreService__SecondaryAdaptor__ObjectStorage`)
 
 Adapter for using Naas-managed cloud storage for RDF triples.
 

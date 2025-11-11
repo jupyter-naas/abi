@@ -1,21 +1,15 @@
-from abi.services.triple_store.TripleStoreService import TripleStoreService
-from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
-    TripleStoreService__SecondaryAdaptor__NaasStorage,
-)
+import os
+
+from abi.services.object_storage.ObjectStorageFactory import ObjectStorageFactory
+from abi.services.triple_store.adaptors.secondary.AWSNeptune import AWSNeptuneSSHTunnel
+from abi.services.triple_store.adaptors.secondary.Oxigraph import Oxigraph
 from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
     TripleStoreService__SecondaryAdaptor__Filesystem,
 )
-from abi.services.object_storage.ObjectStorageFactory import (
-    ObjectStorageFactory,
+from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
+    TripleStoreService__SecondaryAdaptor__ObjectStorage,
 )
-from abi.services.triple_store.adaptors.secondary.AWSNeptune import (
-    AWSNeptuneSSHTunnel,
-)
-from abi.services.triple_store.adaptors.secondary.Oxigraph import (
-    Oxigraph,
-)
-
-import os
+from abi.services.triple_store.TripleStoreService import TripleStoreService
 
 
 class TripleStoreFactory:
@@ -44,7 +38,7 @@ class TripleStoreFactory:
             base_prefix=base_prefix,
         )
         return TripleStoreService(
-            TripleStoreService__SecondaryAdaptor__NaasStorage(object_service)
+            TripleStoreService__SecondaryAdaptor__ObjectStorage(object_service)
         )
 
     @staticmethod
@@ -110,7 +104,7 @@ class TripleStoreFactory:
         """
         if oxigraph_url is None:
             oxigraph_url = os.environ.get("OXIGRAPH_URL", "http://localhost:7878")
-        
+
         return TripleStoreService(
             Oxigraph(
                 oxigraph_url=oxigraph_url,
