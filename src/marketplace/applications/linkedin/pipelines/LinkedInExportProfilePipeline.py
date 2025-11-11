@@ -20,7 +20,7 @@ from src.marketplace.applications.linkedin.integrations.LinkedInExportIntegratio
     LinkedInExportIntegrationConfiguration
 )
 import pandas as pd
-
+from src.utils.SPARQL import results_to_list
 
 LINKEDIN = Namespace("http://ontology.naas.ai/abi/linkedin/")
 DATA_SOURCE = ABI["DataSource"]
@@ -214,9 +214,9 @@ class LinkedInExportProfilePipeline(Pipeline):
             <{linkedin_profile_page_uri}> abi:isLinkedInPageOf ?personUri .
         }}
         """
-        existing_person_uris = list(self.__configuration.triple_store.query(sparql_query))
+        existing_person_uris = results_to_list(self.__configuration.triple_store.query(sparql_query))
         if existing_person_uris:
-            return existing_person_uris[0][0] if isinstance(existing_person_uris[0], (list, tuple)) else existing_person_uris[0]
+            return URIRef(existing_person_uris[0]["personUri"])
         return None
 
     def run(self, parameters: PipelineParameters) -> Graph:
@@ -279,7 +279,7 @@ class LinkedInExportProfilePipeline(Pipeline):
                 backing_datasource_component_uri=row_uri,
             )
 
-            logger.debug(f"Step 3.2: Adding person to the graph")
+            logger.debug("Step 3.2: Adding person to the graph")
             graph, person_uri = self.add_person(
                  graph=graph,
                  linkedin_profile_page_uri=linkedin_profile_page_uri,

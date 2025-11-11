@@ -107,7 +107,7 @@ class LinkedInExportIntegration(Integration):
             "file_modified_at": file_modified_at,
         }
 
-    def list_files_and_folders(self, recursive: bool = True) -> Dict[str, List[str]]:
+    def list_files_and_folders(self, recursive: bool = True) -> Dict:
         """List all files and folders in a directory.
         
         Args:
@@ -243,7 +243,6 @@ def as_tools(configuration: LinkedInExportIntegrationConfiguration):
     """Convert LinkedIn export integration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
-    from typing import Annotated
 
     integration = LinkedInExportIntegration(configuration)
 

@@ -24,6 +24,7 @@ from src.marketplace.applications.linkedin.pipelines.LinkedInExportProfilePipeli
     LinkedInExportProfilePipelineConfiguration,
     LinkedInExportProfilePipelineParameters,
 )
+from src.utils.SPARQL import results_to_list
 
 
 LINKEDIN = Namespace("http://ontology.naas.ai/abi/linkedin/")
@@ -98,14 +99,9 @@ class LinkedInExportConnectionsPipeline(Pipeline):
             ?personUri rdfs:label ?personName .
         }}
         """
-        results = list(self.__configuration.triple_store.query(sparql_query))
+        results = results_to_list(self.__configuration.triple_store.query(sparql_query))
         if results:
-            val = results[0]
-            # Defensive: flatten any types (row could be tuple, list, or a dict-like)
-            if isinstance(val, (list, tuple)) and len(val) >= 2:
-                return val[0], val[1]
-            elif hasattr(val, "__getitem__") and 0 in val and 1 in val:
-                return val[0], val[1]
+            return URIRef(results[0]["personUri"]), results[0]["personName"]
         return None, None
 
     def generate_graph_date(self, date: datetime | str, date_format: str = "%Y-%m-%dT%H:%M:%S.%fZ") -> tuple[URIRef, Graph]:
@@ -130,11 +126,9 @@ class LinkedInExportConnectionsPipeline(Pipeline):
         # Step 0: Run LinkedInExportProfilePipeline to get person URI and name
         logger.debug("Step 0: Running LinkedInExportProfilePipeline to get person URI and name")
         graph = self.__linkedin_export_profile_pipeline.run(LinkedInExportProfilePipelineParameters(linkedin_public_url=parameters.linkedin_public_url))
-        res = self.get_person_uri_and_name_from_linkedin_profile_page_public_url(parameters.linkedin_public_url)
-        if res is not None:
-            initial_person_uri, initial_person_name = res
-        else:
-            initial_person_uri, initial_person_name = None, None
+        initial_person_uri, initial_person_name = self.get_person_uri_and_name_from_linkedin_profile_page_public_url(parameters.linkedin_public_url)
+        if initial_person_uri is None or initial_person_name is None:
+            raise ValueError(f"Could not get person URI and name from LinkedIn profile page public URL: '{parameters.linkedin_public_url}'")
 
         # Step 1: Read CSV file
         logger.debug(f"Step 1: Reading CSV file '{parameters.file_name}'")
@@ -196,7 +190,7 @@ class LinkedInExportConnectionsPipeline(Pipeline):
             )
 
             # Add person to the graph
-            logger.debug(f"Step 3.2: Adding person to the graph")
+            logger.debug("Step 3.2: Adding person to the graph")
             person_name = f"{row.get('First Name', 'UNKNOWN').strip()} {row.get('Last Name', 'UNKNOWN').strip()}"
             graph, person_uri = self.__linkedin_export_profile_pipeline.add_person(
                 graph=graph, 
@@ -300,10 +294,10 @@ class LinkedInExportConnectionsPipeline(Pipeline):
                 graph.add((act_of_connection_uri, RDFS.label, Literal(act_of_connection_label)))
                 graph.add((act_of_connection_uri, ABI.unique_id, Literal(act_of_connection_hash)))
                 graph.add((act_of_connection_uri, ABI.hasBackingDataSource, row_uri))
-                date_uri, graph_date = self.generate_graph_date(connected_on_date)
-                graph.add((act_of_connection_uri, ABI.connectedOn, date_uri))
                 graph.add((act_of_connection_uri, BFO.BFO_0000057, person_uri))
                 graph.add((act_of_connection_uri, BFO.BFO_0000057, initial_person_uri))
+                date_uri, graph_date = self.generate_graph_date(connected_on_date)
+                graph.add((act_of_connection_uri, ABI.connectedOn, date_uri))
                 graph += graph_date
 
         # Add triples to triple store
