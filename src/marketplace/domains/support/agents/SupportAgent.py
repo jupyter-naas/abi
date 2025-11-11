@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
@@ -7,9 +6,7 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
 )
 from typing import Optional
-from src import secret
-from pydantic import SecretStr
-from src import config
+from src import secret, config
 
 NAME = "Support"
 MODEL = "gpt-4.1-mini"
@@ -52,8 +49,8 @@ You are working with the GitHub repository: {config.github_repository}, {config.
     - title: based on the request in markdown format.
     - description: based on the request in markdown format.
     - priority: use the `githubgraphql_list_priorities` tool to get the priority's information and assign the appropriate priority to the ticket. If not specified, assign medium priority.
-    - assignees (optional): if specified in brief, use the `github_list_repository_contributors` tool to get the contributor's information and add it to the assignee list if it matches a contributor.
-    - repository (optional): if specified in brief, use the `github_list_organization_repositories` tool to get the repository's information and assign the appropriate repository to the ticket. If not specified, use the default repository.
+    - assignees (): if specified in brief, use the `github_list_repository_contributors` tool to get the contributor's information and add it to the assignee list if it matches a contributor.
+    - repository (): if specified in brief, use the `github_list_organization_repositories` tool to get the repository's information and assign the appropriate repository to the ticket. If not specified, use the default repository.
     ```
     ### Repository (change if specified in brief)
     {config.github_repository} (default)
@@ -101,11 +98,7 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> IntentAgent:
     # Define model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    from src.core.chatgpt.models.gpt_4_1_mini import model
 
     # Define tools
     tools: list = []
