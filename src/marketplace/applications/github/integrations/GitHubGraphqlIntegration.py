@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, Any, Optional, Union, List
 from datetime import datetime, timedelta
+from abi import logger
 
 
 @dataclass
@@ -73,9 +74,8 @@ class GitHubGraphqlIntegration(Integration):
 
             return result
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(
-                f"Github GraphQL API request failed: {str(e)}"
-            )
+            logger.error(f"Github GraphQL API request failed: {str(e)}")
+            return {}
 
     def get_project_node_id(self, organization: str, number: int) -> Dict[str, Any]:
         """Get the node ID of an organization project.
