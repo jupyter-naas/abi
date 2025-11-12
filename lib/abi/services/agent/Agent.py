@@ -519,11 +519,13 @@ class Agent(Expose):
             list_tools_available, 
             list_subagents_available, 
             list_intents_available,
-            get_current_active_agent,
-            get_supervisor_agent,
         ]
         if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
+
+        if self.state.supervisor_agent is not None or len(self._agents) > 0:
+            tools.append(get_current_active_agent)
+            tools.append(get_supervisor_agent)
             
         if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev":
             tools.append(read_makefile)
@@ -740,10 +742,12 @@ AGENT SYSTEM PROMPT:
             
         if "CURRENT_DATE" not in self._system_prompt:
             from datetime import datetime
-            self._system_prompt += f"\n\n\nCURRENT_DATE: {datetime.now().strftime('%Y-%m-%d')}\n"
+            current_date_str = f"CURRENT_DATE: The current date is {datetime.now().strftime('%Y-%m-%d')}\n"
+            self._system_prompt = self._system_prompt + "\n" + current_date_str
             self.set_system_prompt(self._system_prompt)
+            return Command(goto="current_active_agent")
 
-        # logger.debug(f"System prompt: {self._system_prompt}")
+        logger.debug(f"💬 System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:
@@ -886,17 +890,13 @@ AGENT SYSTEM PROMPT:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
                 
             try:
-                            
-                logger.debug(f"tool_call: {tool_call}")
-                logger.debug(f"tool_input_fields: {tool_input_fields}")
-                logger.debug(f"args: {args}")
+                logger.debug(f"TOOL CALL ARGS: {args}")
                 tool_response = tool_.invoke(args)
                 called_tools.append(tool_)
-
+                logger.debug(f"TOOL CALL RESPONSE: {tool_response}, TYPE: {type(tool_response)}")
 
                 if isinstance(tool_response, ToolMessage):
                     results.append(Command(update={"messages": [tool_response]}))
-
                 # handle tools that return Command directly
                 elif isinstance(tool_response, Command):
                     results.append(tool_response)
@@ -923,13 +923,17 @@ AGENT SYSTEM PROMPT:
                 break
 
         # If the last response is a ToolMessage, we want the model to interpret it.
-        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_"):
+        if (
+            isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and 
+            not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_")
+        ):
             if return_direct is False:
                 logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
                 results.append(Command(goto="call_model"))
             else:
                 logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
                 last_message = pd.get(results[-1], 'update.messages[-1]', None)
+                logger.debug(f"last_message: {last_message}")
                 results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
 
         if (
