@@ -1,4 +1,4 @@
-from typing import Dict, Literal, Union
+from typing import TYPE_CHECKING, Literal, Union
 
 from abi.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
@@ -6,21 +6,14 @@ from abi.engine.engine_configuration.EngineConfiguration_GenericLoader import (
 from abi.engine.engine_configuration.EngineConfiguration_ObjectStorageService import (
     ObjectStorageServiceConfiguration,
 )
-from abi.services.triple_store.adaptors.secondary.AWSNeptune import (
-    AWSNeptune,
-    AWSNeptuneSSHTunnel,
-)
-from abi.services.triple_store.adaptors.secondary.Oxigraph import Oxigraph
-from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
-    TripleStoreService__SecondaryAdaptor__Filesystem,
-)
-from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
-    TripleStoreService__SecondaryAdaptor__ObjectStorage,
-)
 from abi.services.triple_store.TripleStorePorts import ITripleStorePort
 from abi.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
+
+# Only import for type checking, not at runtime
+if TYPE_CHECKING:
+    pass
 
 
 class OxigraphAdapterConfiguration(BaseModel):
@@ -72,23 +65,6 @@ class TripleStoreAdapterConfiguration(GenericLoader):
         | None
     ) = None
 
-    __MAPPING: Dict[
-        Literal[
-            "oxigraph",
-            "aws_neptune_sshtunnel",
-            "aws_neptune",
-            "fs",
-            "object_storage",
-        ],
-        type[ITripleStorePort],
-    ] = {
-        "oxigraph": Oxigraph,
-        "aws_neptune_sshtunnel": AWSNeptuneSSHTunnel,
-        "aws_neptune": AWSNeptune,
-        "fs": TripleStoreService__SecondaryAdaptor__Filesystem,
-        "object_storage": TripleStoreService__SecondaryAdaptor__ObjectStorage,
-    }
-
     @model_validator(mode="after")
     def validate_adapter(self) -> Self:
         if self.adapter != "custom":
@@ -100,12 +76,45 @@ class TripleStoreAdapterConfiguration(GenericLoader):
 
     def load(self) -> ITripleStorePort:
         if self.adapter != "custom":
-            if self.adapter not in self.__MAPPING:
-                raise ValueError(f"Adapter {self.adapter} not supported")
-
             assert self.config is not None, "config is required"
 
-            return self.__MAPPING[self.adapter](**self.config.model_dump())
+            # Lazy import: only import the adapter that's actually configured
+            if self.adapter == "oxigraph":
+                from abi.services.triple_store.adaptors.secondary.Oxigraph import (
+                    Oxigraph,
+                )
+
+                return Oxigraph(**self.config.model_dump())
+            elif self.adapter == "aws_neptune":
+                from abi.services.triple_store.adaptors.secondary.AWSNeptune import (
+                    AWSNeptune,
+                )
+
+                return AWSNeptune(**self.config.model_dump())
+            elif self.adapter == "aws_neptune_sshtunnel":
+                from abi.services.triple_store.adaptors.secondary.AWSNeptune import (
+                    AWSNeptuneSSHTunnel,
+                )
+
+                return AWSNeptuneSSHTunnel(**self.config.model_dump())
+            elif self.adapter == "fs":
+                from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__Filesystem import (
+                    TripleStoreService__SecondaryAdaptor__Filesystem,
+                )
+
+                return TripleStoreService__SecondaryAdaptor__Filesystem(
+                    **self.config.model_dump()
+                )
+            elif self.adapter == "object_storage":
+                from abi.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__ObjectStorage import (
+                    TripleStoreService__SecondaryAdaptor__ObjectStorage,
+                )
+
+                return TripleStoreService__SecondaryAdaptor__ObjectStorage(
+                    **self.config.model_dump()
+                )
+            else:
+                raise ValueError(f"Adapter {self.adapter} not supported")
         else:
             return super().load()
 

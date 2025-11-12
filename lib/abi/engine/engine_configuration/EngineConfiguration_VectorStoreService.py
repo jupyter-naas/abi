@@ -1,9 +1,8 @@
-from typing import Dict, Literal
+from typing import Literal
 
 from abi.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
 )
-from abi.services.vector_store.adapters.QdrantAdapter import QdrantAdapter
 from abi.services.vector_store.IVectorStorePort import IVectorStorePort
 from abi.services.vector_store.VectorStoreService import VectorStoreService
 from pydantic import BaseModel, model_validator
@@ -21,10 +20,6 @@ class VectorStoreAdapterConfiguration(GenericLoader):
     adapter: Literal["qdrant", "custom"]
     config: dict | None = None
 
-    __MAPPING: Dict[Literal["qdrant"], type[IVectorStorePort]] = {
-        "qdrant": QdrantAdapter,
-    }
-
     @model_validator(mode="after")
     def validate_adapter(self) -> "VectorStoreAdapterConfiguration":
         if self.adapter != "custom":
@@ -40,7 +35,15 @@ class VectorStoreAdapterConfiguration(GenericLoader):
                 "config is required if adapter is not custom"
             )
 
-            return self.__MAPPING[self.adapter](**self.config)
+            # Lazy import: only import when actually loading
+            if self.adapter == "qdrant":
+                from abi.services.vector_store.adapters.QdrantAdapter import (
+                    QdrantAdapter,
+                )
+
+                return QdrantAdapter(**self.config)
+            else:
+                raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
             return super().load()
 
