@@ -126,8 +126,8 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
 
     class AskQuestionSchema(BaseModel):
         question: str = Field(..., description="The question to ask Perplexity AI")
-        user_location: Annotated[str, Field(..., description="The user location to use for the search")] = "FR"
-        search_context_size: Annotated[str, Field(..., description="The search context size to use for the search")] = "medium"
+        user_location: Optional[Annotated[str, Field(..., description="The user location to use for the search")]] = "FR"
+        search_context_size: Optional[Annotated[str, Field(..., description="The search context size to use for the search", pattern="^(low|medium|high)$")]] = "medium"
 
     return [
         StructuredTool(
@@ -147,7 +147,7 @@ def as_tools(configuration: PerplexityIntegrationConfiguration):
         StructuredTool(
             name="perplexity_advanced_search",
             description="Advanced search model designed for complex queries, delivering deeper content understanding with enhanced search result accuracy and 2x more search results than standard Sonar with high context size",
-            func=lambda question, user_location, search_context_size: integration.search_web(question=question, user_location=user_location, search_context_size="high", model="sonar-pro-search"),
+            func=lambda question, user_location, search_context_size: integration.search_web(question=question, user_location=user_location, search_context_size=search_context_size, model="sonar-pro-search"),
             args_schema=AskQuestionSchema,
             return_direct=True
         ),
