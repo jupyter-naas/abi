@@ -16,6 +16,8 @@ class EngineModuleLoader:
 
     __modules: Dict[str, BaseModule] = {}
 
+    __module_dependencies: Dict[str, ModuleDependencies] | None = None
+
     def __init__(self, configuration: EngineConfiguration):
         self.__configuration = configuration
 
@@ -30,25 +32,6 @@ class EngineModuleLoader:
     @property
     def ordered_modules(self) -> List[BaseModule]:
         return [self.__modules[module_name] for module_name in self.__module_load_order]
-
-    def __get_module_dependencies(self) -> Dict[str, ModuleDependencies]:
-        module_dependencies: Dict[str, ModuleDependencies] = {}
-        for module_config in self.__configuration.modules:
-            if module_config.enabled:
-                if module_config.module:
-                    module = importlib.import_module(module_config.module)
-                    assert hasattr(module, "ABIModule"), (
-                        f"Module {module_config.module} does not have a ABIModule class"
-                    )
-                    assert hasattr(module.ABIModule, "get_dependencies"), (
-                        f"Module {module_config.module} does not have a get_dependencies method"
-                    )
-                    dependencies = module.ABIModule.get_dependencies()
-                    assert isinstance(dependencies, ModuleDependencies), (
-                        f"Module {module_config.module} get_dependencies method must return a ModuleDependencies object"
-                    )
-                    module_dependencies[module_config.module] = dependencies
-        return module_dependencies
 
     def __topological_sort(self, dependencies: Dict[str, List[str]]) -> List[str]:
         """
@@ -98,7 +81,7 @@ class EngineModuleLoader:
                 "Cannot determine load order."
             )
 
-        logger.info(f"Module load order: {sorted_list}")
+        logger.debug(f"Module load order: {sorted_list}")
         return sorted_list
 
     def module_dependencies_recursive(
@@ -126,38 +109,100 @@ class EngineModuleLoader:
             )
         return list(set(dependencies))
 
+    def get_module_dependencies(
+        self, module_name: str, scanned_modules: List[str] = []
+    ) -> Dict[str, ModuleDependencies]:
+        dependencies: Dict[str, ModuleDependencies] = {}
+        logger.debug(f"Getting module dependencies for {module_name}")
+        if module_name in scanned_modules:
+            raise ValueError(
+                f"Circular dependency detected: {scanned_modules + [module_name]}"
+            )
+
+        module_config = next(
+            (m for m in self.__configuration.modules if m.module == module_name),
+            None,
+        )
+
+        if module_config is None:
+            raise ValueError(f"Module {module_name} not found in configuration")
+
+        module = importlib.import_module(module_config.module)
+        assert hasattr(module, "ABIModule"), (
+            f"Module {module_config.module} does not have a ABIModule class"
+        )
+        assert hasattr(module.ABIModule, "get_dependencies"), (
+            f"Module {module_config.module} does not have a get_dependencies method"
+        )
+        dependencies[module_name] = module.ABIModule.get_dependencies()
+        assert isinstance(dependencies[module_name], ModuleDependencies), (
+            f"Module {module_config.module} get_dependencies method must return a ModuleDependencies object"
+        )
+
+        # We recursively get the dependencies of the module.
+        for module_dependency in dependencies[module_name].modules:
+            submodule_dependencies = self.get_module_dependencies(
+                module_dependency, scanned_modules + [module_name]
+            )
+            dependencies.update(submodule_dependencies)
+
+            # dependencies.modules.extend(submodule_dependencies.modules)
+            # dependencies.services.extend(submodule_dependencies.services)
+
+        # # Make sure we have unique modules and services.
+        # dependencies.modules = list(set(dependencies.modules))
+        # dependencies.services = list(set(dependencies.services))
+
+        logger.debug(f"Module dependencies for {module_name}: {dependencies}")
+
+        return dependencies
+
+    def get_modules_dependencies(
+        self, module_names: List[str] = []
+    ) -> Dict[str, ModuleDependencies]:
+        module_dependencies: Dict[str, ModuleDependencies] = {}
+        for module_config in self.__configuration.modules:
+            # We check if the module is required by the configuration.
+            if (
+                len(module_names) > 0
+                and module_config.module in module_names
+                and not module_config.enabled
+            ):
+                raise ValueError(
+                    f"Module {module_config.module} is not enabled but is required by the configuration"
+                )
+
+            if len(module_names) > 0 and module_config.module not in module_names:
+                continue
+
+            if module_config.enabled:
+                module_dependencies.update(
+                    self.get_module_dependencies(module_config.module)
+                )
+        self.__module_dependencies = module_dependencies
+        return self.__module_dependencies
+
     def load_modules(
         self,
         engine: IEngine,
         module_names: List[str] = [],
     ) -> Dict[str, BaseModule]:
         self.__modules: Dict[str, BaseModule] = {}
-        module_dependencies: Dict[str, ModuleDependencies] = (
-            self.__get_module_dependencies()
-        )
+
+        if self.__module_dependencies is None:
+            # Call this to hydrate the __module_dependencies attribute.
+            self.get_modules_dependencies(module_names)
+
+        logger.debug(f"Module dependencies: {self.__module_dependencies}")
 
         module_load_order = self.__topological_sort(
             {
                 module_name: dependencies.modules
-                for module_name, dependencies in module_dependencies.items()
+                for module_name, dependencies in self.__module_dependencies.items()
             }
         )
 
-        # We run this here because the topological sort is already checking for circular dependencies.
-        # Which sis making things easier for us.
-        if len(module_names) > 0:
-            logger.info(f"Loading engine with only following module: {module_names}")
-            modules_to_load = self.modules_dependencies_recursive(
-                module_names, module_dependencies
-            )
-            logger.info(f"Modules to load: {modules_to_load}")
-            self.__module_load_order = [
-                module_name
-                for module_name in module_load_order
-                if module_name in modules_to_load
-            ]
-        else:
-            self.__module_load_order = module_load_order
+        self.__module_load_order = module_load_order
 
         # We load the modules in the order of the topological sort
         for module_name in self.__module_load_order:
@@ -186,7 +231,7 @@ class EngineModuleLoader:
                     # It will call the constructor of the ABIModule class inside the module.
                     module = module.ABIModule(
                         EngineProxy(
-                            engine, module_name, module_dependencies[module_name]
+                            engine, module_name, self.__module_dependencies[module_name]
                         ),
                         cfg,
                     )

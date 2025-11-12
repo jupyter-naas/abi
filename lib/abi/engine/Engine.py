@@ -35,24 +35,33 @@ class Engine(IEngine):
         self.__engine_service_loader = EngineServiceLoader(self.__configuration)
 
     def load(self, module_names: List[str] = []):
-        logger.info("Loading engine services")
-        self.__services = self.__engine_service_loader.load_services()
-        logger.info("Engine services loaded")
-
-        logger.info("Loading engine modules")
-        self.__modules = self.__engine_module_loader.load_modules(self, module_names)
-        logger.info("Engine modules loaded")
-
-        logger.info("Loading engine ontologies")
-        EngineOntologyLoader.load_ontologies(
-            self.__services.triple_store,
-            self.__engine_module_loader.ordered_modules,
+        module_dependencies = self.__engine_module_loader.get_modules_dependencies(
+            module_names
         )
-        logger.info("Engine ontologies loaded")
 
-        logger.info("Initializing engine")
+        logger.debug("Loading engine services")
+        self.__services = self.__engine_service_loader.load_services(
+            module_dependencies
+        )
+        logger.debug("Engine services loaded")
+
+        logger.debug("Loading engine modules")
+        self.__modules = self.__engine_module_loader.load_modules(self, module_names)
+        logger.debug("Engine modules loaded")
+
+        if self.__services.triple_store_available():
+            logger.debug("Loading engine ontologies")
+            EngineOntologyLoader.load_ontologies(
+                self.__services.triple_store,
+                self.__engine_module_loader.ordered_modules,
+            )
+            logger.debug("Engine ontologies loaded")
+        else:
+            logger.debug("No triple store available, skipping ontology loading")
+
+        logger.debug("Initializing engine")
         self.on_initialized()
-        logger.info("Engine initialized")
+        logger.debug("Engine initialized")
 
     def on_initialized(self):
         for module in self.__modules.values():
@@ -61,5 +70,5 @@ class Engine(IEngine):
 
 if __name__ == "__main__":
     engine = Engine()
-    engine.load()
+    engine.load(module_names=["chatgpt"])
     print("Engine loaded successfully")

@@ -13,17 +13,17 @@ if TYPE_CHECKING:
 
 class IEngine:
     class Services:
-        __object_storage: ObjectStorageService
-        __triple_store: TripleStoreService
-        __vector_store: VectorStoreService
-        __secret: Secret
+        __object_storage: ObjectStorageService | None
+        __triple_store: TripleStoreService | None
+        __vector_store: VectorStoreService | None
+        __secret: Secret | None
 
         def __init__(
             self,
-            object_storage: ObjectStorageService,
-            triple_store: TripleStoreService,
-            vector_store: VectorStoreService,
-            secret: Secret,
+            object_storage: ObjectStorageService | None = None,
+            triple_store: TripleStoreService | None = None,
+            vector_store: VectorStoreService | None = None,
+            secret: Secret | None = None,
         ):
             self.__object_storage = object_storage
             self.__triple_store = triple_store
@@ -32,18 +32,31 @@ class IEngine:
 
         @property
         def object_storage(self) -> ObjectStorageService:
+            assert self.__object_storage is not None, (
+                "Object storage service is not initialized"
+            )
             return self.__object_storage
 
         @property
         def triple_store(self) -> TripleStoreService:
+            assert self.__triple_store is not None, (
+                "Triple store service is not initialized"
+            )
             return self.__triple_store
+
+        def triple_store_available(self) -> bool:
+            return self.__triple_store is not None
 
         @property
         def vector_store(self) -> VectorStoreService:
+            assert self.__vector_store is not None, (
+                "Vector store service is not initialized"
+            )
             return self.__vector_store
 
         @property
         def secret(self) -> Secret:
+            assert self.__secret is not None, "Secret service is not initialized"
             return self.__secret
 
         @property

@@ -30,6 +30,14 @@ class ModuleDependencies:
     def services(self) -> List[type]:
         return self.__services
 
+    @modules.setter
+    def modules(self, modules: List[str]):
+        self.__modules = modules
+
+    @services.setter
+    def services(self, services: List[type]):
+        self.__services = services
+
 
 class ModuleConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
