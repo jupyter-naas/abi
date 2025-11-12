@@ -14,7 +14,6 @@ class ModuleAgentLoader:
         module_root_path = find_class_module_root_path(class_)
 
         agents_path = module_root_path / "agents"
-        print(f"Agents path: {agents_path}")
 
         if os.path.exists(agents_path):
             for file in os.listdir(agents_path):
@@ -32,8 +31,6 @@ class ModuleAgentLoader:
                                 0
                             ]  # This makes sure we only load agents from the same module.
                         ):
-                            print(f"Agent class: {key}")
-
                             if not hasattr(key, "New") and hasattr(
                                 agent_module, "create_agent"
                             ):

@@ -3,7 +3,9 @@ from abi.services.secret.Secret import Secret
 
 
 class ABIModule(BaseModule):
-    dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[Secret])
+    dependencies: ModuleDependencies = ModuleDependencies(
+        modules=["alice"], services=[Secret]
+    )
 
     class Configuration(ModuleConfiguration):
         openai_api_key: str
