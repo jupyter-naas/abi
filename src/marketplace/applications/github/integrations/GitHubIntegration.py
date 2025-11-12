@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import requests
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
+from abi import logger
 
 
 @dataclass
@@ -63,7 +64,8 @@ class GitHubIntegration(Integration):
             response.raise_for_status()
             return response.json() if response.content else []
         except requests.exceptions.RequestException as e:
-            raise IntegrationConnectionError(f"Github API request failed: {str(e)}")
+            logger.error(f"Github API request failed: {str(e)}")
+            return {}
 
     def get_user_details(self, username: str) -> List | Dict:
         """Get detailed information about a specific GitHub user.
