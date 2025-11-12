@@ -1,23 +1,24 @@
-from typing import Dict, List, Literal, Union
+from typing import TYPE_CHECKING, List, Literal, Union
 
 from abi.engine.engine_configuration.EngineConfiguration_GenericLoader import (
     GenericLoader,
 )
-from abi.services.secret.adaptors.secondary.Base64Secret import Base64Secret
-from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
-    DotenvSecretSecondaryAdaptor,
-)
-from abi.services.secret.adaptors.secondary.NaasSecret import NaasSecret
 from abi.services.secret.Secret import Secret
 from abi.services.secret.SecretPorts import ISecretAdapter
 from pydantic import BaseModel
+
+# Only import for type checking, not at runtime
+if TYPE_CHECKING:
+    from abi.services.secret.adaptors.secondary.Base64Secret import Base64Secret
 
 
 class Base64SecretConfiguration(BaseModel):
     secret_adapter: "SecretAdapterConfiguration"
     base64_secret_key: str
 
-    def load(self) -> Base64Secret:
+    def load(self) -> "Base64Secret":
+        from abi.services.secret.adaptors.secondary.Base64Secret import Base64Secret
+
         return Base64Secret(self.secret_adapter.load(), self.base64_secret_key)
 
 
@@ -41,28 +42,33 @@ class SecretAdapterConfiguration(GenericLoader):
         | None
     ) = None
 
-    _MAPPING: Dict[Literal["dotenv", "naas", "base64"], type[ISecretAdapter]] = {
-        "dotenv": DotenvSecretSecondaryAdaptor,
-        "naas": NaasSecret,
-        "base64": Base64Secret,
-    }
-
     def load(self) -> ISecretAdapter:
         if self.adapter != "custom":
             assert self.config is not None, (
                 "config is required if adapter is not custom"
             )
 
+            # Lazy import: only import the adapter that's actually configured
             if self.adapter == "base64":
                 assert isinstance(self.config, Base64SecretConfiguration), (
-                    "config must be a DotenvSecretConfiguration if adapter is dotenv"
+                    "config must be a Base64SecretConfiguration if adapter is base64"
                 )
                 assert hasattr(self.config, "load"), (
                     "config must have a load method if adapter is base64"
                 )
                 return self.config.load()
+            elif self.adapter == "dotenv":
+                from abi.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+                    DotenvSecretSecondaryAdaptor,
+                )
+
+                return DotenvSecretSecondaryAdaptor(**self.config.model_dump())
+            elif self.adapter == "naas":
+                from abi.services.secret.adaptors.secondary.NaasSecret import NaasSecret
+
+                return NaasSecret(**self.config.model_dump())
             else:
-                return self._MAPPING[self.adapter](**self.config.model_dump())
+                raise ValueError(f"Unknown adapter: {self.adapter}")
         else:
             return super().load()
 

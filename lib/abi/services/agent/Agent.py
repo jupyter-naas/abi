@@ -1,65 +1,83 @@
+from __future__ import annotations
+
 # Standard library imports for type hints
-from typing import Callable, Literal, Any, Union, Sequence, Generator, Annotated, Optional, Dict, cast
 import os
-
-# LangChain Core imports for base components
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import (
-    HumanMessage,
-    AnyMessage,
-    BaseMessage,
-    SystemMessage,
-    AIMessage,
-)
-from langchain_core.tools import Tool, StructuredTool, BaseTool
-from langchain_core.runnables import Runnable
-
-# LangGraph imports for workflow and state management
-from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, START
-from langgraph.graph.message import MessagesState
-from langgraph.graph.state import CompiledStateGraph
-
-from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState
-from langchain_core.messages import ToolMessage, ToolCall
-from langgraph.types import Command
-from enum import Enum
-
-# Pydantic imports for schema validation
-from pydantic import BaseModel, Field
-
-from abi.utils.Expose import Expose
+import re
 
 # Dataclass imports for configuration
 from dataclasses import dataclass, field
+from enum import Enum
+from queue import Empty, Queue
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Literal,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
-from fastapi import APIRouter
-from abi.utils.Logger import logger
-from sse_starlette.sse import EventSourceResponse
-
-from queue import Queue, Empty
 import pydash as pd
-import re
+from abi.utils.Expose import Expose
+from abi.utils.Logger import logger
+from langchain_core.tools import BaseTool, StructuredTool, Tool, tool
+
+# Pydantic imports for schema validation (keep - it's already loaded by other modules)
+from pydantic import BaseModel, Field
+
+###
+
+
+# Only import heavy modules for type checking
+if TYPE_CHECKING:
+    from fastapi import APIRouter
+    from langchain_core.language_models import BaseChatModel
+    from langchain_core.runnables import Runnable
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.graph.state import CompiledStateGraph
+    from langgraph.prebuilt import InjectedState
+
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+)
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import START, StateGraph
+from langgraph.graph.message import MessagesState
+from langgraph.types import Command
+from sse_starlette.sse import EventSourceResponse
 
 
 def create_checkpointer() -> BaseCheckpointSaver:
     """Create a checkpointer based on environment configuration.
-    
+
     Returns a PostgreSQL-backed checkpointer if POSTGRES_URL is set,
     otherwise returns an in-memory checkpointer.
     """
     postgres_url = os.getenv("POSTGRES_URL")
-    
+
     if postgres_url:
         try:
+            import time
+
             from langgraph.checkpoint.postgres import PostgresSaver
             from psycopg import Connection
             from psycopg.rows import dict_row
-            import time
-            logger.debug(f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}")
-            
+
+            logger.debug(
+                f"Using PostgreSQL checkpointer for persistent memory: {postgres_url}"
+            )
+
             # Try connection with retries (PostgreSQL might still be starting)
             max_retries = 3
             for attempt in range(max_retries):
@@ -69,40 +87,51 @@ def create_checkpointer() -> BaseCheckpointSaver:
                         postgres_url,
                         autocommit=True,
                         prepare_threshold=0,
-                        row_factory=dict_row
+                        row_factory=dict_row,
                     )
                     checkpointer = PostgresSaver(conn)
-                    
+
                     # Setup tables if they don't exist
                     checkpointer.setup()
                     logger.debug("PostgreSQL checkpointer tables initialized")
-                    
+
                     return checkpointer
-                    
+
                 except Exception as conn_error:
                     if attempt < max_retries - 1:
-                        logger.warning(f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds...")
+                        logger.warning(
+                            f"PostgreSQL connection attempt {attempt + 1} failed, retrying in 2 seconds..."
+                        )
                         time.sleep(2)
                     else:
                         raise conn_error
-                        
+
         except ImportError:
-            logger.error("PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory.")
+            logger.error(
+                "PostgreSQL checkpointer requested but langgraph.checkpoint.postgres not available. Falling back to in-memory."
+            )
         except Exception as e:
             # Provide more helpful error messages
             error_msg = str(e)
             if "nodename nor servname provided" in error_msg:
-                logger.error(f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}")
-                logger.error("Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL")
+                logger.error(
+                    f"PostgreSQL connection failed - cannot resolve hostname. Check if PostgreSQL is running and hostname is correct in POSTGRES_URL: {postgres_url}"
+                )
+                logger.error(
+                    "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
+                )
             else:
                 logger.error(f"Failed to initialize PostgreSQL checkpointer: {e}")
             logger.error("Falling back to in-memory checkpointer")
-        
+
         # Fallback to in-memory checkpointer
         return MemorySaver()
     else:
-        logger.debug("Using in-memory checkpointer (set POSTGRES_URL for persistent memory)")
+        logger.debug(
+            "Using in-memory checkpointer (set POSTGRES_URL for persistent memory)"
+        )
         return MemorySaver()
+
 
 class AgentSharedState:
     _thread_id: str
@@ -110,9 +139,14 @@ class AgentSharedState:
     _supervisor_agent: Optional[str]
     _requesting_help: bool
 
-    def __init__(self, thread_id: str = "1", current_active_agent: Optional[str] = None, supervisor_agent: Optional[str] = None):
+    def __init__(
+        self,
+        thread_id: str = "1",
+        current_active_agent: Optional[str] = None,
+        supervisor_agent: Optional[str] = None,
+    ):
         assert isinstance(thread_id, str)
-        
+
         self._thread_id = thread_id
         self._current_active_agent = current_active_agent
         self._supervisor_agent = supervisor_agent
@@ -124,11 +158,11 @@ class AgentSharedState:
 
     def set_thread_id(self, thread_id: str):
         self._thread_id = thread_id
-    
-    @property 
+
+    @property
     def current_active_agent(self) -> Optional[str]:
         return self._current_active_agent
-    
+
     def set_current_active_agent(self, agent_name: Optional[str]):
         self._current_active_agent = agent_name
 
@@ -138,13 +172,14 @@ class AgentSharedState:
 
     def set_supervisor_agent(self, agent_name: Optional[str]):
         self._supervisor_agent = agent_name
-        
+
     @property
     def requesting_help(self) -> bool:
         return self._requesting_help
-    
+
     def set_requesting_help(self, requesting_help: bool):
         self._requesting_help = requesting_help
+
 
 @dataclass
 class Event:
@@ -160,9 +195,11 @@ class ToolUsageEvent(Event):
 class ToolResponseEvent(Event):
     pass
 
+
 @dataclass
 class AIMessageEvent(Event):
     agent_name: str
+
 
 @dataclass
 class FinalStateEvent(Event):
@@ -183,6 +220,7 @@ class AgentConfiguration:
     system_prompt: str = field(
         default="You are a helpful assistant. If a tool you used did not return the result you wanted, look for another tool that might be able to help you. If you don't find a suitable tool. Just output 'I DONT KNOW'"
     )
+
 
 class Agent(Expose):
     """An Agent class that orchestrates interactions between a language model and tools.
@@ -298,7 +336,9 @@ class Agent(Expose):
 
         # We store the provided tools in __structured_tools because we will need to know which ones are provided by the user and which one are agents.
         # This is needed when we duplicate the agent.
-        _structured_tools, _agents = self.prepare_tools(cast(list[Union[Tool, BaseTool, "Agent"]], tools), agents)
+        _structured_tools, _agents = self.prepare_tools(
+            cast(list[Union[Tool, BaseTool, "Agent"]], tools), agents
+        )
         self._structured_tools = _structured_tools
         self._agents = _agents
 
@@ -318,29 +358,32 @@ class Agent(Expose):
         self._chat_model = chat_model
         if hasattr(chat_model, "output_version"):
             self._chat_model_output_version = chat_model.output_version
-            
+
         self._chat_model_with_tools = chat_model
         if self._tools or self._native_tools:
             tools_to_bind: list[Union[Tool, BaseTool, Dict]] = []
             tools_to_bind.extend(self._structured_tools)
             tools_to_bind.extend(self._native_tools)
-            
+
             # Test if the chat model can bind tools by trying with a default tool first
             if self._can_bind_tools(chat_model):
                 self._chat_model_with_tools = chat_model.bind_tools(tools_to_bind)
             else:
-                logger.warning(f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'.")
+                logger.warning(
+                    f"Chat model {type(chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
+                )
                 # Keep the original model without tools
                 self._chat_model_with_tools = chat_model
-        
+
         # Use provided memory or create based on environment
         if memory is None:
             self._checkpointer = create_checkpointer()
         else:
             self._checkpointer = memory
-        
+
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
         import uuid
+
         if os.getenv("ENV") == "dev":
             self._state.set_thread_id(str(uuid.uuid4()))
 
@@ -361,39 +404,40 @@ class Agent(Expose):
 
     def _can_bind_tools(self, chat_model: BaseChatModel) -> bool:
         """Test if the chat model can bind tools by attempting to bind the get_time_date default tool.
-        
+
         Args:
             chat_model (BaseChatModel): The chat model to test
-            
+
         Returns:
             bool: True if the model can bind tools, False otherwise
         """
         try:
             # Create the get_time_date tool that's used in default_tools()
             @tool(return_direct=True)
-            def get_time_date(timezone: str = 'Europe/Paris') -> str:
+            def get_time_date(timezone: str = "Europe/Paris") -> str:
                 """Get the current time and date."""
                 from datetime import datetime
                 from zoneinfo import ZoneInfo
+
                 return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
-            
+
             # Try to bind this single tool to test if the model supports tool binding
             chat_model.bind_tools([get_time_date])
-            
+
             # If we get here without an exception, the model supports tool binding
             # logger.debug(f"Chat model {type(chat_model).__name__} supports tool calling.")
             return True
-            
+
         except Exception as e:
             # If binding tools raises an exception, the model doesn't support tools
-            logger.debug(f"Chat model {type(chat_model).__name__} does not support tool calling: {e}")
+            logger.debug(
+                f"Chat model {type(chat_model).__name__} does not support tool calling: {e}"
+            )
             return False
 
     def default_tools(self) -> list[Tool | BaseTool]:
         @tool(return_direct=True)
-        def request_help(
-            reason: str
-        ):
+        def request_help(reason: str):
             """
             Request help from the supervisor agent when you (the LLM) are uncertain about the next step or do not have the required capability to fulfill the user's request.
 
@@ -409,20 +453,24 @@ class Agent(Expose):
             """
             logger.debug(f"'{self.name}' is requesting help from the supervisor agent")
             return "Requesting help from the supervisor agent."
-        
+
         @tool(return_direct=False)
-        def get_time_date(timezone: str = 'Europe/Paris') -> str:
+        def get_time_date(timezone: str = "Europe/Paris") -> str:
             """Returns the current date and time for a given timezone."""
             from datetime import datetime
             from zoneinfo import ZoneInfo
+
             return datetime.now(ZoneInfo(timezone)).strftime("%H:%M:%S %Y-%m-%d")
-        
+
         @tool(return_direct=True)
         def list_tools_available() -> str:
             """Displays a formatted list of all available tools."""
-            if not hasattr(self, "_structured_tools") or len(self._structured_tools) == 0:
+            if (
+                not hasattr(self, "_structured_tools")
+                or len(self._structured_tools) == 0
+            ):
                 return "I don't have any tools available to help you at the moment."
-            
+
             tools_text = "Here are the tools I can use to help you:\n\n"
             for t in self._structured_tools:
                 if not t.name.startswith("transfer_to"):
@@ -434,29 +482,31 @@ class Agent(Expose):
             """Displays a formatted list of all available sub-agents."""
             if not hasattr(self, "_agents") or len(self._agents) == 0:
                 return "I don't have any sub-agents that can assist me at the moment."
-                
+
             agents_text = "I can collaborate with these sub-agents:\n"
             for agent in self._agents:
                 agents_text += f"- `{agent.name}`: {agent.description}\n"
             return agents_text.rstrip()
-        
+
         @tool(return_direct=True)
         def list_intents_available() -> str:
             """Displays a formatted list of all available intents."""
             if not hasattr(self, "_intents") or len(self._intents) == 0:
                 return "I haven't been configured with any specific intents yet."
-            
-            from abi.services.agent.IntentAgent import Intent, IntentType, IntentScope
-            
+
+            from abi.services.agent.IntentAgent import Intent, IntentScope, IntentType
+
             # Group intents by scope and type
-            intents_by_scope: dict[Optional[IntentScope], dict[IntentType, list[Intent]]] = {}
+            intents_by_scope: dict[
+                Optional[IntentScope], dict[IntentType, list[Intent]]
+            ] = {}
             for intent in self._intents:
                 if intent.intent_scope not in intents_by_scope:
                     intents_by_scope[intent.intent_scope] = {}
                 if intent.intent_type not in intents_by_scope[intent.intent_scope]:
                     intents_by_scope[intent.intent_scope][intent.intent_type] = []
                 intents_by_scope[intent.intent_scope][intent.intent_type].append(intent)
-            
+
             intents_text = "Here are all the intents I'm configured with:\n\n"
             for scope, types_dict in intents_by_scope.items():
                 intents_text += f"### Intents for {str(scope)}\n\n"
@@ -466,19 +516,21 @@ class Agent(Expose):
                     intents_text += "|--------|--------|\n"
                     for intent in intents:
                         if intent.intent_scope == IntentType.RAW:
-                            intents_text += f"| {intent.intent_value} | {intent.intent_target} |\n"
+                            intents_text += (
+                                f"| {intent.intent_value} | {intent.intent_target} |\n"
+                            )
                         else:
                             intents_text += f"| {intent.intent_value} | `{intent.intent_target}` |\n"
                     intents_text += "\n"
             return intents_text.rstrip()
-        
+
         @tool(return_direct=False)
         def read_makefile() -> str:
             """Read the Makefile and return the content."""
             try:
                 with open("Makefile", "r") as f:
                     makefile_content = f.read()
-                
+
                 return "Here are the make commands available:\n\n" + makefile_content
 
             except FileNotFoundError:
@@ -487,14 +539,14 @@ class Agent(Expose):
                 return f"Error reading Makefile: {str(e)}"
 
         tools: list[Tool | BaseTool] = [
-            get_time_date, 
-            list_tools_available, 
-            list_subagents_available, 
+            get_time_date,
+            list_tools_available,
+            list_subagents_available,
             list_intents_available,
         ]
         if self.state.supervisor_agent and self.state.supervisor_agent != self.name:
             tools.append(request_help)
-            
+
         if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev":
             tools.append(read_makefile)
         return tools
@@ -502,7 +554,7 @@ class Agent(Expose):
     @property
     def system_prompt(self) -> str:
         return self._system_prompt
-    
+
     def set_system_prompt(self, system_prompt: str):
         self._system_prompt = system_prompt
 
@@ -515,22 +567,22 @@ class Agent(Expose):
         return self._state
 
     def validate_tool_name(self, tool: BaseTool) -> BaseTool:
-        if not re.match(r'^[a-zA-Z0-9_-]+$', tool.name):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", tool.name):
             # Replace invalid characters with '_'
-            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', tool.name)
-            logger.warning(f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'.")
+            valid_name = re.sub(r"[^a-zA-Z0-9_-]", "_", tool.name)
+            logger.warning(
+                f"Tool name '{tool.name}' does not comply with '^[a-zA-Z0-9_-]+$'. Renaming to '{valid_name}'."
+            )
             tool.name = valid_name
         return tool
 
     def prepare_tools(
-        self, 
-        tools: list[Union[Tool, BaseTool, "Agent"]], 
-        agents: list
+        self, tools: list[Union[Tool, BaseTool, "Agent"]], agents: list
     ) -> tuple[list[Tool | BaseTool], list["Agent"]]:
         """
         If we have Agents in tools, we are properly loading them as handoff tools.
         It will effectively make the 'self' agent a supervisor agent.
-        
+
         Ensures no duplicate tools or agents are added by tracking unique names/instances.
         """
         _tools: list[Tool | BaseTool] = []
@@ -583,7 +635,7 @@ class Agent(Expose):
         graph.add_node(self.continue_conversation)
 
         graph.add_node(self.call_model)
-        
+
         graph.add_node(self.call_tools)
 
         for agent in self._agents:
@@ -596,31 +648,45 @@ class Agent(Expose):
 
         self.graph = graph.compile(checkpointer=self._checkpointer)
 
-
     def get_last_human_message(self, state: MessagesState) -> Any | None:
         """Get the appropriate human message based on AI message context.
 
         Args:
             state (MessagesState): Current conversation state
-            
+
         Returns:
             Any | None: The relevant human message
         """
-        last_ai_message : Any | None = pd.find(state["messages"][::-1], lambda m: isinstance(m, AIMessage))
-        if last_ai_message is not None and last_ai_message.additional_kwargs.get("owner") == self.name:
-            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
-        elif last_ai_message is not None and hasattr(last_ai_message, "additional_kwargs") and last_ai_message.additional_kwargs is not None and "owner" in last_ai_message.additional_kwargs:
-            return pd.filter_(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))[1]
+        last_ai_message: Any | None = pd.find(
+            state["messages"][::-1], lambda m: isinstance(m, AIMessage)
+        )
+        if (
+            last_ai_message is not None
+            and last_ai_message.additional_kwargs.get("owner") == self.name
+        ):
+            return pd.find(
+                state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
+            )
+        elif (
+            last_ai_message is not None
+            and hasattr(last_ai_message, "additional_kwargs")
+            and last_ai_message.additional_kwargs is not None
+            and "owner" in last_ai_message.additional_kwargs
+        ):
+            return pd.filter_(
+                state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
+            )[1]
         else:
-            return pd.find(state["messages"][::-1], lambda m: isinstance(m, HumanMessage))
-        
+            return pd.find(
+                state["messages"][::-1], lambda m: isinstance(m, HumanMessage)
+            )
 
     def current_active_agent(self, state: MessagesState) -> Command:
         """Goto the current active agent.
-        
+
         Args:
             state (MessagesState): Current conversation state
-            
+
         Returns:
             Command: Command to goto the current active agent
         """
@@ -634,35 +700,48 @@ class Agent(Expose):
 
         # Handle agent routing via @mention
         if (
-            last_human_message is not None and 
-            isinstance(last_human_message.content, str) and 
-            last_human_message.content.startswith("@") and 
-            last_human_message.content.split(" ")[0].split("@")[1] != self.name
+            last_human_message is not None
+            and isinstance(last_human_message.content, str)
+            and last_human_message.content.startswith("@")
+            and last_human_message.content.split(" ")[0].split("@")[1] != self.name
         ):
             at_mention = last_human_message.content.split(" ")[0].split("@")[1]
             logger.debug(f"🔀 Handle agent routing via @mention to '{at_mention}'")
 
             # Check if we have an agent with this name.
-            agent = pd.find(self._agents, lambda a: a.name.lower() == at_mention.lower())
-            
-            #Remove mention from the last human message with re.sub
+            agent = pd.find(
+                self._agents, lambda a: a.name.lower() == at_mention.lower()
+            )
+
+            # Remove mention from the last human message with re.sub
             import re
-            last_human_message.content = re.sub(r"^@[^ ]* ", "", last_human_message.content)
-            
+
+            last_human_message.content = re.sub(
+                r"^@[^ ]* ", "", last_human_message.content
+            )
+
             if agent is not None:
                 self._state.set_current_active_agent(agent.name)
                 return Command(goto=agent.name, update={"messages": state["messages"]})
             else:
                 logger.debug(f"❌ Agent '{at_mention}' not found")
 
-        if self._state.current_active_agent is not None and self._state.current_active_agent != self.name:
-            logger.debug(f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'")
+        if (
+            self._state.current_active_agent is not None
+            and self._state.current_active_agent != self.name
+        ):
+            logger.debug(
+                f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'"
+            )
             self._state.set_current_active_agent(self._state.current_active_agent)
             return Command(goto=self._state.current_active_agent)
-        
+
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with agent '{self.name}'")
-        if self.state.supervisor_agent != self.name and "SUPERVISOR SYSTEM PROMPT" not in self._system_prompt:
+        if (
+            self.state.supervisor_agent != self.name
+            and "SUPERVISOR SYSTEM PROMPT" not in self._system_prompt
+        ):
             # This agent is a subagent with a supervisor
             subagent_prompt = f"""
 SUPERVISOR SYSTEM PROMPT:
@@ -693,7 +772,11 @@ SUBAGENT SYSTEM PROMPT:
 """
             self.set_system_prompt(subagent_prompt)
 
-        if self.state.supervisor_agent == self.name and os.getenv("ENV") == "dev" and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt:
+        if (
+            self.state.supervisor_agent == self.name
+            and os.getenv("ENV") == "dev"
+            and "DEVELOPPER SYSTEM PROMPT" not in self._system_prompt
+        ):
             dev_prompt = f"""
 DEVELOPPER SYSTEM PROMPT:
 
@@ -709,7 +792,7 @@ AGENT SYSTEM PROMPT:
             self.set_system_prompt(dev_prompt)
         logger.debug(f"System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
-    
+
     def continue_conversation(self, state: MessagesState) -> Command:
         return Command(goto="call_model")
 
@@ -717,7 +800,7 @@ AGENT SYSTEM PROMPT:
         content_str: str = ""
         tool_call: list[ToolCall] = []
         logger.debug(f"Chat model output version is responses/v1: {response}")
-        
+
         if isinstance(response.content, list):
             # Parse response content
             for item in response.content:
@@ -728,52 +811,57 @@ AGENT SYSTEM PROMPT:
                         text_content = item.get("text", "")
                         if isinstance(text_content, str):
                             content_str += text_content
-                        
+
                         # Add sources from annotations if any
                         annotations = item.get("annotations", [])
                         if isinstance(annotations, list) and len(annotations) > 0:
                             content_str += "\n\n\n\n*Annotations:*\n"
                             for annotation in annotations:
-                                if isinstance(annotation, dict) and annotation.get("type") == "url_citation":
-                                    title = annotation.get('title', '')
-                                    url = annotation.get('url', '')
+                                if (
+                                    isinstance(annotation, dict)
+                                    and annotation.get("type") == "url_citation"
+                                ):
+                                    title = annotation.get("title", "")
+                                    url = annotation.get("url", "")
                                     content_str += f"- [{title}]({url})\n"
 
                     if "action" in item:
-                        tool_call.append(ToolCall(
-                            name=item["type"],
-                            args={"query": item["action"].get("query", "")},
-                            id=item.get("id"),
-                            type="tool_call"
-                        ))
-        
+                        tool_call.append(
+                            ToolCall(
+                                name=item["type"],
+                                args={"query": item["action"].get("query", "")},
+                                id=item.get("id"),
+                                type="tool_call",
+                            )
+                        )
+
         # Create AIMessage with the content
         usage_metadata = None
-        if hasattr(response, 'usage_metadata'):
+        if hasattr(response, "usage_metadata"):
             usage_metadata = response.usage_metadata
         ai_message = AIMessage(content=content_str, usage_metadata=usage_metadata)
-        
+
         # If action was detected, notify tool usage
         if len(tool_call) > 0:
             # Use the ai_message which is already the correct type
             ai_message.tool_calls = tool_call
             self._notify_tool_usage(ai_message)
             tool_message = ToolMessage(
-                content=content_str,
-                tool_call_id=tool_call[0].get("id")
+                content=content_str, tool_call_id=tool_call[0].get("id")
             )
             self._notify_tool_response(tool_message)
-            return Command(goto="__end__", update={"messages": [tool_message, ai_message]})
-        
-        return Command(goto="__end__", update={"messages": [ai_message]})
+            return Command(
+                goto="__end__", update={"messages": [tool_message, ai_message]}
+            )
 
+        return Command(goto="__end__", update={"messages": [ai_message]})
 
     def call_model(
         self,
         state: MessagesState,
     ) -> Command[Literal["call_tools", "__end__"]]:
         self._state.set_current_active_agent(self.name)
-        
+
         logger.debug(f"call_model on: {self.name}")
         # logger.debug(f"tools: {self._structured_tools}")
         messages = state["messages"]
@@ -802,21 +890,22 @@ AGENT SYSTEM PROMPT:
             # response.tool_calls = [response.tool_calls[0]]
 
             return Command(goto="call_tools", update={"messages": [response]})
-        
-        elif (
-            self._chat_model_output_version == "responses/v1"
-        ):
+
+        elif self._chat_model_output_version == "responses/v1":
             return self.handle_openai_response_v1(response)
 
         return Command(goto="__end__", update={"messages": [response]})
 
-
     def call_tools(self, state: MessagesState) -> list[Command]:
         last_message: AnyMessage = state["messages"][-1]
-        if not isinstance(last_message, AIMessage) or not hasattr(
-            last_message, "tool_calls"
-        ) or len(last_message.tool_calls) == 0:
-            logger.warning(f"No tool calls found in last message but call_tools was called: {last_message}")
+        if (
+            not isinstance(last_message, AIMessage)
+            or not hasattr(last_message, "tool_calls")
+            or len(last_message.tool_calls) == 0
+        ):
+            logger.warning(
+                f"No tool calls found in last message but call_tools was called: {last_message}"
+            )
             return [Command(goto="__end__", update={"messages": [last_message]})]
 
         tool_calls: list[ToolCall] = last_message.tool_calls
@@ -848,15 +937,13 @@ AGENT SYSTEM PROMPT:
             is_handoff = tool_call["name"].startswith("transfer_to_")
             if is_handoff is True:
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
-                
+
             try:
-                            
                 logger.debug(f"tool_call: {tool_call}")
                 logger.debug(f"tool_input_fields: {tool_input_fields}")
                 logger.debug(f"args: {args}")
                 tool_response = tool_.invoke(args)
                 called_tools.append(tool_)
-
 
                 if isinstance(tool_response, ToolMessage):
                     results.append(Command(update={"messages": [tool_response]}))
@@ -872,35 +959,56 @@ AGENT SYSTEM PROMPT:
                 if os.environ.get("LOG_LEVEL") == "DEBUG":
                     raise e
                 # If the tool call fails, we want the model to interpret it.
-                results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
-
-
+                results.append(
+                    Command(
+                        goto="__end__",
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=str(e), tool_call_id=tool_call["id"]
+                                )
+                            ]
+                        },
+                    )
+                )
 
         assert len(results) > 0, state
 
         # Checking if every called tools has return_direct set to True.
         # This is used to know if we can send the ToolMessage to the call_model node.
-        return_direct : bool = True
+        return_direct: bool = True
         for t in called_tools:
             if t.return_direct is False:
                 return_direct = False
                 break
 
         # If the last response is a ToolMessage, we want the model to interpret it.
-        if isinstance(pd.get(results[-1], 'update.messages[-1]', None), ToolMessage) and not pd.get(results[-1], 'update.messages[-1]', None).name.startswith("transfer_to_"):
+        if isinstance(
+            pd.get(results[-1], "update.messages[-1]", None), ToolMessage
+        ) and not pd.get(results[-1], "update.messages[-1]", None).name.startswith(
+            "transfer_to_"
+        ):
             if return_direct is False:
-                logger.debug(f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}")
+                logger.debug(
+                    f"ToolMessage found in results SENDING TO CALL_MODEL: {results[-1]}"
+                )
                 results.append(Command(goto="call_model"))
             else:
-                logger.debug("Injecting ToolMessage into AIMessage for the user to see.")
-                last_message = pd.get(results[-1], 'update.messages[-1]', None)
-                results.append(Command(update={"messages": [AIMessage(content=last_message.content)]}))
+                logger.debug(
+                    "Injecting ToolMessage into AIMessage for the user to see."
+                )
+                last_message = pd.get(results[-1], "update.messages[-1]", None)
+                results.append(
+                    Command(
+                        update={"messages": [AIMessage(content=last_message.content)]}
+                    )
+                )
 
         if (
-            tool_response is not None and 
-            hasattr(tool_response, "name") and 
-            tool_response.name.startswith("request_help") and 
-            self._state.supervisor_agent != self.name
+            tool_response is not None
+            and hasattr(tool_response, "name")
+            and tool_response.name.startswith("request_help")
+            and self._state.supervisor_agent != self.name
         ):
             # self._state.set_requesting_help(True)
             self._state.set_current_active_agent(self._state.supervisor_agent)
@@ -919,7 +1027,7 @@ AGENT SYSTEM PROMPT:
     def _notify_tool_response(self, message: AnyMessage):
         self._event_queue.put(ToolResponseEvent(payload=message))
         self._on_tool_response(message)
-    
+
     def _notify_ai_message(self, message: AnyMessage, agent_name: str):
         self._event_queue.put(AIMessageEvent(payload=message, agent_name=agent_name))
         self._on_ai_message(message, agent_name)
@@ -953,10 +1061,9 @@ AGENT SYSTEM PROMPT:
         # # Also set the callback on all sub-agents to ensure they notify properly
         # for agent in self._agents:
         #     agent.on_tool_response(callback)
-        
+
     def on_ai_message(self, callback: Callable[[AnyMessage, str], None]):
-        """Register a callback to be called when an AI message is received.
-        """
+        """Register a callback to be called when an AI message is received."""
         self._on_ai_message = callback
         # Also set the callback on all sub-agents to ensure they notify properly
         for agent in self._agents:
@@ -991,14 +1098,14 @@ AGENT SYSTEM PROMPT:
             subgraphs=True,
         ):
             source, payload = chunk
-            agent_name = self._name if len(source) == 0 else source[0].split(':')[0]
+            agent_name = self._name if len(source) == 0 else source[0].split(":")[0]
             if isinstance(payload, dict):
-                last_messages = []                
+                last_messages = []
                 v = list(payload.values())[0]
-                
+
                 if v is None:
                     continue
-                
+
                 if isinstance(v, dict):
                     if "messages" in v:
                         last_messages = [v["messages"][-1]]
@@ -1006,7 +1113,6 @@ AGENT SYSTEM PROMPT:
                         continue
                 else:
                     last_messages = [e["messages"][-1] for e in v]
-
 
                 for last_message in last_messages:
                     if isinstance(last_message, AIMessage):
@@ -1019,9 +1125,12 @@ AGENT SYSTEM PROMPT:
                             # - call_tools
                             # are called.
                             # If you need another method to be able to return an AIMessage or a Command(..., update={"messages": [AIMessage(...)]}) we either need to add it to the list or have this specific method calling self._notify_ai_message directly.
-                            
-                            allowed_sources_of_ai_message = ['call_model', 'call_tools']
-                            if any(source in payload for source in allowed_sources_of_ai_message):
+
+                            allowed_sources_of_ai_message = ["call_model", "call_tools"]
+                            if any(
+                                source in payload
+                                for source in allowed_sources_of_ai_message
+                            ):
                                 self._notify_ai_message(last_message, agent_name)
 
                     elif isinstance(last_message, ToolMessage):
@@ -1065,7 +1174,7 @@ AGENT SYSTEM PROMPT:
             messages = value[-1]["messages"]
 
         content = messages[-1].content
-         # content = list(chunks[-1].values())[0]["messages"][-1].content
+        # content = list(chunks[-1].values())[0]["messages"][-1].content
 
         return content
 
@@ -1083,7 +1192,11 @@ AGENT SYSTEM PROMPT:
 
         return response
 
-    def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
+    def duplicate(
+        self,
+        queue: Queue | None = None,
+        agent_shared_state: AgentSharedState | None = None,
+    ) -> "Agent":
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
@@ -1092,11 +1205,11 @@ AGENT SYSTEM PROMPT:
 
         Returns:
             Agent: A new Agent instance with the same configuration
-        """        
+        """
         shared_state = agent_shared_state or AgentSharedState()
-        
+
         logger.debug(f"agent_shared_state: {agent_shared_state}")
-        
+
         # Initialize the tools list with the original list of tools.
         # tools = [tool for tool in self._structured_tools]
         # tools: list[Tool] = [tool for tool in self._tools if isinstance(tool, Tool)]
@@ -1106,7 +1219,9 @@ AGENT SYSTEM PROMPT:
 
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
-        agents: list[Agent] = [agent.duplicate(queue, shared_state) for agent in self._original_agents]
+        agents: list[Agent] = [
+            agent.duplicate(queue, shared_state) for agent in self._original_agents
+        ]
 
         new_agent = Agent(
             name=self._name,
@@ -1125,12 +1240,11 @@ AGENT SYSTEM PROMPT:
     def light_duplicate(self, queue: Queue | None = None) -> "Agent":
         if queue is None:
             queue = Queue()
-            
-        
+
         agents: list[Agent] = [agent.light_duplicate(queue) for agent in self._agents]
-        
+
         tools = self._tools + agents
-        
+
         return Agent(
             name=self._name,
             description=self._description,
@@ -1142,7 +1256,7 @@ AGENT SYSTEM PROMPT:
             configuration=self._configuration,
             event_queue=queue,
         )
-    
+
     def as_api(
         self,
         router: APIRouter,
@@ -1162,7 +1276,7 @@ AGENT SYSTEM PROMPT:
             description_stream (str): Optional description to add to the stream endpoints. Defaults to ""
             tags (list[str]): Optional list of tags to add to the endpoints. Defaults to None
         """
-        
+
         route_name = route_name or self._name
         name = name or self._name.capitalize().replace("_", " ")
         description = description or self._description
@@ -1347,13 +1461,12 @@ def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:
         state: Annotated[dict, InjectedState],
         # optionally pass the current tool call ID (will be ignored by the LLM)
         tool_call: Annotated[ToolCall, ToolCall],
-        
     ):
         """Ask another agent for help."""
         agent_label = " ".join(
             word.capitalize() for word in agent.name.replace("_", " ").split()
         )
-        
+
         tool_message = ToolMessage(
             content=f"Conversation transferred to {agent_label}",
             name=tool_name,

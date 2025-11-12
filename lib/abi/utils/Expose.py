@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter
-from langchain_core.tools import BaseTool
+if TYPE_CHECKING:
+    from fastapi import APIRouter
+    from langchain_core.tools import BaseTool
 
 
 class Expose(ABC):
