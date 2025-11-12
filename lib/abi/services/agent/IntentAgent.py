@@ -733,14 +733,18 @@ Last user message: "{last_human_message.content}"
         logger.debug("💉 Inject Intents in System Prompt")
 
         # We reset the system prompt to the original one.
-        self._system_prompt = self._configuration.system_prompt
+        # self._system_prompt = self._configuration.system_prompt
         
         if "intent_mapping" in state and len(state["intent_mapping"]["intents"]) > 0:
             intents = state["intent_mapping"]["intents"]
-            updated_system_prompt = f"""{self._configuration.system_prompt}
+            intents_str = ""
+            for intent in intents:
+                intents_str += f"-Mapped intent: `{intent['intent'].intent_value}`, tool to call: `{intent['intent'].intent_target}`\n"
 
----
-INTENT RULES:
+            if  "<intents_rules>" not in self._system_prompt:
+                updated_system_prompt = f"""{self._system_prompt}
+
+<intents_rules>
 Everytime a user is sending a message, a system is trying to map the prompt/message to an intent or a list of intents using a vector search.
 The following is the list of mapped intents. This list will change over time as new messages comes in.
 You must analyze if the user message and the mapped intents are related to each other. 
@@ -748,17 +752,20 @@ If it's the case, you must take them into account, otherwise you must ignore the
 If you endup with a single intent which is of type RAW, you must output the intent_target and nothing else as there will be tests asserting the correctness of the output.
 If you endup with a single intent which is of type TOOL, you must call this tool.
 
+<intents>\n{intents_str}\n</intents>
 
-
+</intents_rules>
 """
-            
-            for intent in intents:
-                updated_system_prompt += f"""
-                - {intent['intent']}
-                """
+            else:
+                import re
+                pattern = r'(<intents>)(.*?)(</intents>)'
+                def replace(match):
+                    return f"{match.group(1)}\n{intents_str}\n{match.group(3)}"
+                updated_system_prompt = re.sub(pattern, replace, self._system_prompt, flags=re.DOTALL)
 
-            updated_system_prompt += "\n\nEND INTENT RULES"
             self._system_prompt = updated_system_prompt
+            self.set_system_prompt(self._system_prompt)
+            logger.debug(f"Injected in system prompt: {self._system_prompt}")
 
 
     def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "IntentAgent":
