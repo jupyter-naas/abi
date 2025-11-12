@@ -63,9 +63,9 @@ class GitHubIntegration(Integration):
             )
             response.raise_for_status()
             return response.json() if response.content else []
-        except requests.exceptions.RequestException as e:
+        except IntegrationConnectionError as e:
             logger.error(f"Github API request failed: {str(e)}")
-            return {}
+            return {"error": str(e)}
 
     def get_user_details(self, username: str) -> List | Dict:
         """Get detailed information about a specific GitHub user.
