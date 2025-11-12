@@ -78,7 +78,7 @@ def create_agent(
     from src import secret
     api_key = secret.get("OPENAI_API_KEY")
     base_url = "https://api.openai.com/v1/responses"
-    if secret.get("OPENROUTER_API_KEY"):
+    if secret.get("OPENROUTER_API_KEY") != "default":
         logger.debug("Using OpenRouter for ChatGPTAgent")
         api_key = secret.get("OPENROUTER_API_KEY")
         base_url = "https://openrouter.ai/api/v1/responses"

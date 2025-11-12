@@ -72,7 +72,7 @@ def create_agent(
 
     base_url = "https://api.perplexity.ai"
     api_key = secret.get("PERPLEXITY_API_KEY")
-    if secret.get("OPENROUTER_API_KEY"):
+    if secret.get("OPENROUTER_API_KEY") != "default":
         base_url = "https://openrouter.ai/api/v1"
         api_key = secret.get("OPENROUTER_API_KEY")
     
