@@ -41,10 +41,10 @@ class ReportBugParameters(WorkflowParameters):
     issue_title: Annotated[str, Field(..., description="The title of the bug report")]
     issue_body: Annotated[str, Field(..., description="The description of the bug, including steps to reproduce")]
     repo_name: Annotated[str, Field(..., description="The name of the repository to create the bug report in")] = config.github_repository
-    assignees: Optional[Annotated[list, Field(..., description="The assignees of the bug report")]] = []
-    labels: Optional[Annotated[list, Field(..., description="The labels of the bug report")]] = ["bug"]
-    priority_id: Optional[Annotated[str, Field(..., description="The ID of the priority of the bug report")]] = "4fb76f2d"
-    status_id: Optional[Annotated[str, Field(..., description="The ID of the status of the bug report")]] = "97363483"
+    assignees: Annotated[Optional[list], Field([], description="The assignees of the bug report")]
+    labels: Annotated[Optional[list], Field(["bug"], description="The labels of the bug report")]
+    priority_id: Annotated[Optional[str], Field("4fb76f2d", description="The ID of the priority of the bug report")]
+    status_id: Annotated[Optional[str], Field("97363483", description="The ID of the status of the bug report")]
     
 
 class ReportBugWorkflow(Workflow):
