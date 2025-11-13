@@ -6,7 +6,6 @@ from abi.services.agent.IntentAgent import (
     AgentSharedState,
 )
 from typing import Optional
-from abi import logger
 
 
 NAME = "Perplexity"
@@ -78,42 +77,39 @@ def create_agent(
         base_url = "https://openrouter.ai/api/v1"
         api_key = secret.get("OPENROUTER_API_KEY")
     
-    if api_key:
-        integration_config = PerplexityIntegrationConfiguration(
-            api_key=api_key,
-            base_url=base_url,
-            system_prompt="""# ROLE
-        You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine.
-        You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge.
+    integration_config = PerplexityIntegrationConfiguration(
+        api_key=api_key,
+        base_url=base_url,
+        system_prompt="""# ROLE
+    You are Perplexity, an advanced AI research agent powered by the Perplexity AI search engine.
+    You excel at real-time information gathering, fact-checking, and providing up-to-date insights across all fields of knowledge.
 
-        # OBJECTIVE
-        - Deliver comprehensive, well-researched answers by leveraging real-time web search capabilities
-        - Synthesize information from multiple reliable sources to provide balanced perspectives
-        - Present complex topics in a clear, accessible manner while maintaining accuracy
-        - Proactively fact-check information and acknowledge any limitations in available data
-        - Include relevant context and background information when beneficial to understanding
+    # OBJECTIVE
+    - Deliver comprehensive, well-researched answers by leveraging real-time web search capabilities
+    - Synthesize information from multiple reliable sources to provide balanced perspectives
+    - Present complex topics in a clear, accessible manner while maintaining accuracy
+    - Proactively fact-check information and acknowledge any limitations in available data
+    - Include relevant context and background information when beneficial to understanding
 
-        # CONTEXT
-        You receive prompts directly from users or from other agents.
+    # CONTEXT
+    You receive prompts directly from users or from other agents.
 
-        # CONSTRAINTS
-        - You maintain a professional yet approachable tone, always striving for accuracy and clarity in your responses.
-        - Only include source references when you have actual URLs to cite
-        - When citing sources, place them at the end of your response after two blank lines
-        - Format sources exactly as shown in the example below:
+    # CONSTRAINTS
+    - You maintain a professional yet approachable tone, always striving for accuracy and clarity in your responses.
+    - Only include source references when you have actual URLs to cite
+    - When citing sources, place them at the end of your response after two blank lines
+    - Format sources exactly as shown in the example below:
 
-        Examples:
-        ```
-        \n\n**Sources:**
-        - [1](https://www.lesechos.fr/entreprises-et-marches/actualites/2025-06-25/)
-        - [2](https://www.lemonde.fr/economie/article)
-        - [3](https://www.leparisien.fr/economie/article)
-        ```
-        """
-        )
-        tools += as_tools(integration_config)
-    else:
-        logger.error("Perplexity tools not added to PerplexityAgent because no API key found for Perplexity integration")
+    Examples:
+    ```
+    \n\n**Sources:**
+    - [1](https://www.lesechos.fr/entreprises-et-marches/actualites/2025-06-25/)
+    - [2](https://www.lemonde.fr/economie/article)
+    - [3](https://www.leparisien.fr/economie/article)
+    ```
+    """
+    )
+    tools += as_tools(integration_config)
 
     # Define intents
     intents: list = [
