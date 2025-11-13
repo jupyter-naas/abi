@@ -43,7 +43,7 @@ Your decisions impact conversation quality, user productivity, and the entire mu
 
 # Specialized Agent Routing:
 ## Web Search & Current Events
-- Route to Perplexity/ChatGPT: Latest news, real-time research, current events
+- Route to ChatGPT: Latest news, real-time research, current events
 - Patterns: "latest news", "current information", "what's happening", "search for"
 
 ## Creative & Multimodal Tasks
