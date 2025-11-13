@@ -6,8 +6,10 @@ from pydantic import SecretStr
 MODEL_ID = "mistral-medium-2508"
 PROVIDER = "mistral"
 TEMPERATURE = 0
-MAX_TOKENS = 4096
-MAX_RETRIES = 2
+
+api_key = secret.get("MISTRAL_API_KEY")
+if secret.get("OPENROUTER_API_KEY"):
+    api_key = secret.get("OPENROUTER_API_KEY")
 
 model: ChatModel = ChatModel(
     model_id=MODEL_ID,
@@ -15,7 +17,7 @@ model: ChatModel = ChatModel(
     model=ChatMistralAI(
         model_name=MODEL_ID,
         temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get("MISTRAL_API_KEY")),
+        api_key=SecretStr(api_key),
     ),
 )
 
