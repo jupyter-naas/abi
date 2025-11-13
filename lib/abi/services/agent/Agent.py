@@ -283,15 +283,11 @@ class Agent(Expose):
         # We set the supervisor agent and current active agent before the default tools are injected.
         if self._state.supervisor_agent is not None:
             self._state.set_supervisor_agent(self._state.supervisor_agent)
-        else:
-            self._state.set_supervisor_agent(None)
         logger.debug(f"Supervisor agent: {self._state.supervisor_agent}")
 
         agent_names = [a.name for a in self._original_agents] + [name]
         if self._state.current_active_agent is not None and self._state.current_active_agent in agent_names:
             self._state.set_current_active_agent(self._state.current_active_agent)
-        else:
-            self._state.set_current_active_agent(None)
         logger.debug(f"Current active agent: {self._state.current_active_agent}")
 
         # We inject default tools.
