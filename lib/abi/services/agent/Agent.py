@@ -290,7 +290,7 @@ class Agent(Expose):
             self._state.set_current_active_agent(self._state.current_active_agent)
         logger.debug(f"Current active agent: {self._state.current_active_agent}")
 
-        # We inject default tools.
+        # We inject default tools
         tools += self.default_tools()
 
         # We store the original list of provided tools. This will be usefull for duplication.
@@ -743,7 +743,7 @@ AGENT SYSTEM PROMPT:
             self.set_system_prompt(self._system_prompt)
             return Command(goto="current_active_agent")
 
-        logger.debug(f"💬 System prompt: {self._system_prompt}")
+        # logger.debug(f"💬 System prompt: {self._system_prompt}")
         return Command(goto="continue_conversation")
     
     def continue_conversation(self, state: MessagesState) -> Command:
@@ -821,7 +821,7 @@ AGENT SYSTEM PROMPT:
         # logger.info(f"messages: {messages}")
 
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
-        # logger.info(f"response: {response}")
+        logger.debug(f"call_model response: {response}")
         # logger.info(f"response type: {type(response)}")
         # if isinstance(response, AIMessage):
         #     response.additional_kwargs["agent"] = self.name

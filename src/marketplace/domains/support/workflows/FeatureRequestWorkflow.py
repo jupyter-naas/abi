@@ -41,10 +41,10 @@ class FeatureRequestParameters(WorkflowParameters):
     issue_title: Annotated[str, Field(..., description="The title of the feature request")]
     issue_body: Annotated[str, Field(..., description="The description of the feature request")]
     repo_name: Annotated[str, Field(..., description="The name of the repository to create the feature request in")] = config.github_repository
-    assignees: Annotated[Optional[list], Field([], description="The assignees of the feature request")]
-    labels: Annotated[Optional[list], Field(["enhancement"], description="The labels of the feature request")]
-    priority_id: Annotated[Optional[str], Field("4fb76f2d", description="The ID of the priority of the feature request")]
-    status_id: Annotated[Optional[str], Field("97363483", description="The ID of the status of the feature request")]
+    assignees: Optional[Annotated[list, Field([], description="The assignees of the feature request")]]
+    labels: Optional[Annotated[list, Field(["enhancement"], description="The labels of the feature request")]]
+    priority_id: Optional[Annotated[str, Field("4fb76f2d", description="The ID of the priority of the feature request")]]
+    status_id: Optional[Annotated[str, Field("97363483", description="The ID of the status of the feature request")]]
 
 
 class FeatureRequestWorkflow(Workflow):
