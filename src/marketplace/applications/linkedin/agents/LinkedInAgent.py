@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.IntentAgent import (
     IntentAgent,
     Intent,
@@ -6,16 +5,11 @@ from abi.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
 )
-from fastapi import APIRouter
 from typing import Optional
-from pydantic import SecretStr
-from enum import Enum
 from src import secret
 
 NAME = "LinkedIn"
 DESCRIPTION = "Access LinkedIn through your account."
-MODEL = "gpt-4o"
-TEMPERATURE = 0
 AVATAR_URL = "https://content.linkedin.com/content/dam/me/business/en-us/amp/brand-site/v2/bg/LI-Bug.svg.original.svg"
 SYSTEM_PROMPT = f"""
 ## Role
@@ -101,13 +95,9 @@ SUGGESTIONS: list[str] = []
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
-) -> Optional[IntentAgent]:
+) -> IntentAgent:
     # Set model
-    model = ChatOpenAI(
-        model=MODEL,
-        temperature=TEMPERATURE,
-        api_key=SecretStr(secret.get('OPENAI_API_KEY'))
-    )
+    from src.core.chatgpt.models.gpt_4_1_mini import model
 
     # Set configuration
     if agent_configuration is None:
@@ -165,17 +155,4 @@ def create_agent(
     ) 
 
 class LinkedInAgent(IntentAgent):
-    def as_api(
-        self, 
-        router: APIRouter, 
-        route_name: str = NAME, 
-        name: str = NAME.capitalize().replace("_", " "), 
-        description: str = "API endpoints to call the LinkedIn agent completion.", 
-        description_stream: str = "API endpoints to call the LinkedIn agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass

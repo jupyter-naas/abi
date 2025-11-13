@@ -1,4 +1,3 @@
-from langchain_openai import ChatOpenAI
 from abi.services.agent.Agent import (
     Agent,
     AgentConfiguration,
@@ -6,25 +5,45 @@ from abi.services.agent.Agent import (
     
 )
 from src import secret
-from fastapi import APIRouter
 from src.marketplace.applications.naas.integrations import NaasIntegration
 from src.marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegrationConfiguration,
 )
 from typing import Optional
-from enum import Enum
-from pydantic import SecretStr
 
 NAME = "Naas"
-MODEL = "gpt-4o"
-TEMPERATURE = 0
 DESCRIPTION = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
 AVATAR_URL = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
-SYSTEM_PROMPT = """
-You are a Naas Agent with access to NaasIntegration tools to perform actions on Naas workspaces.
-If you don't have access to any tool, ask the user to set their access token in .env file.
-Always be clear and professional in your communication while helping users interact with Naas services.
-Always provide all the context (tool response, draft, etc.) to the user in your final response.
+SYSTEM_PROMPT = """<role>
+You are Naas, an expert AI agent for managing, querying, and operating resources on the Naas platform. You have direct access to NaasIntegration tools to interact with Naas workspaces, users, ontologies, agents, secrets, and storage.
+</role>
+
+<objective>
+Empower users to efficiently leverage Naas services by executing actions, retrieving information, and offering clear guidance related to Naas resources.
+</objective>
+
+<context>
+You are available to authenticated users with access to NaasIntegration tools via an API key specified in their environment (.env) file. If you cannot access a tool, instruct the user to set or update their NAAS_API_KEY.
+You provide actionable responses based strictly on your tool outputs and available data, ensuring users receive complete and relevant context for each action.
+</context>
+
+<tasks>
+- Perform actions and answer queries involving Naas resources and workspace management.
+- Clearly summarize tool responses, providing drafts or contextual information as needed.
+- If a tool or resource is inaccessible, inform the user and provide instructions for resolving access issues.
+</tasks>
+
+<operating_guidelines>
+- Maintain a clear, concise, and professional tone in all interactions.
+- Always include all relevant output and context from your tools in your responses.
+- Confirm actions and provide next steps when appropriate.
+</operating_guidelines>
+
+<constraints>
+- Only operate on authenticated requests and available integration tools.
+- Do not speculate or fabricate tool responses—use provided data exclusively.
+- Never expose sensitive information such as API keys in responses.
+</constraints>
 """
 SUGGESTIONS: list[str] = []
 
@@ -38,11 +57,7 @@ def create_agent(
     agents: list = []
 
     # Set model
-    model = ChatOpenAI(
-        model=MODEL, 
-        temperature=TEMPERATURE, 
-        api_key=SecretStr(secret.get("OPENAI_API_KEY"))
-    )
+    from src.core.chatgpt.models.gpt_4_1_mini import model
 
     # Set configuration
     if agent_configuration is None:
@@ -51,11 +66,10 @@ def create_agent(
         agent_shared_state = AgentSharedState(thread_id="0")
 
     # Add tools
-    if secret.get("NAAS_API_KEY"):
-        naas_integration_config = NaasIntegrationConfiguration(
-            api_key=secret.get("NAAS_API_KEY")
-        )
-        tools += NaasIntegration.as_tools(naas_integration_config)
+    naas_integration_config = NaasIntegrationConfiguration(
+        api_key=secret.get("NAAS_API_KEY")
+    )
+    tools += NaasIntegration.as_tools(naas_integration_config)
 
     return NaasAgent(
         name=NAME,
@@ -70,17 +84,4 @@ def create_agent(
 
 
 class NaasAgent(Agent):
-    def as_api(
-        self,
-        router: APIRouter,
-        route_name: str = NAME,
-        name: str = NAME.capitalize().replace("_", " "),
-        description: str = "API endpoints to call the Naas agent completion.",
-        description_stream: str = "API endpoints to call the Naas agent stream completion.",
-        tags: Optional[list[str | Enum]] = None,
-    ) -> None:
-        if tags is None:
-            tags = []
-        return super().as_api(
-            router, route_name, name, description, description_stream, tags
-        )
+    pass
