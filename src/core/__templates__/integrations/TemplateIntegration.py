@@ -69,11 +69,12 @@ def as_tools(configuration: YourIntegrationConfiguration):
     """Convert YourIntegration into LangChain tools."""
     from langchain_core.tools import StructuredTool
     from pydantic import BaseModel, Field
+    from typing import Annotated
     
     integration = YourIntegration(configuration)
 
     class ExampleToolSchema(BaseModel):
-        parameter: str = Field(..., description="Description of parameter")
+        parameter: Annotated[str, Field(..., description="Description of parameter")]
 
     return [
         StructuredTool(
