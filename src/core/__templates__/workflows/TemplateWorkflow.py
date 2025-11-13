@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pydantic import Field
 from fastapi import APIRouter
 from langchain_core.tools import StructuredTool, BaseTool
-from typing import Any
+from typing import Any, Annotated
 from enum import Enum
 
 @dataclass
@@ -27,8 +27,8 @@ class YourWorkflowParameters(WorkflowParameters):
         parameter_1 (str): Description of parameter_1
         parameter_2 (int): Description of parameter_2
     """
-    parameter_1: str = Field(..., description="Description of parameter_1")
-    parameter_2: int = Field(..., description="Description of parameter_2")
+    parameter_1: Annotated[str, Field(..., description="Description of parameter_1")]
+    parameter_2: Annotated[int, Field(..., description="Description of parameter_2")]
 
 class YourWorkflow(Workflow):
     __configuration: YourWorkflowConfiguration
