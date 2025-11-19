@@ -27,5 +27,5 @@ def test_workflow_search_linkedin_organization_page(workflow: SearchLinkedInOrga
     assert len(result) > 0, result
     assert result[0]["title"] is not None, result[0]
     assert result[0]["link"] is not None, result[0]
-    assert result[0]["snippet"] is not None, result[0]
-    assert result[0]["thumbnail_image"] is not None, result[0]
+    assert result[0]["description"] is not None, result[0]
+    assert result[0]["cse_image"] is not None, result[0]

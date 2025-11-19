@@ -61,13 +61,22 @@ class SearchLinkedInOrganizationPageWorkflow(Workflow):
             if match is not None:
                 organization_type = "company" if "/company/" in url else "school" if "/school/" in url else "showcase" if "/showcase/" in url else None
                 if organization_type is not None:
+                    organization_id = url.split(f"/{organization_type}/")[1].split("/")[0].split("?")[0]
                     page_data = {
                         "title": result["title"],
                         "link": url,
-                        "snippet": result["snippet"],
-                        "thumbnail_image": result.get("pagemap", {}).get("cse_thumbnail", [{}])[0].get("src", None)
+                        "description": (
+                            result.get("pagemap", {})
+                            .get("metatags", [{}])[0]
+                            .get("og:description", result["snippet"])
+                        ),
+                        "cse_image": (
+                            result.get("pagemap", {})
+                            .get("cse_image", [{}])[0]
+                            .get("src", None)
+                        )
                     }
-                    save_json(page_data, os.path.join(self.__configuration.data_store_path.replace("organization", organization_type), organization_name), f"{organization_name}.json")
+                    save_json(page_data, os.path.join(self.__configuration.data_store_path.replace("organization", organization_type), organization_id), f"{organization_id}.json")
                     data.append(page_data)
         return data
 
@@ -81,7 +90,7 @@ class SearchLinkedInOrganizationPageWorkflow(Workflow):
             StructuredTool(
                 name="googlesearch_search_linkedin_organization_page",
                 description="Search for LinkedIn organization page URL using Google Programmable Search Engine",
-                func=lambda **kwargs: self.search_linkedin_organization_page(**kwargs),
+                func=lambda **kwargs: self.search_linkedin_organization_page(SearchLinkedInOrganizationPageWorkflowParameters(**kwargs)),
                 args_schema=SearchLinkedInOrganizationPageWorkflowParameters
             )
         ]

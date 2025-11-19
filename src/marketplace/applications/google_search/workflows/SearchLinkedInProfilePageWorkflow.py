@@ -65,12 +65,20 @@ class SearchLinkedInProfilePageWorkflow(Workflow):
             url = result["link"]
             match = re.search(self.__configuration.pattern, url)
             if match is not None:
-                profile_id = url.split("/in/")[-1]
+                profile_id = url.split("/in/")[-1].split("/")[0].split("?")[0]
                 page_data = {
                     "title": result["title"],
                     "link": url,
-                    "snippet": result["snippet"],
-                    "thumbnail_image": result.get("pagemap", {}).get("cse_thumbnail", [{}])[0].get("src", None)
+                    "description": (
+                        result.get("pagemap", {})
+                        .get("metatags", [{}])[0]
+                        .get("og:description", result["snippet"])
+                    ),
+                    "cse_image": (
+                        result.get("pagemap", {})
+                        .get("cse_image", [{}])[0]
+                        .get("src", None)
+                    )
                 }
                 save_json(page_data, os.path.join(self.__configuration.data_store_path, profile_id), f"{profile_id}.json")
                 data.append(page_data)
@@ -86,7 +94,7 @@ class SearchLinkedInProfilePageWorkflow(Workflow):
             StructuredTool(
                 name="googlesearch_search_linkedin_profile_page",
                 description="Search for LinkedIn profile page URL using Google Programmable Search Engine",
-                func=lambda **kwargs: self.search_linkedin_profile_page(**kwargs),
+                func=lambda **kwargs: self.search_linkedin_profile_page(SearchLinkedInProfilePageWorkflowParameters(**kwargs)),
                 args_schema=SearchLinkedInProfilePageWorkflowParameters
             )
         ]
