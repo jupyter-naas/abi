@@ -62,7 +62,7 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
 
         while remaining > 0:
             fetch_count = min(10, remaining)
-            params = {
+            params: dict = {
                 "key": self.__configuration.api_key,
                 "cx": self.__configuration.search_engine_id,
                 "q": query,
@@ -96,8 +96,8 @@ def as_tools(configuration: GoogleProgrammableSearchEngineIntegrationConfigurati
     integration = GoogleProgrammableSearchEngineIntegration(configuration)
     
     class SearchSchema(BaseModel):
-        query: str = Annotated[str, Field(..., description="Search query")]
-        num_results: int = Annotated[Optional[int], Field(5, description="Number of results to return")]
+        query: Annotated[str, Field(..., description="Search query")]
+        num_results: Optional[Annotated[int, Field(5, description="Number of results to return")]]
 
     return [
         StructuredTool(

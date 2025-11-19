@@ -29,3 +29,12 @@ def test_workflow_search_linkedin_profile_page(workflow: SearchLinkedInProfilePa
     assert result[0]["link"] is not None, result[0]
     assert result[0]["description"] is not None, result[0]
     assert result[0]["cse_image"] is not None, result[0]
+
+def test_workflow_search_linkedin_profile_page_with_organization(workflow: SearchLinkedInProfilePageWorkflow):
+    result = workflow.search_linkedin_profile_page(SearchLinkedInProfilePageWorkflowParameters(profile_name="Florent Ravenel", organization_name="Naas.ai"))
+    assert result is not None, result
+    assert len(result) > 0, result
+    assert result[0]["title"] is not None, result[0]
+    assert result[0]["link"] is not None, result[0]
+    assert result[0]["description"] is not None, result[0]
+    assert result[0]["cse_image"] is not None, result[0]
