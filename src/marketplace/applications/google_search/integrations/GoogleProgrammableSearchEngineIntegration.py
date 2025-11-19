@@ -41,7 +41,7 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
         self.__configuration = configuration
 
     @cache(lambda self, query, num_results: f"googlesearch_search_{query}_{num_results}", cache_type=DataType.JSON, ttl=datetime.timedelta(days=1))
-    def search(self, query: str, num_results: int = 5) -> List[dict]:
+    def query(self, query: str, num_results: int = 5) -> List[dict]:
         """
         Perform a Google Custom Search using requests, with automatic pagination.
         Returns a list of dicts with title, link, snippet.
@@ -83,7 +83,7 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
                 break  # Reached the last page
         
         query_clean = clean_string(query)
-        save_json(items, os.path.join(self.__configuration.data_store_path, query_clean), query_clean + ".json")
+        save_json(items, os.path.join(self.__configuration.data_store_path, "queries", query_clean), query_clean + ".json")
         return items
 
 
@@ -101,9 +101,9 @@ def as_tools(configuration: GoogleProgrammableSearchEngineIntegrationConfigurati
 
     return [
         StructuredTool(
-            name="googlesearch_search_web",
+            name="googlesearch_query",
             description="Search the web using Google Programmable Search Engine",
-            func=lambda **kwargs: integration.search(**kwargs),
+            func=lambda **kwargs: integration.query(**kwargs),
             args_schema=SearchSchema
         ),
     ] 

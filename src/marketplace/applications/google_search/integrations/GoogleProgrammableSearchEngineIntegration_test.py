@@ -16,8 +16,8 @@ def integration() -> GoogleProgrammableSearchEngineIntegration:
     )
     return GoogleProgrammableSearchEngineIntegration(configuration)
 
-def test_search(integration: GoogleProgrammableSearchEngineIntegration):
-    results = integration.search("Florent+Ravenel+LinkedIn+profile+site:linkedin.com")
+def test_query(integration: GoogleProgrammableSearchEngineIntegration):
+    results = integration.query("Florent+Ravenel+LinkedIn+profile+site:linkedin.com")
     assert results is not None, results
     assert len(results) > 0, results
     assert results[0]["title"] is not None, results[0]
