@@ -35,7 +35,7 @@ class SearchLinkedInProfilePageWorkflowParameters(WorkflowParameters):
         organization_name (str): Name of the organization to search for
     """
     profile_name: Annotated[str, Field(..., description="Name of the profile to search for")]
-    organization_name: Annotated[Optional[str], Field(None, description="Name of the organization to search for")]
+    organization_name: Optional[Annotated[str, Field(description="Name of the organization to search for")]] = None
 
 class SearchLinkedInProfilePageWorkflow(Workflow):
     __configuration: SearchLinkedInProfilePageWorkflowConfiguration
@@ -59,7 +59,7 @@ class SearchLinkedInProfilePageWorkflow(Workflow):
         query = f"{profile_name.replace(' ', '+')}"
         if organization_name:
             query += f"+organization:{organization_name.replace(' ', '+')}"
-        query += f"+LinkedIn+profile+site:linkedin.com"
+        query += "+LinkedIn+profile+site:linkedin.com"
         results = self.__integration.query(query)
         for result in results:
             url = result["link"]
