@@ -1,22 +1,22 @@
-from abi.services.agent.Agent import (
-    Agent,
-    AgentConfiguration,
-    AgentSharedState,
-    
-)
-from src import secret
+# from src import secret
 from typing import Optional
+
+from abi import logger
+from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
 from langchain_openai import ChatOpenAI  # noqa: F401
 from pydantic import SecretStr
-from abi import logger
+
+from src.core.abi import ABIModule
+
+MODULE: ABIModule = ABIModule.get_instance()
 
 NAME: str = "Knowledge_Graph_Builder"
 MODEL: str = "gpt-4o"
 TEMPERATURE: float = 0
-AVATAR_URL: str = (
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
+AVATAR_URL: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Rdf_logo.svg/1200px-Rdf_logo.svg.png"
+DESCRIPTION: str = (
+    "A Knowledge Graph Builder Agent that helps users to build Knowledge Graphs."
 )
-DESCRIPTION: str = "A Knowledge Graph Builder Agent that helps users to build Knowledge Graphs."
 SYSTEM_PROMPT: str = """
 # ROLE:
 You are a friendly and helpful Knowledge Graph Builder Agent and your role is to help users interact with instances within a Knowledge Graph by getting, adding, updating, merging and removing them.
@@ -145,8 +145,9 @@ def create_agent(
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Set model based on AI_MODE
-    ai_mode = secret.get("AI_MODE")
-    
+
+    ai_mode = MODULE.configuration.global_config.ai_mode
+
     if ai_mode == "airgap":
         # Use airgap model (Docker Model Runner)
         model = ChatOpenAI(
@@ -157,15 +158,13 @@ def create_agent(
         )
     else:
         # Use cloud model for cloud/local modes
-        openai_api_key = secret.get("OPENAI_API_KEY")
+        openai_api_key = MODULE.configuration.openai_api_key
         if not openai_api_key:
             logger.error("OpenAI API key not available for KnowledgeGraphBuilderAgent")
             logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
             return None
         model = ChatOpenAI(
-            model=MODEL, 
-            temperature=TEMPERATURE, 
-            api_key=SecretStr(openai_api_key)
+            model=MODEL, temperature=TEMPERATURE, api_key=SecretStr(openai_api_key)
         )
 
     # Use provided configuration or create default one
@@ -178,24 +177,28 @@ def create_agent(
 
     # Init tools
     tools: list = []
-    from src import services
+    from src.core.abi.pipelines.AddIndividualPipeline import (
+        AddIndividualPipeline,
+        AddIndividualPipelineConfiguration,
+    )
 
     # Add Foundational Tools
     from src.core.abi.workflows.SearchIndividualWorkflow import (
         SearchIndividualWorkflow,
         SearchIndividualWorkflowConfiguration,
     )
-    from src.core.abi.pipelines.AddIndividualPipeline import (
-        AddIndividualPipeline,
-        AddIndividualPipelineConfiguration,
-    )
+
     ## Initialize search workflow first since add pipeline depends on it
-    search_config = SearchIndividualWorkflowConfiguration(services.triple_store_service)
+    search_config = SearchIndividualWorkflowConfiguration(
+        MODULE.engine.services.triple_store
+    )
     search_workflow = SearchIndividualWorkflow(search_config)
     tools += search_workflow.as_tools()
 
     ## Initialize add pipeline with search workflow config
-    add_config = AddIndividualPipelineConfiguration(services.triple_store_service, search_config)
+    add_config = AddIndividualPipelineConfiguration(
+        MODULE.engine.services.triple_store, search_config
+    )
     add_pipeline = AddIndividualPipeline(add_config)
     tools += add_pipeline.as_tools()
 
@@ -203,9 +206,10 @@ def create_agent(
         InsertDataSPARQLPipeline,
         InsertDataSPARQLPipelineConfiguration,
     )
+
     insert_data_spql_pipeline = InsertDataSPARQLPipeline(
         InsertDataSPARQLPipelineConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=MODULE.engine.services.triple_store
         )
     )
     tools += insert_data_spql_pipeline.as_tools()
@@ -215,6 +219,7 @@ def create_agent(
         GetSubjectGraphWorkflow,
         GetSubjectGraphWorkflowConfiguration,
     )
+
     get_subject_graph_config = GetSubjectGraphWorkflowConfiguration()
     get_subject_graph_workflow = GetSubjectGraphWorkflow(get_subject_graph_config)
     tools += get_subject_graph_workflow.as_tools()
@@ -224,9 +229,10 @@ def create_agent(
         UpdateDataPropertyPipeline,
         UpdateDataPropertyPipelineConfiguration,
     )
+
     update_data_property_pipeline = UpdateDataPropertyPipeline(
         UpdateDataPropertyPipelineConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=MODULE.engine.services.triple_store
         )
     )
     tools += update_data_property_pipeline.as_tools()
@@ -236,9 +242,10 @@ def create_agent(
         MergeIndividualsPipeline,
         MergeIndividualsPipelineConfiguration,
     )
+
     merge_individuals_pipeline = MergeIndividualsPipeline(
         MergeIndividualsPipelineConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=MODULE.engine.services.triple_store
         )
     )
     tools += merge_individuals_pipeline.as_tools()
@@ -248,14 +255,27 @@ def create_agent(
         RemoveIndividualPipeline,
         RemoveIndividualPipelineConfiguration,
     )
+
     remove_individuals_pipeline = RemoveIndividualPipeline(
         RemoveIndividualPipelineConfiguration(
-            triple_store=services.triple_store_service
+            triple_store=MODULE.engine.services.triple_store
         )
     )
     tools += remove_individuals_pipeline.as_tools()
 
     # Add specialized pipelines
+    from src.core.abi.pipelines.UpdateCommercialOrganizationPipeline import (
+        UpdateCommercialOrganizationPipeline,
+        UpdateCommercialOrganizationPipelineConfiguration,
+    )
+    from src.core.abi.pipelines.UpdateLegalNamePipeline import (
+        UpdateLegalNamePipeline,
+        UpdateLegalNamePipelineConfiguration,
+    )
+    from src.core.abi.pipelines.UpdateLinkedInPagePipeline import (
+        UpdateLinkedInPagePipeline,
+        UpdateLinkedInPagePipelineConfiguration,
+    )
     from src.core.abi.pipelines.UpdatePersonPipeline import (
         UpdatePersonPipeline,
         UpdatePersonPipelineConfiguration,
@@ -264,41 +284,33 @@ def create_agent(
         UpdateSkillPipeline,
         UpdateSkillPipelineConfiguration,
     )
-    from src.core.abi.pipelines.UpdateCommercialOrganizationPipeline import (
-        UpdateCommercialOrganizationPipeline,
-        UpdateCommercialOrganizationPipelineConfiguration,
-    )
-    from src.core.abi.pipelines.UpdateLinkedInPagePipeline import (
-        UpdateLinkedInPagePipeline,
-        UpdateLinkedInPagePipelineConfiguration,
+    from src.core.abi.pipelines.UpdateTickerPipeline import (
+        UpdateTickerPipeline,
+        UpdateTickerPipelineConfiguration,
     )
     from src.core.abi.pipelines.UpdateWebsitePipeline import (
         UpdateWebsitePipeline,
         UpdateWebsitePipelineConfiguration,
     )
-    from src.core.abi.pipelines.UpdateLegalNamePipeline import (
-        UpdateLegalNamePipeline,
-        UpdateLegalNamePipelineConfiguration,
-    )
-    from src.core.abi.pipelines.UpdateTickerPipeline import (
-        UpdateTickerPipeline,
-        UpdateTickerPipelineConfiguration,
-    )
+
     specialized_pipelines = [
         (UpdatePersonPipeline, UpdatePersonPipelineConfiguration),
         (UpdateSkillPipeline, UpdateSkillPipelineConfiguration),
-        (UpdateCommercialOrganizationPipeline, UpdateCommercialOrganizationPipelineConfiguration),
+        (
+            UpdateCommercialOrganizationPipeline,
+            UpdateCommercialOrganizationPipelineConfiguration,
+        ),
         (UpdateLinkedInPagePipeline, UpdateLinkedInPagePipelineConfiguration),
-        (UpdateWebsitePipeline, UpdateWebsitePipelineConfiguration), 
+        (UpdateWebsitePipeline, UpdateWebsitePipelineConfiguration),
         (UpdateLegalNamePipeline, UpdateLegalNamePipelineConfiguration),
-        (UpdateTickerPipeline, UpdateTickerPipelineConfiguration)
+        (UpdateTickerPipeline, UpdateTickerPipelineConfiguration),
     ]
     for Pipeline, Configuration in specialized_pipelines:
-        tools += Pipeline(Configuration(services.triple_store_service)).as_tools()
-
+        tools += Pipeline(Configuration(MODULE.engine.services.triple_store)).as_tools()
 
     # Add search organizations tools
     from src.core.templatablesparqlquery import get_tools
+
     ontology_tools: list = [
         "search_class",
         "count_instances_by_class",

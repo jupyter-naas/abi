@@ -1,19 +1,27 @@
+from datetime import datetime
 from queue import Queue
-from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import Tool, BaseTool
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from typing import Any, Callable, Optional, Union
+
+from abi import logger
+
+# from src import secret
+from abi.engine.EngineProxy import ServicesProxy
 from abi.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
-from typing import Callable, Optional, Union, Any
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.tools import BaseTool, Tool
 from langchain_openai import ChatOpenAI  # noqa: F401
-from langgraph.graph import StateGraph, START
-from langgraph.graph.message import MessagesState
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
+from langgraph.graph import START, StateGraph
+from langgraph.graph.message import MessagesState
 from langgraph.types import Command
 from pydantic import SecretStr
-from src import secret
-from datetime import datetime
-from abi import logger
+
+from src.core.abi import ABIModule
+
+MODULE: ABIModule = ABIModule.get_instance()
+SERVICES: ServicesProxy = MODULE.engine.services
 
 NAME = "Entity_to_SPARQL"
 DESCRIPTION = "A agent that extracts entities from text and transform them into SPARQL INSERT DATA statements."
@@ -133,13 +141,14 @@ INSERT DATA {
 - MUST ensure all statements are semantically valid according to BFO principles
 """
 
+
 def create_agent(
     agent_shared_state: Optional[AgentSharedState] = None,
     agent_configuration: Optional[AgentConfiguration] = None,
 ) -> Optional[Agent]:
     # Set model based on AI_MODE
-    ai_mode = secret.get("AI_MODE")
-    
+    ai_mode = MODULE.configuration.global_config.ai_mode
+
     if ai_mode == "airgap":
         # Use airgap model (Docker Model Runner)
         model = ChatOpenAI(
@@ -156,9 +165,7 @@ def create_agent(
             logger.error("   Set OPENAI_API_KEY in .env or switch to airgap mode")
             return None
         model = ChatOpenAI(
-            model=MODEL, 
-            temperature=TEMPERATURE, 
-            api_key=SecretStr(openai_api_key)
+            model=MODEL, temperature=TEMPERATURE, api_key=SecretStr(openai_api_key)
         )
 
     if agent_configuration is None:
@@ -179,18 +186,21 @@ def create_agent(
         configuration=agent_configuration,
     )
 
+
 class EntityExtractionState(MessagesState):
     """State class for entity extraction conversations.
-    
+
     Extends MessagesState to include entity extraction information that tracks
     the extracted entities and their relationships throughout the conversation flow.
-    
+
     Attributes:
         entities (list[dict[str, Any]]): List of extracted entities with their BFO mappings
         object_properties (list[dict[str, Any]]): List of object properties for entity relationships
     """
+
     entities: list[dict[str, Any]]
     object_properties: list[dict[str, Any]]
+
 
 class EntitytoSPARQLAgent(Agent):
     def __init__(
@@ -206,23 +216,20 @@ class EntitytoSPARQLAgent(Agent):
         event_queue: Queue | None = None,
     ):
         super().__init__(
-            name, 
-            description, 
-            chat_model, 
-            tools, 
-            agents, 
-            memory, 
-            state, 
-            configuration, 
-            event_queue
-          )
-        
+            name,
+            description,
+            chat_model,
+            tools,
+            agents,
+            memory,
+            state,
+            configuration,
+            event_queue,
+        )
+
         self.datastore_path = f"datastore/ontology/entities_to_sparql/{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-    def entity_extract(
-        self, 
-        state: EntityExtractionState
-    ) -> Command:
+
+    def entity_extract(self, state: EntityExtractionState) -> Command:
         """
         This node is used to extract the entities from the last message.
         """
@@ -743,35 +750,43 @@ If you find you missed entities, you can add it again in the message.
 """
         from datetime import datetime
 
-        system_prompt = system_prompt.replace("{{current_date}}", datetime.now().strftime("%Y-%m-%d"))
-        messages = [SystemMessage(content=system_prompt)] + [message for message in state["messages"] if not isinstance(message, SystemMessage)]
+        system_prompt = system_prompt.replace(
+            "{{current_date}}", datetime.now().strftime("%Y-%m-%d")
+        )
+        messages = [SystemMessage(content=system_prompt)] + [
+            message
+            for message in state["messages"]
+            if not isinstance(message, SystemMessage)
+        ]
         response: BaseMessage = self._chat_model.invoke(messages)
         return Command(update={"messages": [response]})
-    
-    def prep_data(
-      self, 
-      state: EntityExtractionState
-    ) -> Command:
+
+    def prep_data(self, state: EntityExtractionState) -> Command:
         """
         This node is used to prepare the data for the SPARQL generation.
         It extracts the entities from the last message and transform them into SPARQL INSERT DATA statements.
         """
-        from abi.utils.JSON import extract_json_from_completion
-        from src.utils.Storage import save_json, save_text
         import uuid
-        from src import services
+
+        from abi.utils.JSON import extract_json_from_completion
+
         from src.core.abi.workflows.GetObjectPropertiesFromClassWorkflow import (
-            GetObjectPropertiesFromClassWorkflow, 
+            GetObjectPropertiesFromClassWorkflow,
             GetObjectPropertiesFromClassWorkflowConfiguration,
-            GetObjectPropertiesFromClassWorkflowParameters
+            GetObjectPropertiesFromClassWorkflowParameters,
+        )
+        from src.utils.Storage import save_json, save_text
+
+        workflow = GetObjectPropertiesFromClassWorkflow(
+            GetObjectPropertiesFromClassWorkflowConfiguration(
+                triple_store=SERVICES.triple_store
+            )
         )
 
-        workflow = GetObjectPropertiesFromClassWorkflow(GetObjectPropertiesFromClassWorkflowConfiguration(
-            triple_store=services.triple_store_service
-        ))
-
         last_message_content = state["messages"][-1].content
-        assert isinstance(last_message_content, str), "Last message content must be a string"
+        assert isinstance(last_message_content, str), (
+            "Last message content must be a string"
+        )
 
         # Get JSON response from model
         object_properties = {}
@@ -780,39 +795,49 @@ If you find you missed entities, you can add it again in the message.
             # Create a unique URI for the entity
             e["uri"] = "http://ontology.naas.ai/abi/" + str(uuid.uuid4())
             class_uri = e.get("class_uri")
-            
+
             # Only fetch object properties if we haven't seen this class/subclass before
             if class_uri:
                 if class_uri not in object_properties:
-                    oprop = workflow.get_object_properties_from_class(GetObjectPropertiesFromClassWorkflowParameters(class_uri=class_uri))
+                    oprop = workflow.get_object_properties_from_class(
+                        GetObjectPropertiesFromClassWorkflowParameters(
+                            class_uri=class_uri
+                        )
+                    )
                     if len(oprop.get("object_properties", [])) > 0:
                         object_properties[class_uri] = oprop
 
         # Save data to storage
         last_last_message_content_str = str(state["messages"][-2].content)
-        save_text(last_last_message_content_str, self.datastore_path, "init_text.txt", copy=False)
+        save_text(
+            last_last_message_content_str,
+            self.datastore_path,
+            "init_text.txt",
+            copy=False,
+        )
         save_json(entities, self.datastore_path, "entities.json", copy=False)
-        save_json(object_properties, self.datastore_path, "object_properties.json", copy=False)
-        
-        # Store entities and object_properties in state instead of AI message
-        return Command(update={
-            "entities": entities,
-            "object_properties": list(object_properties.values())
-        })
+        save_json(
+            object_properties, self.datastore_path, "object_properties.json", copy=False
+        )
 
-    def create_sparql(
-        self, 
-        state: EntityExtractionState
-    ) -> Command:
+        # Store entities and object_properties in state instead of AI message
+        return Command(
+            update={
+                "entities": entities,
+                "object_properties": list(object_properties.values()),
+            }
+        )
+
+    def create_sparql(self, state: EntityExtractionState) -> Command:
         """
         This node is used to generate SPARQL INSERT DATA statements from extracted entities and their relationships.
-        
+
         Uses a language model to transform the extracted entities and object properties
         into proper SPARQL INSERT DATA statements that can be executed against a triple store.
-        
+
         Args:
             state (EntityExtractionState): Current state containing entities and object_properties
-            
+
         Returns:
             Command: Command to end the workflow with the generated SPARQL statement
         """
@@ -880,13 +905,17 @@ INSERT DATA {
         entities_data = {
             "entities": state.get("entities", []),
             "object_properties": state.get("object_properties", []),
-            "original_message": state["messages"][0].content if state["messages"] else ""
+            "original_message": state["messages"][0].content
+            if state["messages"]
+            else "",
         }
 
         # Create messages for the model
         messages = [
             SystemMessage(content=system_prompt),
-            AIMessage(content=f"Here is the data to transform into SPARQL:\n\n{entities_data}")
+            AIMessage(
+                content=f"Here is the data to transform into SPARQL:\n\n{entities_data}"
+            ),
         ]
 
         # Generate SPARQL using the model
@@ -894,14 +923,16 @@ INSERT DATA {
 
         # Save SPARQL statement to storage
         response_content_str = str(response.content) if response.content else ""
-        save_text(response_content_str, self.datastore_path, "insert_data.sparql", copy=False)
-        
+        save_text(
+            response_content_str, self.datastore_path, "insert_data.sparql", copy=False
+        )
+
         # Return the generated SPARQL statement
         return Command(update={"messages": [AIMessage(content=response.content)]})
-    
+
     def call_model(
-        self, 
-        state: EntityExtractionState  # type: ignore[override]
+        self,
+        state: EntityExtractionState,  # type: ignore[override]
     ) -> Command:
         """
         This node is used to call the model to extract the entities from the last message.
@@ -918,7 +949,7 @@ INSERT DATA {
 
     def build_graph(self, patcher: Optional[Callable] = None):
         graph = StateGraph(EntityExtractionState)
-        
+
         graph.add_node(self.entity_extract)
         graph.add_edge(START, "entity_extract")
 

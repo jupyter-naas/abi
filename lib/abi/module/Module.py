@@ -5,6 +5,7 @@ import os
 from typing import Dict, List
 
 from abi import logger
+from abi.engine.engine_configuration.EngineConfiguration import GlobalConfig
 from abi.engine.EngineProxy import EngineProxy
 from abi.integration.integration import Integration
 from abi.module.ModuleAgentLoader import ModuleAgentLoader
@@ -41,6 +42,8 @@ class ModuleDependencies:
 
 class ModuleConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    global_config: GlobalConfig
 
 
 class BaseModule:

@@ -6,7 +6,7 @@ from abi import logger
 from abi.engine.engine_configuration.EngineConfiguration import EngineConfiguration
 from abi.engine.EngineProxy import EngineProxy
 from abi.engine.IEngine import IEngine
-from abi.module.Module import BaseModule, ModuleDependencies
+from abi.module.Module import BaseModule, ModuleConfiguration, ModuleDependencies
 
 
 class EngineModuleLoader:
@@ -220,8 +220,23 @@ class EngineModuleLoader:
                         raise ValueError(
                             f"Module {module_config.module} does not have a Module class"
                         )
+
+                    if not hasattr(module.ABIModule, "Configuration"):
+                        raise ValueError(
+                            f"Module {module_config.module} does not have a Configuration class"
+                        )
+
+                    assert type(module.ABIModule.Configuration) is type(
+                        ModuleConfiguration
+                    ), (
+                        f"Module {module_config.module} Configuration must be a subclass of ModuleConfiguration"
+                    )
+
                     try:
-                        cfg = module.ABIModule.Configuration(**module_config.config)
+                        cfg = module.ABIModule.Configuration(
+                            global_config=self.__configuration.global_config,
+                            **module_config.config,
+                        )
                     except pydantic_core._pydantic_core.ValidationError as e:
                         raise ValueError(
                             f"Error loading configuration for module {module_config.module}: {e}"
