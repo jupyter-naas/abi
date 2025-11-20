@@ -826,6 +826,7 @@ AGENT SYSTEM PROMPT:
             messages = [
                 SystemMessage(content=self._system_prompt),
             ] + messages
+        logger.debug(f"Messages before calling model: {messages}")
 
         # Calling model
         response: BaseMessage = self._chat_model_with_tools.invoke(messages)
