@@ -689,8 +689,7 @@ class Agent(Expose):
         ):
             logger.debug(f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'")
             # Check if current active agent is in list of agents.
-            agent = pd.find(self._agents, lambda a: a.name.lower() == self._state.current_active_agent.lower())
-            if agent is not None:
+            if self._state.current_active_agent in [a.name for a in self._agents]:
                 self._state.set_current_active_agent(self._state.current_active_agent)
                 return Command(goto=self._state.current_active_agent)
             else:
