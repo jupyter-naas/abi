@@ -43,6 +43,7 @@ from sse_starlette.sse import EventSourceResponse
 from queue import Queue, Empty
 import pydash as pd
 import re
+import uuid
 
 
 def create_checkpointer() -> BaseCheckpointSaver:
@@ -352,7 +353,6 @@ class Agent(Expose):
             self._checkpointer = memory
         
         # Randomize the thread_id to prevent the same thread_id to be used by multiple agents.
-        import uuid
         if os.getenv("ENV") == "dev":
             self._state.set_thread_id(str(uuid.uuid4()))
 
@@ -683,10 +683,18 @@ class Agent(Expose):
             else:
                 logger.debug(f"❌ Agent '{at_mention}' not found")
 
-        if self._state.current_active_agent is not None and self._state.current_active_agent != self.name:
-            logger.debug(f"⏩ Continuing conversation with agent '{self._state.current_active_agent}'")
-            self._state.set_current_active_agent(self._state.current_active_agent)
-            return Command(goto=self._state.current_active_agent)
+        if (
+            self._state.current_active_agent is not None and 
+            self._state.current_active_agent != self.name
+        ):
+            logger.debug(f"🔀 Continuing conversation with agent '{self._state.current_active_agent}'")
+            # Check if current active agent is in list of agents.
+            agent = pd.find(self._agents, lambda a: a.name.lower() == self._state.current_active_agent.lower())
+            if agent is not None:
+                self._state.set_current_active_agent(self._state.current_active_agent)
+                return Command(goto=self._state.current_active_agent)
+            else:
+                logger.debug(f"❌ Agent '{self._state.current_active_agent}' not found")
         
         # self._state.set_current_active_agent(self.name)
         logger.debug(f"💬 Starting chatting with agent '{self.name}'")
@@ -808,9 +816,8 @@ AGENT SYSTEM PROMPT:
         self,
         state: MessagesState,
     ) -> Command[Literal["call_tools", "__end__"]]:
-        self._state.set_current_active_agent(self.name)
-        
         logger.debug(f"call_model on: {self.name}")
+        self._state.set_current_active_agent(self.name)
         # logger.debug(f"tools: {self._structured_tools}")
         messages = state["messages"]
         if self._system_prompt:
@@ -905,7 +912,6 @@ AGENT SYSTEM PROMPT:
                     raise e
                 # If the tool call fails, we want the model to interpret it.
                 results.append(Command(goto="__end__", update={"messages": [ToolMessage(content=str(e), tool_call_id=tool_call["id"])]}))
-
 
 
         assert len(results) > 0, state
@@ -1111,12 +1117,12 @@ AGENT SYSTEM PROMPT:
         conversation thread. Any subsequent invocations will be processed as part of a
         new conversation context.
         """
-        self._state.set_thread_id(str(int(self._state.thread_id) + 1))
-
-    def __tool_function(self, prompt: str) -> str:
-        response = self.invoke(prompt)
-
-        return response
+        try:
+            current_thread_id = int(self._state.thread_id)
+            self._state.set_thread_id(str(current_thread_id + 1))
+        except (ValueError, TypeError):
+            # If thread_id is not a valid integer, generate a new UUID
+            self._state.set_thread_id(str(uuid.uuid4()))
 
     def duplicate(self, queue: Queue | None = None, agent_shared_state: AgentSharedState | None = None) -> "Agent":
         """Create a new instance of the agent with the same configuration.
